@@ -11,7 +11,7 @@ import type {
   Wallet,
 } from '@/domain/types';
 import { FxRequiredError, ValidationError } from './errors';
-import { newId } from './ids';
+import { isUuid, newId } from './ids';
 import {
   cleanPatch,
   getLiveCategory,
@@ -21,7 +21,17 @@ import {
   writeTx,
   type RepoContext,
 } from './repoContext';
-import { parseFx, parseTxFields, parseTxSnapshot, type TxFields, type TxSnapshot } from './validate';
+import {
+  BASE_AMOUNT_MAX,
+  formatLimit,
+  parseFx,
+  parseTxFields,
+  parseTxSnapshot,
+  TRANSFER_CREATES_MONEY_TEXT,
+  transferCreatesMoney,
+  type TxFields,
+  type TxSnapshot,
+} from './validate';
 
 export interface TransactionInput {
   kind: TxKind;
@@ -38,8 +48,17 @@ export interface TransactionInput {
 
 export type TransactionPatch = Partial<TransactionInput>;
 
+export interface TransactionCreateOptions {
+  /**
+   * Заранее выданный id операции (UUID; в верхнем регистре приводится к нижнему). Делает создание идемпотентным:
+   * повторный вызов с тем же id (двойное нажатие «Сохранить», повтор после сбоя) не создаёт дубль, а возвращает
+   * уже имеющуюся строку как есть. Даже если она удалена: повтор удалённую операцию не воскрешает.
+   */
+  id?: UUID;
+}
+
 export interface TransactionsRepo {
-  create(input: TransactionInput): Promise<LocalRow<Transaction>>;
+  create(input: TransactionInput, opts?: TransactionCreateOptions): Promise<LocalRow<Transaction>>;
   /**
    * Снимок базовой валюты пересчитывается ТОЛЬКО при смене суммы/кошелька/вида или при новом fx.
    * Иначе сохраняется прежний курс: старая операция не переоценивается сегодняшним курсом.
@@ -172,19 +191,34 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
       return { baseCurrency, baseAmountMinor: f.amountMinor, fxRate: 1, fxSource: 'same' };
     }
     if (!rate) throw new FxRequiredError(wallet.currency, baseCurrency);
+    let s: { baseAmountMinor: Minor; fxRate: number };
     try {
-      const s = fxSnapshot(f.amountMinor, wallet.currency, baseCurrency, rate.rate);
-      return { baseCurrency, baseAmountMinor: s.baseAmountMinor, fxRate: s.fxRate, fxSource: rate.source };
+      s = fxSnapshot(f.amountMinor, wallet.currency, baseCurrency, rate.rate);
     } catch (e) {
       if (e instanceof RangeError) throw new ValidationError('Сумма слишком велика для пересчёта в базовую валюту');
       throw e;
     }
+    // граница сервера для суммы в базовой валюте (transactions.base_amount_minor ≤ 1e15)
+    if (s.baseAmountMinor > BASE_AMOUNT_MAX) {
+      throw new ValidationError(
+        `Сумма слишком велика для пересчёта в базовую валюту: в ${baseCurrency} получилось бы больше ${formatLimit(BASE_AMOUNT_MAX)} минимальных единиц`,
+      );
+    }
+    return { baseCurrency, baseAmountMinor: s.baseAmountMinor, fxRate: s.fxRate, fxSource: rate.source };
   }
 
-  function assemble(base: Transaction | null, f: TxFields, snap: TxSnapshot): LocalRow<Transaction> {
+  /** Перевод в одной валюте не может зачислить больше, чем списал (см. transferCreatesMoney). */
+  function checkTransferAmounts(f: TxFields, wallet: Wallet, toWallet: Wallet | null): void {
+    if (f.kind !== 'transfer' || toWallet === null) return;
+    if (transferCreatesMoney(wallet.currency, toWallet.currency, f.amountMinor, f.toAmountMinor)) {
+      throw new ValidationError(TRANSFER_CREATES_MONEY_TEXT);
+    }
+  }
+
+  function assemble(base: Transaction | null, f: TxFields, snap: TxSnapshot, givenId?: UUID): LocalRow<Transaction> {
     const { stamp, fields } = touch(ctx);
     const row: LocalRow<Transaction> = {
-      id: base?.id ?? newId(),
+      id: base?.id ?? givenId ?? newId(),
       createdAt: base?.createdAt ?? stamp,
       deletedAt: base?.deletedAt ?? null,
       ...f,
@@ -205,11 +239,21 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
   }
 
   return {
-    async create(input) {
+    async create(input, opts) {
       const clean = cleanPatch(input, KEYS, 'Операция');
+      let givenId: UUID | undefined;
+      if (opts?.id !== undefined) {
+        if (!isUuid(opts.id)) throw new ValidationError('Операция: id должен быть в виде UUID');
+        givenId = opts.id.toLowerCase(); // Postgres вернёт UUID строчным: в базе он тоже должен быть строчным
+      }
       const fx = clean.fx === undefined ? undefined : parseFx(clean.fx);
       const fields = parseTxFields(clean);
       return writeTx(ctx, scope(), async () => {
+        if (givenId !== undefined) {
+          // Идемпотентность: строка с этим id уже есть (живая или удалённая) — отдаём её, ничего не записывая.
+          const existing = await db.transactions.get(givenId);
+          if (existing) return existing;
+        }
         const settings = await requireSettings(ctx);
         const { wallet, toWallet } = await loadWallets(fields);
         await checkCategory(fields);
@@ -217,7 +261,8 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
           ...fields,
           toAmountMinor: resolveToAmount(fields, wallet, toWallet, true),
         };
-        const row = assemble(null, f, buildSnapshot(f, wallet, settings.baseCurrency, fx ?? null));
+        checkTransferAmounts(f, wallet, toWallet);
+        const row = assemble(null, f, buildSnapshot(f, wallet, settings.baseCurrency, fx ?? null), givenId);
         await db.transactions.add(row);
         return row;
       });
@@ -269,6 +314,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
 
         const probe = { ...cur, ...f, ...snap } as Transaction;
         if (COMPARED.every((k) => Object.is(probe[k], cur[k]))) return cur;
+        checkTransferAmounts(f, wallet, toWallet);
         const row = assemble(cur, f, snap);
         await db.transactions.put(row);
         return row;
@@ -291,8 +337,14 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         const cur = await mustGet(id);
         if (cur.deletedAt === null) return cur;
         // всё, на что ссылается операция, должно существовать (архив не мешает: это не новая операция)
-        await getLiveWallet(ctx, cur.walletId, 'Кошелёк');
-        if (cur.toWalletId !== null) await getLiveWallet(ctx, cur.toWalletId, 'Кошелёк зачисления');
+        const from = await getLiveWallet(ctx, cur.walletId, 'Кошелёк');
+        if (cur.toWalletId !== null) {
+          const to = await getLiveWallet(ctx, cur.toWalletId, 'Кошелёк зачисления');
+          // не оживляем перевод, который в одной валюте зачислил больше, чем списал (старые данные)
+          if (transferCreatesMoney(from.currency, to.currency, cur.amountMinor, cur.toAmountMinor)) {
+            throw new ValidationError(TRANSFER_CREATES_MONEY_TEXT);
+          }
+        }
         if (cur.categoryId !== null) checkCategoryKind(await getLiveCategory(ctx, cur.categoryId), cur.kind);
         const row: LocalRow<Transaction> = { ...cur, deletedAt: null, ...touch(ctx).fields };
         await db.transactions.put(row);

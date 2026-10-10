@@ -297,6 +297,23 @@ export function parseTxFields(raw: Record<string, unknown>, opts: { requireToAmo
   return { kind, walletId, toWalletId, amountMinor, toAmountMinor, categoryId, occurredOn, note };
 }
 
+/**
+ * Перевод между кошельками ОДНОЙ валюты не может зачислить больше, чем списал: разница — только комиссия (меньше).
+ * Иначе деньги появились бы из воздуха (чаще всего это лишний ноль в поле «зачислено»).
+ * Для разных валют суммы независимы: разницу задаёт курс обмена.
+ */
+export function transferCreatesMoney(
+  fromCurrency: CurrencyCode,
+  toCurrency: CurrencyCode,
+  amountMinor: Minor,
+  toAmountMinor: Minor | null,
+): boolean {
+  return fromCurrency === toCurrency && toAmountMinor !== null && toAmountMinor > amountMinor;
+}
+
+export const TRANSFER_CREATES_MONEY_TEXT =
+  'Перевод между кошельками одной валюты: сумма зачисления не может быть больше суммы списания (комиссия её уменьшает, но не увеличивает)';
+
 export interface TxSnapshot {
   baseCurrency: CurrencyCode;
   baseAmountMinor: Minor;

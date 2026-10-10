@@ -1,6 +1,7 @@
 import type { Category, Settings, Transaction, Wallet } from '@/domain/types';
 import { MAX_FUTURE_SKEW_MS } from './clock';
 import { fail, ValidationError } from './errors';
+import { isUuid } from './ids';
 import {
   isPlainObject,
   parseCategoryData,
@@ -10,6 +11,8 @@ import {
   parseTxSnapshot,
   parseWalletData,
   reqObject,
+  SORT_ORDER_MAX,
+  SORT_ORDER_MIN,
   type SyncData,
 } from './validate';
 
@@ -59,6 +62,33 @@ function atRow<T>(label: string, index: number | null, fn: () => T): T {
     }
     throw e;
   }
+}
+
+/**
+ * В файле каждый идентификатор записи и каждая ссылка (walletId, toWalletId, categoryId, parentId, defaultWalletId)
+ * обязаны быть UUID: на сервере эти колонки имеют тип uuid, и строка с другим id отвергается навсегда.
+ * UUID приводится к нижнему регистру ВМЕСТЕ со всеми ссылками: Postgres хранит и возвращает его строчным,
+ * и запись в верхнем регистре дала бы дубль, а ссылка на неё разошлась бы с самой записью.
+ */
+function withUuids(raw: Record<string, unknown>, labels: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...raw };
+  for (const [key, label] of Object.entries(labels)) {
+    const v = raw[key];
+    if (v === null || v === undefined) continue; // обязательность проверит разбор самой записи
+    if (!isUuid(v)) fail(`${label}: идентификатор должен быть в виде UUID (например 0a3a28c0-5fdc-4385-8fca-7c24d9aaaa48)`);
+    out[key] = v.toLowerCase();
+  }
+  return out;
+}
+
+/**
+ * Порядок за границей сервера (±1e15) зажимается, а не отвергает копию: порядок — лишь расположение в списке,
+ * а своя же копия не должна не загружаться из-за него. Не число остаётся как есть — его отвергнет обычная проверка.
+ */
+function withClampedSortOrder(raw: Record<string, unknown>): Record<string, unknown> {
+  const v = raw['sortOrder'];
+  if (typeof v !== 'number' || !Number.isSafeInteger(v)) return raw;
+  return { ...raw, sortOrder: Math.min(Math.max(v, SORT_ORDER_MIN), SORT_ORDER_MAX) };
 }
 
 /** Позже этой метки сервер строку не примет никогда (CHECK ..._ts_sane в supabase/schema.sql). */
@@ -111,7 +141,10 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const settingsRaw = data['settings'];
   if (settingsRaw !== null && settingsRaw !== undefined) {
     settings = atRow('настройки', null, () => {
-      const raw = reqObject(settingsRaw, 'Настройки');
+      const raw = withUuids(reqObject(settingsRaw, 'Настройки'), {
+        id: 'Идентификатор записи',
+        defaultWalletId: 'Кошелёк по умолчанию',
+      });
       const sync = limitStamps(parseSyncData(raw), opts);
       if (sync.id !== opts.userId) fail('копия принадлежит другому аккаунту — импорт отменён');
       return { ...sync, ...parseSettingsData(raw) };
@@ -121,7 +154,7 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const walletIds = new Set<string>();
   const wallets = walletsRaw.map((r, i) =>
     atRow('кошелёк', i, () => {
-      const raw = reqObject(r, 'Кошелёк');
+      const raw = withClampedSortOrder(withUuids(reqObject(r, 'Кошелёк'), { id: 'Идентификатор записи' }));
       const sync = limitStamps(parseSyncData(raw), opts);
       seen(walletIds, sync.id);
       return { ...sync, ...parseWalletData(raw) } satisfies Wallet;
@@ -131,7 +164,9 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const categoryIds = new Set<string>();
   const categories = categoriesRaw.map((r, i) =>
     atRow('категория', i, () => {
-      const raw = reqObject(r, 'Категория');
+      const raw = withClampedSortOrder(
+        withUuids(reqObject(r, 'Категория'), { id: 'Идентификатор записи', parentId: 'Родительская категория' }),
+      );
       const sync = limitStamps(parseSyncData(raw), opts);
       seen(categoryIds, sync.id);
       const data = parseCategoryData(raw);
@@ -143,7 +178,12 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const txIds = new Set<string>();
   const transactions = txRaw.map((r, i) =>
     atRow('операция', i, () => {
-      const raw = reqObject(r, 'Операция');
+      const raw = withUuids(reqObject(r, 'Операция'), {
+        id: 'Идентификатор записи',
+        walletId: 'Кошелёк',
+        toWalletId: 'Кошелёк зачисления',
+        categoryId: 'Категория',
+      });
       const sync = limitStamps(parseSyncData(raw), opts);
       seen(txIds, sync.id);
       const fields = parseTxFields(raw, { requireToAmount: true });
