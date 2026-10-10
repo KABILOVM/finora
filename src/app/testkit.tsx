@@ -263,15 +263,17 @@ export interface RenderAppOptions {
   client?: SupabaseClient | null;
   deps?: SessionDeps;
   path?: string;
+  /** state первой записи истории (например, { background } для шита поверх страницы). */
+  state?: unknown;
   bootTimeoutMs?: number;
 }
 
 /** Всё приложение целиком вокруг переданного содержимого (обычно <AppRoutes />). */
 export function renderAppRoot(ui: ReactNode, options: RenderAppOptions = {}) {
-  const { client = null, deps, path = '/', bootTimeoutMs } = options;
+  const { client = null, deps, path = '/', state, bootTimeoutMs } = options;
   return render(
     <ToastProvider>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={[state === undefined ? path : { pathname: path, state }]}>
         <AppRoot client={client} deps={deps} bootTimeoutMs={bootTimeoutMs}>
           {ui}
         </AppRoot>
