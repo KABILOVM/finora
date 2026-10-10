@@ -3,6 +3,7 @@ import type { Category, IsoDateTime, LocalRow, Settings, UUID, Wallet } from '@/
 import type { Clock } from './clock';
 import { META_LAST_STAMP, type FinoraDB } from './database';
 import { ValidationError } from './errors';
+import { SORT_ORDER_MAX, SORT_ORDER_MIN } from './validate';
 
 /** Всё, что нужно репозиториям: база, часы, id устройства и «сообщить подписчикам об изменении». */
 export interface RepoContext {
@@ -75,10 +76,16 @@ export async function requireSettings(ctx: RepoContext): Promise<LocalRow<Settin
   return s;
 }
 
-/** Следующий порядковый номер для сортировки (после самого большого, включая архивные и удалённые). */
+/**
+ * Следующий порядковый номер для сортировки (после самого большого, включая архивные и удалённые).
+ * Не выходит за границы сервера (±1e15): у самой границы новая запись получает ту же границу (порядок при равенстве
+ * определён названием и id, см. sort.ts), а не число, которое сервер отвергнет, и не переполнение.
+ */
 export async function nextSortOrder(table: Table<{ sortOrder: number }, string>): Promise<number> {
   const last = await table.orderBy('sortOrder').last();
-  return last ? last.sortOrder + 1 : 0;
+  if (!last) return 0;
+  const next = Math.min(last.sortOrder, SORT_ORDER_MAX - 1) + 1;
+  return Math.max(next, SORT_ORDER_MIN);
 }
 
 /** Только перечисленные ключи; значения undefined считаются «не задано». Лишние ключи — ошибка (защита от опечаток и подмены служебных полей). */

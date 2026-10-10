@@ -41,7 +41,11 @@ export function filterTransactions<T extends TxLike>(txs: readonly T[], filter: 
     if (filter.to !== undefined && t.occurredOn > filter.to) return false;
     if (filter.kind !== undefined && t.kind !== filter.kind) return false;
     if (filter.walletId !== undefined && t.walletId !== filter.walletId && t.toWalletId !== filter.walletId) return false;
-    if (filter.categoryId !== undefined && t.categoryId !== filter.categoryId) return false;
+    if (filter.categoryId !== undefined) {
+      // «Без категории» — только расходы и доходы: у перевода категории не бывает по определению, это не «пропущенная» категория
+      if (filter.categoryId === null && t.kind === 'transfer') return false;
+      if (t.categoryId !== filter.categoryId) return false;
+    }
     if (needle !== '' && !t.note.toLocaleLowerCase('ru').includes(needle)) return false;
     return true;
   });

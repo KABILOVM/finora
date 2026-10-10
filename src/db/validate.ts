@@ -31,6 +31,30 @@ export const LIMITS = {
   deviceId: 64,
 } as const;
 
+/**
+ * Границы чисел — ровно как CHECK в supabase/schema.sql (все включительно). Сервер отвергает запись за границей навсегда,
+ * поэтому клиент не должен её принимать: иначе строка осталась бы только на этом устройстве (карантин синхронизации).
+ */
+export const MINOR_LIMIT = 1_000_000_000_000_000; // 1e15: помещается в безопасное целое JavaScript с большим запасом
+/** transactions.amount_minor и transactions.to_amount_minor: от 1 до 1e15. */
+export const AMOUNT_MIN = 1;
+export const AMOUNT_MAX = MINOR_LIMIT;
+/** transactions.base_amount_minor: от 0 до 1e15. */
+export const BASE_AMOUNT_MIN = 0;
+export const BASE_AMOUNT_MAX = MINOR_LIMIT;
+/** wallets.opening_balance_minor: от −1e15 до 1e15. */
+export const OPENING_BALANCE_MIN = -MINOR_LIMIT;
+export const OPENING_BALANCE_MAX = MINOR_LIMIT;
+/** wallets.sort_order и categories.sort_order: от −1e15 до 1e15. */
+export const SORT_ORDER_MIN = -MINOR_LIMIT;
+export const SORT_ORDER_MAX = MINOR_LIMIT;
+
+/** 1000000000000000 → «1 000 000 000 000 000» (для текстов ошибок). */
+export function formatLimit(n: number): string {
+  const body = String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return n < 0 ? `−${body}` : body;
+}
+
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
   const proto = Object.getPrototypeOf(v) as unknown;
@@ -42,8 +66,14 @@ export function reqObject(v: unknown, label: string): Record<string, unknown> {
   return v;
 }
 
+/** Postgres не хранит символ NUL (\u0000) в тексте: сервер отвергнет такую строку навсегда. */
+export function hasNul(v: string): boolean {
+  return v.includes('\u0000');
+}
+
 export function reqText(v: unknown, label: string, max: number, min = 1): string {
   if (typeof v !== 'string') fail(`${label}: ожидался текст`);
+  if (hasNul(v)) fail(`${label}: в тексте не должно быть нулевого символа (он не сохраняется в базе)`);
   const s = v.trim();
   if (s.length < min || s.length > max) {
     fail(min === 0 ? `${label}: не длиннее ${max} символов` : `${label}: от ${min} до ${max} символов`);
@@ -60,7 +90,10 @@ export function reqEnum<T extends string>(v: unknown, label: string, allowed: re
 
 export function reqSafeInt(v: unknown, label: string, min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER): number {
   if (typeof v !== 'number' || !Number.isSafeInteger(v)) fail(`${label}: ожидалось целое число`);
-  if (v < min || v > max) fail(`${label}: вне допустимых границ`);
+  if (v < min || v > max) {
+    const custom = min !== Number.MIN_SAFE_INTEGER || max !== Number.MAX_SAFE_INTEGER;
+    fail(custom ? `${label}: допустимо от ${formatLimit(min)} до ${formatLimit(max)}` : `${label}: вне допустимых границ`);
+  }
   return v === 0 ? 0 : v; // убираем -0
 }
 
@@ -69,10 +102,22 @@ export function reqMinor(v: unknown, label: string): Minor {
   return v === 0 ? 0 : v;
 }
 
-/** Сумма операции: целое > 0. */
+/** Сумма в минорных единицах в границах [min, max] (границы сервера, см. выше). */
+export function reqMinorInRange(v: unknown, label: string, min: number, max: number): Minor {
+  const n = reqMinor(v, label);
+  if (n < min || n > max) {
+    fail(`${label}: допустимо от ${formatLimit(min)} до ${formatLimit(max)} минимальных единиц валюты (дирамов, центов)`);
+  }
+  return n;
+}
+
+/** Сумма операции: целое от 1 до 1e15 (как CHECK на сервере). */
 export function reqPositiveMinor(v: unknown, label: string): Minor {
   const n = reqMinor(v, label);
   if (n <= 0) fail(`${label}: должна быть больше нуля`);
+  if (n > AMOUNT_MAX) {
+    fail(`${label} слишком велика: допустимо не больше ${formatLimit(AMOUNT_MAX)} минимальных единиц валюты (дирамов, центов)`);
+  }
   return n;
 }
 
@@ -140,11 +185,23 @@ export function optStamp(v: unknown, label: string): IsoDateTime | null {
   return v === null || v === undefined ? null : reqStamp(v, label);
 }
 
+/**
+ * Курс помещается в колонку fx_rate numeric(20, 10): после округления до 10 знаков он больше нуля и меньше 1e10.
+ * Иначе сервер отвергнет операцию навсегда («numeric field overflow» или CHECK fx_rate > 0).
+ */
+function isStorableRate(rate: unknown): rate is number {
+  if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) return false;
+  const stored = Number(rate.toFixed(10));
+  return stored > 0 && stored < 10_000_000_000;
+}
+
+const FX_RATE_RANGE_TEXT = 'ожидалось число больше нуля (от 0,0000000001 до 9 999 999 999)';
+
 /** Курс, переданный вызывающим кодом. */
 export function parseFx(v: unknown): { rate: number; source: string } {
   const o = reqObject(v, 'Курс');
   const rate = o['rate'];
-  if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) fail('Курс: ожидалось число больше нуля');
+  if (!isStorableRate(rate)) fail(`Курс: ${FX_RATE_RANGE_TEXT}`);
   const source = o['source'];
   if (typeof source !== 'string' || !FX_SOURCES.includes(source)) {
     fail(`Источник курса: допустимо только ${FX_SOURCES.join(', ')}`);
@@ -170,10 +227,10 @@ export function parseWalletData(raw: Record<string, unknown>): WalletData {
     name: reqText(raw['name'], 'Название кошелька', LIMITS.name),
     currency: reqCurrency(raw['currency'], 'Валюта кошелька'),
     kind: reqEnum(raw['kind'], 'Вид кошелька', WALLET_KINDS),
-    openingBalanceMinor: reqMinor(raw['openingBalanceMinor'], 'Начальный остаток'),
+    openingBalanceMinor: reqMinorInRange(raw['openingBalanceMinor'], 'Начальный остаток', OPENING_BALANCE_MIN, OPENING_BALANCE_MAX),
     color: reqText(raw['color'], 'Цвет кошелька', LIMITS.short),
     icon: reqText(raw['icon'], 'Значок кошелька', LIMITS.short),
-    sortOrder: reqSafeInt(raw['sortOrder'], 'Порядок кошелька'),
+    sortOrder: reqSafeInt(raw['sortOrder'], 'Порядок кошелька', SORT_ORDER_MIN, SORT_ORDER_MAX),
     archivedAt: optStamp(raw['archivedAt'], 'Дата архивации кошелька'),
   };
 }
@@ -195,7 +252,7 @@ export function parseCategoryData(raw: Record<string, unknown>): CategoryData {
     parentId: optId(raw['parentId'], 'Родительская категория'),
     color: reqText(raw['color'], 'Цвет категории', LIMITS.short),
     icon: reqText(raw['icon'], 'Значок категории', LIMITS.short),
-    sortOrder: reqSafeInt(raw['sortOrder'], 'Порядок категории'),
+    sortOrder: reqSafeInt(raw['sortOrder'], 'Порядок категории', SORT_ORDER_MIN, SORT_ORDER_MAX),
     archivedAt: optStamp(raw['archivedAt'], 'Дата архивации категории'),
   };
 }
@@ -250,7 +307,7 @@ export interface TxSnapshot {
 /** Проверка снимка базовой валюты у готовой операции. */
 export function parseTxSnapshot(kind: TxKind, amountMinor: Minor, raw: Record<string, unknown>): TxSnapshot {
   const baseCurrency = reqCurrency(raw['baseCurrency'], 'Базовая валюта операции');
-  const baseAmountMinor = reqSafeInt(raw['baseAmountMinor'], 'Сумма в базовой валюте', 0);
+  const baseAmountMinor = reqMinorInRange(raw['baseAmountMinor'], 'Сумма в базовой валюте', BASE_AMOUNT_MIN, BASE_AMOUNT_MAX);
   const rate = raw['fxRate'] ?? null;
   const source = raw['fxSource'] ?? null;
   if (kind === 'transfer') {
@@ -258,7 +315,7 @@ export function parseTxSnapshot(kind: TxKind, amountMinor: Minor, raw: Record<st
     if (rate !== null || source !== null) fail('Перевод: курс не используется');
     return { baseCurrency, baseAmountMinor, fxRate: null, fxSource: null };
   }
-  if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) fail('Курс операции: ожидалось число больше нуля');
+  if (!isStorableRate(rate)) fail(`Курс операции: ${FX_RATE_RANGE_TEXT}`);
   if (typeof source !== 'string' || !(source === 'same' || FX_SOURCES.includes(source))) {
     fail('Источник курса операции: неизвестное значение');
   }
@@ -296,7 +353,7 @@ export interface SyncData {
 
 export function parseSyncData(raw: Record<string, unknown>): SyncData {
   const deviceId = raw['deviceId'];
-  if (typeof deviceId !== 'string' || deviceId.length < 1 || deviceId.length > LIMITS.deviceId || /\s/.test(deviceId)) {
+  if (typeof deviceId !== 'string' || deviceId.length < 1 || deviceId.length > LIMITS.deviceId || /\s/.test(deviceId) || hasNul(deviceId)) {
     fail('Устройство: некорректный идентификатор');
   }
   return {
