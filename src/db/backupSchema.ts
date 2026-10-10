@@ -1,8 +1,9 @@
 import type { Category, Settings, Transaction, Wallet } from '@/domain/types';
-import { MAX_FUTURE_SKEW_MS } from './clock';
+import { MAX_FUTURE_SKEW_MS, MAX_OBSERVE_AHEAD_MS, MAX_STAMP, MAX_STAMP_MS, MIN_STAMP, MIN_STAMP_MS } from './clock';
 import { fail, ValidationError } from './errors';
 import { isUuid } from './ids';
 import {
+  isCanonicalStamp,
   isPlainObject,
   parseCategoryData,
   parseSettingsData,
@@ -41,8 +42,14 @@ export interface BackupFile {
 export interface ParseBackupOptions {
   /** Владелец базы, в которую импортируем. Копия другого аккаунта отвергается. */
   userId: string;
-  /** Текущее время, мс (метки из будущего подрезаются до «сейчас + 5 минут»). */
+  /** Текущее время, мс (метки позже «сейчас + 5 минут» считаются метками из будущего и подрезаются, см. limitStamps). */
   nowMs: number;
+}
+
+/** Опции разбора вместе с меткой, до которой подрезаются метки из будущего (одна на весь файл). */
+interface StampLimits extends ParseBackupOptions {
+  /** Во что превращается метка из будущего. Зависит от самого файла, а не от «сейчас» (см. futureStampTarget). */
+  futureTarget: string;
 }
 
 function rows(raw: Record<string, unknown>, key: string, label: string, max: number): unknown[] {
@@ -91,27 +98,59 @@ function withClampedSortOrder(raw: Record<string, unknown>): Record<string, unkn
   return { ...raw, sortOrder: Math.min(Math.max(v, SORT_ORDER_MIN), SORT_ORDER_MAX) };
 }
 
-/** Позже этой метки сервер строку не примет никогда (CHECK ..._ts_sane в supabase/schema.sql). */
-const STAMP_CEILING = '2100-01-01T00:00:00.000Z';
+/** Метка в границах сервера (CHECK ..._ts_sane в supabase/schema.sql): 2000-01-01 … 2100-01-01 включительно. */
+const toServerRange = (stamp: string): string => (stamp < MIN_STAMP ? MIN_STAMP : stamp > MAX_STAMP ? MAX_STAMP : stamp);
 
 /**
- * Метки из будущего. Устройство-источник могло жить с убежавшими вперёд часами и честно поставить такие метки;
- * собственную копию человека из-за этого отвергать нельзя. Поэтому метки подрезаются до «сейчас + 5 минут» —
- * ровно так их зажал бы сервер. Отвергается только то, что за границей схемы сервера (после 2100 года):
- * это уже не сбой часов, а порча файла.
+ * Во что превращается метка из будущего. Это значение НЕ должно зависеть от того, когда нажали «Загрузить копию»:
+ * иначе тот же файл при каждом импорте получает всё более свежие метки, выигрывает у правок, сделанных между импортами,
+ * и «повторный импорт ничего не меняет» перестаёт быть правдой.
+ *  - обычный случай: часы источника убежали вперёд, потом их поправили. Время создания копии (exportedAt) — настоящее,
+ *    и значит ничего из файла не было изменено позже этого момента: метки подрезаются до него. Одно и то же в каждом импорте;
+ *  - exportedAt сам чуть впереди (часы источника спешат на пару минут): подрезаем до «сейчас + 5 минут», как сервер;
+ *  - exportedAt дальше чем на 30 минут впереди (часы источника сейчас неверны): времени записи мы не знаем вообще.
+ *    Такая запись получает самую раннюю метку: добавляется, если её нет, но никогда не затирает то, что уже есть на устройстве.
+ * Не меньше 2000-01-01 и не больше 2100-01-01: за этими границами сервер запись отвергнет навсегда.
  */
-function limitStamps(sync: SyncData, o: ParseBackupOptions): SyncData {
-  if (sync.clientUpdatedAt > STAMP_CEILING) {
-    fail('метка изменения из будущего (позже 2100 года) — файл повреждён');
-  }
+function futureStampTarget(exportedAt: string, nowMs: number): string {
+  const exportedMs = Date.parse(exportedAt);
+  if (!(exportedMs <= nowMs + MAX_OBSERVE_AHEAD_MS)) return MIN_STAMP; // сюда же попадает «не число»
+  const ms = Math.min(exportedMs, nowMs + MAX_FUTURE_SKEW_MS);
+  return new Date(Math.min(Math.max(ms, MIN_STAMP_MS), MAX_STAMP_MS)).toISOString();
+}
+
+/**
+ * Метки из прошлого и из будущего. Устройство-источник могло жить с неверными часами (старая копия с меткой 1970 года,
+ * часы, убежавшие вперёд), а собственную копию человека из-за этого отвергать нельзя. Поэтому метки подрезаются:
+ *  - createdAt, clientUpdatedAt, deletedAt позже «сейчас + 5 минут» (дальше сервер всё равно зажал бы их сам) заменяются
+ *    на futureStampTarget: метку из будущего нельзя оставить, иначе она навсегда обгоняла бы правки человека;
+ *  - эти же три метки и archivedAt (см. withClampedArchivedAt): в границах сервера 2000-01-01 … 2100-01-01.
+ * Запись с меткой за этими границами сервер отверг бы НАВСЕГДА (она осела бы в карантине), поэтому её подрезаем до границы.
+ * Порядок «новее побеждает» (clientUpdatedAt, затем deviceId) сохраняется: у локальных строк метки всегда внутри границ,
+ * а метка из будущего подрезается одинаково при каждом импорте, так что тот же файл второй раз ничего не заменяет,
+ * а старая копия по-прежнему проигрывает более новым локальным правкам.
+ */
+function limitStamps(sync: SyncData, o: StampLimits): SyncData {
   const limit = new Date(o.nowMs + MAX_FUTURE_SKEW_MS).toISOString();
-  const cut = (stamp: string): string => (stamp > limit ? limit : stamp);
+  const cut = (stamp: string): string => toServerRange(stamp > limit ? o.futureTarget : stamp);
   return {
     ...sync,
     createdAt: cut(sync.createdAt),
     clientUpdatedAt: cut(sync.clientUpdatedAt),
     deletedAt: sync.deletedAt === null ? null : cut(sync.deletedAt),
   };
+}
+
+/**
+ * archivedAt (кошелёк, категория) — тоже метка с CHECK сервера 2000–2100: подрезается до границы, а не отвергает копию.
+ * «Сейчас + 5 минут» к ней не применяется (сервер её не зажимает). Не метка вообще (мусор) остаётся как есть:
+ * её отвергнет обычная проверка.
+ */
+function withClampedArchivedAt(raw: Record<string, unknown>): Record<string, unknown> {
+  const v = raw['archivedAt'];
+  if (!isCanonicalStamp(v)) return raw;
+  const clamped = toServerRange(v);
+  return clamped === v ? raw : { ...raw, archivedAt: clamped };
 }
 
 export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile {
@@ -127,6 +166,7 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   }
   const exportedAt = data['exportedAt'];
   if (typeof exportedAt !== 'string' || Number.isNaN(Date.parse(exportedAt))) fail('В файле нет даты создания копии');
+  const limits: StampLimits = { ...opts, futureTarget: futureStampTarget(exportedAt, opts.nowMs) };
 
   const walletsRaw = rows(data, 'wallets', 'кошельки', BACKUP_LIMITS.wallets);
   const categoriesRaw = rows(data, 'categories', 'категории', BACKUP_LIMITS.categories);
@@ -145,7 +185,7 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
         id: 'Идентификатор записи',
         defaultWalletId: 'Кошелёк по умолчанию',
       });
-      const sync = limitStamps(parseSyncData(raw), opts);
+      const sync = limitStamps(parseSyncData(raw), limits);
       if (sync.id !== opts.userId) fail('копия принадлежит другому аккаунту — импорт отменён');
       return { ...sync, ...parseSettingsData(raw) };
     });
@@ -154,8 +194,8 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const walletIds = new Set<string>();
   const wallets = walletsRaw.map((r, i) =>
     atRow('кошелёк', i, () => {
-      const raw = withClampedSortOrder(withUuids(reqObject(r, 'Кошелёк'), { id: 'Идентификатор записи' }));
-      const sync = limitStamps(parseSyncData(raw), opts);
+      const raw = withClampedArchivedAt(withClampedSortOrder(withUuids(reqObject(r, 'Кошелёк'), { id: 'Идентификатор записи' })));
+      const sync = limitStamps(parseSyncData(raw), limits);
       seen(walletIds, sync.id);
       return { ...sync, ...parseWalletData(raw) } satisfies Wallet;
     }),
@@ -164,10 +204,12 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const categoryIds = new Set<string>();
   const categories = categoriesRaw.map((r, i) =>
     atRow('категория', i, () => {
-      const raw = withClampedSortOrder(
-        withUuids(reqObject(r, 'Категория'), { id: 'Идентификатор записи', parentId: 'Родительская категория' }),
+      const raw = withClampedArchivedAt(
+        withClampedSortOrder(
+          withUuids(reqObject(r, 'Категория'), { id: 'Идентификатор записи', parentId: 'Родительская категория' }),
+        ),
       );
-      const sync = limitStamps(parseSyncData(raw), opts);
+      const sync = limitStamps(parseSyncData(raw), limits);
       seen(categoryIds, sync.id);
       const data = parseCategoryData(raw);
       if (data.parentId === sync.id) fail('категория не может быть родителем самой себе');
@@ -184,7 +226,7 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
         toWalletId: 'Кошелёк зачисления',
         categoryId: 'Категория',
       });
-      const sync = limitStamps(parseSyncData(raw), opts);
+      const sync = limitStamps(parseSyncData(raw), limits);
       seen(txIds, sync.id);
       const fields = parseTxFields(raw, { requireToAmount: true });
       const snap = parseTxSnapshot(fields.kind, fields.amountMinor, raw);

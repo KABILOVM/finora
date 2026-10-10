@@ -25,7 +25,7 @@ describe('refresh: порядок провайдеров', () => {
     const r = await service.refresh();
     expect(r.ok).toBe(true);
     expect(r.providerId).toBe('nbt');
-    expect(r.failures).toEqual([{ providerId: 'server', kind: 'error', message: 'JWT expired' }]);
+    expect(r.failures).toEqual([{ providerId: 'server', kind: 'error', message: 'Источник курсов не пустил запрос (нужен вход или доступ закрыт)' }]);
     expect(api.calls).toBe(0);
     expect(service.getStatus().lastError).toBeNull();
   });
@@ -50,7 +50,7 @@ describe('refresh: порядок провайдеров', () => {
     expect(r).toMatchObject({ ok: false, providerId: null, table: null, aborted: false });
     expect(r.failures).toHaveLength(3);
     const err = service.getStatus().lastError ?? '';
-    for (const part of ['server — сервер лежит', 'nbt — HTTP 503', 'api — нет связи']) expect(err).toContain(part);
+    for (const part of ['сервер курсов — сервер лежит', 'Нацбанк — источник курсов сейчас не работает (ошибка 503)', 'запасной источник — нет связи']) expect(err).toContain(part);
     expect(service.getRate('USD', 'TJS')).toMatchObject({ rate: 10.95 });
   });
 
@@ -202,7 +202,7 @@ describe('refresh: таймаут и отмена', () => {
     const r = await pending;
     expect(r.ok).toBe(false);
     expect(r.failures.map((f) => f.kind)).toEqual(['timeout', 'timeout']);
-    expect(service.getStatus().lastError).toContain('nbt — нет ответа за 100 мс');
+    expect(service.getStatus().lastError).toContain('Нацбанк — нет ответа за 100 мс');
   });
 
   it('таймер не течёт: после успешного ответа активных таймеров нет', async () => {
@@ -271,7 +271,7 @@ describe('офлайн и хранение', () => {
     );
     const r = await service.refresh();
     expect(r.ok).toBe(false);
-    expect(r.failures[0]?.message).toContain('нет связи');
+    expect(r.failures[0]?.message).toBe('Нет связи с источником курсов');
     expect(service.getRate('USD', 'TJS')).toEqual({ rate: 10.95, source: 'nbt', asOf: '2026-10-01', stale: true, manual: false });
   });
 

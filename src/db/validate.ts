@@ -71,9 +71,33 @@ export function hasNul(v: string): boolean {
   return v.includes('\u0000');
 }
 
+/**
+ * Одинокий суррогат UTF-16: «половинка» символа, чаще всего обрезанный смайлик (…😀 → …\uD83D). В настоящем тексте
+ * (UTF-8) такого символа нет: при отправке в облако он превратился бы в «�» и запись разошлась бы с телефоном.
+ * Целая пара (😀 = 😀) — нормальный символ и допустима. Без lookbehind: старый Safari его не разбирает.
+ */
+export function hasLoneSurrogate(v: string): boolean {
+  for (let i = 0; i < v.length; i++) {
+    const c = v.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const next = v.charCodeAt(i + 1); // за концом строки — NaN, условие ниже ложно
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        i++; // верная пара
+        continue;
+      }
+      return true;
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) return true; // «хвост» без «головы»
+  }
+  return false;
+}
+
+export const LONE_SURROGATE_TEXT = 'Некорректный символ в тексте';
+
 export function reqText(v: unknown, label: string, max: number, min = 1): string {
   if (typeof v !== 'string') fail(`${label}: ожидался текст`);
   if (hasNul(v)) fail(`${label}: в тексте не должно быть нулевого символа (он не сохраняется в базе)`);
+  if (hasLoneSurrogate(v)) fail(`${label}: ${LONE_SURROGATE_TEXT} — возможно, обрезан смайлик. Удалите его и повторите`);
   const s = v.trim();
   if (s.length < min || s.length > max) {
     fail(min === 0 ? `${label}: не длиннее ${max} символов` : `${label}: от ${min} до ${max} символов`);
@@ -370,7 +394,7 @@ export interface SyncData {
 
 export function parseSyncData(raw: Record<string, unknown>): SyncData {
   const deviceId = raw['deviceId'];
-  if (typeof deviceId !== 'string' || deviceId.length < 1 || deviceId.length > LIMITS.deviceId || /\s/.test(deviceId) || hasNul(deviceId)) {
+  if (typeof deviceId !== 'string' || deviceId.length < 1 || deviceId.length > LIMITS.deviceId || /\s/.test(deviceId) || hasNul(deviceId) || hasLoneSurrogate(deviceId)) {
     fail('Устройство: некорректный идентификатор');
   }
   return {

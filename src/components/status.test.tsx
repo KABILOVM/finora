@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HeaderStatus } from '@/app/HeaderStatus';
+import { SyncProvider } from '@/sync/syncContext';
+import type { SyncEngineApi, SyncStatus } from '@/sync/transport';
 import { INSTALL_HINT_KEY, InstallHint } from './InstallHint';
 import { OnlineBadge, useOnline } from './OnlineBadge';
 import { SyncBadge, syncBadgeText } from './SyncBadge';
@@ -18,9 +21,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const SYNCED_AT = '2026-10-10T08:00:00.000Z';
+
 describe('SyncBadge', () => {
   it('тексты по фазам', () => {
-    expect(syncBadgeText('idle', 0)).toBe('Синхронизировано');
+    expect(syncBadgeText('idle', 0, 0, SYNCED_AT)).toBe('Синхронизировано');
     expect(syncBadgeText('idle', 1)).toBe('1 запись ждёт отправки');
     expect(syncBadgeText('idle', 3)).toBe('3 записи ждут отправки');
     expect(syncBadgeText('idle', 5)).toBe('5 записей ждут отправки');
@@ -33,23 +38,23 @@ describe('SyncBadge', () => {
   });
 
   it('записи, отвергнутые сервером, видны в любой фазе и не дают написать «Синхронизировано»', () => {
-    expect(syncBadgeText('idle', 0, 3)).toBe('Не принято сервером: 3');
-    expect(syncBadgeText('idle', 2, 1)).toBe('2 записи ждут отправки · не принято сервером: 1');
+    expect(syncBadgeText('idle', 0, 3, SYNCED_AT)).toBe('Не принято сервером: 3');
+    expect(syncBadgeText('idle', 2, 1, SYNCED_AT)).toBe('2 записи ждут отправки · не принято сервером: 1');
     expect(syncBadgeText('syncing', 0, 4)).toBe('Синхронизация… · не принято сервером: 4');
     expect(syncBadgeText('offline', 0, 2)).toBe('Без сети · не принято сервером: 2');
     expect(syncBadgeText('error', 5, 1)).toBe('Ошибка синхронизации · 5 записей в очереди · не принято сервером: 1');
     expect(syncBadgeText('auth-required', 0, 7)).toBe('Нужен вход · не принято сервером: 7');
-    expect(syncBadgeText('idle', 0, 0)).toBe('Синхронизировано');
-    expect(syncBadgeText('idle', 0, Number.NaN)).toBe('Синхронизировано');
-    expect(syncBadgeText('idle', 0, -2)).toBe('Синхронизировано');
+    expect(syncBadgeText('idle', 0, 0, SYNCED_AT)).toBe('Синхронизировано');
+    expect(syncBadgeText('idle', 0, Number.NaN, SYNCED_AT)).toBe('Синхронизировано');
+    expect(syncBadgeText('idle', 0, -2, SYNCED_AT)).toBe('Синхронизировано');
   });
 
   it('бейдж с отвергнутыми записями красный (danger), с иконкой тревоги', () => {
-    const v = render(<SyncBadge phase="idle" pending={0} quarantined={2} />);
+    const v = render(<SyncBadge phase="idle" pending={0} quarantined={2} lastSyncedAt={SYNCED_AT} />);
     const el = screen.getByRole('status');
     expect(el).toHaveTextContent('Не принято сервером: 2');
     expect(el.className).toContain('text-danger');
-    v.rerender(<SyncBadge phase="idle" pending={0} quarantined={0} />);
+    v.rerender(<SyncBadge phase="idle" pending={0} quarantined={0} lastSyncedAt={SYNCED_AT} />);
     expect(screen.getByRole('status')).toHaveTextContent('Синхронизировано');
     expect(screen.getByRole('status').className).not.toContain('text-danger');
   });
@@ -61,19 +66,135 @@ describe('SyncBadge', () => {
 
   it('рисуется как status с нужной фазой для каждого состояния', () => {
     for (const phase of ['idle', 'syncing', 'offline', 'error', 'auth-required'] as const) {
-      const v = render(<SyncBadge phase={phase} pending={2} />);
+      const v = render(<SyncBadge phase={phase} pending={2} lastSyncedAt={SYNCED_AT} />);
       const el = screen.getByRole('status');
       expect(el).toHaveAttribute('data-phase', phase);
-      expect(el.textContent).toBe(syncBadgeText(phase, 2));
+      expect(el.textContent).toBe(syncBadgeText(phase, 2, 0, SYNCED_AT));
       v.unmount();
     }
   });
 
   it('обновляется по пропсам', () => {
-    const v = render(<SyncBadge phase="offline" pending={1} />);
+    const v = render(<SyncBadge phase="offline" pending={1} lastSyncedAt={SYNCED_AT} />);
     expect(screen.getByRole('status')).toHaveTextContent('Без сети · 1 запись в очереди');
-    v.rerender(<SyncBadge phase="idle" pending={0} />);
+    v.rerender(<SyncBadge phase="idle" pending={0} lastSyncedAt={SYNCED_AT} />);
     expect(screen.getByRole('status')).toHaveTextContent('Синхронизировано');
+  });
+});
+
+describe('SyncBadge: честный статус (пункт «Синхронизировано» только по правде)', () => {
+  it('lastSyncedAt === null и очередь пуста: нейтральное «Ещё не синхронизировано», а не «Синхронизировано»', () => {
+    expect(syncBadgeText('idle', 0, 0, null)).toBe('Ещё не синхронизировано');
+    const v = render(<SyncBadge phase="idle" pending={0} quarantined={0} lastSyncedAt={null} />);
+    const el = screen.getByRole('status');
+    expect(el).toHaveTextContent('Ещё не синхронизировано');
+    expect(el.textContent).not.toMatch(/^Синхронизировано/);
+    expect(el.className).not.toContain('text-danger');
+    expect(el.className).not.toContain('text-warning');
+    v.unmount();
+  });
+
+  it('поле lastSyncedAt не передано или мусор: подтверждения нет — «Синхронизировано» не показываем', () => {
+    expect(syncBadgeText('idle', 0)).toBe('Ещё не синхронизировано');
+    expect(syncBadgeText('idle', 0, 0, undefined)).toBe('Ещё не синхронизировано');
+    expect(syncBadgeText('idle', 0, 0, '')).toBe('Ещё не синхронизировано');
+    expect(syncBadgeText('idle', 0, 0, 'вчера')).toBe('Ещё не синхронизировано');
+  });
+
+  it('очередь не пуста — «Синхронизировано» нет, даже если раньше синхронизация была', () => {
+    for (const lastSyncedAt of [null, SYNCED_AT]) {
+      expect(syncBadgeText('idle', 1, 0, lastSyncedAt)).toBe('1 запись ждёт отправки');
+      expect(syncBadgeText('idle', 7, 0, lastSyncedAt)).not.toMatch(/Синхронизировано/);
+    }
+  });
+
+  it('есть записи, не принятые сервером — «Синхронизировано» нет', () => {
+    for (const lastSyncedAt of [null, SYNCED_AT]) {
+      expect(syncBadgeText('idle', 0, 2, lastSyncedAt)).toBe('Не принято сервером: 2');
+    }
+  });
+
+  it('СВОЙСТВО: «Синхронизировано» только когда фаза idle, очередь пуста, карантин пуст и lastSyncedAt настоящий', () => {
+    const phases = ['idle', 'syncing', 'offline', 'error', 'auth-required'] as const;
+    for (const phase of phases) {
+      for (const pending of [0, 1, 4]) {
+        for (const quarantined of [0, 3]) {
+          for (const lastSyncedAt of [null, undefined, SYNCED_AT]) {
+            const text = syncBadgeText(phase, pending, quarantined, lastSyncedAt);
+            const honest = phase === 'idle' && pending === 0 && quarantined === 0 && lastSyncedAt === SYNCED_AT;
+            expect(/^Синхронизировано$/.test(text), `${phase}/${pending}/${quarantined}/${String(lastSyncedAt)} → «${text}»`).toBe(honest);
+          }
+        }
+      }
+    }
+  });
+
+  it('«Нужен вход»: понятный текст в подсказке, данные не теряются; очередь показана', () => {
+    const v = render(<SyncBadge phase="auth-required" pending={0} lastSyncedAt={null} />);
+    const el = screen.getByRole('status');
+    expect(el).toHaveTextContent('Нужен вход');
+    expect(el.getAttribute('title')).toMatch(/Войдите в аккаунт заново/);
+    expect(el.getAttribute('title')).toMatch(/Всё сохранено на устройстве/);
+    expect(el.className).toContain('text-warning');
+    v.rerender(<SyncBadge phase="auth-required" pending={3} lastSyncedAt={SYNCED_AT} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Нужен вход · 3 записи в очереди');
+  });
+
+  it('до первого цикла в подсказке сказано, что данные пока только на устройстве', () => {
+    render(<SyncBadge phase="idle" pending={0} lastSyncedAt={null} />);
+    expect(screen.getByRole('status').getAttribute('title')).toMatch(/пока только на этом устройстве/);
+  });
+
+  it('после настоящей синхронизации — «Синхронизировано» с галочкой облака', () => {
+    render(<SyncBadge phase="idle" pending={0} quarantined={0} lastSyncedAt={SYNCED_AT} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/^Синхронизировано$/);
+  });
+});
+
+describe('HeaderStatus: SyncBadge получает ПОЛНЫЙ статус движка', () => {
+  function fakeEngine(initial: SyncStatus): SyncEngineApi & { set(next: Partial<SyncStatus>): void } {
+    let status = initial;
+    const listeners = new Set<(s: SyncStatus) => void>();
+    return {
+      getStatus: () => status,
+      subscribe(l) {
+        listeners.add(l);
+        return () => listeners.delete(l);
+      },
+      syncNow: async () => undefined,
+      start: () => undefined,
+      stop: () => undefined,
+      set(next) {
+        status = { ...status, ...next }; // новый объект только при изменении, как требует договор
+        for (const l of [...listeners]) l(status);
+      },
+    };
+  }
+
+  it('lastSyncedAt доходит до бейджа: до цикла — «Ещё не синхронизировано», после — «Синхронизировано»', () => {
+    const engine = fakeEngine({ phase: 'idle', pending: 0, quarantined: 0, lastSyncedAt: null, lastError: null });
+    render(
+      <SyncProvider engine={engine}>
+        <HeaderStatus />
+      </SyncProvider>,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Ещё не синхронизировано');
+    act(() => engine.set({ lastSyncedAt: SYNCED_AT }));
+    expect(screen.getByRole('status')).toHaveTextContent(/^Синхронизировано$/);
+    act(() => engine.set({ pending: 2 }));
+    expect(screen.getByRole('status')).toHaveTextContent('2 записи ждут отправки');
+    act(() => engine.set({ pending: 0, phase: 'auth-required' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Нужен вход');
+  });
+
+  it('локальный режим (без движка): «Только на устройстве», никакой «Синхронизации»', () => {
+    render(
+      <SyncProvider engine={null}>
+        <HeaderStatus />
+      </SyncProvider>,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Только на устройстве');
+    expect(screen.queryByText(/Синхронизировано|Ещё не синхронизировано/)).toBeNull();
   });
 });
 
@@ -140,7 +261,7 @@ describe('InstallHint', () => {
     env(IPHONE_SAFARI);
     render(<InstallHint />);
     const note = screen.getByRole('note');
-    expect(note).toHaveTextContent('Нажмите «Поделиться» → «На экран Домой»');
+    expect(note).toHaveTextContent(/Поделиться → На экран Домой/); // формулировка подсказки может меняться, шаги — нет
   });
 
   it('не показывает: Chrome на iPhone, ПК, настоящий Mac', () => {

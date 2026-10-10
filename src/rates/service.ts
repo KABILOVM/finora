@@ -1,9 +1,10 @@
 import type { CurrencyCode, RateTable } from '@/domain/types';
 import { isValidCurrencyCode } from '@/domain/currency';
 import { pickRate } from '@/domain/rates';
+import { describeRateError } from './http';
 import { MAX_PER_UNIT, MIN_PER_UNIT, boundWarnings, daysBetween, isFutureDate, isRateValue, isoDateOf } from './parseUtil';
 import { assessRateTable, pickComparable, withoutCodes } from './sanity';
-import { cleanTable, emptyState, isStoredState, mergeTables, normalizeStored, pairKey, putTable, serializeState, stamp, type RatesState } from './state';
+import { cleanTable, emptyState, isOwnerId, isStoredState, mergeTables, normalizeStored, pairKey, putTable, serializeState, stamp, type ManualRate, type RatesState } from './state';
 import type { FailureKind, ProviderFailure, RateLookup, RateProvider, RateService, RateServiceStatus, RateStorage, RefreshResult } from './types';
 
 /** Курс старше стольких календарных суток считается устаревшим (в пятницу-воскресенье курс «живёт» до вторника). */
@@ -23,10 +24,17 @@ class TimeoutFailure extends Error {}
 class AbortFailure extends Error {}
 
 function describeError(e: unknown): string {
-  const msg = e instanceof Error ? e.message || e.name : String(e);
-  // fetch без сети в браузере бросает TypeError('Failed to fetch') / ('Load failed') — переводим на человеческий
-  return (e instanceof TypeError ? `нет связи (${msg})` : msg).slice(0, 300);
+  return describeRateError(e).slice(0, 300); // всегда по-русски: «Failed to fetch» и подобное человеку не показываем
 }
+
+const hasOwn = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
+
+/** Как источник называется для человека. Свой (неизвестный) источник — по id. */
+const PROVIDER_LABELS: Readonly<Record<string, string>> = { server: 'сервер курсов', nbt: 'Нацбанк', api: 'запасной источник' };
+export const providerLabel = (id: string): string => (hasOwn(PROVIDER_LABELS, id) ? (PROVIDER_LABELS[id] as string) : `источник «${id}»`);
+
+/** «Нет связи…» → «нет связи…» внутри перечисления; сокращения (USD, HTTP) и имена не трогаем. */
+const lowerFirst = (s: string): string => (/^[А-ЯЁ][а-яё]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
 function warningsOf(table: unknown): string[] {
   const w = (table as { warnings?: unknown } | null)?.warnings;
@@ -59,6 +67,8 @@ export function createRateService(options: RateServiceOptions): RateService {
   let detachStorage: (() => void) | null = null;
   // true, если последняя запись в хранилище не удалась: в памяти есть то, чего там нет, и хранилище не должно это затирать
   let unsaved = false;
+  // чьи ручные курсы сейчас в силе; null — пользователь не назван (общая «ничья» корзина, как было до версии с пользователями)
+  let owner: string | null = null;
 
   let state: RatesState;
   try {
@@ -99,7 +109,10 @@ export function createRateService(options: RateServiceOptions): RateService {
     const stored = readStored();
     if (!stored) return;
     state.tables = dropFuture(mergeTables(state.tables, stored.tables));
-    if (!unsaved) state.manual = stored.manual;
+    if (!unsaved) {
+      state.manual = stored.manual;
+      state.manualByUser = stored.manualByUser;
+    }
     if (stamp(stored.lastAttemptAt) > stamp(state.lastAttemptAt)) {
       state.lastAttemptAt = stored.lastAttemptAt;
       state.lastError = stored.lastError;
@@ -188,13 +201,13 @@ export function createRateService(options: RateServiceOptions): RateService {
       if (!verdict.ok) {
         const why = verdict.reasons.join('; ');
         failures.push({ providerId: provider.id, kind: 'rejected', message: why });
-        warnings.push(`Курсы от «${provider.id}» выглядят подозрительно и не приняты, оставлены прежние: ${why}`);
+        warnings.push(`Курсы (${providerLabel(provider.id)}) выглядят подозрительно и не приняты, оставлены прежние: ${why}`);
         continue;
       }
       if (isFutureDate(fetched.asOf, now())) {
         const why = `дата курсов ${fetched.asOf} из будущего (проверьте дату на устройстве)`;
         failures.push({ providerId: provider.id, kind: 'rejected', message: why });
-        warnings.push(`Курсы от «${provider.id}» не приняты: ${why}`);
+        warnings.push(`Курсы (${providerLabel(provider.id)}) не приняты: ${why}`);
         continue;
       }
       if (latest && fetched.asOf < latest.asOf) {
@@ -206,7 +219,7 @@ export function createRateService(options: RateServiceOptions): RateService {
       if (verdict.excluded) {
         // скачок только у валют, которых нет в списке приложения: их не принимаем (прежние курсы остаются), остальные — да
         accepted = withoutCodes(fetched, verdict.excluded);
-        warnings.push(`Курсы валют ${verdict.excluded.join(', ')} от «${provider.id}» не приняты, оставлены прежние: ${verdict.reasons.join('; ')}`);
+        warnings.push(`Курсы валют ${verdict.excluded.join(', ')} (${providerLabel(provider.id)}) не приняты, оставлены прежние: ${verdict.reasons.join('; ')}`);
       }
       // более ранние таблицы провайдера — только действительно более ранние и не из будущего
       const earlier = earlierOf(fetched)
@@ -227,7 +240,7 @@ export function createRateService(options: RateServiceOptions): RateService {
         state.lastError =
           providers.length === 0
             ? 'Не настроено ни одного источника курсов'
-            : `Не удалось обновить курсы: ${failures.map((f) => `${f.providerId} — ${f.message}`).join('; ')}`.slice(0, 600);
+            : `Не удалось обновить курсы: ${failures.map((f) => `${providerLabel(f.providerId)} — ${lowerFirst(f.message)}`).join('; ')}`.slice(0, 600);
       }
     });
     return {
@@ -297,7 +310,7 @@ export function createRateService(options: RateServiceOptions): RateService {
     if (!isValidCurrencyCode(f) || !isValidCurrencyCode(t)) return null;
     const today = isoDateOf(now());
     if (f === t) return { rate: 1, source: 'same', asOf: today, stale: false, manual: false };
-    const manual = state.manual[pairKey(f, t)];
+    const manual = manualOf(owner)[pairKey(f, t)];
     if (manual) return { rate: manual.rate, source: 'manual', asOf: manual.setAt.slice(0, 10), stale: false, manual: true };
     const hit = pickRate(state.tables, f, t);
     if (!hit || !Number.isFinite(hit.rate) || hit.rate <= 0) return null;
@@ -318,13 +331,26 @@ export function createRateService(options: RateServiceOptions): RateService {
     return [f, t];
   }
 
+  /** Ручные курсы владельца (null — «ничья» корзина). Только чтение. */
+  function manualOf(who: string | null): Record<string, ManualRate> {
+    if (who === null) return state.manual;
+    return hasOwn(state.manualByUser, who) ? (state.manualByUser[who] as Record<string, ManualRate>) : {};
+  }
+
+  /** Корзина ручных курсов текущего владельца для записи (создаётся при первой записи). */
+  function manualForWrite(): Record<string, ManualRate> {
+    if (owner === null) return state.manual;
+    if (!hasOwn(state.manualByUser, owner)) state.manualByUser[owner] = {};
+    return state.manualByUser[owner] as Record<string, ManualRate>;
+  }
+
   function setManualRate(from: CurrencyCode, to: CurrencyCode, rate: number): void {
     const [f, t] = checkedPair(from, to);
     if (!isRateValue(rate)) {
       throw new RangeError(`Курс должен быть числом больше нуля (от ${MIN_PER_UNIT} до ${MAX_PER_UNIT}), получено ${String(rate)}`);
     }
     commit(() => {
-      state.manual[pairKey(f, t)] = { rate, setAt: now().toISOString() };
+      manualForWrite()[pairKey(f, t)] = { rate, setAt: now().toISOString() };
     });
     notify();
   }
@@ -332,17 +358,38 @@ export function createRateService(options: RateServiceOptions): RateService {
   function clearManualRate(from: CurrencyCode, to: CurrencyCode): void {
     const [f, t] = checkedPair(from, to);
     pull(); // курс мог быть задан в другой вкладке, а у этой в памяти его ещё нет
-    if (!(pairKey(f, t) in state.manual)) return;
+    if (!(pairKey(f, t) in manualOf(owner))) return;
     commit(() => {
-      delete state.manual[pairKey(f, t)];
+      const mine = manualForWrite();
+      delete mine[pairKey(f, t)];
+      if (owner !== null && Object.keys(mine).length === 0) delete state.manualByUser[owner]; // пустую корзину не храним
     });
     notify();
+  }
+
+  /**
+   * Привязывает ручные курсы к пользователю (id из локальной базы). Ручной курс одного человека не становится курсом другого
+   * на общем телефоне; автоматические курсы остаются общими. Старые ручные курсы (до привязки они были общими) достаются тому,
+   * кто первым открыл приложение после обновления: здесь они переезжают в его корзину, у остальных их нет. Вызывается до первой
+   * отрисовки, ничего не рассылает слушателям. Некорректный id — RangeError.
+   */
+  function bindUser(userId: string): void {
+    if (!isOwnerId(userId)) throw new RangeError('Некорректный идентификатор пользователя для ручных курсов');
+    owner = userId;
+    pull();
+    if (Object.keys(state.manual).length === 0) return;
+    commit(() => {
+      const mine = manualForWrite();
+      // свои курсы побеждают: «ничьи» подбираются только там, где у пользователя такой пары ещё нет
+      for (const [key, value] of Object.entries(state.manual)) if (!hasOwn(mine, key)) mine[key] = value;
+      state.manual = {};
+    });
   }
 
   function listKnownCurrencies(): CurrencyCode[] {
     const codes = new Set<CurrencyCode>();
     for (const table of state.tables) for (const code of Object.keys(table.perUnit)) codes.add(code);
-    for (const key of Object.keys(state.manual)) for (const code of key.split('>')) codes.add(code);
+    for (const key of Object.keys(manualOf(owner))) for (const code of key.split('>')) codes.add(code);
     return [...codes].sort();
   }
 
@@ -372,5 +419,5 @@ export function createRateService(options: RateServiceOptions): RateService {
     };
   }
 
-  return { refresh, getRate, setManualRate, clearManualRate, listKnownCurrencies, getStatus, subscribe };
+  return { refresh, getRate, setManualRate, clearManualRate, bindUser, listKnownCurrencies, getStatus, subscribe };
 }

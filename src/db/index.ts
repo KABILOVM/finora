@@ -3,7 +3,7 @@
 export { openStore, type Store, type OpenStoreOptions } from './store';
 export { StoreProvider, useStore } from './storeContext';
 
-export { FinoraDB, type MetaRow, type MetaValue } from './database';
+export { FinoraDB, META_LAST_SYNCED_AT, type MetaRow, type MetaValue } from './database';
 export { FxRequiredError, ValidationError } from './errors';
 
 export { createClock, type Clock, type ClockOptions } from './clock';
@@ -24,7 +24,17 @@ export {
   type CategoryTotal,
   type DayGroup,
 } from './queries';
-export { useWallets, useCategories, useTransactions, useBalances, useSettings, useMonthSummary } from './hooks';
+export {
+  useWallets,
+  useCategories,
+  useTransactions,
+  useBalances,
+  useBalancesState,
+  useSettings,
+  useMonthSummary,
+  BALANCES_OVERFLOW_MESSAGE,
+  type BalancesState,
+} from './hooks';
 
 export { ensureSeeded } from './seed';
 export { exportBackup, exportTransactionsCsv, importBackup, type BackupFile, type ImportResult } from './backup';

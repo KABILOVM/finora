@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { version } from '../../../package.json';
 import { AccountSection } from './AccountSection';
 import { BackupSection } from './BackupSection';
+import { CloudCheckSection } from './CloudCheckSection';
 import { CurrencySection } from './CurrencySection';
 import { DataCheckSection } from './DataCheckSection';
 import { InstallSection } from './InstallSection';
@@ -14,7 +15,7 @@ import { SettingsSection } from './SettingsSection';
 import { StorageSection } from './StorageSection';
 import { SyncSection } from './SyncSection';
 
-/** Настройки: аккаунт, синхронизация, валюта, курсы, копия, проверка, хранилище, установка, версия. */
+/** Настройки: аккаунт, синхронизация, проверка облака, валюта, курсы, копия, проверка данных, хранилище, установка, версия. */
 export default function SettingsPage() {
   const { cloud } = useAuth();
   return (
@@ -36,6 +37,7 @@ export default function SettingsPage() {
 
       <AccountSection />
       <SyncSection />
+      <CloudCheckSection />
       <CurrencySection />
       <RatesSection />
       <BackupSection />

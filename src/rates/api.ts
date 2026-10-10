@@ -1,5 +1,5 @@
 import { decodeBody, MAX_BODY_CHARS, RateParseError, boundWarnings, isFutureDate, isPlainObject, isRateValue, normalizeDate, parseDecimal } from './parseUtil';
-import { abortError, defaultFetch, fetchBytes, type FetchLike } from './http';
+import { abortError, defaultFetch, describeRateError, fetchBytes, type FetchLike } from './http';
 import type { ParsedRateTable, RateProvider } from './types';
 
 /*
@@ -139,12 +139,12 @@ export function apiProvider(fetchImpl: FetchLike = defaultFetch, options: ApiPro
           return parseCurrencyApiJson(decodeBody(bytes, contentType), base, options.now?.() ?? new Date());
         } catch (e) {
           if (signal?.aborted) throw e;
-          problems.push(`${hostOf(url)}: ${attempt.timedOut() && slice !== undefined ? waitedText(slice) : e instanceof Error ? e.message : String(e)}`);
+          problems.push(`${hostOf(url)}: ${attempt.timedOut() && slice !== undefined ? waitedText(slice) : describeRateError(e)}`);
         } finally {
           attempt.dispose();
         }
       }
-      throw new Error(`Все зеркала currency-api недоступны (${problems.join('; ') || 'список зеркал пуст'})`);
+      throw new Error(`Запасной источник курсов недоступен (${problems.join('; ') || 'список зеркал пуст'})`);
     },
   };
 }

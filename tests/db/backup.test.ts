@@ -170,7 +170,6 @@ describe('importBackup — мусорные файлы: ничего не зап
     ['неизвестный вид кошелька', (f) => (f.wallets[0].kind = 'crypto'), /Вид кошелька/],
     ['пустое название категории', (f) => (f.categories[0].name = '  '), /Название/],
     ['метка времени не каноничная', (f) => (f.wallets[0].clientUpdatedAt = '2026-10-01 10:00:00'), /метка времени/],
-    ['метка времени из будущего', (f) => (f.wallets[0].clientUpdatedAt = '2999-01-01T00:00:00.000Z'), /из будущего/],
     ['createdAt нет', (f) => delete f.wallets[0].createdAt, /Дата создания/],
     ['id с пробелом', (f) => (f.wallets[0].id = 'a b'), /идентификатор/],
     ['id пустой', (f) => (f.categories[0].id = ''), /идентификатор/],
@@ -402,12 +401,15 @@ describe('importBackup — метки из будущего и правила р
     expect(edited.clientUpdatedAt > imported.clientUpdatedAt).toBe(true);
   });
 
-  it('метка после 2100 года — не сбой часов, а порча файла: отвергается', async () => {
+  it('метка после 2100 года больше не отвергает файл: подрезается (подробнее — backupClamp.test.ts)', async () => {
     const src = await fresh();
     await populated(src);
     const file = clone(await exportBackup(src));
     file.wallets[0].clientUpdatedAt = '2100-01-01T00:00:00.001Z';
-    await expect(importBackup(await fresh(), file)).rejects.toThrow(/из будущего/);
+    const dst = await fresh();
+    await expect(importBackup(dst, file)).resolves.toBeDefined();
+    const limit = new Date(Date.now() + 5 * 60_000).toISOString();
+    expect((await dst.db.wallets.get(file.wallets[0].id))!.clientUpdatedAt <= limit).toBe(true);
   });
 
   it('копия, где кошелёк переехал в другую валюту, а его операции — на другой кошелёк, загружается', async () => {

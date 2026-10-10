@@ -1,5 +1,5 @@
 import type { RateTable } from '@/domain/types';
-import { abortError } from './http';
+import { abortError, describeRateError } from './http';
 import { RateParseError, boundWarnings, isFutureDate, isPlainObject, isRateValue, normalizeDate } from './parseUtil';
 import { assessRateTable } from './sanity';
 import type { ParsedRateTable, RateProvider, RateTableWithEarlier } from './types';
@@ -65,11 +65,6 @@ function rowToTable(row: unknown, now: Date): { table: ParsedRateTable } | { pro
   return { table: { ...table, warnings: boundWarnings(warnings) } };
 }
 
-function messageOf(error: unknown): string {
-  if (isPlainObject(error) && typeof error.message === 'string') return error.message;
-  return String(error);
-}
-
 /**
  * Читает последние строки public.exchange_rates (их туда кладёт Edge-функция fetch-rates) и отдаёт самую свежую.
  * При равной дате предпочитается строка с source = 'nbt' (официальные курсы), затем более поздний fetched_at.
@@ -89,7 +84,7 @@ export function serverProvider(client: RatesClient, options: ServerProviderOptio
         .order('as_of', { ascending: false })
         .limit(limit);
       if (signal?.aborted) throw abortError(signal);
-      if (error) throw new Error(`Сервер курсов: ${messageOf(error)}`);
+      if (error) throw new Error(`Сервер курсов: ${describeRateError(error)}`); // сырой текст ошибки сервера (английский) человеку не показываем
       if (!Array.isArray(data) || data.length === 0) throw new RateParseError('На сервере пока нет курсов');
 
       const now = options.now?.() ?? new Date();

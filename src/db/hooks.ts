@@ -63,16 +63,48 @@ export function useTransactions(
   }, [store, key]);
 }
 
-/** Текущие остатки всех кошельков (включая архивные): начальный остаток ± живые операции. Нигде не хранятся. */
-export function useBalances(): Map<UUID, Minor> | undefined {
+/** Что показать человеку, когда суммы не помещаются в расчёт (см. useBalancesState). */
+export const BALANCES_OVERFLOW_MESSAGE = 'Сумма слишком большая, проверьте данные';
+
+/**
+ * Итог расчёта остатков: либо остатки, либо понятный признак ошибки. Не бросает: переполнение (RangeError из
+ * computeBalances) становится значением, иначе useLiveQuery пробросил бы его в отрисовку и уронил бы экран.
+ */
+export type BalancesState =
+  | { ok: true; balances: Map<UUID, Minor> }
+  | { ok: false; error: 'overflow'; message: typeof BALANCES_OVERFLOW_MESSAGE };
+
+/**
+ * Остатки или признак ошибки. undefined — ещё считается. Экран при ok === false показывает `message`
+ * («Сумма слишком большая, проверьте данные») вместо цифр: показывать нули или половину сумм нельзя, это деньги.
+ */
+export function useBalancesState(): BalancesState | undefined {
   const store = useStore();
-  return useLiveQuery(async () => {
+  return useLiveQuery(async (): Promise<BalancesState> => {
     const [wallets, txs] = await Promise.all([store.db.wallets.toArray(), store.db.transactions.toArray()]);
-    return computeBalances(
-      wallets.filter((w) => w.deletedAt === null),
-      txs,
-    );
+    try {
+      return {
+        ok: true,
+        balances: computeBalances(
+          wallets.filter((w) => w.deletedAt === null),
+          txs,
+        ),
+      };
+    } catch (e) {
+      if (e instanceof RangeError) return { ok: false, error: 'overflow', message: BALANCES_OVERFLOW_MESSAGE };
+      throw e; // любая другая ошибка — настоящий сбой, его скрывать нельзя
+    }
   }, [store]);
+}
+
+/**
+ * Текущие остатки всех кошельков (включая архивные): начальный остаток ± живые операции. Нигде не хранятся.
+ * Прежний API: Map или undefined. При переполнении сумм экран НЕ падает, а остаётся в состоянии «считается» (undefined):
+ * чтобы показать причину, используйте useBalancesState().
+ */
+export function useBalances(): Map<UUID, Minor> | undefined {
+  const state = useBalancesState();
+  return state?.ok ? state.balances : undefined;
 }
 
 /** Настройки пользователя. undefined — загружаются; null — ещё не созданы (до первой загрузки/затравки). */

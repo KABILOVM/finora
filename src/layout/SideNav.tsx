@@ -6,11 +6,11 @@ import { Logo } from '@/components/Logo';
 import { cn } from '@/lib/cn';
 import { ADD_LABEL, NAV_ITEMS, useAddLink } from './nav';
 
-/** Боковая панель ПК (≥ 1024px): знак, пункты меню, «Добавить операцию» и место для индикатора синхронизации. */
+/** Боковая панель планшета и ПК (≥ 768px): знак, пункты меню, «Добавить операцию» и место для индикатора синхронизации. */
 export function SideNav({ status }: { status?: ReactNode }) {
   const addLink = useAddLink();
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col gap-4 border-r border-border bg-surface px-3 py-5 lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-4 border-r border-border bg-surface px-3 py-5 md:flex">
       <div className="flex items-center gap-3 px-3">
         <Logo size={36} />
         <span className="text-xl font-bold tracking-tight">Finora</span>

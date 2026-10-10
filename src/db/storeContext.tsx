@@ -13,3 +13,8 @@ export function useStore(): Store {
   if (!store) throw new Error('useStore: оберните приложение в <StoreProvider store={...}>');
   return store;
 }
+
+/** Id владельца текущего хранилища или null, если провайдера нет. В отличие от useStore не бросает ошибку. */
+export function useStoreUserId(): string | null {
+  return useContext(StoreContext)?.userId ?? null;
+}

@@ -147,12 +147,25 @@ describe('период', () => {
   });
 });
 
+/** Кошелёк, вид и категория выбираются в шите «Фильтры»: открыть, выбрать, «Применить» (список меняется только после него). */
+const openSheet = async () => {
+  await user.click(screen.getByRole('button', { name: /^Фильтры/ }));
+  await findByRole('dialog', { name: 'Фильтры' });
+};
+const kind = (name: string) => user.click(screen.getByRole('button', { name }));
+async function applySheet(pick: () => void | Promise<void>) {
+  await openSheet();
+  await pick();
+  await user.click(screen.getByRole('button', { name: 'Применить' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+}
+
 describe('фильтры', () => {
   it('по кошельку: и расходы с него, и переводы НА него', async () => {
     await openList();
     await period('Всё время');
     await waitFor(() => expect(has('Работа')).toBe(true));
-    choose('Кошелёк', 'Карта');
+    await applySheet(() => choose('Кошелёк', 'Карта'));
     await waitFor(() => expect(has('обед')).toBe(false));
     expect(has('такси')).toBe(true);
     expect(has('Наличные → Карта')).toBe(true);
@@ -164,11 +177,11 @@ describe('фильтры', () => {
     await openList();
     await period('Всё время');
     await waitFor(() => expect(has('Работа')).toBe(true));
-    choose('Категория', 'Еда');
+    await applySheet(() => choose('Категория', 'Еда'));
     await waitFor(() => expect(rowTexts()).toHaveLength(2));
     expect(has('обед')).toBe(true);
     expect(has('coffee')).toBe(true);
-    choose('Категория', 'Без категории');
+    await applySheet(() => choose('Категория', 'Без категории'));
     await waitFor(() => expect(rowTexts()).toHaveLength(1));
     expect(rowTexts()[0]).toContain('Без категории');
     expect(has('Наличные → Карта')).toBe(false); // перевод — не «пропущенная» категория
@@ -178,18 +191,23 @@ describe('фильтры', () => {
     await openList();
     await period('Всё время');
     await waitFor(() => expect(has('Работа')).toBe(true));
-    choose('Категория', 'Еда');
+    await applySheet(() => choose('Категория', 'Еда'));
     await waitFor(() => expect(rowTexts()).toHaveLength(2));
-    choose('Вид операции', 'Доходы'); // «Еда» — категория расходов: не подходит к доходам
+    // «Еда» — категория расходов: к доходам не подходит, в шите она сбрасывается
+    await applySheet(async () => {
+      await kind('Доходы');
+      expect((screen.getByRole('combobox', { name: 'Категория' }) as HTMLSelectElement).value).toBe('');
+    });
     await waitFor(() => expect(has('аванс')).toBe(true));
     expect(rowTexts()).toHaveLength(2);
     expect(has('Работа')).toBe(true);
-    expect((screen.getByRole('combobox', { name: 'Категория' }) as HTMLSelectElement).value).toBe('');
-    choose('Вид операции', 'Переводы');
+    await applySheet(async () => {
+      await kind('Переводы');
+      expect(screen.getByRole('combobox', { name: 'Категория' })).toBeDisabled();
+    });
     await waitFor(() => expect(rowTexts()).toHaveLength(1));
     expect(has('Наличные → Карта')).toBe(true);
-    expect(screen.getByRole('combobox', { name: 'Категория' })).toBeDisabled();
-    choose('Вид операции', 'Расходы');
+    await applySheet(() => kind('Расходы'));
     await waitFor(() => expect(rowTexts()).toHaveLength(5));
   });
 
@@ -197,11 +215,88 @@ describe('фильтры', () => {
     await openList();
     await period('Всё время');
     await waitFor(() => expect(has('Работа')).toBe(true));
-    choose('Кошелёк', 'Карта');
-    choose('Вид операции', 'Расходы');
+    await applySheet(async () => {
+      choose('Кошелёк', 'Карта');
+      await kind('Расходы');
+    });
     await waitFor(() => expect(rowTexts()).toHaveLength(2));
     expect(has('такси')).toBe(true);
     expect(has('Без категории')).toBe(true);
+  });
+});
+
+describe('шит «Фильтры» и счётчик', () => {
+  const filtersButton = () => screen.getByRole('button', { name: /^Фильтры/ });
+  const activeLine = () => document.querySelector('[data-testid="active-filters"]');
+  /** Кнопка внутри шита (под поиском тоже есть «Сбросить», поэтому ищем только в окне). */
+  const inSheet = (name: string) =>
+    Array.from(document.querySelectorAll('[role="dialog"] button')).find((b) => (b.textContent ?? '').trim() === name) as HTMLElement;
+
+  it('кнопка «Фильтры» в первой строке с периодом; поиск виден сразу, кошелёк/вид/категория — только в шите', async () => {
+    await openList();
+    const periodGroup = screen.getByRole('group', { name: 'Период' });
+    // чипы периода и кнопка лежат в одной строке (общий родитель)
+    expect(periodGroup.parentElement?.contains(filtersButton())).toBe(true);
+    expect(screen.getByRole('textbox', { name: 'Поиск по заметке' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Кошелёк' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Категория' })).toBeNull();
+    expect(filtersButton().getAttribute('aria-label')).toBe('Фильтры');
+    expect(activeLine()).toBeNull();
+    await openSheet();
+    expect(screen.getByRole('combobox', { name: 'Кошелёк' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Категория' })).toBeInTheDocument();
+    expect(inSheet('Сбросить')).toBeDisabled(); // пока ничего не выбрано
+  });
+
+  it('число включённых фильтров на кнопке: 0 → 1 → 2 → снова 0 после «Сбросить»', async () => {
+    await openList();
+    await period('Всё время');
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    await applySheet(() => choose('Кошелёк', 'Карта'));
+    await waitFor(() => expect(filtersButton().getAttribute('aria-label')).toBe('Фильтры, включено: 1'));
+    expect(filtersButton()).toHaveTextContent('1');
+    await applySheet(() => kind('Расходы'));
+    await waitFor(() => expect(filtersButton().getAttribute('aria-label')).toBe('Фильтры, включено: 2'));
+    // под поиском — что именно включено
+    expect(activeLine()).toHaveTextContent('Карта · Расходы');
+    // «Сбросить» под поиском снимает всё, а период и поиск не трогает
+    await user.click(screen.getByRole('button', { name: 'Сбросить' }));
+    await waitFor(() => expect(filtersButton().getAttribute('aria-label')).toBe('Фильтры'));
+    expect(activeLine()).toBeNull();
+    expect(screen.getByRole('button', { name: 'Всё время' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(has('обед')).toBe(true));
+  });
+
+  it('выбор в шите попадает в список только после «Применить»; закрытие без «Применить» ничего не меняет', async () => {
+    await openList();
+    await period('Всё время');
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    const before = rowTexts().length;
+    await openSheet();
+    choose('Кошелёк', 'Карта');
+    expect(rowTexts()).toHaveLength(before); // список ещё прежний
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(rowTexts()).toHaveLength(before);
+    expect(filtersButton().getAttribute('aria-label')).toBe('Фильтры');
+    // повторное открытие начинает с того, что реально включено (прежний выбор не «залип»)
+    await openSheet();
+    expect((screen.getByRole('combobox', { name: 'Кошелёк' }) as HTMLSelectElement).value).toBe('');
+  });
+
+  it('«Сбросить» в шите очищает выбор, список обновляется после «Применить»', async () => {
+    await openList();
+    await period('Всё время');
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    await applySheet(() => choose('Кошелёк', 'Карта'));
+    await waitFor(() => expect(has('обед')).toBe(false));
+    await openSheet();
+    await user.click(inSheet('Сбросить'));
+    expect((screen.getByRole('combobox', { name: 'Кошелёк' }) as HTMLSelectElement).value).toBe('');
+    expect(has('обед')).toBe(false); // пока не применили — список прежний
+    await user.click(inSheet('Применить'));
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(filtersButton().getAttribute('aria-label')).toBe('Фильтры');
   });
 });
 

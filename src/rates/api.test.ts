@@ -176,7 +176,7 @@ describe('apiProvider', () => {
   it('упали все зеркала — одна ошибка с причиной по каждому', async () => {
     const fetchImpl = routeFetch((url) => (url === API_MIRRORS[0] ? failResponse(404) : okResponse(API_HTML)));
     const run = () => apiProvider(fetchImpl, opts).fetchLatest();
-    await expect(run()).rejects.toThrow('cdn.jsdelivr.net: HTTP 404');
+    await expect(run()).rejects.toThrow('cdn.jsdelivr.net: Источник курсов не найден (ошибка 404)');
     await expect(run()).rejects.toThrow(/latest\.currency-api\.pages\.dev/);
   });
 

@@ -1,5 +1,4 @@
-import type { Store } from '@/db';
-import { META_LAST_SYNCED_AT } from '@/db/database';
+import { META_LAST_SYNCED_AT, type Store } from '@/db';
 import { BISECT_BUDGET, BisectBudgetError, pushAll, type PushCtx } from './pushPhase';
 import { UNREADABLE_MESSAGE, pullAll } from './pullPhase';
 import { SESSION_MISMATCH_MESSAGE, SessionMismatchError, guardSession } from './session';
@@ -147,12 +146,22 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     return countsRunning;
   }
 
+  /**
+   * Время прошлой синхронизации и счётчики очереди ставятся ОДНИМ обновлением статуса: иначе на миг получается
+   * «синхронизировано до такого-то времени» при неподсчитанной (нулевой) очереди, и индикатор врёт «Синхронизировано».
+   */
   async function loadSavedStatus(): Promise<void> {
     try {
-      const saved = await store.sync.getMeta(META_LAST_SYNCED_AT);
-      if (!disposed && typeof saved === 'string' && status.lastSyncedAt === null) setStatus({ lastSyncedAt: saved });
+      const [saved, c] = await Promise.all([store.sync.getMeta(META_LAST_SYNCED_AT), store.sync.counts()]);
+      if (!disposed) {
+        setStatus({
+          pending: c.pending,
+          quarantined: c.quarantined,
+          ...(typeof saved === 'string' && status.lastSyncedAt === null ? { lastSyncedAt: saved } : {}),
+        });
+      }
     } catch {
-      // нет сохранённого времени — не страшно
+      // нет сохранённого времени или счётчиков — статус остаётся «ещё не синхронизировано», это честно
     }
     await refreshCounts();
   }

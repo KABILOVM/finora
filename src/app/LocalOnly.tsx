@@ -1,5 +1,5 @@
+import { Link, useLocation } from 'react-router-dom';
 import { Badge } from '@/components/Badge';
-import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 
 /** Нейтральный индикатор вместо «Синхронизировано»: в локальном режиме синхронизации нет. */
@@ -12,15 +12,33 @@ export function LocalOnlyBadge() {
   );
 }
 
-/** Заметная, но не навязчивая плашка локального режима. */
+/**
+ * Плашка локального режима: ОДНА строка — что не так («Облако не подключено») и что делать («Сделать копию» → Настройки).
+ * Полная фраза для скринридера и подсказки скрыта визуально. В самих «Настройках» ссылка не нужна: копия там же, ниже.
+ */
 export function LocalModeBanner() {
+  const { pathname } = useLocation();
+  const inSettings = pathname === '/settings' || pathname.startsWith('/settings/');
   return (
-    <Card role="note" className="mb-4 flex items-start gap-3 border-warning/40 bg-warning/5" data-testid="local-mode-banner">
-      <Icon name="info" size={22} className="mt-0.5 shrink-0 text-warning" />
-      <p className="min-w-0 text-base">
-        <strong className="font-semibold">Облако не подключено:</strong> данные хранятся только на этом устройстве.
-        Делайте резервную копию.
+    <div
+      role="note"
+      data-testid="local-mode-banner"
+      className="mb-2 flex min-h-[44px] items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 pl-3 pr-1 text-[13px] leading-tight"
+    >
+      <Icon name="info" size={18} className="shrink-0 text-warning" />
+      <p className="min-w-0 flex-1 py-1.5">
+        <strong className="font-semibold">Облако не подключено</strong>
+        <span className="sr-only">: данные хранятся только на этом устройстве. Делайте резервную копию.</span>
       </p>
-    </Card>
+      {!inSettings && (
+        <Link
+          to="/settings"
+          className="inline-flex min-h-[44px] shrink-0 items-center gap-0.5 rounded-lg px-2 font-semibold text-brand"
+        >
+          Сделать копию
+          <Icon name="chevron" size={14} />
+        </Link>
+      )}
+    </div>
   );
 }

@@ -76,7 +76,10 @@ export interface RateServiceStatus {
   lastError: string | null;
 }
 
-/** Курсы не приватны, поэтому один общий ключ на устройство (а не по пользователю). */
+/**
+ * Автоматические курсы не приватны, поэтому один общий ключ на устройство (а не по пользователю).
+ * Ручные курсы лежат в том же документе, но по пользователям (см. RateService.bindUser).
+ */
 export const RATES_STORAGE_KEY = 'finora:rates:v1';
 
 /** Хранилище одного JSON-документа. get() не бросает: нет данных или они битые — вернёт null. */
@@ -94,9 +97,18 @@ export interface RateService {
    */
   refresh(signal?: AbortSignal): Promise<RefreshResult>;
   getRate(from: CurrencyCode, to: CurrencyCode): RateLookup | null;
-  /** Бросает RangeError, если курс не конечное число > 0 или коды валют некорректны. */
+  /**
+   * Ручной курс действует для пользователя, названного через bindUser (без него — для «общей» корзины).
+   * Бросает RangeError, если курс не конечное число > 0 или коды валют некорректны.
+   */
   setManualRate(from: CurrencyCode, to: CurrencyCode, rate: number): void;
   clearManualRate(from: CurrencyCode, to: CurrencyCode): void;
+  /**
+   * Привязать ручные курсы к пользователю: на общем телефоне свой курс одного человека не становится курсом другого.
+   * Автоматические курсы остаются общими. Ручные курсы, заданные до этой привязки, достаются тому, кто привязался первым.
+   * Необязательный метод (подставные сервисы в тестах его могут не иметь). Бросает RangeError при некорректном id.
+   */
+  bindUser?(userId: string): void;
   listKnownCurrencies(): CurrencyCode[];
   getStatus(): RateServiceStatus;
   /** Слушатель вызывается после любого изменения курсов или статуса. Возвращает функцию отписки. */

@@ -288,7 +288,7 @@ describe('nbtProvider', () => {
   });
 
   it('HTTP-ошибка, отсутствие сети, HTML и пустой ответ — это отказ (rejects), а не пустая таблица', async () => {
-    await expect(nbtProvider(routeFetch(() => failResponse(503)), opts).fetchLatest()).rejects.toThrow(/HTTP 503/);
+    await expect(nbtProvider(routeFetch(() => failResponse(503)), opts).fetchLatest()).rejects.toThrow(/Источник курсов сейчас не работает \(ошибка 503\)/);
     await expect(
       nbtProvider(
         routeFetch(() => {
@@ -296,7 +296,7 @@ describe('nbtProvider', () => {
         }),
         opts,
       ).fetchLatest(),
-    ).rejects.toThrow(/Failed to fetch/);
+    ).rejects.toThrow(/Нет связи с источником курсов/);
     await expect(nbtProvider(routeFetch(() => okResponse(NBT_HTML, 'text/html')), opts).fetchLatest()).rejects.toThrow(/HTML/);
     await expect(nbtProvider(routeFetch(() => okResponse('')), opts).fetchLatest()).rejects.toThrow(/Пустой ответ/);
   });

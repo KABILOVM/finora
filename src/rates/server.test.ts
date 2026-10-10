@@ -110,8 +110,8 @@ describe('serverProvider', () => {
   });
 
   it('ошибка базы, пустой ответ, null и сплошной мусор — отказ', async () => {
-    await expect(serverProvider(fakeClient({ data: null, error: { message: 'JWT expired' } }), opts).fetchLatest()).rejects.toThrow(/Сервер курсов: JWT expired/);
-    await expect(serverProvider(fakeClient({ data: null, error: 'boom' }), opts).fetchLatest()).rejects.toThrow(/boom/);
+    await expect(serverProvider(fakeClient({ data: null, error: { message: 'JWT expired' } }), opts).fetchLatest()).rejects.toThrow(/^Сервер курсов: Источник курсов не пустил запрос/);
+    await expect(serverProvider(fakeClient({ data: null, error: 'boom' }), opts).fetchLatest()).rejects.toThrow(/^Сервер курсов: Источник курсов вернул ошибку$/);
     await expect(serverProvider(fakeClient(rows()), opts).fetchLatest()).rejects.toThrow(RateParseError);
     await expect(serverProvider(fakeClient({ data: null, error: null }), opts).fetchLatest()).rejects.toThrow(/пока нет курсов/);
     await expect(serverProvider(fakeClient(rows({ junk: 1 }, null)), opts).fetchLatest()).rejects.toThrow(/нет пригодных курсов/);

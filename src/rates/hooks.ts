@@ -1,4 +1,5 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
+import { useStoreUserId } from '@/db/storeContext';
 import type { CurrencyCode, IsoDateTime } from '@/domain/types';
 import type { RateLookup, RateService, RateServiceStatus, RefreshResult } from './types';
 
@@ -36,6 +37,8 @@ interface RatesContextValue {
   refreshing: boolean;
   /** Растёт при любом изменении курсов или статуса — чтобы потребители пересчитались. */
   version: number;
+  /** Чьи ручные курсы сейчас в силе (null — пользователь не назван). */
+  owner: string | null;
 }
 
 const RatesContext = createContext<RatesContextValue | null>(null);
@@ -44,12 +47,28 @@ export interface RateServiceProviderProps {
   service: RateService;
   /** false — не обновлять само (для тестов и экранов без сети). */
   autoRefresh?: boolean;
+  /**
+   * Чьи ручные курсы показывать. По умолчанию — владелец локальной базы из StoreProvider (приложение так и работает:
+   * курсы создаются внутри сеанса пользователя). Без базы и без этого поля ручные курсы остаются «общими».
+   */
+  userId?: string;
   children?: ReactNode;
 }
 
-export function RateServiceProvider({ service, autoRefresh = true, children }: RateServiceProviderProps): ReactElement {
+export function RateServiceProvider({ service, autoRefresh = true, userId, children }: RateServiceProviderProps): ReactElement {
   const [version, setVersion] = useState(0);
   const [active, setActive] = useState(0);
+  const storeUserId = useStoreUserId();
+  const owner = userId ?? storeUserId;
+  // Привязка ДО отрисовки детей: иначе первый кадр показал бы чужой ручной курс. Повтор безопасен (идемпотентна).
+  useMemo(() => {
+    if (owner === null) return;
+    try {
+      service.bindUser?.(owner);
+    } catch (e) {
+      console.error('Ручные курсы не привязаны к пользователю:', e);
+    }
+  }, [service, owner]);
 
   useEffect(() => service.subscribe(() => setVersion((v) => v + 1)), [service]);
 
@@ -74,8 +93,8 @@ export function RateServiceProvider({ service, autoRefresh = true, children }: R
   }, [service, autoRefresh, refresh]);
 
   const value = useMemo<RatesContextValue>(
-    () => ({ service, refresh, refreshing: active > 0, version }),
-    [service, refresh, active, version],
+    () => ({ service, refresh, refreshing: active > 0, version, owner }),
+    [service, refresh, active, version, owner],
   );
   return createElement(RatesContext.Provider, { value }, children);
 }
@@ -96,9 +115,9 @@ export interface UseRates {
 }
 
 export function useRates(): UseRates {
-  const { service, refresh, refreshing, version } = useRatesContext();
-  // version нужен только как зависимость: после обновления курсов getRate получает новую identity
-  const getRate = useCallback((from: CurrencyCode, to: CurrencyCode) => service.getRate(from, to), [service, version]);
+  const { service, refresh, refreshing, version, owner } = useRatesContext();
+  // version и owner нужны только как зависимости: после обновления курсов (или смены пользователя) getRate получает новую identity
+  const getRate = useCallback((from: CurrencyCode, to: CurrencyCode) => service.getRate(from, to), [service, version, owner]);
   const status = service.getStatus();
   return { getRate, refresh, refreshing, lastRefreshAt: status.lastRefreshAt, lastError: status.lastError };
 }

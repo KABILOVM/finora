@@ -1,5 +1,5 @@
 import { decodeBody, MAX_BODY_CHARS, RateParseError, boundWarnings, isFutureDate, isRateValue, normalizeDate, parseDecimal, parseNominal } from './parseUtil';
-import { defaultFetch, fetchBytes, type FetchLike } from './http';
+import { defaultFetch, fetchBytes, russianError, type FetchLike } from './http';
 import type { ParsedRateTable, RateProvider } from './types';
 
 /*
@@ -318,8 +318,13 @@ export function nbtProvider(fetchImpl: FetchLike = defaultFetch, options: NbtPro
   return {
     id: 'nbt',
     async fetchLatest(signal) {
-      const { bytes, contentType } = await fetchBytes(fetchImpl, url, signal);
-      return parseNbtXml(decodeBody(bytes, contentType), options.now?.() ?? new Date());
+      let got: Awaited<ReturnType<typeof fetchBytes>>;
+      try {
+        got = await fetchBytes(fetchImpl, url, signal);
+      } catch (e) {
+        throw russianError(e); // «Failed to fetch» и подобное наружу не выходит
+      }
+      return parseNbtXml(decodeBody(got.bytes, got.contentType), options.now?.() ?? new Date());
     },
   };
 }

@@ -24,6 +24,41 @@ export interface ListFilters {
   search: string;
 }
 
+/** Часть фильтров, которая живёт в шите «Фильтры» (период и поиск видны на самом экране). */
+export type SheetFilters = Pick<ListFilters, 'walletId' | 'kind' | 'categoryId'>;
+
+export const EMPTY_SHEET_FILTERS: SheetFilters = { walletId: '', kind: '', categoryId: '' };
+
+/** Сколько фильтров из шита включено (0–3): это число показывает кнопка «Фильтры». */
+export function activeFilterCount(f: SheetFilters): number {
+  return (f.walletId !== '' ? 1 : 0) + (f.kind !== '' ? 1 : 0) + (f.categoryId !== '' ? 1 : 0);
+}
+
+/**
+ * Смена вида в шите. Категория другого вида (или любая, если смотрим переводы) к новому виду не подходит — сбрасывается.
+ * categoryKind — вид выбранной категории (undefined: категории нет или это «Без категории»).
+ */
+export function withKind(f: SheetFilters, kind: '' | TxKind, categoryKind: TxKind | undefined): SheetFilters {
+  const drop = kind === 'transfer' || (categoryKind !== undefined && kind !== '' && categoryKind !== kind);
+  return drop ? { ...f, kind, categoryId: '' } : { ...f, kind };
+}
+
+const KIND_NAMES: Record<TxKind, string> = { expense: 'Расходы', income: 'Доходы', transfer: 'Переводы' };
+
+/** Короткие названия включённых фильтров для строки под поиском: «Карта · Расходы · Еда». */
+export function activeFilterLabels(
+  f: SheetFilters,
+  wallets: readonly { id: string; name: string }[],
+  categories: readonly { id: string; name: string }[],
+): string[] {
+  const out: string[] = [];
+  if (f.walletId !== '') out.push(wallets.find((w) => w.id === f.walletId)?.name ?? 'Кошелёк');
+  if (f.kind !== '') out.push(KIND_NAMES[f.kind]);
+  if (f.categoryId === NO_CATEGORY) out.push('Без категории');
+  else if (f.categoryId !== '') out.push(categories.find((c) => c.id === f.categoryId)?.name ?? 'Категория');
+  return out;
+}
+
 export const MIN_MONTH = '2000-01';
 export const MAX_MONTH = '2100-12';
 

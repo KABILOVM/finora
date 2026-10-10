@@ -170,7 +170,7 @@ describe('subscribe, статус, список валют', () => {
     const service = createRateService({ providers: [p], storage, now: () => new Date(nowMs) });
     expect(service.getStatus()).toEqual({ lastRefreshAt: null, lastAttemptAt: null, lastError: null });
     await service.refresh();
-    expect(service.getStatus()).toEqual({ lastRefreshAt: null, lastAttemptAt: t0, lastError: 'Не удалось обновить курсы: nbt — нет сети' });
+    expect(service.getStatus()).toEqual({ lastRefreshAt: null, lastAttemptAt: t0, lastError: 'Не удалось обновить курсы: Нацбанк — нет сети' });
     nowMs += 3_600_000;
     shouldFail = false;
     await service.refresh();

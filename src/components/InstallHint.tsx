@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
 import { IconButton } from './IconButton';
-import { Icon } from './Icon';
 
 export const INSTALL_HINT_KEY = 'finora.installHint.dismissed';
 
@@ -37,24 +36,29 @@ function writeDismissed(): void {
   }
 }
 
-/** Подсказка «как установить» для Safari на iPhone. Закрывается и больше не показывается. */
+/**
+ * Подсказка «как установить» для Safari на iPhone: ОДНА строка и крестик (не занимает пол-экрана).
+ * Сама решает, показываться ли (только iPhone/iPad Safari, не из «Домой», не закрытая раньше);
+ * на какой странице её показывать, решает вызывающий — сейчас только «Главная».
+ */
 export function InstallHint({ className }: { className?: string }) {
   const [visible, setVisible] = useState(() => isIosSafari() && !isStandalone() && !readDismissed());
   if (!visible) return null;
   return (
     <div
       role="note"
-      className={cn('flex items-start gap-3 rounded-2xl border border-border bg-surface p-4 shadow-card', className)}
+      className={cn(
+        'flex min-h-[44px] items-center gap-1 rounded-xl border border-border bg-surface pl-3 text-[13px] leading-tight shadow-card',
+        className,
+      )}
     >
-      <Icon name="download" size={24} className="mt-0.5 shrink-0 text-brand" />
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold">Установите Finora как приложение</p>
-        <p className="text-muted">Нажмите «Поделиться» → «На экран Домой».</p>
-      </div>
+      <p className="min-w-0 flex-1 py-1.5">
+        <span className="font-semibold text-brand">Установка:</span> Поделиться → На экран Домой
+      </p>
       <IconButton
         icon="close"
         label="Закрыть подсказку"
-        className="-mr-2 -mt-2"
+        iconSize={18}
         onClick={() => {
           writeDismissed();
           setVisible(false);

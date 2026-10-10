@@ -21,14 +21,14 @@ function Item({ item }: { item: NavItem }) {
   );
 }
 
-/** Нижняя панель телефона и планшета (< 1024px): 2 пункта, большая «+», 2 пункта. Уважает «чёлку» снизу (safe-area). */
+/** Нижняя панель телефона (< 768px): 2 пункта, большая «+», 2 пункта. Уважает «чёлку» снизу (safe-area). */
 export function BottomNav() {
   const addLink = useAddLink();
   const [first, second, third, fourth] = NAV_ITEMS;
   return (
     <nav
       aria-label="Основная навигация"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
       <div className="mx-auto grid max-w-xl grid-cols-5 items-center px-2">
         {first && <Item item={first} />}

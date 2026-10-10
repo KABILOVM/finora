@@ -55,9 +55,9 @@ export function MonthCard({ month, currentMonth, onMonth, categories }: MonthCar
   const bars = summary ? topCategories(summary.byCategory) : null;
 
   return (
-    <Card padding="lg" aria-label="Итоги месяца">
-      <MonthSwitcher month={month} max={currentMonth} onChange={onMonth} />
-      {month === currentMonth && <p className="text-center text-xs text-muted">Этот месяц</p>}
+    <Card aria-label="Итоги месяца" className="!py-3 md:!p-5">
+      <MonthSwitcher month={month} max={currentMonth} onChange={onMonth} className="-my-1" />
+      {month === currentMonth && <p className="-mt-1 text-center text-xs text-muted">Этот месяц</p>}
 
       {!summary ? (
         <p role="status" className="py-6 text-center text-muted">
@@ -65,7 +65,7 @@ export function MonthCard({ month, currentMonth, onMonth, categories }: MonthCar
         </p>
       ) : (
         <>
-          <dl className="mt-4 flex flex-col gap-2">
+          <dl className="mt-3 flex flex-col gap-1.5">
             <Row label="Доходы">
               <MoneyText minor={summary.incomeMinor} currency={base} tone="income" sign="always" />
             </Row>

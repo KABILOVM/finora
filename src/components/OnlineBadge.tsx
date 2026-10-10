@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { cn } from '@/lib/cn';
 import { Badge } from './Badge';
 import { Icon } from './Icon';
 
@@ -24,11 +25,20 @@ export interface OnlineBadgeProps {
   className?: string;
 }
 
+/**
+ * «Офлайн» — янтарная плашка с рамкой: заметна, но маленькая. data-keep: в шапке телефона она не сжимается
+ * (сокращается подпись соседнего индикатора, см. .header-status в index.css).
+ */
 export function OnlineBadge({ hideWhenOnline = false, className }: OnlineBadgeProps) {
   const online = useOnline();
   if (online && hideWhenOnline) return null;
   return (
-    <Badge tone={online ? 'neutral' : 'warning'} role="status" className={className}>
+    <Badge
+      tone={online ? 'neutral' : 'warning'}
+      role="status"
+      data-keep
+      className={cn(!online && 'font-bold ring-1 ring-inset ring-warning/50', className)}
+    >
       {online ? (
         <span className="h-2 w-2 rounded-full bg-income" aria-hidden="true" />
       ) : (

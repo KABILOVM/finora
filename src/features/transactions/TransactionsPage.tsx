@@ -75,7 +75,7 @@ export default function TransactionsPage() {
 
   return (
     <>
-      <PageHeader title="Операции" />
+      <PageHeader title="Операции" className="!pb-2 !pt-1 md:!pb-4 md:!pt-0" />
       {loading ? (
         <p role="status" className="py-10 text-center text-muted">
           Загрузка…

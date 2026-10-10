@@ -94,6 +94,11 @@
     outline-offset: 2px;
   }
 
+  /* Строки списка лежат в карточках с overflow-hidden: рамка фокуса снаружи обрезалась бы, поэтому внутри таких карточек она рисуется внутрь. */
+  .overflow-hidden :focus-visible {
+    outline-offset: -2px;
+  }
+
   ::selection {
     background-color: rgb(var(--brand) / 0.25);
   }
@@ -115,5 +120,42 @@
   .money {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+
+  /*
+   * Индикаторы в шапке телефона: всегда ОДНА строка. Если места мало, длинная подпись первого индикатора сокращается «…»
+   * (полный текст — в подсказке title), а «Офлайн» (data-keep) не сжимается и остаётся виден целиком.
+   */
+  .header-status {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+  }
+  .header-status > * {
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
+  }
+  .header-status > [data-keep] {
+    flex-shrink: 0;
+  }
+  .header-status > * > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Строка с горизонтальной прокруткой без полосы (чипы периода): прокручивается пальцем, полоса не занимает место. */
+  .scroll-x-quiet {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-x-quiet::-webkit-scrollbar {
+    display: none;
   }
 }

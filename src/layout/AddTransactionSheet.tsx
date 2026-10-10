@@ -166,7 +166,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, onSaved }: Add
               {c.errors.form}
             </p>
           )}
-          <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+          <div className="grid grid-cols-[1fr_1.2fr] gap-2 md:grid-cols-[1.3fr_1fr]">
             <Button
               variant="secondary"
               size="lg"
