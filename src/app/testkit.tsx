@@ -47,8 +47,14 @@ export function fakeAuthClient(options: FakeAuthOptions = {}) {
   const accounts = options.accounts ?? [ALICE, BOB];
   let current: FakeAccount | null = options.session ?? null;
   const listeners = new Set<Listener>();
-  const calls = { signIn: 0, signOut: 0, updateUser: 0, refreshSession: 0, getSession: 0 };
-  const state = { offline: options.offline ?? false, getSession: options.getSession ?? 'ok', lastPassword: null as string | null };
+  const calls = { signIn: 0, signOut: 0, updateUser: 0, refreshSession: 0, getSession: 0, signOutArgs: [] as unknown[] };
+  const state = {
+    offline: options.offline ?? false,
+    getSession: options.getSession ?? 'ok',
+    lastPassword: null as string | null,
+    /** true — signOut возвращает ошибку сети и сессию НЕ снимает. */
+    signOutFails: false,
+  };
 
   const sessionOf = (a: FakeAccount | null): Session | null =>
     a
@@ -94,8 +100,10 @@ export function fakeAuthClient(options: FakeAuthOptions = {}) {
       emit('SIGNED_IN', found);
       return { data: { user: session?.user ?? null, session }, error: null };
     },
-    async signOut() {
+    async signOut(args?: unknown) {
       calls.signOut++;
+      calls.signOutArgs.push(args);
+      if (state.signOutFails) return { error: networkError() };
       current = null;
       emit('SIGNED_OUT', null);
       return { error: null };

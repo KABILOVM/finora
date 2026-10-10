@@ -106,8 +106,8 @@ export interface Spy {
   holdNextPush(): Gate;
   /** Хук перед каждым push: может бросить ошибку. */
   onPush?: (table: SyncTableName, rows: WireRow[]) => Promise<void> | void;
-  /** Хук над ответом pull: может подменить строки. */
-  onPull?: (table: SyncTableName, afterSeq: number, rows: PulledRow[]) => PulledRow[];
+  /** Хук над ответом pull: может подменить строки (и сделать что угодно, пока запрос «в пути»). */
+  onPull?: (table: SyncTableName, afterSeq: number, rows: PulledRow[]) => PulledRow[] | Promise<PulledRow[]>;
   /** Сервер ПРИНЯЛ данные, но ответ потерялся: следующие n вызовов push применяются, а затем бросают сетевую ошибку. */
   loseResponses: number;
 }

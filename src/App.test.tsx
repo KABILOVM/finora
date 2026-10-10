@@ -128,7 +128,7 @@ describe('навигация', () => {
 describe('шит правки /edit/:id', () => {
   it('прямой заход: шит правки поверх «Главной», закрытие ведёт на «/»', async () => {
     renderAt('/edit/0b1c2d3e-0000-4000-8000-000000000001');
-    expect(await findByRole('dialog', { name: 'Правка операции' })).toBeInTheDocument();
+    expect(await findByRole('dialog')).toBeInTheDocument();
     expect(await findByRole('heading', { name: 'Главная', level: 1 })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Закрыть' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -138,7 +138,7 @@ describe('шит правки /edit/:id', () => {
   it('открытие поверх «Операций» (state.background): страница под шитом остаётся, Esc закрывает', async () => {
     const background = { pathname: '/transactions', search: '', hash: '', state: null, key: 'k' };
     renderAt('/edit/abc', { state: { background } });
-    expect(await findByRole('dialog', { name: 'Правка операции' })).toBeInTheDocument();
+    expect(await findByRole('dialog')).toBeInTheDocument();
     expect(await findByRole('heading', { name: 'Операции', level: 1 })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

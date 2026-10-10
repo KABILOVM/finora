@@ -64,17 +64,15 @@ describe('простая отправка и получение', () => {
   });
 
   it('конфликт: сервер оставил более новую правку другого устройства; после отправки устройство принимает серверную версию', async () => {
-    const server = createMemoryServer();
-    let ta = 1_900_000_000_000;
-    let tb = ta + 5_000; // часы B идут на 5 секунд впереди
-    const { d: a } = await ready(server, 'dev-a', () => ta);
-    const { d: b } = await ready(server, 'dev-b', () => tb);
+    let t = Date.now(); // общее «настоящее время»; сервер и устройства живут по нему (метки в пределах допуска сервера)
+    const server = createMemoryServer({ now: () => t });
+    const { d: a } = await ready(server, 'dev-a', () => t);
+    const { d: b } = await ready(server, 'dev-b', () => t + 5_000); // часы B идут на 5 секунд впереди
     const w = await firstWallet(a);
     await b.engine.syncNow();
-    ta += 1000;
-    tb += 1000;
+    t += 1000;
     await a.store.wallets.update(w.id, { name: 'правка A' });
-    tb += 1000;
+    t += 1000;
     await b.store.wallets.update(w.id, { name: 'правка B' });
     await b.engine.syncNow(); // сервер получает B
     await a.engine.syncNow(); // старая правка A молча игнорируется сервером; A обязан принять версию B
@@ -83,6 +81,24 @@ describe('простая отправка и получение', () => {
     await b.engine.syncNow();
     expect(await snapshotOf(a.store)).toEqual(await snapshotOf(b.store));
     expect(serverRows(server, 'wallets')[0]?.['name']).toBe('правка B');
+  });
+
+  it('обратный порядок: A успел отправить раньше, но B новее — побеждает B на обоих устройствах', async () => {
+    let t = Date.now();
+    const server = createMemoryServer({ now: () => t });
+    const { d: a } = await ready(server, 'dev-a', () => t);
+    const { d: b } = await ready(server, 'dev-b', () => t);
+    await b.engine.syncNow();
+    const w = await firstWallet(a);
+    t += 1000;
+    await a.store.wallets.update(w.id, { name: 'правка A' });
+    t += 1000;
+    await b.store.wallets.update(w.id, { name: 'правка B' });
+    await a.engine.syncNow();
+    await b.engine.syncNow(); // B новее: перекрывает A на сервере
+    await a.engine.syncNow();
+    expect((await a.store.db.wallets.get(w.id))?.name).toBe('правка B');
+    expect(await snapshotOf(a.store)).toEqual(await snapshotOf(b.store));
   });
 });
 
@@ -138,8 +154,8 @@ describe('офлайн-очередь', () => {
     await a.engine.syncNow();
     expect(a.engine.getStatus()).toMatchObject({ phase: 'idle', pending: 0 });
     expect(serverRows(server, 'transactions')).toHaveLength(250);
-    const sizes = sp.pushes('transactions').map((c) => c.size);
-    expect(sizes).toEqual([200, 200, 50]); // вторая попытка 200 — оборванная; повторно она не отправляла уже принятые
+    // 200 — принято; 50 — оборвано; ещё 50 — повтор. Уже принятые 200 заново не отправлялись.
+    expect(sp.pushes('transactions').map((c) => c.size)).toEqual([200, 50, 50]);
   });
 
   it('ответ потерялся, хотя сервер данные принял: повторная отправка ничего не дублирует и не двигает server_seq', async () => {
@@ -159,10 +175,11 @@ describe('офлайн-очередь', () => {
 });
 
 describe('правка во время отправки', () => {
-  it('новая правка не теряется и не помечается отправленной; уходит следующим циклом', async () => {
+  it('правка во время отправки не теряется: версия «в пути» не помечается отправленной и уходит следом в том же цикле', async () => {
     const server = createMemoryServer();
     const { d: a, sp } = await ready(server, 'dev-a');
     const w = await a.store.wallets.create({ name: 'Копилка', currency: 'TJS', kind: 'savings', openingBalanceMinor: 0, color: '#000000', icon: '🐷' });
+    sp.calls.length = 0;
     const gate = sp.holdNextPush();
     const cycle = a.engine.syncNow();
     await gate.entered; // кошелёк уже прочитан и «в пути»
@@ -170,9 +187,28 @@ describe('правка во время отправки', () => {
     gate.open();
     await cycle;
 
+    const pushes = sp.pushes('wallets');
+    expect(pushes).toHaveLength(2); // сначала версия «в пути», потом новая (первая не очистила строку)
+    expect(serverRows(server, 'wallets').find((r) => r['id'] === w.id)?.['name']).toBe('Копилка 2');
+    expect(await a.store.db.wallets.get(w.id)).toMatchObject({ name: 'Копилка 2', dirty: 0 });
+    expect(a.engine.getStatus().pending).toBe(0);
+  });
+
+  it('правка во время получения: сервер вернул старую версию, но локальная правка новее — остаётся и уходит следующим циклом', async () => {
+    const server = createMemoryServer();
+    const { d: a, sp } = await ready(server, 'dev-a');
+    const w = await a.store.wallets.create({ name: 'Копилка', currency: 'TJS', kind: 'savings', openingBalanceMinor: 0, color: '#000000', icon: '🐷' });
+    let edited = false;
+    sp.onPull = async (table, _after, rows) => {
+      if (table === 'wallets' && !edited) {
+        edited = true;
+        await a.store.wallets.update(w.id, { name: 'Копилка 2' }); // правка посреди получения, уже после отправки
+      }
+      return rows;
+    };
+    await a.engine.syncNow();
     expect(serverRows(server, 'wallets').find((r) => r['id'] === w.id)?.['name']).toBe('Копилка');
-    const local = await a.store.db.wallets.get(w.id);
-    expect(local).toMatchObject({ name: 'Копилка 2', dirty: 1 }); // сервер вернул старую версию, но локальная правка новее и осталась
+    expect(await a.store.db.wallets.get(w.id)).toMatchObject({ name: 'Копилка 2', dirty: 1 });
     expect(a.engine.getStatus().pending).toBe(1);
 
     await a.engine.syncNow();
