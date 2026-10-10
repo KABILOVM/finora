@@ -5,7 +5,7 @@ import { BACKUP_FORMAT, BACKUP_VERSION, parseBackup, type BackupFile } from './b
 import { fail } from './errors';
 import { writeTx } from './repoContext';
 import { internalContext, type Store } from './store';
-import { compareVersion } from './validate';
+import { compareVersion, TRANSFER_CREATES_MONEY_TEXT, transferCreatesMoney } from './validate';
 
 export { exportTransactionsCsv } from './backupCsv';
 export type { BackupFile } from './backupSchema';
@@ -91,7 +91,8 @@ const index = <R extends { id: string }>(rows: readonly R[]): Map<string, R> => 
  *  3) Копия не может сделать то, что запретили бы репозитории: сменить валюту кошелька с операциями или вид категории
  *     с живыми операциями (иначе суммы поменяли бы смысл) — такой файл отвергается целиком.
  *  4) Всё записывается одной транзакцией; импортированное помечается dirty и уйдёт в облако.
- * Копия другого аккаунта отвергается (id записей уникальны на сервере и принадлежат владельцу).
+ *  5) Копия с блоком настроек ДРУГОГО аккаунта отвергается. Копия БЕЗ блока настроек принимается: восстановить свои данные
+ *     в новый аккаунт после потери старого — законный сценарий, отказ его сломал бы (принятое решение, не упущение).
  */
 export async function importBackup(store: Store, data: unknown): Promise<ImportResult> {
   const ctx = internalContext(store);
@@ -137,6 +138,14 @@ export async function importBackup(store: Store, data: unknown): Promise<ImportR
         fail(`Резервная копия: у категории «${cat.name}» нет родительской категории`);
       }
     }
+    // Кольцо родителей (A → B → A) оставило бы категории без корня и зациклило дерево: репозиторий такое не создаёт.
+    for (const id of c.winners) {
+      const seen = new Set<string>();
+      for (let cur: string | null = id; cur !== null; cur = categories.get(cur)?.parentId ?? null) {
+        if (seen.has(cur)) fail(`Резервная копия: категория «${categories.get(id)?.name ?? id}» входит в кольцо родительских категорий (цикл)`);
+        seen.add(cur);
+      }
+    }
     // Вид категории и её родителя: смотрим итог, но только там, где импорт что-то изменил. Удалённые не в счёт.
     for (const cat of categories.values()) {
       if (cat.deletedAt !== null || cat.parentId === null) continue;
@@ -151,6 +160,15 @@ export async function importBackup(store: Store, data: unknown): Promise<ImportR
       }
       if (tx.categoryId !== null && !categories.has(tx.categoryId)) {
         fail('Резервная копия: операция ссылается на несуществующую категорию');
+      }
+    }
+    // Перевод в одной валюте не зачисляет больше, чем списал (как и в репозитории). Смотрим живые операции из файла.
+    for (const tx of transactions.values()) {
+      if (!t.winners.has(tx.id) || tx.deletedAt !== null || tx.kind !== 'transfer' || tx.toWalletId === null) continue;
+      const from = wallets.get(tx.walletId);
+      const to = wallets.get(tx.toWalletId);
+      if (from && to && transferCreatesMoney(from.currency, to.currency, tx.amountMinor, tx.toAmountMinor)) {
+        fail(`Резервная копия, перевод от ${tx.occurredOn}: ${TRANSFER_CREATES_MONEY_TEXT}`);
       }
     }
     // Вид живой операции совпадает с видом её категории (у удалённой операции это не важно: её не видно, а

@@ -1,5 +1,14 @@
 import { lazy, Suspense } from 'react';
-import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom';
+import {
+  HashRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  type Location,
+} from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OnlineBadge } from '@/components/OnlineBadge';
 import { ToastProvider } from '@/components/Toast';
@@ -18,6 +27,16 @@ const AddTransactionSheet = lazy(() => import('@/layout/AddTransactionSheet'));
 
 type BackgroundState = { background?: Location } | null;
 
+/** Номер записи в истории браузера (react-router кладёт его в history.state.idx); 0 — первая запись или неизвестно. */
+function historyIndex(): number {
+  try {
+    const idx = (window.history.state as { idx?: unknown } | null)?.idx;
+    return typeof idx === 'number' && Number.isFinite(idx) ? idx : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Маршруты: / /transactions /wallets /settings внутри каркаса, /login без каркаса,
  * /add — шит поверх страницы, с которой его открыли (при прямом заходе — поверх «Главной»).
@@ -25,14 +44,19 @@ type BackgroundState = { background?: Location } | null;
 export function AppRoutes() {
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
 
   const stateBackground = (location.state as BackgroundState)?.background;
   const background = stateBackground && stateBackground.pathname !== ADD_PATH ? stateBackground : undefined;
   const isAdd = location.pathname === ADD_PATH;
   const pagesLocation = isAdd ? (background ?? '/') : location;
 
+  // Назад (navigate(-1)) — только если есть куда вернуться: шит открыли переходом внутри приложения (PUSH) или перед этой
+  // записью в истории есть другая (history.state.idx > 0). Иначе (дубль вкладки, восстановление сессии, прямой заход,
+  // state.background без предыдущей записи) «назад» ничего не закрыл бы или увёл бы из приложения — заменяем запись на «/».
   const closeAdd = () => {
-    if (background) navigate(-1);
+    const canGoBack = navigationType === 'PUSH' || historyIndex() > 0;
+    if (background && canGoBack) navigate(-1);
     else navigate('/', { replace: true });
   };
 
