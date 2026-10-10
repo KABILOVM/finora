@@ -18,7 +18,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["vite/client", "vite-plugin-pwa/client", "node"],
+    "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-pwa/react", "node"],
     "baseUrl": ".",
     "paths": { "@/*": ["src/*"] }
   },

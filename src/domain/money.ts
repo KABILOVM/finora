@@ -34,20 +34,18 @@ const SPACES = /[\s   ']/g;
 
 /**
  * '12,5' → 1250 (TJS). Принимает пробелы-разделители тысяч, запятую или точку (одну). Минус, буквы, степени — null.
- * Больше знаков после запятой, чем у валюты → null (кроме хвоста из нулей: '12.500' для 2 знаков = 1250).
+ * Больше знаков после запятой, чем у валюты → null ВСЕГДА, даже если лишние знаки нули:
+ * '1,000' — это не «одна тысяча», а двусмысленная запись (для человека с английской привычкой
+ * запятая = разделитель тысяч), и молча прочитать её как 1 значило бы ошибиться в 1000 раз.
  * Ноль допустим ('0' → 0); проверку «> 0» делает вызывающий код.
  */
 export function parseAmountToMinor(input: string, currency: CurrencyCode): Minor | null {
   if (typeof input !== 'string') return null;
   const s = input.replace(SPACES, '').replace(',', '.');
   if (!/^(\d+(\.\d*)?|\.\d+)$/.test(s)) return null;
-  const [intRaw = '', fracRaw = ''] = s.split('.');
+  const [intRaw = '', frac = ''] = s.split('.');
   const exp = exponentOf(currency);
-  let frac = fracRaw;
-  if (frac.length > exp) {
-    if (/[1-9]/.test(frac.slice(exp))) return null;
-    frac = frac.slice(0, exp);
-  }
+  if (frac.length > exp) return null;
   const digits = (intRaw === '' ? '0' : intRaw) + frac.padEnd(exp, '0');
   if (digits.length > 16) return null;
   const n = Number(digits);
@@ -118,7 +116,14 @@ export function convertMinor(minor: Minor, from: CurrencyCode, to: CurrencyCode,
   return minor < 0 ? -out : out;
 }
 
-/** Снимок «сумма в базовой валюте» для сохранения в операции. */
+/** Знаков курса в базе данных: колонка fx_rate — numeric(20,10). Курс в операции округляем так же, чтобы локальная копия == серверной. */
+export const FX_RATE_DECIMALS = 10;
+
+/**
+ * Снимок «сумма в базовой валюте» для сохранения в операции.
+ * Курс сначала округляется до FX_RATE_DECIMALS знаков, и сумма считается уже по округлённому курсу —
+ * тогда то, что лежит на телефоне, побитово совпадает с тем, что вернёт сервер.
+ */
 export function fxSnapshot(
   amountMinor: Minor,
   walletCurrency: CurrencyCode,
@@ -127,5 +132,8 @@ export function fxSnapshot(
 ): { baseAmountMinor: Minor; fxRate: number } {
   if (walletCurrency === baseCurrency) return { baseAmountMinor: amountMinor, fxRate: 1 };
   if (rate === null) throw new RangeError(`Нет курса ${walletCurrency}→${baseCurrency}`);
-  return { baseAmountMinor: convertMinor(amountMinor, walletCurrency, baseCurrency, rate), fxRate: rate };
+  if (!Number.isFinite(rate) || rate <= 0) throw new RangeError(`Некорректный курс: ${rate}`);
+  const stored = Number(rate.toFixed(FX_RATE_DECIMALS));
+  if (!(stored > 0)) throw new RangeError(`Курс слишком мал для хранения: ${rate}`);
+  return { baseAmountMinor: convertMinor(amountMinor, walletCurrency, baseCurrency, stored), fxRate: stored };
 }
