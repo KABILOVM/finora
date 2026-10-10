@@ -40,7 +40,22 @@ export default defineConfig({
       },
     }),
   ],
-  build: { target: 'es2022', sourcemap: false },
+  build: {
+    target: 'es2022',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Тяжёлые библиотеки — отдельными файлами: при выходе новой версии приложения они не скачиваются заново.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run)\//.test(id)) return 'vendor-react';
+          if (/node_modules\/(@supabase|@supabase\/.*|tslib|iceberg-js)\//.test(id)) return 'vendor-supabase';
+          if (/node_modules\/(dexie|dexie-react-hooks)\//.test(id)) return 'vendor-dexie';
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
