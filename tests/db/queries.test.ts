@@ -34,7 +34,8 @@ describe('filterTransactions', () => {
 
   it('категория: конкретная, «без категории» (null) и любая (не задана)', () => {
     expect(ids(filterTransactions(rows, { categoryId: 'food' }))).toEqual(['a']);
-    expect(ids(filterTransactions(rows, { categoryId: null }))).toEqual(['d', 'e']);
+    // 'd' — перевод: у перевода категории не бывает, в «без категории» он не попадает
+    expect(ids(filterTransactions(rows, { categoryId: null }))).toEqual(['e']);
     expect(filterTransactions(rows, {})).toHaveLength(5);
   });
 

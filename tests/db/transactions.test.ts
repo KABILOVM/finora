@@ -31,13 +31,13 @@ describe('TransactionsRepo.create — норма', () => {
     expect(t.note).toBe('');
   });
 
-  it('заметка ровно 500 символов — можно; максимально большая безопасная сумма — можно', async () => {
+  it('заметка ровно 500 символов — можно; максимальная допустимая сумма (1e15, граница сервера) — можно', async () => {
     const { store, cash } = await setup();
     const t = await store.transactions.create({
-      kind: 'income', walletId: cash.id, amountMinor: Number.MAX_SAFE_INTEGER, occurredOn: day, note: 'я'.repeat(500),
+      kind: 'income', walletId: cash.id, amountMinor: 1_000_000_000_000_000, occurredOn: day, note: 'я'.repeat(500),
     });
     expect(t.note).toHaveLength(500);
-    expect(t.amountMinor).toBe(Number.MAX_SAFE_INTEGER);
+    expect(t.amountMinor).toBe(1_000_000_000_000_000);
   });
 
   it('29 февраля високосного года — настоящая дата', async () => {
@@ -196,7 +196,8 @@ describe('TransactionsRepo.create — курс (снимок базовой ва
 
   it('переполнение при пересчёте — понятная ошибка, а не тихая потеря точности', async () => {
     const { store, usd } = await setup();
-    await expect(expense(store, usd.id, Number.MAX_SAFE_INTEGER, { fx: { rate: 1000, source: 'manual' } })).rejects.toThrow(/слишком велика/);
+    // 1e15 дозволено как сумма, но при курсе 1000 пересчёт выходит за безопасные целые
+    await expect(expense(store, usd.id, 1_000_000_000_000_000, { fx: { rate: 1000, source: 'manual' } })).rejects.toThrow(/пересчёта/);
   });
 });
 

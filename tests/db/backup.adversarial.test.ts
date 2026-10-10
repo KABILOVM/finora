@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exportBackup, importBackup } from '@/db';
-import { basics, expense, makeStore, USER_A, USER_B } from './helpers';
+import { basics, expense, makeStore } from './helpers';
 
 const json = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
@@ -51,20 +51,18 @@ describe('импорт копии не должен нарушать прави�
     const { food } = await basics(A);
     const base = json(await exportBackup(A));
     const stamp = '2026-10-10T12:30:00.000Z';
+    // id — настоящие UUID: иначе файл отвергся бы по другой причине (id не UUID), а не из-за кольца
+    const idA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const idB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     const cat = (id: string, parentId: string) => ({ ...base.categories[0]!, id, parentId, name: id, kind: 'expense' as const, createdAt: stamp, clientUpdatedAt: stamp, deviceId: 'device-zzzzz-1' });
-    base.categories.push(cat('cat-a', 'cat-b'), cat('cat-b', 'cat-a'));
+    base.categories.push(cat(idA, idB), cat(idB, idA));
     void food;
-    await expect(importBackup(A, base)).rejects.toThrow();
+    await expect(importBackup(A, base)).rejects.toThrow(/кольц|цикл/);
   });
 
-  it('копия другого аккаунта без блока настроек не принимается (id записей принадлежат владельцу)', async () => {
-    const B = await makeStore({ userId: USER_B });
-    await basics(B);
-    const file = json(await exportBackup(B));
-    file.settings = null; // например, файл выгружен из нового аккаунта до затравки
-    const A = await makeStore({ userId: USER_A });
-    await expect(importBackup(A, file)).rejects.toThrow();
-  });
+  // Решение: копия БЕЗ блока настроек (в том числе чужого аккаунта) ПРИНИМАЕТСЯ. Раньше здесь был тест «отвергается»,
+  // но восстановление своей копии в новый аккаунт после потери старого — законный сценарий, и отказ его ломал бы.
+  // Копию с блоком настроек ДРУГОГО аккаунта по-прежнему отвергает backup.test.ts («копия другого аккаунта»).
 
   it('собственная выгрузка всегда должна загружаться обратно: удалённая операция + смена вида её категории', async () => {
     const A = await makeStore();

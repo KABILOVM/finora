@@ -178,13 +178,13 @@ describe('importBackup — мусорные файлы: ничего не зап
     ['повторяющийся id кошелька', (f) => (f.wallets[1].id = f.wallets[0].id), /повторяющийся/],
     ['повторяющийся id операции', (f) => (lastTx(f).id = f.transactions[0].id), /повторяющийся/],
     ['запись не объект', (f) => (f.wallets[0] = 'строка'), /объект/],
-    ['операция на несуществующий кошелёк', (f) => (expenseTx(f).walletId = 'missing-wallet'), /несуществующий кошелёк/],
-    ['перевод на несуществующий кошелёк', (f) => (transferTx(f).toWalletId = 'missing-wallet'), /несуществующий кошелёк/],
-    ['операция в несуществующей категории', (f) => (expenseTx(f).categoryId = 'missing-category'), /несуществующую категорию/],
+    ['операция на несуществующий кошелёк', (f) => (expenseTx(f).walletId = '99999999-9999-4999-8999-999999999999'), /несуществующий кошелёк/],
+    ['перевод на несуществующий кошелёк', (f) => (transferTx(f).toWalletId = '99999999-9999-4999-8999-999999999999'), /несуществующий кошелёк/],
+    ['операция в несуществующей категории', (f) => (expenseTx(f).categoryId = '99999999-9999-4999-8999-999999999999'), /несуществующую категорию/],
     ['вид категории не совпадает с видом операции', (f) => (expenseTx(f).categoryId = f.categories.find((c: any) => c.kind === 'income').id), /не подходит/],
-    ['родитель категории не найден', (f) => (f.categories[0].parentId = 'missing-category'), /нет родительской/],
+    ['родитель категории не найден', (f) => (f.categories[0].parentId = '99999999-9999-4999-8999-999999999999'), /нет родительской/],
     ['категория — родитель самой себе', (f) => (f.categories[0].parentId = f.categories[0].id), /самой себе/],
-    ['кошелёк по умолчанию не найден', (f) => (f.settings.defaultWalletId = 'missing-wallet'), /по умолчанию/],
+    ['кошелёк по умолчанию не найден', (f) => (f.settings.defaultWalletId = '99999999-9999-4999-8999-999999999999'), /по умолчанию/],
     ['настройки: неверная неделя', (f) => (f.settings.weekStartsOn = 5), /недели/],
     ['копия другого аккаунта', (f) => (f.settings.id = USER_B), /другому аккаунту/],
   ];
@@ -206,10 +206,12 @@ describe('importBackup — мусорные файлы: ничего не зап
     const src = await fresh();
     const { cash } = await populated(src);
     const file = clone(await exportBackup(src));
-    file.wallets.find((w: any) => w.id === cash.id).openingBalanceMinor = Number.MAX_SAFE_INTEGER;
+    // каждое число в границах сервера (≤ 1e15), но вместе они не помещаются в безопасное целое (≈ 9e15)
+    file.wallets.find((w: any) => w.id === cash.id).openingBalanceMinor = 1_000_000_000_000_000;
     const income = file.transactions.find((t: any) => t.kind === 'income');
-    income.amountMinor = Number.MAX_SAFE_INTEGER;
-    income.baseAmountMinor = Number.MAX_SAFE_INTEGER;
+    income.amountMinor = 1_000_000_000_000_000;
+    income.baseAmountMinor = 1_000_000_000_000_000;
+    for (let i = 0; i < 9; i++) file.transactions.push({ ...income, id: crypto.randomUUID() });
     const dst = await fresh();
     await expect(importBackup(dst, file)).rejects.toThrow(/слишком велики/);
     expect(await dst.db.wallets.count()).toBe(0);
@@ -349,13 +351,13 @@ describe('exportTransactionsCsv', () => {
     expect(dates).toEqual([...dates].sort());
   });
 
-  it('валюты без копеек (JPY) и крупные суммы печатаются без потерь', async () => {
+  it('валюты без копеек (JPY) и крупные суммы (до 1e15) печатаются без потерь', async () => {
     const store = await fresh();
     await store.settings.ensure({ baseCurrency: 'JPY' });
     const w = await store.wallets.create({ name: 'Иена', currency: 'JPY', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' });
-    await expense(store, w.id, Number.MAX_SAFE_INTEGER);
+    await expense(store, w.id, 1_000_000_000_000_000);
     const csv = await exportTransactionsCsv(store);
-    expect(csv).toContain(';9007199254740991;JPY;');
+    expect(csv).toContain(';1000000000000000;JPY;');
   });
 
   it('текст из заметки/названий не исполняется как формула; кавычки и переводы строк экранируются', async () => {

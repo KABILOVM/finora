@@ -12,7 +12,7 @@ export { newId, uuidV5, defaultId, isUuid } from './ids';
 
 export type { WalletsRepo, WalletInput, WalletPatch } from './walletsRepo';
 export type { CategoriesRepo, CategoryInput, CategoryPatch } from './categoriesRepo';
-export type { TransactionsRepo, TransactionInput, TransactionPatch } from './transactionsRepo';
+export type { TransactionsRepo, TransactionInput, TransactionPatch, TransactionCreateOptions } from './transactionsRepo';
 export type { SettingsRepo, SettingsPatch } from './settingsRepo';
 
 export {
