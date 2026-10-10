@@ -46,6 +46,9 @@ const AuthContext = createContext<AuthApi | null>(null);
 
 export const DEFAULT_BOOT_TIMEOUT_MS = 4000;
 
+/** Сколько ждать ответа сети при выходе, мс. Дольше нет смысла: сессию на устройстве мы снимаем в любом случае. */
+export const SIGN_OUT_WAIT_MS = 1000;
+
 export interface AuthProviderProps {
   /** null — локальный режим. */
   client: AuthClientLike | null;
@@ -86,6 +89,11 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
   );
   const clientRef = useRef(client);
   clientRef.current = client;
+  // Номер «поколения» входа: растёт при выходе и входе. Запоздалый ответ getSession из прошлого поколения игнорируется,
+  // иначе человек, уже нажавший «Выйти», вернулся бы в аккаунт сам (слабая сеть: getSession отвечает через минуту).
+  const epochRef = useRef(0);
+  // true — человек сам вышел и после этого не входил: события «сессия найдена» из прошлого (INITIAL_SESSION и т.п.) не верим.
+  const leftRef = useRef(false);
 
   useEffect(() => {
     if (!client) {
@@ -93,6 +101,8 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
       return undefined;
     }
     let cancelled = false;
+    const bootEpoch = epochRef.current;
+    const stale = () => cancelled || epochRef.current !== bootEpoch;
 
     const signedIn = (user: AuthUser) => {
       writeLastUser(user);
@@ -114,8 +124,13 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
         signedOut();
         return;
       }
+      // После нашего выхода верим только настоящему новому входу (в том числе из другой вкладки).
+      if (leftRef.current && event !== 'SIGNED_IN') return;
       const user = userOf(session);
-      if (user) signedIn(user);
+      if (user) {
+        if (event === 'SIGNED_IN') leftRef.current = false;
+        signedIn(user);
+      }
     });
 
     const fallbackUser = (): AuthUser | null => readLastUser();
@@ -130,19 +145,19 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
       try {
         pending = client.auth.getSession();
       } catch {
-        if (!cancelled) toOfflineOrSignedOut();
+        if (!stale()) toOfflineOrSignedOut();
         return;
       }
       try {
         const result = await withTimeout(pending, bootTimeoutMs);
-        if (cancelled) return;
+        if (stale()) return;
         if (result === TIMED_OUT) {
           // Сеть не отвечает. Если сессия всё же найдётся позже — onAuthStateChange поднимет состояние до signed-in.
           toOfflineOrSignedOut();
           void pending.then(
             (late) => {
               const user = userOf(late.data.session);
-              if (!cancelled && user) signedIn(user);
+              if (!stale() && user) signedIn(user);
             },
             () => undefined,
           );
@@ -160,7 +175,7 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
           signedOut();
         }
       } catch {
-        if (!cancelled) toOfflineOrSignedOut();
+        if (!stale()) toOfflineOrSignedOut();
       }
     })();
 
@@ -181,6 +196,8 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
       if (error) return { ok: false, message: describeAuthError(error, 'sign-in') };
       const user = userOf(data.session ?? (data.user ? { user: data.user } : null));
       if (!user) return { ok: false, message: 'Не удалось войти. Попробуйте ещё раз.' };
+      epochRef.current++;
+      leftRef.current = false;
       writeLastUser(user);
       setState({ status: 'signed-in', user });
       return { ok: true };
@@ -193,23 +210,23 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
     const c = clientRef.current;
     if (!c) return;
     // Сначала забываем «последнего пользователя»: выход не должен оставлять чужие данные открываемыми без входа.
+    epochRef.current++;
+    leftRef.current = true;
     clearLastUser();
-    try {
-      const { error } = await c.auth.signOut({ scope: 'local' });
-      if (error) {
-        // Сессия на устройстве должна исчезнуть при любом исходе, иначе после перезапуска человек «вернётся» сам.
-        try {
-          localStorage.removeItem(AUTH_STORAGE_KEY);
-        } catch {
-          // нет доступа к хранилищу — больше ничего сделать нельзя
-        }
-      }
-    } catch {
+    const forgetSession = () => {
       try {
         localStorage.removeItem(AUTH_STORAGE_KEY);
       } catch {
-        // см. выше
+        // нет доступа к хранилищу — больше ничего сделать нельзя
       }
+    };
+    try {
+      // Сеть «есть, но не отвечает» не должна держать человека в аккаунте: ждём недолго, дальше снимаем сессию сами.
+      const outcome = await withTimeout(c.auth.signOut({ scope: 'local' }), SIGN_OUT_WAIT_MS);
+      // Сессия на устройстве должна исчезнуть при любом исходе, иначе после перезапуска человек «вернётся» сам.
+      if (outcome === TIMED_OUT || outcome.error) forgetSession();
+    } catch {
+      forgetSession();
     }
     setState({ status: 'signed-out' });
   }, []);

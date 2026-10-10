@@ -46,12 +46,12 @@ export function RatesSection() {
         Последнее обновление: {lastRefreshAt ? formatDateTime(lastRefreshAt) : 'ещё не обновлялись'}
       </p>
       {lastError && (
-        <p role="alert" className="text-sm text-warning">
+        <p className="text-sm text-warning">
           Последняя попытка не удалась: {lastError}
         </p>
       )}
       {anyStale && (
-        <p role="alert" className="rounded-xl bg-warning/10 p-3 text-warning">
+        <p className="rounded-xl bg-warning/10 p-3 text-warning">
           Курс устарел (старше 3 суток). Обновите курсы, когда будет интернет, или задайте свой курс.
         </p>
       )}

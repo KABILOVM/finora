@@ -16,10 +16,14 @@ export interface RejectedItem {
 
 const KIND_LABEL: Record<TxKind, string> = { expense: 'Расход', income: 'Доход', transfer: 'Перевод' };
 
-/** Записи, которые сервер отверг (карантин): живой список, обновляется сам. */
-export function useRejectedItems(): RejectedItem[] | undefined {
+/**
+ * Записи, которые сервер отверг (карантин): живой список, обновляется сам.
+ * enabled=false — не читать базу вообще (когда по статусу отвергнутых нет): список строится полным просмотром таблиц.
+ */
+export function useRejectedItems(enabled = true): RejectedItem[] | undefined {
   const store = useStore();
   return useLiveQuery(async () => {
+    if (!enabled) return [];
     const { db } = store;
     const [settings, wallets, categories, txs] = await Promise.all([
       db.settings.filter((r) => r.syncError !== null && r.syncError !== undefined).toArray(),
@@ -45,5 +49,5 @@ export function useRejectedItems(): RejectedItem[] | undefined {
       });
     }
     return out;
-  }, [store]);
+  }, [store, enabled]);
 }

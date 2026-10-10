@@ -6,7 +6,7 @@ import { useToast } from '@/components/Toast';
 import type { CurrencyCode } from '@/domain/types';
 import { useRateService } from '@/rates/hooks';
 import type { RateLookup } from '@/rates/types';
-import { formatRate, parseRateInput } from './rateInput';
+import { formatRateExact, parseRateInput } from './rateInput';
 
 export interface ManualRateSheetProps {
   from: CurrencyCode;
@@ -19,7 +19,8 @@ export interface ManualRateSheetProps {
 export function ManualRateSheet({ from, to, current, onClose }: ManualRateSheetProps) {
   const service = useRateService();
   const toast = useToast();
-  const [text, setText] = useState(current?.manual ? formatRate(current.rate).replace(/ /g, '') : '');
+  // Точное значение, а не округлённое для показа: «Сохранить» без правок не должно менять курс.
+  const [text, setText] = useState(current?.manual ? formatRateExact(current.rate) : '');
   const [error, setError] = useState<string | null>(null);
 
   const save = () => {

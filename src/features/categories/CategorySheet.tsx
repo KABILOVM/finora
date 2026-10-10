@@ -7,7 +7,7 @@ import { useToast } from '@/components/Toast';
 import { ValidationError, useStore } from '@/db';
 import type { Category, CategoryKind, LocalRow } from '@/domain/types';
 import { ColorSwatches } from '@/features/wallets/ColorSwatches';
-import { COLOR_CHOICES, sameName } from '@/features/wallets/walletUi';
+import { cleanName, COLOR_CHOICES, sameName } from '@/features/wallets/walletUi';
 
 export interface CategorySheetProps {
   /** null — новая категория вида `kind`. */
@@ -35,7 +35,7 @@ export function CategorySheet({ category, kind, others, onClose, onArchive }: Ca
 
   const save = async () => {
     if (saving) return;
-    const clean = name.trim();
+    const clean = cleanName(name);
     setFormError(null);
     if (clean === '') return setError('Введите название категории');
     if (clean.length > 60) return setError('Название не длиннее 60 символов');

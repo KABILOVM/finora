@@ -117,7 +117,7 @@ export default function WalletsPage() {
       />
 
       {base && total !== undefined && (
-        <Card className="mb-4" aria-label="Всего">
+        <Card className="mb-4">
           <div className="text-sm font-semibold text-muted">Всего</div>
           {total === null ? (
             <div className="text-lg text-muted">Сумма слишком велика для расчёта</div>
@@ -237,7 +237,10 @@ export default function WalletsPage() {
           }
         />
       )}
-      {reconciling && <ReconcileSheet wallet={reconciling} onClose={() => setReconciling(null)} />}
+      {/* берём кошелёк из живого списка, а не снимок на момент нажатия: правка с другого устройства не должна давать ложное «не совпадает» */}
+      {reconciling && (
+        <ReconcileSheet wallet={wallets.find((w) => w.id === reconciling.id) ?? reconciling} onClose={() => setReconciling(null)} />
+      )}
 
       <ConfirmDialog
         open={archiving !== null}

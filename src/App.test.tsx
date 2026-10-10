@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { AppRoutes } from './App';
+import { LOCAL_USER_ID } from './auth/config';
+import { ensureSeeded } from './db';
 import { makeTestDeps, renderAppRoot, type RenderAppOptions } from './app/testkit';
 import { findByRole, render, screen, user, waitFor } from './components/testUtils';
 
@@ -125,10 +127,22 @@ describe('навигация', () => {
   });
 });
 
+/** Устройство, на котором уже есть одна операция: шит правки открывается только для существующей. */
+async function deviceWithTx() {
+  const td = makeTestDeps();
+  const s = await td.deps.openStore(LOCAL_USER_ID);
+  await ensureSeeded(s);
+  const wallet = (await s.db.wallets.toArray())[0];
+  const tx = await s.transactions.create({ kind: 'expense', walletId: wallet?.id ?? '', amountMinor: 1200, occurredOn: '2026-10-05', note: 'хлеб' });
+  s.close();
+  return { td, id: tx.id };
+}
+
 describe('шит правки /edit/:id', () => {
   it('прямой заход: шит правки поверх «Главной», закрытие ведёт на «/»', async () => {
-    renderAt('/edit/0b1c2d3e-0000-4000-8000-000000000001');
-    expect(await findByRole('dialog')).toBeInTheDocument();
+    const { td, id } = await deviceWithTx();
+    renderAppRoot(<AppRoutes />, { path: `/edit/${id}`, deps: td.deps });
+    expect(await findByRole('dialog', { name: 'Правка операции' })).toBeInTheDocument();
     expect(await findByRole('heading', { name: 'Главная', level: 1 })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Закрыть' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -136,12 +150,21 @@ describe('шит правки /edit/:id', () => {
   });
 
   it('открытие поверх «Операций» (state.background): страница под шитом остаётся, Esc закрывает', async () => {
+    const { td, id } = await deviceWithTx();
     const background = { pathname: '/transactions', search: '', hash: '', state: null, key: 'k' };
-    renderAt('/edit/abc', { state: { background } });
-    expect(await findByRole('dialog')).toBeInTheDocument();
+    renderAppRoot(<AppRoutes />, { path: `/edit/${id}`, deps: td.deps, state: { background } });
+    expect(await findByRole('dialog', { name: 'Правка операции' })).toBeInTheDocument();
     expect(await findByRole('heading', { name: 'Операции', level: 1 })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('операции с таким id нет: шит сам закрывается, человек остаётся на странице под ним', async () => {
+    const background = { pathname: '/transactions', search: '', hash: '', state: null, key: 'k' };
+    renderAt('/edit/0b1c2d3e-0000-4000-8000-000000000001', { state: { background } });
+    expect(await findByRole('heading', { name: 'Операции', level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('heading', { name: 'Операции', level: 1 })).toBeInTheDocument();
   });
 
   it('/edit без id не открывает шит и ведёт на «Главную»', async () => {

@@ -4,12 +4,15 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
 import { exportBackup, exportTransactionsCsv, importBackup, useStore, ValidationError, type ImportResult } from '@/db';
 import { todayLocal } from '@/lib/dates';
-import { MAX_BACKUP_FILE_BYTES, downloadTextFile } from './download';
+import { isForeignBackup, withoutSettings } from './backupAccount';
+import { MAX_BACKUP_FILE_BYTES, downloadTextFile, readFileText } from './download';
 import { SettingsSection } from './SettingsSection';
 
 interface PendingImport {
   fileName: string;
   data: unknown;
+  /** Копия сделана в другом аккаунте: грузим только после отдельного согласия и без блока настроек. */
+  foreign: boolean;
 }
 
 /** Понятный человеку текст ошибки. Технические подробности остаются в консоли. */
@@ -21,6 +24,13 @@ export function backupErrorText(e: unknown, action: 'export' | 'import'): string
     : 'Не удалось подготовить файл. Попробуйте ещё раз.';
 }
 
+function importMessage({ fileName, foreign }: PendingImport): string {
+  const merge = 'у каждой записи побеждает более новая версия, ничего не удаляется';
+  return foreign
+    ? `Файл «${fileName}» сделан в другом аккаунте или до входа в облако. Если это ваши данные (например, вы создали аккаунт заново), они добавятся к текущим: ${merge}. Основная валюта и кошелёк по умолчанию останутся как сейчас, а одинаковые категории могут повториться — лишние уберите в архив. Если файл не ваш — нажмите «Отмена».`
+    : `Файл «${fileName}» будет объединён с вашими данными: ${merge}.`;
+}
+
 /** Резервная копия: скачать JSON (полная) и CSV (для таблиц), загрузить JSON обратно. */
 export function BackupSection() {
   const store = useStore();
@@ -29,7 +39,7 @@ export function BackupSection() {
   const [busy, setBusy] = useState<'json' | 'csv' | 'import' | null>(null);
   const [pending, setPending] = useState<PendingImport | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [result, setResult] = useState<(ImportResult & { foreign: boolean }) | null>(null);
 
   const exportJson = async () => {
     if (busy) return;
@@ -72,8 +82,9 @@ export function BackupSection() {
       return;
     }
     try {
-      const text = await file.text();
-      setPending({ fileName: file.name, data: JSON.parse(text) as unknown });
+      const text = await readFileText(file);
+      const data = JSON.parse(text) as unknown;
+      setPending({ fileName: file.name, data, foreign: isForeignBackup(data, store.userId) });
     } catch {
       setError('Не удалось прочитать файл: это не копия Finora (нужен файл .json, скачанный из приложения).');
     }
@@ -83,8 +94,9 @@ export function BackupSection() {
     if (!pending || busy) return;
     setBusy('import');
     try {
-      const r = await importBackup(store, pending.data);
-      setResult(r);
+      // Из чужого аккаунта (или из локального режима) блок настроек отбрасываем: договор принимает такую копию только без него.
+      const r = await importBackup(store, pending.foreign ? withoutSettings(pending.data) : pending.data);
+      setResult({ ...r, foreign: pending.foreign });
       setPending(null);
     } catch (e) {
       setPending(null);
@@ -113,7 +125,9 @@ export function BackupSection() {
           ref={fileInput}
           type="file"
           accept="application/json,.json"
-          className="hidden"
+          // не display:none: на iPhone вызов click() у полностью скрытого поля выбора файла срабатывает не всегда
+          className="sr-only"
+          tabIndex={-1}
           aria-label="Файл копии"
           onChange={(e) => void onFile(e)}
         />
@@ -132,19 +146,20 @@ export function BackupSection() {
             <li>Заменено более новыми из файла: {result.replaced}</li>
             <li>Оставлено текущих (они новее или такие же): {result.keptLocal}</li>
           </ul>
+          {result.foreign && (
+            <p className="mt-2 text-sm text-muted">
+              Основная валюта и кошелёк по умолчанию из файла не переносились: остались такие, как в этом аккаунте (валюту можно проверить в разделе «Валюта учёта»).
+            </p>
+          )}
         </div>
       )}
 
       <ConfirmDialog
         open={pending !== null}
         loading={busy === 'import'}
-        title="Загрузить копию?"
-        confirmLabel="Загрузить"
-        message={
-          pending
-            ? `Файл «${pending.fileName}» будет объединён с вашими данными: у каждой записи побеждает более новая версия, ничего не удаляется. Копия чужого аккаунта не загрузится.`
-            : undefined
-        }
+        title={pending?.foreign ? 'Копия из другого аккаунта' : 'Загрузить копию?'}
+        confirmLabel={pending?.foreign ? 'Загрузить в этот аккаунт' : 'Загрузить'}
+        message={pending ? importMessage(pending) : undefined}
         onConfirm={() => void runImport()}
         onCancel={() => busy !== 'import' && setPending(null)}
       />

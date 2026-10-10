@@ -4,9 +4,9 @@
  */
 import type { AuthChangeEvent, Session, SupabaseClient } from '@supabase/supabase-js';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { render } from '@/components/testUtils';
+import { act, fire, render, screen } from '@/components/testUtils';
 import { ToastProvider } from '@/components/Toast';
 import { FinoraDB, openStore, type Store } from '@/db';
 import { createRateService } from '@/rates/service';
@@ -159,6 +159,8 @@ export interface FakeEngine extends SyncEngine {
 export interface FakeEngineControl {
   /** Пока false, движок «без сети»: первая загрузка не проходит. */
   online: boolean;
+  /** Если задан, первая загрузка «идёт», пока этот промис не завершится. */
+  hold?: Promise<void>;
 }
 
 export function makeFakeEngine(options: CreateSyncEngineOptions, control: FakeEngineControl): FakeEngine {
@@ -176,6 +178,7 @@ export function makeFakeEngine(options: CreateSyncEngineOptions, control: FakeEn
     }
     set({ phase: 'syncing' });
     try {
+      if (control.hold) await control.hold;
       if ((await options.store.sync.getMeta(META_INITIAL_PULL)) !== true) {
         await options.afterFirstPull?.();
         await options.store.sync.setMeta(META_INITIAL_PULL, true);
@@ -274,18 +277,59 @@ export interface RenderAppOptions {
   /** state первой записи истории (например, { background } для шита поверх страницы). */
   state?: unknown;
   bootTimeoutMs?: number;
+  /** Обернуть в React.StrictMode (двойной запуск эффектов, как в разработке). */
+  strict?: boolean;
 }
 
 /** Всё приложение целиком вокруг переданного содержимого (обычно <AppRoutes />). */
 export function renderAppRoot(ui: ReactNode, options: RenderAppOptions = {}) {
-  const { client = null, deps, path = '/', state, bootTimeoutMs } = options;
-  return render(
+  const { client = null, deps, path = '/', state, bootTimeoutMs, strict = false } = options;
+  const tree = (
     <ToastProvider>
       <MemoryRouter initialEntries={[state === undefined ? path : { pathname: path, state }]}>
         <AppRoot client={client} deps={deps} bootTimeoutMs={bootTimeoutMs}>
           {ui}
         </AppRoot>
       </MemoryRouter>
-    </ToastProvider>,
+    </ToastProvider>
   );
+  return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
+}
+
+// ---------- ввод в поля, которых нет в мини-замене Testing Library ----------
+
+/** Выбрать значение в <select> так, как это делает человек (React слышит событие change). */
+export function pick(select: HTMLElement, value: string): void {
+  const el = select as HTMLSelectElement;
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(el, value);
+  fire(el, new Event('change', { bubbles: true }));
+}
+
+/** Открытое окно (шит или подтверждение) по его заголовку. */
+export const dialogNamed = (name: string | RegExp) => screen.getByRole('dialog', { name });
+export const alertDialogNamed = (name: string | RegExp) => screen.getByRole('alertdialog', { name });
+
+/** Повторяет асинхронную проверку (например, чтение из базы), пока она не пройдёт или не выйдет время. */
+export async function eventually(check: () => Promise<void> | void, timeoutMs = 3000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      await check();
+      return;
+    } catch (e) {
+      if (Date.now() > deadline) throw e;
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 15));
+      });
+    }
+  }
+}
+
+/** Запись в базу «со стороны» (как будто пришло с другого экрана) внутри act, чтобы React не ругался. */
+export async function write<T>(fn: () => Promise<T>): Promise<T> {
+  let out: T | undefined;
+  await act(async () => {
+    out = await fn();
+  });
+  return out as T;
 }

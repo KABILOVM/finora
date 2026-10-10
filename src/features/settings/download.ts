@@ -16,3 +16,14 @@ export function downloadTextFile(filename: string, mime: string, content: string
 
 /** Резервная копия — максимум столько байт (защита от случайно выбранного огромного файла). */
 export const MAX_BACKUP_FILE_BYTES = 25 * 1024 * 1024;
+
+/** Читает выбранный файл как текст. Blob.text() есть не во всех браузерах — запасной путь через FileReader. */
+export function readFileText(file: Blob): Promise<string> {
+  if (typeof file.text === 'function') return file.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Не удалось прочитать файл'));
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.readAsText(file);
+  });
+}

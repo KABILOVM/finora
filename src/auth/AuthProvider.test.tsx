@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALICE, BOB, fakeAuthClient, type FakeAuthOptions } from '@/app/testkit';
 import { act, render, waitFor } from '@/components/testUtils';
-import { AuthProvider, useAuth, type AuthApi } from './AuthProvider';
+import { AuthProvider, SIGN_OUT_WAIT_MS, useAuth, type AuthApi } from './AuthProvider';
 import { NO_CONNECTION_TEXT } from './authErrors';
 import { LOCAL_USER_ID } from './config';
 import { readLastUser, writeLastUser } from './lastUser';
@@ -216,6 +216,50 @@ describe('signOut', () => {
     vi.spyOn(fake.client.auth, 'signOut').mockRejectedValue(new Error('сеть'));
     await act(async () => auth.api.signOut());
     expect(auth.api.state.status).toBe('signed-out');
+  });
+});
+
+describe('signOut: сеть не отвечает и запоздавшие ответы', () => {
+  it('signOut завис → через SIGN_OUT_WAIT_MS человек всё равно вышел, сессия на устройстве снята', async () => {
+    const { fake, auth } = setup({ session: ALICE }, 200);
+    await waitFor(() => expect(auth.api.state.status).toBe('signed-in'));
+    localStorage.setItem(AUTH_STORAGE_KEY, '{"access_token":"x"}');
+    (fake.client.auth as unknown as { signOut: () => Promise<never> }).signOut = () => new Promise<never>(() => undefined);
+    let done = false;
+    void auth.api.signOut().then(() => void (done = true));
+    await act(async () => void (await new Promise((r) => setTimeout(r, SIGN_OUT_WAIT_MS + 150))));
+    expect(done).toBe(true);
+    expect(auth.api.state.status).toBe('signed-out');
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull();
+    expect(readLastUser()).toBeNull();
+
+    // запоздавшие «сессия найдена» из прошлого не возвращают человека в аккаунт, а настоящий новый вход (другая вкладка) — принимается
+    act(() => fake.emit('INITIAL_SESSION', ALICE));
+    act(() => fake.emit('TOKEN_REFRESHED', ALICE));
+    expect(auth.api.state.status).toBe('signed-out');
+    expect(readLastUser()).toBeNull();
+    act(() => fake.emit('SIGNED_IN', BOB));
+    expect(auth.api.user?.id).toBe(BOB.id);
+  });
+
+  it('запоздавший getSession прошлого поколения не перебивает человека, который уже вошёл заново', async () => {
+    let resolveLate!: (v: { data: { session: unknown }; error: null }) => void;
+    const late = new Promise<{ data: { session: unknown }; error: null }>((r) => (resolveLate = r));
+    const fake = fakeAuthClient({ session: null });
+    (fake.client.auth as unknown as { getSession: () => unknown }).getSession = () => late;
+    writeLastUser({ id: ALICE.id, email: ALICE.email });
+    const auth = mountAuth(fake.client, 30);
+    await waitFor(() => expect(auth.api.state.status).toBe('offline-known'));
+
+    await act(async () => void (await auth.api.signIn(BOB.email, BOB.password)));
+    expect(auth.api.user?.id).toBe(BOB.id);
+
+    await act(async () => {
+      resolveLate({ data: { session: { user: { id: ALICE.id, email: ALICE.email } } }, error: null });
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(auth.api.user?.id, 'старый ответ getSession не должен подменить Боба на Алису').toBe(BOB.id);
+    expect(readLastUser()?.id).toBe(BOB.id);
   });
 });
 

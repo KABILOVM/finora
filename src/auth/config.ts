@@ -8,8 +8,12 @@ export interface CloudConfig {
   anonKey: string;
 }
 
-/** Фиксированный пользователь локального режима. От его id зависит имя локальной базы — менять нельзя. */
-export const LOCAL_USER_ID = 'local-device';
+/**
+ * Фиксированный пользователь локального режима. От его id зависит имя локальной базы — менять нельзя.
+ * Это именно UUID, а не слово вроде 'local-device': id настроек равен id пользователя, а резервная копия
+ * (db/backupSchema.ts) принимает только настройки с id в виде UUID — иначе в локальном режиме копию нельзя было бы загрузить обратно.
+ */
+export const LOCAL_USER_ID = '10ca1de0-0000-4000-8000-000000000001';
 
 export interface AuthUser {
   id: string;
@@ -18,8 +22,14 @@ export interface AuthUser {
 
 export const LOCAL_USER: AuthUser = { id: LOCAL_USER_ID, email: '' };
 
-/** Значения из .env.example: если их оставили как есть, облака на самом деле нет. */
-const PLACEHOLDER = /YOUR-PROJECT-REF|xxx/i;
+/**
+ * Значения из .env.example: если их оставили как есть, облака на самом деле нет.
+ * Сравниваем с заготовкой ЦЕЛИКОМ, а не ищем «xxx» где попало: в настоящем ключе (около 0,6%) или адресе проекта
+ * три «x» подряд встречаются случайно, и тогда рабочее облако молча превратилось бы в локальный режим.
+ * В адресе проекта дефисов не бывает (только 20 строчных букв), поэтому «your-project-ref» — точно заготовка.
+ */
+const PLACEHOLDER_URL = /your-project-ref/i;
+const PLACEHOLDER_KEY = /^(sb_publishable_)?x{3,}$/i;
 
 export interface EnvLike {
   VITE_SUPABASE_URL?: unknown;
@@ -34,7 +44,7 @@ export function readCloudConfig(env: EnvLike): CloudConfig | null {
   const url = typeof env.VITE_SUPABASE_URL === 'string' ? env.VITE_SUPABASE_URL.trim() : '';
   const anonKey = typeof env.VITE_SUPABASE_ANON_KEY === 'string' ? env.VITE_SUPABASE_ANON_KEY.trim() : '';
   if (url === '' || anonKey === '') return null;
-  if (PLACEHOLDER.test(url) || PLACEHOLDER.test(anonKey)) return null;
+  if (PLACEHOLDER_URL.test(url) || PLACEHOLDER_KEY.test(anonKey)) return null;
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;

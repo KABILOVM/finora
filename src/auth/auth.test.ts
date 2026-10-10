@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { describeAuthError, isNetworkError, NO_CONNECTION_TEXT } from './authErrors';
-import { isSafeUserId, LOCAL_USER_ID, readCloudConfig } from './config';
+import { isUuid } from '@/db';
+import { isSafeUserId, LOCAL_USER_ID, readCloudConfig, type EnvLike } from './config';
 import { LAST_USER_KEY, clearLastUser, readLastUser, writeLastUser } from './lastUser';
 import { checkNewPassword, MIN_PASSWORD_LENGTH } from './passwordRules';
 
@@ -18,7 +19,7 @@ describe('readCloudConfig', () => {
     expect(readCloudConfig({ VITE_SUPABASE_URL: ` ${url}/ `, VITE_SUPABASE_ANON_KEY: ' key123 ' })).toEqual({ url, anonKey: 'key123' });
   });
 
-  it.each([
+  const bad: [EnvLike, string][] = [
     [{}, 'ничего не задано'],
     [{ VITE_SUPABASE_URL: url }, 'нет ключа'],
     [{ VITE_SUPABASE_ANON_KEY: 'k' }, 'нет адреса'],
@@ -28,9 +29,20 @@ describe('readCloudConfig', () => {
     [{ VITE_SUPABASE_URL: 'ftp://x.supabase.co', VITE_SUPABASE_ANON_KEY: 'k' }, 'не http(s)'],
     [{ VITE_SUPABASE_URL: 'javascript:alert(1)', VITE_SUPABASE_ANON_KEY: 'k' }, 'опасная схема'],
     [{ VITE_SUPABASE_URL: 'https://YOUR-PROJECT-REF.supabase.co', VITE_SUPABASE_ANON_KEY: 'sb_publishable_xxx' }, 'заготовка из .env.example'],
+    [{ VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: 'sb_publishable_xxx' }, 'ключ остался заготовкой'],
+    [{ VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: 'XXX' }, 'ключ из одних x'],
+    [{ VITE_SUPABASE_URL: 'https://YOUR-PROJECT-REF.supabase.co', VITE_SUPABASE_ANON_KEY: 'настоящий.ключ' }, 'адрес остался заготовкой'],
     [{ VITE_SUPABASE_URL: 123, VITE_SUPABASE_ANON_KEY: {} }, 'не строки'],
-  ])('%j → локальный режим (%s)', (env) => {
+  ];
+  it.each(bad)('%j → локальный режим (%s)', (env) => {
     expect(readCloudConfig(env)).toBeNull();
+  });
+});
+
+describe('LOCAL_USER_ID', () => {
+  it('это UUID: иначе резервную копию локального режима нельзя было бы загрузить обратно (см. db/backupSchema.ts)', () => {
+    expect(isUuid(LOCAL_USER_ID)).toBe(true);
+    expect(isSafeUserId(LOCAL_USER_ID)).toBe(true);
   });
 });
 

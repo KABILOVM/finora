@@ -8,6 +8,7 @@ import {
   type Rec,
 } from './memoryRules';
 import { SYNC_TABLES, TABLE_SPECS, type PulledRow, type SyncTableName, type WireRow } from './tables';
+import type { SessionAwareTransport } from './session';
 import { TransportError, type SyncTransport, type TransportErrorKind } from './transport';
 
 /**
@@ -15,8 +16,8 @@ import { TransportError, type SyncTransport, type TransportErrorKind } from './t
  * Нужен для тестов, демо-режима и сценариев отказов. Обязан проходить tests/sync/conformance.ts.
  */
 export interface MemoryServer {
-  /** Транспорт от имени пользователя. */
-  transportFor(userId: string): SyncTransport;
+  /** Транспорт от имени пользователя (как боевой, умеет сказать, чей у него токен). */
+  transportFor(userId: string): SessionAwareTransport;
   /** Транспорт «без входа»: pull/push бросают TransportError('auth'). */
   signedOutTransport(): SyncTransport;
   /** false — любой запрос бросает TransportError('network'). */
@@ -120,14 +121,18 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
   let latencyMs = 0;
   const failures: TransportErrorKind[] = [];
 
-  /** Общая часть любого запроса: сеть, имитация сбоя, задержка. Дальше — синхронная работа (запрос атомарен). */
-  async function gate(): Promise<void> {
+  /** Запрос дошёл до сервера: сеть, имитация сбоя. Дальше сервер работает синхронно (запрос атомарен). */
+  function arrive(): void {
     if (!online) throw new TransportError('network', 'Нет связи с сервером (сервер в памяти выключен)');
     const kind = failures.shift();
     if (kind !== undefined) {
       const t = FAIL_TEXT[kind];
       throw new TransportError(kind, t.message, t.code);
     }
+  }
+
+  /** Ответ уходит с задержкой: сервер уже сделал дело (как в жизни), клиент ждёт ответа. */
+  async function respond(): Promise<void> {
     if (latencyMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, latencyMs));
     else await Promise.resolve();
   }
@@ -168,25 +173,21 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
       }
     }
 
-    // Дубли id в одной пачке: Postgres отвергает пачку целиком (ON CONFLICT DO UPDATE cannot affect row a second time).
-    const ids = new Set<string>();
-    const coerced = rows.map((row) => coerceRow(table, row));
-    for (const rec of coerced) {
-      const id = String(rec['id']);
-      if (ids.has(id)) throw rejected('ON CONFLICT DO UPDATE command cannot affect row a second time', '21000');
-      ids.add(id);
-    }
-
     // Дальше — «одна транзакция»: всё считаем в черновике и фиксируем, только если ни одна строка не отвергнута.
+    // Порядок проверок такой же, как у Postgres: каждая строка по очереди (типы → триггер → NOT NULL/CHECK → конфликт),
+    // а внешние ключи проверяются в самом конце оператора.
     const limitMs = clock() + FIVE_MINUTES;
     const nowMs = clock();
     const stagedLedger = new Map<string, number>();
     const stagedRows = new Map<string, Stored>();
+    const touched = new Set<string>(); // строки, которые этот оператор уже вставил или изменил
     const stagedOf = (id: string): Stored | undefined => stagedRows.get(id) ?? tables[table].get(id);
     const parentExists = (parent: 'wallets' | 'categories', uid: string, id: string): boolean => tables[parent].get(id)?.userId === uid;
     const store = tables[table];
+    const foreignKeyChecks: Array<() => void> = [];
 
-    for (const incoming of coerced) {
+    for (const wire of rows) {
+      const incoming = coerceRow(table, wire);
       const id = String(incoming['id']);
       const device = String(incoming['device_id']);
 
@@ -202,8 +203,9 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
 
       const existing = stagedOf(id);
       if (!existing) {
-        checkForeignKeys(table, proposed, userId, parentExists);
+        foreignKeyChecks.push(() => checkForeignKeys(table, proposed, userId, parentExists));
         stagedRows.set(id, { userId, seq: seqCounter, updatedMs: nowMs, data: proposed });
+        touched.add(id);
         continue;
       }
 
@@ -211,6 +213,8 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
       if (existing.userId !== userId) {
         throw rejected(`new row violates row-level security policy (USING expression) for table "${table}"`, '42501');
       }
+      // две строки пачки с одним id: Postgres отвергает оператор, если строку уже трогала эта же команда
+      if (touched.has(id)) throw rejected('ON CONFLICT DO UPDATE command cannot affect row a second time', '21000');
 
       // 4) триггер на правку: DO UPDATE SET берёт значения предложенной строки по всем колонкам пачки, кроме id
       const next: Rec = { ...existing.data };
@@ -226,10 +230,12 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
         continue; // устаревшая правка или повтор: строка не меняется, ошибки нет
       }
       checkConstraints(table, next, userId);
-      checkForeignKeys(table, next, userId, parentExists);
+      foreignKeyChecks.push(() => checkForeignKeys(table, next, userId, parentExists));
       seqCounter++;
       stagedRows.set(id, { userId, seq: seqCounter, updatedMs: nowMs, data: next });
+      touched.add(id);
     }
+    for (const check of foreignKeyChecks) check();
 
     // Фиксация. Номера внутри пачки уже возрастают; в хранилище строки кладём в порядке номеров.
     for (const [key, value] of stagedLedger) futureLedger.set(key, value);
@@ -253,21 +259,26 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
     transportFor(userId) {
       const uid = normalizeUser(userId);
       return {
+        currentUserId: async () => uid,
         async pull(table, afterSeq, limit) {
-          await gate();
-          return pull(uid, table, afterSeq, limit);
+          arrive();
+          const rows = pull(uid, table, afterSeq, limit);
+          await respond();
+          return rows;
         },
         async push(table, rows) {
           if (Array.isArray(rows) && rows.length === 0) return; // пустая пачка — пустой запрос, сервер не трогаем
-          await gate();
+          arrive();
           push(uid, table, rows);
+          await respond();
         },
       };
     },
 
     signedOutTransport() {
       const refuse = async (): Promise<never> => {
-        await gate();
+        arrive();
+        await respond();
         throw new TransportError('auth', 'Нужно войти в систему', '28000');
       };
       return { pull: refuse, push: refuse };

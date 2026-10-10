@@ -2,7 +2,18 @@ import type { Store } from '@/db';
 import { META_LAST_SYNCED_AT } from '@/db/database';
 import { BISECT_BUDGET, BisectBudgetError, pushAll, type PushCtx } from './pushPhase';
 import { UNREADABLE_MESSAGE, pullAll } from './pullPhase';
+import { SESSION_MISMATCH_MESSAGE, SessionMismatchError, guardSession } from './session';
 import { TransportError, type SyncEngineApi, type SyncPhase, type SyncStatus, type SyncTransport } from './transport';
+
+/**
+ * Движок синхронизации «устройство ↔ сервер». Только оркестрирует: КОГДА слать и забирать, как вести себя при сбоях.
+ * Правила целостности (что считать отправленным, как слить чужую версию, где курс) — в store.sync (src/db/syncOps.ts).
+ *
+ * Цикл: [первая загрузка → затравка] → отправка (по таблицам, пачки до 200, поиск виновных делением пополам) →
+ * получение (страницы по 500, после отправки обязательно: сервер мог оставить свою версию).
+ * Одновременно идёт один цикл; запросы, пришедшие во время него, схлопываются в один повторный.
+ * Перед каждым запросом сверяется, что токен принадлежит владельцу этой локальной базы (см. session.ts).
+ */
 
 /** Ключ в store.sync.getMeta/setMeta: true после первого успешного полного получения данных с сервера. */
 export const META_INITIAL_PULL = 'initialPullDone';
@@ -34,6 +45,10 @@ const INTERVAL_MS = 60_000;
 const DEBOUNCE_MS = 1_000;
 const BACKOFF_MIN_MS = 5_000;
 const BACKOFF_MAX_MS = 300_000;
+/** Пока нужен вход, таймер пробует не чаще: токен мог обновиться сам (сеть моргнула), а человек ничего не нажимает. */
+const AUTH_PROBE_MS = 300_000;
+/** Сколько раз за цикл можно переписать данные ради согласованности и отправить их (дальше — со следующего цикла). */
+const MAX_REPAIR_ROUNDS = 3;
 
 /** Движок выключен посреди цикла: цикл тихо обрывается. */
 class DisposedSignal extends Error {}
@@ -59,18 +74,27 @@ const defer = (): Deferred => {
 const errorText = (e: unknown): string => (e instanceof Error && e.message !== '' ? e.message : 'Неизвестная ошибка');
 
 export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
-  const { store, transport } = opts;
+  const { store } = opts;
+  const transport = guardSession(opts.transport, store.userId);
   const now = opts.now ?? (() => Date.now());
 
   let status: SyncStatus = INITIAL_STATUS;
   const listeners = new Set<(s: SyncStatus) => void>();
   let started = false;
   let disposed = false;
+  /** Идёт затравка (afterFirstPull): её записи не запускают лишний цикл. */
+  let seeding = false;
+  /** Сколько раз вызывали start(): отличает актуальный запуск от устаревшего. */
+  let startCount = 0;
 
   /** Идёт цикл (флаг ставится ДО запуска: подписчик статуса может позвать syncNow прямо из колбэка). */
   let running = false;
   let queued: Deferred | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Когда повтор должен был сработать (по часам). Нужен, если телефон «заснул» и таймер не успел сработать. */
+  let retryDueAt = 0;
+  /** Когда движок остановился на «нужен вход» (по часам). */
+  let authFailedAt = 0;
   let attempts = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let intervalTimer: ReturnType<typeof setInterval> | null = null;
@@ -154,6 +178,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     if (!started || disposed || retryTimer !== null) return;
     const delay = Math.min(BACKOFF_MIN_MS * 2 ** attempts, BACKOFF_MAX_MS);
     attempts++;
+    retryDueAt = now() + delay;
     retryTimer = setTimeout(() => {
       retryTimer = null;
       void request('retry');
@@ -165,13 +190,27 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     if ((await store.sync.getMeta(META_INITIAL_PULL)) !== true) {
       // Пока не известно, что уже есть на сервере, свои данные не отправляем и не создаём: сначала забираем всё.
       if ((await pullAll(ctx)).unreadable) throw new UnreadableSignal();
-      if (opts.afterFirstPull) await opts.afterFirstPull();
+      if (opts.afterFirstPull) {
+        seeding = true; // затравка пишет данные: отдельного запуска цикла из-за них не нужно, они уйдут в этом же цикле
+        try {
+          await opts.afterFirstPull();
+        } finally {
+          seeding = false;
+        }
+      }
       await store.sync.setMeta(META_INITIAL_PULL, true);
     }
     await pushAll(ctx);
     await refreshCounts();
     // Обязательно забираем после отправки: сервер мог оставить свою, более новую версию — принимаем её.
-    if ((await pullAll(ctx)).unreadable) throw new UnreadableSignal();
+    // Если пришедшее пришлось согласовать с операциями (см. reconcile.ts), исправленное сразу уходит на сервер.
+    for (let round = 0; ; round++) {
+      const pulled = await pullAll(ctx);
+      if (pulled.unreadable) throw new UnreadableSignal();
+      if (pulled.repaired === 0 || round >= MAX_REPAIR_ROUNDS) break;
+      await pushAll(ctx);
+      await refreshCounts();
+    }
   }
 
   async function cycle(): Promise<void> {
@@ -199,6 +238,12 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
           return;
         } catch (e) {
           if (e instanceof DisposedSignal || disposed) return;
+          if (e instanceof SessionMismatchError) {
+            // токен чужого пользователя: обновлять сессию бессмысленно, данные не трогаем
+            authFailedAt = now();
+            setStatus({ phase: 'auth-required', lastError: SESSION_MISMATCH_MESSAGE });
+            return;
+          }
           if (e instanceof TransportError && e.kind === 'auth') {
             if (!authRetried && opts.onAuthError) {
               authRetried = true;
@@ -210,6 +255,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
               }
               if (refreshed) continue; // сессия обновлена: повторяем цикл один раз
             }
+            authFailedAt = now();
             setStatus({ phase: 'auth-required', lastError: 'Нужно войти заново' });
             return;
           }
@@ -235,21 +281,36 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
 
   // ---- запуск циклов: один за раз, лишние запросы схлопываются в один повторный ------------------------------------
 
-  /** Пока идёт пауза после сбоя, «мягкие» причины ждут таймер. При «нужен вход» не дёргаем сервер по кругу, кроме возврата на вкладку. */
+  /**
+   * Пока идёт пауза после сбоя, «мягкие» причины ждут таймер. При «нужен вход» не дёргаем сервер по кругу: пробуем при возврате
+   * на вкладку и по таймеру не чаще раза в AUTH_PROBE_MS (правки и сеть тут не повод).
+   */
   function mayRun(reason: Reason): boolean {
     if (FORCING.has(reason)) return true;
-    if (retryTimer !== null) return false;
-    if (status.phase === 'auth-required') return reason === 'visible';
+    // Пауза после сбоя ещё идёт. Исключение — возврат на вкладку после «сна» телефона: срок уже прошёл, а таймер мог не сработать.
+    if (retryTimer !== null) return reason === 'visible' && now() >= retryDueAt;
+    if (status.phase === 'auth-required') return reason === 'visible' || (reason === 'interval' && now() - authFailedAt >= AUTH_PROBE_MS);
     return true;
+  }
+
+  /** Цикл, который никогда не бросает: непредвиденный сбой становится статусом «ошибка» с повтором, а не необработанным отказом промиса. */
+  async function safeCycle(): Promise<void> {
+    try {
+      await cycle();
+    } catch (e) {
+      if (disposed) return;
+      setStatus({ phase: 'error', lastError: errorText(e) });
+      scheduleRetry();
+    }
   }
 
   async function drain(): Promise<void> {
     try {
-      await cycle();
+      await safeCycle();
       while (queued && !disposed) {
         const q = queued;
         queued = null;
-        if ([...q.reasons].some(mayRun)) await cycle();
+        if ([...q.reasons].some(mayRun)) await safeCycle();
         q.resolve();
       }
     } finally {
@@ -268,6 +329,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
       clearRetry();
     }
     if (!mayRun(reason)) return Promise.resolve();
+    if (reason === 'visible') clearRetry(); // просроченный повтор заменяется этим запуском
     if (running) {
       queued ??= defer();
       queued.reasons.add(reason);
@@ -302,6 +364,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
   };
   const onLocalChange = (): void => {
     void refreshCounts();
+    if (seeding) return;
     if (debounceTimer !== null) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
@@ -309,7 +372,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     }, DEBOUNCE_MS);
   };
 
-  async function bootstrap(): Promise<void> {
+  async function bootstrap(generation: number): Promise<void> {
     try {
       // временные отказы получают второй шанс: снимаем карантин один раз при запуске
       await store.sync.retryQuarantined();
@@ -317,12 +380,14 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
       // не вышло — отправка пойдёт как есть
     }
     await refreshCounts();
-    if (started && !disposed) void request('start');
+    // start → stop → start (двойной запуск в React StrictMode): первый запуск уже не актуален, цикл просит только последний
+    if (started && !disposed && generation === startCount) void request('start');
   }
 
   function start(): void {
     if (started || disposed) return;
     started = true;
+    startCount++;
     if (typeof window !== 'undefined') {
       window.addEventListener('online', onOnline);
       window.addEventListener('offline', onOffline);
@@ -330,7 +395,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
     stopLocalChange = store.onLocalChange(onLocalChange);
     if (pageVisible()) startInterval();
-    void bootstrap();
+    void bootstrap(startCount);
   }
 
   function stop(): void {

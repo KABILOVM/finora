@@ -441,5 +441,17 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       expect(['auth', 'rejected']).toContain((await failure(out.push('wallets', [overwrite]))).kind);
       expect(await pullAll(t, 'wallets')).toEqual(snap);
     });
+
+    it('11. транспорт, умеющий называть владельца своей сессии, называет именно своего (по этому движок не даёт отправить чужие данные)', async () => {
+      const [A, B] = [fresh(), fresh()];
+      for (const x of [A, B]) {
+        const t = x.t as SyncTransport & { currentUserId?: () => Promise<string | null | undefined> };
+        if (typeof t.currentUserId !== 'function') continue; // не умеет — движок такую проверку пропускает
+        const who = await t.currentUserId();
+        // undefined — «узнать нельзя» (клиент с готовым токеном); всё остальное обязано совпасть
+        expect(who === undefined ? x.userId : who).toBe(x.userId);
+      }
+      expect(A.userId).not.toBe(B.userId);
+    });
   });
 }

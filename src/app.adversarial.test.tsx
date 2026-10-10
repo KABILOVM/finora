@@ -1,19 +1,33 @@
-import { HashRouter, MemoryRouter } from 'react-router-dom';
+import { HashRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from './App';
+import { AppRoot } from './app/AppRoot';
+import { makeTestDeps, renderAppRoot } from './app/testkit';
 import { findByRole, render, screen, user, waitFor } from './components/testUtils';
+import { ToastProvider } from './components/Toast';
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({ needRefresh: [false, vi.fn()], offlineReady: [false, vi.fn()], updateServiceWorker: vi.fn() }),
 }));
 
+/** Приложение целиком (вход → база → страницы) в обычной памяти-истории: страницам нужна база, голый <AppRoutes /> их не отрисует. */
+const renderAt = (path: string, state?: unknown) => renderAppRoot(<AppRoutes />, { deps: makeTestDeps().deps, path, state });
+
+/** То же, но с настоящей историей браузера (HashRouter). */
+const renderHash = () =>
+  render(
+    <ToastProvider>
+      <HashRouter>
+        <AppRoot client={null} deps={makeTestDeps().deps}>
+          <AppRoutes />
+        </AppRoot>
+      </HashRouter>
+    </ToastProvider>,
+  );
+
 describe('ATTACK: шит /add и история', () => {
   it('прямой заход на /add: Esc закрывает шит и показывает «Главную»', async () => {
-    render(
-      <MemoryRouter initialEntries={['/add']}>
-        <AppRoutes />
-      </MemoryRouter>,
-    );
+    renderAt('/add');
     await findByRole('dialog');
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -22,32 +36,20 @@ describe('ATTACK: шит /add и история', () => {
 
   it('/add со state.background, но БЕЗ предыдущей записи истории (дубль вкладки/восстановление): шит всё равно закрывается', async () => {
     const background = { pathname: '/transactions', search: '', hash: '', state: null, key: 'k' };
-    render(
-      <MemoryRouter initialEntries={[{ pathname: '/add', state: { background } }]}>
-        <AppRoutes />
-      </MemoryRouter>,
-    );
+    renderAt('/add', { background });
     await findByRole('dialog');
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('повреждённый state.background ({}), например из старой версии приложения, не роняет экран', async () => {
-    render(
-      <MemoryRouter initialEntries={[{ pathname: '/add', state: { background: {} } }]}>
-        <AppRoutes />
-      </MemoryRouter>,
-    );
+    renderAt('/add', { background: {} });
     expect(await findByRole('dialog')).toBeInTheDocument();
   });
 
   it('/ADD (другой регистр) и /add/ не оставляют пользователя на пустом экране', async () => {
     for (const p of ['/ADD', '/add/']) {
-      const { unmount } = render(
-        <MemoryRouter initialEntries={[p]}>
-          <AppRoutes />
-        </MemoryRouter>,
-      );
+      const { unmount } = renderAt(p);
       expect(await findByRole('heading', { name: 'Главная', level: 1 })).toBeInTheDocument();
       unmount();
     }
@@ -56,11 +58,7 @@ describe('ATTACK: шит /add и история', () => {
   // Настоящая история браузера (HashRouter): «назад» — только если есть куда вернуться.
   it('шит открыт кнопкой «+» из браузерной истории: закрытие возвращает на страницу под ним (шаг назад)', async () => {
     window.history.replaceState(null, '', '#/transactions');
-    render(
-      <HashRouter>
-        <AppRoutes />
-      </HashRouter>,
-    );
+    renderHash();
     await findByRole('heading', { name: 'Операции', level: 1 });
     await user.click(screen.getAllByRole('link', { name: 'Добавить операцию' })[0] as HTMLElement);
     await findByRole('dialog');
@@ -75,11 +73,7 @@ describe('ATTACK: шит /add и история', () => {
     const background = { pathname: '/transactions', search: '', hash: '', state: null, key: 'k' };
     window.history.replaceState({ usr: { background }, key: 'dup', idx: 0 }, '', '#/add');
     const before = window.history.length;
-    render(
-      <HashRouter>
-        <AppRoutes />
-      </HashRouter>,
-    );
+    renderHash();
     await findByRole('dialog');
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

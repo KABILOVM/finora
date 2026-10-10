@@ -39,12 +39,14 @@ export interface OpenDeviceOptions {
   engine?: Partial<Omit<CreateSyncEngineOptions, 'store' | 'transport'>>;
   /** Затравка после первой загрузки (как в приложении): настройки, «Наличные», категории. */
   seed?: boolean;
+  /** Готовый транспорт вместо сервера в памяти (например, supabase-js + эмулятор PostgREST). Тогда server можно не передавать (null). */
+  transport?: SyncTransport;
   /** Своя «браузерная» база; передать прежнюю, чтобы открыть те же данные заново (перезапуск приложения). */
   factory?: IDBFactory;
 }
 
 /** Новое устройство: своя IndexedDB, свой движок (НЕ запущен — start() вызывает тест). */
-export async function openDevice(server: MemoryServer, deviceId: string, o: OpenDeviceOptions = {}): Promise<Device> {
+export async function openDevice(server: MemoryServer | null, deviceId: string, o: OpenDeviceOptions = {}): Promise<Device> {
   const userId = o.userId ?? USER;
   const store = await openStore(userId, {
     deviceId,
@@ -54,13 +56,17 @@ export async function openDevice(server: MemoryServer, deviceId: string, o: Open
   return assemble(server, store, deviceId, userId, o);
 }
 
-function assemble(server: MemoryServer, store: Store, deviceId: string, userId: string, o: OpenDeviceOptions): Device {
-  const inner = server.transportFor(userId);
+function assemble(server: MemoryServer | null, store: Store, deviceId: string, userId: string, o: OpenDeviceOptions): Device {
+  const inner = o.transport ?? (server ?? fail('нужен сервер или transport')).transportFor(userId);
   const transport = o.wrap ? o.wrap(inner) : inner;
   const afterFirstPull = o.seed ? async () => void (await ensureSeeded(store)) : undefined;
   const engine = createSyncEngine({ store, transport, now: o.now, afterFirstPull, ...o.engine });
   opened.push({ store, engine });
   return { deviceId, store, engine, transport };
+}
+
+function fail(message: string): never {
+  throw new Error(message);
 }
 
 const nextTurn = (): Promise<void> => new Promise((r) => setImmediate(r));
@@ -90,6 +96,8 @@ export interface Gate {
 }
 
 export interface Call {
+  /** Date.now() в момент вызова (с поддельными таймерами — поддельное время). */
+  at: number;
   op: 'pull' | 'push';
   table: SyncTableName;
   /** push: сколько строк; pull: курс. */
@@ -130,12 +138,12 @@ export function spy(inner: SyncTransport): Spy {
     },
     transport: {
       async pull(table, afterSeq, limit) {
-        calls.push({ op: 'pull', table, size: afterSeq });
+        calls.push({ at: Date.now(), op: 'pull', table, size: afterSeq });
         const rows = await inner.pull(table, afterSeq, limit);
         return s.onPull ? s.onPull(table, afterSeq, rows) : rows;
       },
       async push(table, rows) {
-        calls.push({ op: 'push', table, size: rows.length, ids: rows.map((r) => String(r['id'])) });
+        calls.push({ at: Date.now(), op: 'push', table, size: rows.length, ids: rows.map((r) => String(r['id'])) });
         const hold = holds.shift();
         if (hold) {
           hold.enter();

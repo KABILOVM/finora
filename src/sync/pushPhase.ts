@@ -18,6 +18,9 @@ const MAX_ROUNDS = 3;
 const MAX_BATCHES_PER_TABLE = 2000;
 const LIST_LIMIT_MAX = 10_000; // потолок store.sync.listDirty
 
+/** Так начинается сообщение у операции, которую не отправили из-за отвергнутого родителя (по нему её отличают от собственных отказов). */
+const BLOCKED_PREFIX = 'Не отправлена: ';
+
 export interface PhaseCtx {
   store: Store;
   transport: SyncTransport;
@@ -159,14 +162,43 @@ async function splitByParents(ctx: PhaseCtx, table: SyncTableName, rows: Row[]):
       return s ? [s] : [];
     });
     const stuck = dirty.find((s) => s.quarantined);
-    if (stuck) out.blocked.push({ row, message: `Не отправлена: ${stuck.label} не принят(а) сервером` });
+    if (stuck) out.blocked.push({ row, message: `${BLOCKED_PREFIX}${stuck.label} не принят(а) сервером` });
     else if (dirty.length > 0) out.deferred.push(row);
     else out.ready.push(row);
   });
   return out;
 }
 
+/**
+ * Операции, застрявшие в карантине только из-за родителя, возвращаются в очередь, как только родитель перестал быть отвергнутым
+ * (человек исправил кошелёк или категорию и сервер их принял, либо пришла серверная версия). Собственные отказы операций не трогаем.
+ */
+async function releaseBlocked(ctx: PhaseCtx): Promise<void> {
+  const { db } = ctx.store;
+  await db.transaction('rw', [db.transactions, db.wallets, db.categories], async () => {
+    const stuck = await db.transactions
+      .where('dirty')
+      .equals(1)
+      .filter((t) => t.syncError !== null && t.syncError.startsWith(BLOCKED_PREFIX))
+      .toArray();
+    if (stuck.length === 0) return;
+    const walletIds = new Set<string>();
+    const categoryIds = new Set<string>();
+    for (const t of stuck) {
+      walletIds.add(t.walletId);
+      if (t.toWalletId) walletIds.add(t.toWalletId);
+      if (t.categoryId) categoryIds.add(t.categoryId);
+    }
+    const rejected = new Set<string>();
+    for (const w of await db.wallets.bulkGet([...walletIds])) if (w && w.dirty === 1 && w.syncError !== null) rejected.add(w.id);
+    for (const c of await db.categories.bulkGet([...categoryIds])) if (c && c.dirty === 1 && c.syncError !== null) rejected.add(c.id);
+    const free = stuck.filter((t) => ![t.walletId, t.toWalletId, t.categoryId].some((id) => id !== null && rejected.has(id)));
+    if (free.length > 0) await db.transactions.bulkPut(free.map((t) => ({ ...t, syncError: null })));
+  });
+}
+
 async function pushTable(ctx: PushCtx, table: SyncTableName, stats: PushStats): Promise<number> {
+  if (table === 'transactions') await releaseBlocked(ctx);
   const skip = new Set<string>();
   for (let guard = 0; guard < MAX_BATCHES_PER_TABLE; guard++) {
     ctx.check();

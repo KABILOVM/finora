@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
 import { useOnline } from '@/components/OnlineBadge';
 import { useToast } from '@/components/Toast';
@@ -24,7 +25,8 @@ export function SyncSection() {
   const online = useOnline();
   const store = useStore();
   const toast = useToast();
-  const rejected = useRejectedItems();
+  const auth = useAuth();
+  const rejected = useRejectedItems(enabled && status.quarantined > 0);
   const [busy, setBusy] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
@@ -81,9 +83,14 @@ export function SyncSection() {
         Последняя успешная синхронизация: {status.lastSyncedAt ? formatDateTime(status.lastSyncedAt) : 'ещё не было'}
         {!online && ' · сейчас нет сети'}
       </p>
-      <Button variant="secondary" icon="refresh" loading={working} onClick={() => void run()}>
-        Синхронизировать сейчас
-      </Button>
+      {status.phase === 'auth-required' ? (
+        // Данные остаются на устройстве: после входа под той же почтой они отправятся.
+        <Button onClick={() => void auth.signOut()}>Войти заново</Button>
+      ) : (
+        <Button variant="secondary" icon="refresh" loading={working} onClick={() => void run()}>
+          Синхронизировать сейчас
+        </Button>
+      )}
 
       {rejected !== undefined && rejected.length > 0 && (
         <div className="mt-2 border-t border-border pt-3">

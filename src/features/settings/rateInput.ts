@@ -28,6 +28,16 @@ export function formatRate(rate: number): string {
   return frac ? `${grouped},${frac}` : grouped;
 }
 
+/**
+ * Курс для поля ввода: ВСЕ знаки (до 10), без пробелов и хвостовых нулей, 10.123456 → '10,123456'.
+ * formatRate округляет до 4 знаков — для показа это хорошо, а в поле ввода округление тихо поменяло бы курс
+ * после нажатия «Сохранить» без правок. parseRateInput(formatRateExact(x)) всегда возвращает то же x.
+ */
+export function formatRateExact(rate: number): string {
+  if (!Number.isFinite(rate) || rate <= 0) return '';
+  return rate.toFixed(MAX_DECIMALS).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+}
+
 export const RATE_SOURCE_LABELS: Record<string, string> = {
   nbt: 'Нацбанк Таджикистана',
   server: 'сервер Finora',

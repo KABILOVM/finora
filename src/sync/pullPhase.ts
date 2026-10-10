@@ -3,6 +3,7 @@ import type { RemoteRow } from '@/db';
 import { SYNC_TABLES, WireError, fromWire, type SyncTableName } from './tables';
 import { TransportError } from './transport';
 import type { PhaseCtx } from './pushPhase';
+import { newWatch, noteIncoming, reconcile, type Watch } from './reconcile';
 
 /**
  * Фаза «получение»: по каждой таблице забираем страницы с сервера, начиная с сохранённого курса.
@@ -19,9 +20,11 @@ export interface PullResult {
   unreadable: boolean;
   /** Сколько строк записано в локальную базу. */
   applied: number;
+  /** Сколько записей пришлось переписать, чтобы операции не поменяли смысл (см. reconcile.ts): они ждут отправки. */
+  repaired: number;
 }
 
-async function pullTable(ctx: PhaseCtx, table: SyncTableName): Promise<{ unreadable: boolean; applied: number }> {
+async function pullTable(ctx: PhaseCtx, table: SyncTableName, watch: Watch): Promise<{ unreadable: boolean; applied: number }> {
   let applied = 0;
   let cursor = await ctx.store.sync.getCursor(table);
   for (;;) {
@@ -47,6 +50,7 @@ async function pullTable(ctx: PhaseCtx, table: SyncTableName): Promise<{ unreada
       // Сервер обязан отдавать только строки новее курса. Иначе мы бы крутились на одной странице бесконечно.
       if (maxSeq <= cursor) throw new TransportError('server', `Сервер вернул строки не новее курса ${cursor} (таблица ${table})`);
       try {
+        await noteIncoming(ctx.store, table, good, watch); // пока в базе ещё локальные версии
         applied += (await ctx.store.sync.applyRemotePage(table, good, maxSeq)).applied;
       } catch (e) {
         // страница не прошла проверку базы целиком — как нечитаемая: ничего не записано, курс на месте
@@ -60,13 +64,29 @@ async function pullTable(ctx: PhaseCtx, table: SyncTableName): Promise<{ unreada
   }
 }
 
-/** Забирает все таблицы. Нечитаемая строка в одной таблице не мешает остальным, но итог помечается как неполный. */
+/**
+ * Забирает все таблицы. Нечитаемая строка в одной таблице не мешает остальным, но итог помечается как неполный.
+ * В конце (даже если получение прервалось на середине) проверяется согласованность того, что уже записано.
+ */
 export async function pullAll(ctx: PhaseCtx): Promise<PullResult> {
-  const total: PullResult = { unreadable: false, applied: 0 };
-  for (const table of SYNC_TABLES) {
-    const r = await pullTable(ctx, table);
-    total.applied += r.applied;
-    if (r.unreadable) total.unreadable = true;
+  const total: PullResult = { unreadable: false, applied: 0, repaired: 0 };
+  const watch = newWatch();
+  let failure: { error: unknown } | null = null;
+  try {
+    for (const table of SYNC_TABLES) {
+      const r = await pullTable(ctx, table, watch);
+      total.applied += r.applied;
+      if (r.unreadable) total.unreadable = true;
+    }
+  } catch (error) {
+    failure = { error };
   }
+  try {
+    ctx.check();
+    total.repaired = await reconcile(ctx.store, watch);
+  } catch (error) {
+    failure ??= { error };
+  }
+  if (failure) throw failure.error;
   return total;
 }

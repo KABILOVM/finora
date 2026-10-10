@@ -30,7 +30,7 @@ async function errorOf(p: Promise<unknown>): Promise<TransportError> {
 describe('MemoryServer: журнал меток из будущего (как private.sync_future_stamps)', () => {
   const base = (name: string, device: string, at: number, w = fixedWallet) => toWire('wallets', { ...w, name, deviceId: device, clientUpdatedAt: iso(at) });
   const fixedWallet = makeWallet({ createdAt: iso(T0 - 10 * MIN), clientUpdatedAt: iso(T0 - 10 * MIN), name: 'исходное', deviceId: 'dev-b' });
-  const nameOf = (s: ReturnType<typeof serverAt>, uid: string) => (s.server.dump(uid, 'wallets')[0] ?? {})['name'];
+  const nameOf = (s: ReturnType<typeof serverAt>, uid: string) => s.server.dump(uid, 'wallets')[0]?.['name'];
 
   it('запоздалый повтор: когда время сервера «догнало» присланную метку, старая правка новую не затирает', async () => {
     const s = serverAt();
@@ -264,6 +264,25 @@ describe('MemoryServer: сценарии отказов', () => {
       await p;
       expect(done).toBe(true);
       expect(() => s.server.setLatency(-1)).toThrow(RangeError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('setLatency: сервер принимает запись сразу, задерживается только ответ («принято, а ответа ещё нет»)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const s = serverAt();
+      const uid = makeUserId();
+      s.server.setLatency(500);
+      let done = false;
+      const p = s.server.transportFor(uid).push('wallets', [oneWallet()]).then(() => (done = true));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(done).toBe(false);
+      expect(s.server.dump(uid, 'wallets')).toHaveLength(1); // сервер уже принял
+      await vi.advanceTimersByTimeAsync(500);
+      await p;
+      expect(done).toBe(true);
     } finally {
       vi.useRealTimers();
     }

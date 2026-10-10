@@ -12,7 +12,7 @@ import { CURRENCIES, currencyInfo } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, LocalRow, Minor, Wallet, WalletKind } from '@/domain/types';
 import { ColorSwatches } from './ColorSwatches';
-import { COLOR_CHOICES, DEFAULT_ICON_BY_KIND, sameName, WALLET_KIND_LABELS, WALLET_KINDS } from './walletUi';
+import { cleanName, COLOR_CHOICES, DEFAULT_ICON_BY_KIND, sameName, WALLET_KIND_LABELS, WALLET_KINDS } from './walletUi';
 
 export interface WalletSheetProps {
   /** null — создаём новый кошелёк. */
@@ -62,10 +62,10 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
 
   const save = async () => {
     if (saving) return;
-    const cleanName = name.trim();
-    if (cleanName === '') return setError({ field: 'name', message: 'Введите название кошелька' });
-    if (cleanName.length > 60) return setError({ field: 'name', message: 'Название не длиннее 60 символов' });
-    if (otherNames.some((n) => sameName(n, cleanName))) {
+    const cleaned = cleanName(name);
+    if (cleaned === '') return setError({ field: 'name', message: 'Введите название кошелька' });
+    if (cleaned.length > 60) return setError({ field: 'name', message: 'Название не длиннее 60 символов' });
+    if (otherNames.some((n) => sameName(n, cleaned))) {
       return setError({ field: 'name', message: 'Кошелёк с таким названием уже есть' });
     }
     setError(null);
@@ -73,7 +73,7 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
     try {
       if (!wallet) {
         await store.wallets.create({
-          name: cleanName,
+          name: cleaned,
           currency,
           kind,
           openingBalanceMinor: opening ?? 0,
@@ -82,7 +82,7 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
         });
       } else {
         const patch: Parameters<typeof store.wallets.update>[1] = {};
-        if (cleanName !== wallet.name) patch.name = cleanName;
+        if (cleaned !== wallet.name) patch.name = cleaned;
         if (currency !== wallet.currency) patch.currency = currency;
         if (kind !== wallet.kind) patch.kind = kind;
         if (icon !== wallet.icon) patch.icon = icon;

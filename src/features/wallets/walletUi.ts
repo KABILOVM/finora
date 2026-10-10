@@ -30,7 +30,19 @@ export const COLOR_CHOICES: readonly { value: string; name: string }[] = [
   { value: '#475569', name: 'Серый' },
 ];
 
+/**
+ * Невидимые символы: мягкий перенос, нулевой ширины, метки направления письма, BOM. Из мессенджеров они приезжают при вставке,
+ * а «обычный» trim() их не убирает — название из одних таких символов выглядело бы пустым, но проходило проверку.
+ */
+const INVISIBLE = '\\u00AD\\u180E\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF';
+const EDGE = new RegExp(`^[\\s${INVISIBLE}]+|[\\s${INVISIBLE}]+$`, 'g');
+
+/** Название без пробелов и невидимых символов по краям. Внутри слова их не трогаем (метки направления нужны арабскому письму). */
+export function cleanName(raw: string): string {
+  return raw.replace(EDGE, '');
+}
+
 /** Названия сравниваем без учёта регистра и лишних пробелов: «Нал» и «нал » — одно и то же. */
 export function sameName(a: string, b: string): boolean {
-  return a.trim().toLocaleLowerCase('ru') === b.trim().toLocaleLowerCase('ru');
+  return cleanName(a).toLocaleLowerCase('ru') === cleanName(b).toLocaleLowerCase('ru');
 }

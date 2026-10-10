@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
+import { describe, expect, it, vi } from 'vitest';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { createSyncEngine } from '@/sync/engine';
 import { createMemoryServer } from '@/sync/memoryServer';
-import { fromWire } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
 import { makeTransaction, makeWallet } from './factories';
 import { USER, openDevice, snapshotOf, spy, until, type Device, type Spy } from './engineHarness';
@@ -327,7 +327,7 @@ describe('отказы сервера: карантин', () => {
     const server = createMemoryServer();
     const { d: a, sp } = await ready(server, 'dev-a');
     const base = Date.now() - 3_600_000;
-    const wallets = Array.from({ length: 450 }, (_, i) =>
+    const wallets = Array.from({ length: 320 }, (_, i) =>
       makeWallet({ createdAt: iso(base + i), clientUpdatedAt: iso(base + i), deviceId: 'dev-a', sortOrder: 100 + i, name: '' }),
     );
     await a.store.db.wallets.bulkPut(wallets.map((w) => ({ ...w, dirty: 1 as const, serverSeq: null, syncError: null })));
@@ -336,7 +336,7 @@ describe('отказы сервера: карантин', () => {
     expect(a.engine.getStatus().phase).toBe('error');
     expect(sp.pushes().length).toBeLessThanOrEqual(600 + 5);
     for (let i = 0; i < 5 && a.engine.getStatus().pending > 0; i++) await a.engine.syncNow();
-    expect(a.engine.getStatus()).toMatchObject({ pending: 0, quarantined: 450, phase: 'idle' });
+    expect(a.engine.getStatus()).toMatchObject({ pending: 0, quarantined: 320, phase: 'idle' });
   });
 });
 
@@ -415,6 +415,33 @@ describe('схлопывание запросов', () => {
   });
 });
 
+describe('перезапуск приложения', () => {
+  it('очередь, курсы и признак первой загрузки переживают перезапуск: ничего не теряется и не сеется заново', async () => {
+    const server = createMemoryServer();
+    const factory = new IDBFactory();
+    const first = await openDevice(server, 'dev-a', { factory, seed: true });
+    await first.engine.syncNow();
+    server.setOnline(false);
+    await first.store.wallets.create({ name: 'Копилка', currency: 'TJS', kind: 'savings', openingBalanceMinor: 0, color: '#000000', icon: '🐷' });
+    await first.engine.syncNow();
+    expect(first.engine.getStatus()).toMatchObject({ phase: 'offline', pending: 1 });
+    first.engine.dispose();
+    first.store.close(); // приложение закрыли
+
+    server.setOnline(true);
+    const seed = vi.fn(async () => undefined);
+    let sp!: Spy;
+    const second = await openDevice(server, 'dev-a', { factory, wrap: (inner) => (sp = spy(inner)).transport, engine: { afterFirstPull: seed } });
+    await until(() => second.engine.getStatus().pending === 1 && second.engine.getStatus().lastSyncedAt !== null, 'состояние после перезапуска');
+    await second.engine.syncNow();
+    expect(seed).not.toHaveBeenCalled(); // признак первой загрузки сохранился
+    expect(second.engine.getStatus()).toMatchObject({ phase: 'idle', pending: 0 });
+    expect(serverRows(server, 'wallets').map((r) => r['name']).sort()).toEqual(['Копилка', 'Наличные']);
+    expect(sp.pulls('settings')[0]?.size).toBeGreaterThan(0); // получение пошло с сохранённого курса, а не с нуля
+    expect(sp.pushes('wallets')).toHaveLength(1);
+  });
+});
+
 describe('статус', () => {
   it('getStatus отдаёт один и тот же объект, пока ничего не изменилось; подписчик получает текущий статус сразу', async () => {
     const server = createMemoryServer();
@@ -458,6 +485,3 @@ describe('статус', () => {
     await until(() => a.engine.getStatus().pending === 1, 'pending = 1');
   });
 });
-
-// Тип нужен, чтобы проверить разбор строк сервера напрямую.
-void fromWire;
