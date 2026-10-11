@@ -16,6 +16,7 @@ import { PageNotices } from '@/app/PageNotices';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
+import AutoPostRunner from '@/features/recurring/AutoPostRunner';
 import { AppShell } from '@/layout/AppShell';
 import { ADD_PATH } from '@/layout/nav';
 
@@ -30,6 +31,7 @@ const MorePage = lazy(() => import('@/features/more/MorePage'));
 const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'));
 const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'));
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'));
+const DebtDetailPage = lazy(() => import('@/features/debts/DebtDetailPage'));
 const ImportPage = lazy(() => import('@/features/import/ImportPage'));
 // Шит «Новая операция» (пока заглушка в src/layout; настоящий подключат вместо неё).
 const AddTransactionSheet = lazy(() => import('@/layout/AddTransactionSheet'));
@@ -100,6 +102,7 @@ export function AppRoutes() {
 
   return (
     <>
+      <AutoPostRunner />
       <Routes location={pagesLocation}>
         {/* Экран входа показывает сама сборка (src/app), пока никто не вошёл; сюда попадают уже вошедшие. */}
         <Route path="/login" element={<Navigate to="/" replace />} />
@@ -112,6 +115,7 @@ export function AppRoutes() {
             <Route path="/budgets" element={<BudgetsPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
             <Route path="/debts" element={<DebtsPage />} />
+            <Route path="/debts/:id" element={<DebtDetailPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/categories" element={<CategoriesPage />} />
