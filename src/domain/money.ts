@@ -110,11 +110,20 @@ export function convertMinor(minor: Minor, from: CurrencyCode, to: CurrencyCode,
   assertMinor(minor);
   if (from === to) return minor;
   if (!Number.isFinite(rate) || rate <= 0) throw new RangeError(`Некорректный курс: ${rate}`);
-  const major = Math.abs(minor) / factorOf(from);
-  const out = Math.round(major * rate * factorOf(to));
-  if (!Number.isSafeInteger(out)) throw new RangeError('Переполнение при пересчёте валюты');
-  return minor < 0 ? -out : out;
+  if (rate >= 1e21) throw new RangeError('Переполнение при пересчёте валюты');
+  // Считаем ТОЧНО, целыми числами: курс переводим в десятичную строку (12 знаков) и в BigInt. Дробные числа на половинках
+  // ошибались на одну минорную единицу (3,05 $ × 10,9 давало 33,24 вместо 33,25).
+  const scaled = BigInt(rate.toFixed(RATE_SCALE_DIGITS).replace('.', ''));
+  const den = BigInt(factorOf(from)) * RATE_SCALE;
+  const num = BigInt(Math.abs(minor)) * scaled * BigInt(factorOf(to));
+  const out = (2n * num + den) / (2n * den); // округление «от нуля» на половинке
+  if (out > MAX_SAFE) throw new RangeError('Переполнение при пересчёте валюты');
+  return minor < 0 && out !== 0n ? -Number(out) : Number(out);
 }
+
+const RATE_SCALE_DIGITS = 12;
+const RATE_SCALE = 10n ** BigInt(RATE_SCALE_DIGITS);
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 
 /** Знаков курса в базе данных: колонка fx_rate — numeric(20,10). Курс в операции округляем так же, чтобы локальная копия == серверной. */
 export const FX_RATE_DECIMALS = 10;

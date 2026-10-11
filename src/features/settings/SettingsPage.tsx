@@ -7,9 +7,11 @@ import { useSyncEnabled, useSyncStatus } from '@/sync/syncContext';
 import { version } from '../../../package.json';
 import { AppearanceSection } from './AppearanceSection';
 import { AccountSection } from './AccountSection';
+import { AppLockSection } from './AppLockSection';
 import { BackupSection } from './BackupSection';
 import { CurrencySection } from './CurrencySection';
 import { RatesSection } from './RatesSection';
+import { RemindersSection } from './RemindersSection';
 import { SyncSection } from './SyncSection';
 
 function NavRow({ to, icon, color, title }: { to: string; icon: string; color: string; title: string }) {
@@ -53,6 +55,8 @@ export default function SettingsPage() {
       <RatesSection />
       <BackupSection />
       <AccountSection />
+      <AppLockSection />
+      <RemindersSection />
 
       <p className="pb-2 text-center text-xs text-muted">
         Finora {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Manrope (SIL OFL)

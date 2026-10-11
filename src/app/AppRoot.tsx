@@ -5,6 +5,7 @@ import LoginPage from '@/features/auth/LoginPage';
 import { BootScreen } from './BootScreen';
 import { defaultDeps, type SessionDeps } from './deps';
 import { AppEnvProvider } from './env';
+import { LockGate } from './LockGate';
 import { UserSession } from './UserSession';
 
 /** Решает, что показать: заставку, вход или данные пользователя. */
@@ -14,9 +15,9 @@ function SessionGate({ children }: { children?: ReactNode }) {
   if (state.status === 'signed-out') return <LoginPage />;
   // key: другой человек — другая сессия «с нуля», данные не смешиваются. offline-known → signed-in не перезапускает сеанс.
   return (
-    <UserSession key={state.user.id} user={state.user}>
-      {children}
-    </UserSession>
+    <LockGate key={state.user.id} user={state.user}>
+      <UserSession user={state.user}>{children}</UserSession>
+    </LockGate>
   );
 }
 

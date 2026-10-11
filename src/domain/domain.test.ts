@@ -94,6 +94,15 @@ describe('сложение и пересчёт', () => {
     expect(convertMinor(500, 'TJS', 'TJS', 123)).toBe(500);
   });
 
+  it('convertMinor: половинка дирама округляется от нуля точно, без ошибки дробных чисел', () => {
+    expect(convertMinor(305, 'USD', 'TJS', 10.9)).toBe(3325); // 3,05$ × 10,9 = 33,245 → 33,25 (раньше выходило 33,24)
+    expect(convertMinor(-305, 'USD', 'TJS', 10.9)).toBe(-3325);
+    expect(convertMinor(1, 'USD', 'TJS', 0.5)).toBe(1); // 0,005 сомони → от нуля → 0,01
+    expect(convertMinor(1, 'USD', 'TJS', 0.4999999)).toBe(0);
+    expect(Object.is(convertMinor(-1, 'USD', 'TJS', 0.1), 0)).toBe(true); // не «минус ноль»
+    expect(convertMinor(100, 'RUB', 'TJS', 0.1234567891)).toBe(12);
+  });
+
   it('convertMinor отвергает плохой курс и переполнение', () => {
     for (const r of [0, -1, NaN, Infinity]) expect(() => convertMinor(100, 'USD', 'TJS', r)).toThrow(RangeError);
     expect(() => convertMinor(Number.MAX_SAFE_INTEGER, 'USD', 'TJS', 1000)).toThrow(RangeError);

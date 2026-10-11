@@ -42,18 +42,19 @@ test.describe('15. Меню «Ещё»', () => {
     });
   }
 
-  test('заглушки новых разделов: «Скоро», каркас на месте, без ошибок', async ({ page }, testInfo) => {
-    for (const [hash, title] of [
-      ['/budgets', 'Бюджеты'],
-      ['/recurring', 'Регулярные платежи'],
-      ['/debts', 'Долги и кредиты'],
-      ['/import', 'Импорт из Zenmoney'],
+  test('новые разделы — настоящие экраны (не «Скоро»): заголовок и каркас на месте, без ошибок', async ({ page }, testInfo) => {
+    for (const [hash, title, real] of [
+      ['/budgets', 'Бюджеты', (p: Page) => p.getByRole('heading', { level: 2, name: 'Лимиты на месяц' })],
+      ['/recurring', 'Регулярные платежи', (p: Page) => p.getByRole('button', { name: 'Добавить платёж' })],
+      ['/debts', 'Долги и кредиты', (p: Page) => p.getByRole('button', { name: 'Новый долг' })],
+      ['/import', 'Импорт из Zenmoney', (p: Page) => p.getByLabel('Файл Zenmoney')],
     ] as const) {
       await openApp(page, hash);
       await expect(h1(page, title)).toBeVisible();
-      await expect(page.getByRole('heading', { level: 2, name: 'Скоро' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 2, name: 'Скоро' }), `заглушка «Скоро» на ${hash}`).toHaveCount(0);
+      await expect(real(page), `настоящее содержимое экрана ${hash}`).toBeAttached();
       await expect(mainNav(page)).toBeVisible();
-      if (hash === '/budgets') await shot(page, '15-budgets-stub', testInfo);
+      if (hash === '/budgets') await shot(page, '15-budgets-screen', testInfo);
     }
   });
 

@@ -97,6 +97,8 @@ export default defineConfig({
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [],
+        // Показ push-напоминаний: файл из public/ подключается к сервис-воркеру (вся логика push — в нём, не в generateSW).
+        importScripts: ['push-handler.js'],
       },
     }),
   ],

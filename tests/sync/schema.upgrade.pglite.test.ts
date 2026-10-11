@@ -161,7 +161,7 @@ describe('схема: обновление с этапа 1 на этап 2 по�
         )
       ).rows[0];
     const once = await count();
-    expect(once).toMatchObject({ policies: 22, triggers: 7 });
+    expect(once).toMatchObject({ policies: 28, triggers: 7 });
     await s.applySchema();
     await s.applySchema();
     expect(await count()).toEqual(once);
