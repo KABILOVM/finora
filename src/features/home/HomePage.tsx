@@ -89,7 +89,10 @@ export default function HomePage() {
       <InstallHint className="mb-2" />
       <PageHeader title="Главная" className={HEADER_CLASS} />
       <div className="flex flex-col gap-3 md:gap-6">
-        <Card aria-label="Всего денег" data-testid="home-total" className="!py-3 md:!py-4">
+        <Card aria-label="Всего денег" data-testid="home-total" className="relative overflow-hidden !py-3 md:!py-4">
+          {/* Декор: два мягких цветных круга (не мешают тексту и касаниям). */}
+          <span aria-hidden="true" className="pointer-events-none absolute -right-10 -top-14 h-44 w-44 rounded-full bg-gradient-to-br from-brand/25 to-accent/20 blur-2xl" />
+          <span aria-hidden="true" className="pointer-events-none absolute -bottom-16 right-16 h-36 w-36 rounded-full bg-accent/15 blur-2xl" />
           <p className="text-sm text-muted">Всего</p>
           {total ? (
             <>

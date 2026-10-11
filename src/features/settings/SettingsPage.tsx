@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { Card } from '@/components/Card';
@@ -27,9 +28,7 @@ export default function SettingsPage() {
           to="/settings/categories"
           className="flex min-h-[56px] items-center gap-3 rounded-2xl px-4 py-2 transition-colors hover:bg-surface-2 active:bg-border/60"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center text-xl" aria-hidden="true">
-            🏷️
-          </span>
+          <Glyph value="i:tag" color="#4f46e5" size={40} />
           <span className="min-w-0 flex-1 text-base font-medium">Категории</span>
           <Icon name="chevron" size={18} className="shrink-0 text-muted" />
         </Link>
@@ -48,6 +47,7 @@ export default function SettingsPage() {
       <SettingsSection title="О приложении">
         <p>Finora — личный учёт денег. Версия {version}.</p>
         <p className="text-sm text-muted">{cloud ? 'Режим: с облаком (данные синхронизируются).' : 'Режим: только на этом устройстве.'}</p>
+        <p className="text-xs text-muted">Иконки: Solar (CC BY 4.0) и Lucide (ISC). Шрифт: Manrope (SIL OFL).</p>
       </SettingsSection>
     </>
   );

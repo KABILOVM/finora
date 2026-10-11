@@ -102,6 +102,8 @@ export default defineConfig({
   ],
   build: {
     target: 'es2022',
+    // Шрифты — всегда отдельными файлами: политика безопасности (font-src 'self') не пускает шрифты, встроенные в CSS как data:.
+    assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
     sourcemap: false,
     rollupOptions: {
       output: {

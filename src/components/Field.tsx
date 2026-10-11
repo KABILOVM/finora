@@ -39,8 +39,8 @@ export function Field({ id, label, hint, error, className, children }: FieldProp
 /** Общий вид полей: ≥ 44px по высоте, шрифт 16px (иначе iOS приближает страницу), рамка с контрастом ≥ 3:1. */
 export function inputClasses(invalid: boolean): string {
   return cn(
-    'w-full rounded-xl border bg-surface px-3.5 text-base text-text placeholder:text-muted/80',
-    'transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60',
+    'w-full rounded-2xl border bg-surface/80 px-3.5 text-base text-text placeholder:text-muted/80',
+    'transition duration-200 focus:outline-none focus:ring-4 focus:ring-brand/20 disabled:opacity-60',
     invalid ? 'border-danger' : 'border-border-strong focus:border-brand',
   );
 }
