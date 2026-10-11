@@ -22,7 +22,7 @@ export interface SegmentedProps<T extends string> {
 const ACTIVE: Record<SegmentTone, string> = {
   brand: 'bg-brand text-brand-fg',
   income: 'bg-income text-brand-fg',
-  expense: 'bg-expense text-white dark:text-bg',
+  expense: 'bg-expense text-on-danger',
 };
 
 /** Переключатель из 2–4 вариантов (Расход / Доход / Перевод). Стрелки ←/→ переключают, Tab — выходит из группы. */

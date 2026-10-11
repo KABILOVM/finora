@@ -105,7 +105,7 @@ export function MonthCard({ month, currentMonth, onMonth, categories }: MonthCar
                       </span>
                     </div>
                     <div className="mt-1 h-2 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
-                      <div className="h-full rounded-full" style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: color }} />
+                      <div className="bar-grow h-full rounded-full" style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: color }} />
                     </div>
                   </li>
                 );

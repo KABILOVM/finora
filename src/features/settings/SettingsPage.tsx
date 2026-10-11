@@ -1,10 +1,10 @@
 import { Glyph } from '@/components/Glyph';
 import { Link } from 'react-router-dom';
-import { useAuth } from '@/auth/AuthProvider';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { version } from '../../../package.json';
+import { AppearanceSection } from './AppearanceSection';
 import { AccountSection } from './AccountSection';
 import { BackupSection } from './BackupSection';
 import { CloudCheckSection } from './CloudCheckSection';
@@ -18,7 +18,6 @@ import { SyncSection } from './SyncSection';
 
 /** Настройки: аккаунт, синхронизация, проверка облака, валюта, курсы, копия, проверка данных, хранилище, установка, версия. */
 export default function SettingsPage() {
-  const { cloud } = useAuth();
   return (
     <>
       <PageHeader title="Настройки" />
@@ -34,20 +33,30 @@ export default function SettingsPage() {
         </Link>
       </Card>
 
+      <AppearanceSection />
       <AccountSection />
-      <SyncSection />
-      <CloudCheckSection />
       <CurrencySection />
-      <RatesSection />
       <BackupSection />
-      <DataCheckSection />
-      <StorageSection />
-      <InstallSection />
+
+      {/* Технические разделы свёрнуты: в обычной жизни они не нужны, но остаются под рукой. */}
+      <details className="group mb-6">
+        <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 rounded-2xl border border-border/70 bg-surface/70 px-4 text-base font-semibold shadow-card backdrop-blur-xl [&::-webkit-details-marker]:hidden">
+          Дополнительно
+          <Icon name="chevron" size={18} className="shrink-0 text-muted transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="mt-4">
+          <SyncSection />
+          <RatesSection />
+          <CloudCheckSection />
+          <DataCheckSection />
+          <StorageSection />
+          <InstallSection />
+        </div>
+      </details>
 
       <SettingsSection title="О приложении">
         <p>Finora — личный учёт денег. Версия {version}.</p>
-        <p className="text-sm text-muted">{cloud ? 'Режим: с облаком (данные синхронизируются).' : 'Режим: только на этом устройстве.'}</p>
-        <p className="text-xs text-muted">Иконки: Solar (CC BY 4.0) и Lucide (ISC). Шрифт: Manrope (SIL OFL).</p>
+        <p className="text-xs text-muted">Иконки: Solar (CC BY 4.0), Lucide (ISC). Шрифт: Manrope (SIL OFL).</p>
       </SettingsSection>
     </>
   );

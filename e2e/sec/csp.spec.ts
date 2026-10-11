@@ -253,6 +253,7 @@ test.describe('CSP в настоящем браузере', () => {
 
     // «Настройки»: все разделы, курсы (сеть к nbt/jsdelivr), проверка данных, выгрузки
     await goSection(page, 'Настройки');
+    await page.getByText('Дополнительно', { exact: true }).click();
     await page.getByRole('button', { name: 'Обновить курсы' }).click();
     await expect.poll(() => external.length, { message: 'запросов курсов не было' }).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Проверить данные' }).click();

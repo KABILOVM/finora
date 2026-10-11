@@ -90,6 +90,7 @@ test.describe('8. Категории и настройки', () => {
     await openApp(page);
     await addTx(page, { amount: '12,5', category: 'Еда' });
     await goSection(page, 'Настройки');
+    await page.getByText('Дополнительно', { exact: true }).click();
     for (const title of [
       'Аккаунт', 'Синхронизация', 'Проверка облака', 'Валюта учёта', 'Курсы валют', 'Резервная копия', 'Проверка данных', 'Хранилище', 'О приложении',
     ]) {
@@ -111,7 +112,6 @@ test.describe('8. Категории и настройки', () => {
     // Курсы: в сети курсов нет, это сказано словами (а не пустой экран)
     const rates = page.getByRole('region', { name: 'Курсы валют' });
     await expect(rates.getByRole('button', { name: 'Обновить курсы' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'О приложении' })).toContainText('только на этом устройстве');
 
     // Проверка данных
     const check = page.getByRole('region', { name: 'Проверка данных' });
@@ -124,6 +124,7 @@ test.describe('8. Категории и настройки', () => {
     await openApp(page);
     await addTx(page, { amount: '12,5', category: 'Еда' });
     await goSection(page, 'Настройки');
+    await page.getByText('Дополнительно', { exact: true }).click();
     await page.getByRole('button', { name: 'Обновить курсы' }).click();
     // человек видит, что не получилось (тост или строка «Последняя попытка не удалась»), а не вечную крутилку
     await expect(page.getByText(/Не удалось обновить курсы/).first()).toBeVisible();

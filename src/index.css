@@ -28,12 +28,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Дизайн-токены. Значения — «R G B» (для модификаторов прозрачности: bg-brand/10).
- * Светлая тема по умолчанию, тёмная — по prefers-color-scheme.
- * Контраст текста проверен на WCAG AA (≥ 4.5:1) для всех пар «цвет текста на фоне»;
- * --border-strong (рамки полей ввода) — ≥ 3:1.
- */
+/* Дизайн-токены. Значения — «R G B» (для модификаторов прозрачности: bg-brand/10). Тема выбирается вручную (см. src/theme.ts). */
 /*
  * Палитра: сине-фиолетовая «стеклянная» тема. Контраст проверен по парам «цвет текста на фоне»:
  * текст и приглушённый текст ≥ 4.5:1 (WCAG AA) на bg / surface / surface-2, brand и on-brand — ≥ 4.5:1,
@@ -53,7 +48,10 @@
   --brand: 79 70 229;
   --brand-hover: 67 56 202;
   --on-brand: 255 255 255;
+  --on-danger: 255 255 255;
   --accent: 144 97 249;
+  --hero-from: 79 70 229;
+  --hero: 112 82 240;
   --danger: 185 28 28;
   --income: 4 110 80;
   --expense: 190 18 60;
@@ -65,8 +63,34 @@
   --glass-shadow: 56 60 150;
 }
 
+/* Тёмная тема: выбрана вручную (data-theme="dark") или «как в системе» (атрибута нет, а у устройства тёмная тема). */
+:root[data-theme='dark'] {
+  --bg: 8 10 24;
+  --surface: 24 27 58;
+  --surface-2: 38 42 82;
+  --text: 238 240 255;
+  --muted: 162 168 204;
+  --border: 48 54 100;
+  --border-strong: 120 128 175;
+  --brand: 165 180 252;
+  --brand-hover: 199 210 254;
+  --on-brand: 30 27 75;
+  --on-danger: 8 10 24;
+  --accent: 196 167 253;
+  --hero-from: 61 63 196;
+  --hero: 122 69 208;
+  --danger: 248 113 113;
+  --income: 74 222 128;
+  --expense: 251 113 133;
+  --warning: 251 191 36;
+  --orb-1: 59 63 201;
+  --orb-2: 122 63 201;
+  --orb-3: 28 111 168;
+  --glass-shadow: 0 0 0;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: 8 10 24;
     --surface: 24 27 58;
     --surface-2: 38 42 82;
@@ -77,7 +101,10 @@
     --brand: 165 180 252;
     --brand-hover: 199 210 254;
     --on-brand: 30 27 75;
+    --on-danger: 8 10 24;
     --accent: 196 167 253;
+    --hero-from: 61 63 196;
+    --hero: 122 69 208;
     --danger: 248 113 113;
     --income: 74 222 128;
     --expense: 251 113 133;
@@ -223,5 +250,74 @@
   }
   .scroll-x-quiet::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ───── Дашборд главной: линия графика рисуется, маркер пульсирует, полоски растут ───── */
+@keyframes spark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+@keyframes spark-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes spark-ping {
+  0% {
+    box-shadow: 0 0 0 0 rgb(255 255 255 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgb(255 255 255 / 0);
+  }
+}
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+.spark-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: spark-draw 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+  filter: drop-shadow(0 4px 8px rgb(30 20 120 / 0.35));
+}
+.spark-area {
+  animation: spark-fade 1.2s ease 0.5s both;
+}
+.spark-dot {
+  animation:
+    spark-fade 0.4s ease 1.3s both,
+    spark-ping 2.4s ease-out 1.7s infinite;
+}
+.bar-grow {
+  transform-origin: left;
+  animation: bar-grow 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Блоки страницы появляются по очереди (каскадом). */
+.stagger > * {
+  animation: rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > :nth-child(2) {
+  animation-delay: 0.06s;
+}
+.stagger > :nth-child(3) {
+  animation-delay: 0.12s;
+}
+.stagger > :nth-child(4) {
+  animation-delay: 0.18s;
+}
+.stagger > :nth-child(5) {
+  animation-delay: 0.24s;
+}
+.stagger > :nth-child(n + 6) {
+  animation-delay: 0.3s;
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
   }
 }

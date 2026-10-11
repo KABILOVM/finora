@@ -108,9 +108,7 @@ export function BackupSection() {
 
   return (
     <SettingsSection title="Резервная копия">
-      <p className="text-muted">
-        Копия — это файл со всеми кошельками, категориями и операциями. Сохраняйте его в надёжное место (облако, почта, компьютер).
-      </p>
+      <p className="text-muted">Файл со всеми данными. Храните его в надёжном месте.</p>
       <div className="flex flex-col gap-2">
         <Button variant="secondary" icon="download" loading={busy === 'json'} onClick={() => void exportJson()}>
           Скачать копию (JSON)
