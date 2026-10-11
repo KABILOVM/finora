@@ -5,7 +5,7 @@ import { SettingsSection } from './SettingsSection';
 const OPTIONS = [
   { value: 'light', label: 'Светлая' },
   { value: 'dark', label: 'Тёмная' },
-  { value: 'system', label: 'Как в системе' },
+  { value: 'system', label: 'Авто' },
 ] as const satisfies readonly { value: ThemePref; label: string }[];
 
 /** Оформление: тема. Выбор хранится на этом устройстве. */

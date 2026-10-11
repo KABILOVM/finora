@@ -3,9 +3,9 @@ import { useSyncEnabled } from '@/sync/syncContext';
 import { LocalDataNotice } from './LocalDataNotice';
 import { LocalModeBanner } from './LocalOnly';
 
-/** Где показывать плашку локального режима: на «Главной» и в «Настройках». */
+/** Где показывать плашку локального режима: только на «Главной» (в «Настройках» и так всё видно по значку в шапке). */
 function showsBanner(pathname: string): boolean {
-  return pathname === '/' || pathname === '/settings' || pathname === '/settings/';
+  return pathname === '/';
 }
 
 /** Обёртка над страницами внутри каркаса: плашки-напоминания + сама страница. */

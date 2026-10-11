@@ -178,7 +178,7 @@ test.describe('XSS и CSV-инъекция через пользовательс
     await goSection(page, 'Настройки');
     const dir = join(SEC_TMP, 'files');
     mkdirSync(dir, { recursive: true });
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Скачать копию (JSON)' }).click()]);
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Сохранить копию' }).click()]);
     const jsonPath = join(dir, 'b.json');
     await dl.saveAs(jsonPath);
     await page.locator('input[type=file]').setInputFiles({ name: '<img src=x onerror=window.__xss=8>.json', mimeType: 'application/json', buffer: readFileSync(jsonPath) });
@@ -202,7 +202,7 @@ test.describe('XSS и CSV-инъекция через пользовательс
       await dismissToasts(page);
     }
     await goSection(page, 'Настройки');
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Скачать операции (CSV)' }).click()]);
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Операции в таблицу (CSV)' }).click()]);
     const path = join(SEC_TMP, 'files', 'ops.csv');
     mkdirSync(join(SEC_TMP, 'files'), { recursive: true });
     await dl.saveAs(path);
@@ -227,7 +227,7 @@ test.describe('XSS и CSV-инъекция через пользовательс
     await newPage(page);
     await createWallet(page, { name: 'Для копии', opening: '1' });
     await goSection(page, 'Настройки');
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Скачать копию (JSON)' }).click()]);
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Сохранить копию' }).click()]);
     const path = join(SEC_TMP, 'files', 'proto.json');
     mkdirSync(join(SEC_TMP, 'files'), { recursive: true });
     await dl.saveAs(path);

@@ -35,11 +35,10 @@ describe('плашка локального режима: одна строка 
     expect(await findByRole('heading', { name: 'Настройки', level: 1 })).toBeInTheDocument();
   });
 
-  it('в самих «Настройках» плашка остаётся, но без ссылки (резервная копия — там же)', async () => {
+  it('в самих «Настройках» плашки нет: копия там же, а режим виден по значку в шапке', async () => {
     renderAt('/settings');
     await findByRole('heading', { name: 'Настройки', level: 1 });
-    expect(banner()).not.toBeNull();
-    expect(banner()?.querySelector('a')).toBeNull();
+    expect(banner()).toBeNull();
   });
 
   it('на «Операциях» и «Кошельках» плашки нет', async () => {

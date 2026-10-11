@@ -123,6 +123,7 @@ test('ошибка при открытом окне видна и не закр�
   await page.route((url) => url.origin !== own, (route) => route.abort());
   await openApp(page);
   await page.setViewportSize(SIZES[testInfo.project.name]?.[0] ?? { width: 1024, height: 768 });
+  await createWallet(page, { name: 'Доллары', currency: 'USD' });
   await page.goto('/#/settings');
   await page.getByRole('button', { name: 'Обновить курсы' }).click();
   const err = page.getByRole('alert').filter({ hasText: 'Не удалось обновить курсы' });

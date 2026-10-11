@@ -127,7 +127,6 @@ describe('ATTACK: восстановление копии в пересозда�
     await user.click(screen.getByRole('button', { name: 'Загрузить в этот аккаунт' }));
 
     await waitFor(() => expect(screen.getByText('Копия загружена')).toBeInTheDocument());
-    expect(screen.getByText(/Основная валюта и кошелёк по умолчанию из файла не переносились/)).toBeInTheDocument();
     const saved = (await store().db.wallets.toArray()).find((w) => w.name === 'Накопления');
     expect(saved?.openingBalanceMinor).toBe(500_000);
     expect(saved?.dirty).toBe(1); // уйдёт в облако

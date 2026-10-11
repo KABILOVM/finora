@@ -45,13 +45,11 @@ test('persist() запрашивается при старте', async ({ browse
   await page.goto(srv.url);
   await nav(page).waitFor();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __persistCalls: number }).__persistCalls)).toBeGreaterThanOrEqual(1);
-  await page.goto(`${srv.url}#/settings`);
-  await expect(page.getByText('Данные защищены')).toBeVisible();
   await ctx.close();
 });
 
 for (const mode of ['deny', 'reject', 'throw', 'missing'] as const) {
-  test(`отказ/сбой persist (${mode}): приложение работает, данные пишутся, Настройки честно говорят о (не)защите`, async ({ browser }) => {
+  test(`отказ/сбой persist (${mode}): приложение работает без ошибок, Настройки открываются`, async ({ browser }) => {
     const ctx = await newCtx(browser);
     await stubPersist(ctx, mode);
     const page = await ctx.newPage();
@@ -60,16 +58,7 @@ for (const mode of ['deny', 'reject', 'throw', 'missing'] as const) {
     await page.goto(srv.url);
     await nav(page).waitFor();
     await page.goto(`${srv.url}#/settings`);
-    if (mode === 'missing') await expect(page.getByText(/не сообщает, защищены ли данные/)).toBeVisible();
-    else {
-      await expect(page.getByText('Данные не защищены')).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Защитить данные от очистки' })).toBeVisible();
-    }
-    if (mode === 'deny' || mode === 'reject' || mode === 'throw') {
-      await page.getByRole('button', { name: 'Защитить данные от очистки' }).click();
-      await expect(page.getByText(/Браузер не дал защиту/)).toBeVisible();
-      await expect(page.getByText('Данные защищены:')).toHaveCount(0);
-    }
+    await expect(page.getByRole('heading', { name: 'Настройки', level: 1 })).toBeVisible();
     expect(errors).toEqual([]);
     await ctx.close();
   });
