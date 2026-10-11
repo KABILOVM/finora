@@ -8,6 +8,7 @@ import { useToast } from '@/components/Toast';
 import { useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
+import { TxLinkNotice } from '@/features/debts/TxLinkNotice';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
 import { changedFields, formFromTx, GENERIC_SAVE_ERROR } from './txForm';
@@ -143,7 +144,14 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
     try {
       // Только изменённое против того, что человек видел при открытии. Ничего не менял — в базу не пишем.
       const patch = changedFields(prepared.input, orig);
-      if (Object.keys(patch).length > 0) await store.transactions.update(tx.id, patch);
+      if (Object.keys(patch).length > 0) {
+        // Операция по долгу / по расписанию остаётся связанной: связь передаётся явно, а не «по умолчанию». Тогда репозиторий
+        // сам проверит новую пару вид+кошелёк против долга (валюта обязана совпасть) и откажет понятным текстом, например
+        // для «Перевода»: «У перевода не бывает долга…». Молча потерять или подменить связь нельзя.
+        if (orig.debtId) patch.debtId = orig.debtId;
+        if (orig.recurringRuleId) patch.recurringRuleId = orig.recurringRuleId;
+        await store.transactions.update(tx.id, patch);
+      }
       prepared.rememberRate(); // курс, набранный руками, запоминаем только после успешного сохранения
       toast.success('Сохранено');
       onClose();
@@ -218,6 +226,7 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
         }
       >
         <div ref={formRef}>
+          <TxLinkNotice tx={orig} />
           <TxFormFields c={c} wallets={selectable} categories={categoryOptions} />
         </div>
       </Sheet>
@@ -225,7 +234,7 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
         open={confirmOpen}
         danger
         title="Удалить операцию?"
-        message={`${endSentence(summary)} Она пропадёт из списка, остатки пересчитаются. Сразу после удаления её можно вернуть кнопкой «Отменить».`}
+        message={`${endSentence(summary)} Она пропадёт из списка, остатки пересчитаются${tx.debtId ? ', в том числе остаток долга' : ''}. Сразу после удаления её можно вернуть кнопкой «Отменить».`}
         confirmLabel="Удалить"
         loading={deleting}
         onConfirm={() => void remove()}

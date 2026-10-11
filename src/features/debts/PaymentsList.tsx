@@ -1,0 +1,112 @@
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { IconButton } from '@/components/IconButton';
+import { MoneyText } from '@/components/MoneyText';
+import type { DebtIssue, DebtPayment } from '@/domain/debts';
+import { formatMinor } from '@/domain/money';
+import type { CurrencyCode, IsoDate, LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
+import { MISSING_WALLET } from '@/features/transactions/txDisplay';
+import { formatDayLabel } from '@/lib/dates';
+import { ruDateShort } from './debtText';
+
+export interface PaymentsListProps {
+  /** Платежи по порядку: старые первыми (как отдаёт computeDebtState); на экране новые сверху. */
+  payments: readonly DebtPayment[];
+  currency: CurrencyCode;
+  txs: ReadonlyMap<UUID, LocalRow<Transaction>>;
+  wallets: ReadonlyMap<UUID, LocalRow<Wallet>>;
+  today: IsoDate;
+  /** Нельзя менять (долг в архиве): кнопок удаления нет. */
+  readOnly?: boolean;
+  onDelete: (payment: DebtPayment) => void;
+}
+
+/** Платежи по долгу: дата, кошелёк, заметка, сумма и кнопка «Удалить» (мягкое удаление, с подтверждением и «Отменить»). */
+export function PaymentsList({ payments, currency, txs, wallets, today, readOnly = false, onDelete }: PaymentsListProps) {
+  const rows = [...payments].reverse();
+  return (
+    <section aria-labelledby="debt-payments-title">
+      <h2 id="debt-payments-title" className="mb-2 mt-6 text-lg font-bold">
+        Платежи
+      </h2>
+      {rows.length === 0 ? (
+        <Card>
+          <p className="text-muted">Платежей пока нет. Когда деньги вернутся, нажмите «Добавить платёж».</p>
+        </Card>
+      ) : (
+        <Card padding="none">
+          <ul className="divide-y divide-border" aria-label="Платежи по долгу">
+            {rows.map((p) => {
+              const tx = txs.get(p.txId);
+              const wallet = tx ? wallets.get(tx.walletId) : undefined;
+              const note = tx?.note.trim() ?? '';
+              const sub = [wallet?.name ?? MISSING_WALLET, note].filter((x) => x !== '').join(' · ');
+              const label = `${ruDateShort(p.occurredOn)} на ${formatMinor(p.amountMinor, currency)}`;
+              return (
+                <li key={p.txId} className="flex items-center gap-2 py-1 pl-4 pr-2">
+                  <div className="min-w-0 flex-1 py-2">
+                    <p className="font-medium">{formatDayLabel(p.occurredOn, today)}</p>
+                    <p className="truncate text-sm text-muted">{sub}</p>
+                  </div>
+                  <MoneyText minor={p.amountMinor} currency={currency} tone="none" className="shrink-0 font-semibold" />
+                  {!readOnly && <IconButton icon="trash" variant="danger" label={`Удалить платёж от ${label}`} onClick={() => onDelete(p)} />}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+export interface IssuesNoticeProps {
+  issues: readonly DebtIssue[];
+  txs: ReadonlyMap<UUID, LocalRow<Transaction>>;
+  wallets: ReadonlyMap<UUID, LocalRow<Wallet>>;
+  onOpen: (txId: UUID) => void;
+}
+
+/** Честное предупреждение: операции долга, которые не вошли в остаток (другая валюта, неизвестный кошелёк, перевод), и как их поправить. */
+export function IssuesNotice({ issues, txs, wallets, onOpen }: IssuesNoticeProps) {
+  if (issues.length === 0) return null;
+  return (
+    <section
+      aria-labelledby="debt-issues-title"
+      role="alert"
+      className="mt-4 rounded-2xl border border-warning/60 bg-warning/10 p-4"
+      data-testid="debt-issues"
+    >
+      <h2 id="debt-issues-title" className="font-bold text-warning">
+        Часть операций не вошла в остаток
+      </h2>
+      <p className="mt-1 text-sm text-text">
+        Остаток посчитан без них, чтобы не складывать деньги разных валют. Откройте операцию и исправьте кошелёк.
+      </p>
+      <ul className="mt-2 flex flex-col gap-2">
+        {issues.map((i) => {
+          const tx = txs.get(i.txId);
+          const wallet = tx ? wallets.get(tx.walletId) : undefined;
+          // сумма без валюты ничего не значит: у неизвестного кошелька её не показываем
+          const what = tx
+            ? [ruDateShort(tx.occurredOn), wallet?.name ?? MISSING_WALLET, wallet ? formatMinor(tx.amountMinor, wallet.currency) : '']
+                .filter((x) => x !== '')
+                .join(' · ')
+            : 'Операция';
+          return (
+            <li key={i.txId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="min-w-0">
+                <span className="block font-medium">{what}</span>
+                <span className="block text-muted">{i.message}</span>
+              </span>
+              <Button variant="secondary" aria-label={`Открыть операцию: ${what}`} onClick={() => onOpen(i.txId)}>
+                Открыть
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+

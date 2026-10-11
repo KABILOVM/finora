@@ -20,7 +20,33 @@ export interface TxView {
 type TxLike = Pick<
   Transaction,
   'kind' | 'walletId' | 'toWalletId' | 'categoryId' | 'amountMinor' | 'toAmountMinor' | 'note' | 'baseCurrency'
->;
+> & {
+  /** Нет поля (старые данные и тестовые заготовки) = нет долга / не по расписанию. */
+  debtId?: Transaction['debtId'] | undefined;
+  recurringRuleId?: Transaction['recurringRuleId'] | undefined;
+};
+
+/** Метка на строке операции: связь с долгом или с регулярным платежом. */
+export interface TxTag {
+  key: 'debt' | 'recurring';
+  text: string;
+}
+
+export const RECURRING_TAG = 'Регулярный платёж';
+
+/** «Долг: Алишер»; имя пока неизвестно (читается) или долга нет в базе — просто «Долг». */
+export const debtTagText = (name: string | null | undefined): string => {
+  const n = name?.trim() ?? '';
+  return n === '' ? 'Долг' : `Долг: ${n}`;
+};
+
+/** Метки операции: по долгу и/или по расписанию. Пустой список — обычная операция. */
+export function txTags(tx: Pick<TxLike, 'debtId' | 'recurringRuleId'>, debtName: string | null | undefined): TxTag[] {
+  const tags: TxTag[] = [];
+  if (tx.debtId) tags.push({ key: 'debt', text: debtTagText(debtName) });
+  if (tx.recurringRuleId) tags.push({ key: 'recurring', text: RECURRING_TAG });
+  return tags;
+}
 
 /**
  * Ставит точку в конце предложения, если её там ещё нет. Сумма в сомони «60 с.» сама кончается точкой,
