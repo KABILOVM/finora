@@ -26,7 +26,7 @@ const WALLET_HUE = {bank:230,cash:150,electronic:190,savings:45};
 const WALLET_LABEL = {bank:"Карта",cash:"Наличные",electronic:"Электронный",savings:"Накопления"};
 /* банки: знак (символ в icons.js) и фирменные цвета; цвета приблизительные — поправьте при необходимости */
 const BANKS = {
- alif:{name:"Алиф",c1:"#35c27a",c2:"#119a63"},
+ alif:{name:"Алиф",c1:"#05ab65",c2:"#0a7a56"},
  dc:{name:"Душанбе Сити",c1:"#3b82f6",c2:"#1d4ed8"},
  humo:{name:"Хумо",c1:"#ffa03a",c2:"#f0561e"}
 };
@@ -378,6 +378,7 @@ const sheet=$("#transactionForm");
  el.addEventListener("touchend",end);el.addEventListener("touchcancel",end);
 });
 
+if(reducedMotion)document.querySelector(".logo")?.pauseAnimations?.();
 if("serviceWorker" in navigator && location.protocol!=="file:"){window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));}
 render(true);
 if(window.FinoraCloud) window.FinoraCloud.init().then(()=>{updateSync();if(currentView==="settings")render();}).catch(()=>{});
