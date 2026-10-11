@@ -500,7 +500,6 @@ const sheet=$("#transactionForm");
  el.addEventListener("touchend",end);el.addEventListener("touchcancel",end);
 });
 
-if(reducedMotion)document.querySelector(".logo")?.pauseAnimations?.();
 if("serviceWorker" in navigator && location.protocol!=="file:"){
  /* новая версия приложения: один раз перезагружаем страницу, чтобы сразу показать свежие файлы */
  const hadController=!!navigator.serviceWorker.controller;let reloaded=false;
