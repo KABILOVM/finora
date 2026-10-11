@@ -10,7 +10,7 @@ import { ADD_LABEL, NAV_ITEMS, useAddLink } from './nav';
 export function SideNav({ status }: { status?: ReactNode }) {
   const addLink = useAddLink();
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-4 border-r border-border bg-surface px-3 py-5 md:flex">
+    <aside className="fixed bottom-3 left-3 top-3 z-30 hidden w-56 flex-col gap-4 rounded-3xl border border-border/70 bg-surface/70 px-3 py-5 shadow-card backdrop-blur-xl md:flex">
       <div className="flex items-center gap-3 px-3">
         <Logo size={36} />
         <span className="text-xl font-bold tracking-tight">Finora</span>
@@ -27,7 +27,7 @@ export function SideNav({ status }: { status?: ReactNode }) {
             end={item.end}
             className={({ isActive }) =>
               cn(
-                'flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-base font-semibold transition-colors',
+                'flex min-h-[44px] items-center gap-3 rounded-2xl px-3 text-base font-semibold transition duration-200 active:scale-[0.97]',
                 isActive ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-surface-2 hover:text-text',
               )
             }

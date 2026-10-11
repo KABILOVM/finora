@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
@@ -139,9 +140,7 @@ export default function HomePage() {
                 <li key={w.id} className="min-w-[8.5rem] shrink-0 grow snap-start sm:min-w-0">
                   <Card className="h-full !p-3">
                     <div className="flex items-center gap-2">
-                      <span aria-hidden="true" className="text-xl">
-                        {w.icon}
-                      </span>
+                      <Glyph value={w.icon} color={w.color} size={30} />
                       <span className="min-w-0 max-w-[9rem] truncate text-sm font-medium sm:max-w-none">{w.name}</span>
                     </div>
                     <MoneyText

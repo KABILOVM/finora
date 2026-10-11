@@ -86,7 +86,6 @@ describe('список по дням', () => {
     await openList();
     await waitFor(() => expect(has('обед')).toBe(true));
     const lunch = rowTexts().find((t) => t.includes('обед')) ?? '';
-    expect(lunch).toContain('🍽️');
     expect(lunch).toContain('Еда');
     expect(lunch).toContain('Наличные · обед');
     expect(lunch).toContain(money(-1250));

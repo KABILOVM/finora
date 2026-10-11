@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/Button';
 import { ChipPicker } from '@/components/ChipPicker';
-import { EmojiPicker } from '@/components/EmojiPicker';
+import { GlyphPicker } from '@/components/GlyphPicker';
 import { Field, inputClasses, TextInput } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
@@ -12,6 +12,7 @@ import { CURRENCIES, currencyInfo } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, LocalRow, Minor, Wallet, WalletKind } from '@/domain/types';
 import { endSentence } from '@/features/transactions/txDisplay';
+import { BANKS, bankById, bankIcon } from './banks';
 import { ColorSwatches } from './ColorSwatches';
 import { cleanName, COLOR_CHOICES, DEFAULT_ICON_BY_KIND, sameName, WALLET_KIND_LABELS, WALLET_KINDS } from './walletUi';
 
@@ -40,6 +41,8 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
   const [kind, setKind] = useState<WalletKind>(wallet?.kind ?? 'cash');
   const [icon, setIcon] = useState(wallet?.icon ?? DEFAULT_ICON_BY_KIND.cash);
   const [color, setColor] = useState(wallet?.color ?? COLOR_CHOICES[0]?.value ?? '#16a34a');
+  // Банк (знак и цвет подставляются сами); null — обычный кошелёк.
+  const [bankId, setBankId] = useState<string | null>(wallet?.icon.startsWith('b:') ? wallet.icon.slice(2) : null);
   // Ввод не умеет отрицательные суммы: у кошелька с отрицательным начальным остатком поле пустое, пока человек его не тронул.
   const [opening, setOpening] = useState<Minor | null>(wallet && wallet.openingBalanceMinor >= 0 ? wallet.openingBalanceMinor : null);
   const [openingTouched, setOpeningTouched] = useState(false);
@@ -107,6 +110,20 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
     }
   };
 
+  const pickBank = (id: string | null) => {
+    setBankId(id);
+    const bank = id ? bankById(id) : undefined;
+    if (bank) {
+      setIcon(bankIcon(bank.id));
+      setColor(bank.color);
+      // название подставляем, только если его не писали сами
+      if (name.trim() === '' || BANKS.some((b) => b.name === name)) setName(bank.name);
+      if (kind === 'cash') setKind('card');
+    } else {
+      setIcon(DEFAULT_ICON_BY_KIND[kind]);
+    }
+  };
+
   const err = (field: FieldError['field']) => (error?.field === field ? error.message : null);
 
   return (
@@ -134,6 +151,17 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
       }
     >
       <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold">Банк</span>
+          <ChipPicker
+            ariaLabel="Банк"
+            layout="scroll"
+            value={bankId ?? 'none'}
+            options={[...BANKS.map((b) => ({ value: b.id, label: b.name, icon: bankIcon(b.id) })), { value: 'none', label: 'Другой' }]}
+            onChange={(v) => pickBank(v === 'none' ? null : v)}
+          />
+        </div>
+
         <TextInput
           label="Название"
           value={name}
@@ -211,7 +239,15 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold">Значок</span>
-          <EmojiPicker value={icon} onChange={setIcon} ariaLabel="Значок кошелька" />
+          <GlyphPicker
+            value={icon}
+            color={color}
+            onChange={(v) => {
+              setBankId(null);
+              setIcon(v);
+            }}
+            ariaLabel="Значок кошелька"
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">

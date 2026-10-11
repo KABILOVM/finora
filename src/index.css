@@ -1,3 +1,29 @@
+/* Manrope (SIL OFL) — вшит в приложение (работает без интернета). Кириллица, её расширение (таджикские буквы) и латиница. */
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('./assets/fonts/manrope-cyrillic-wght-normal.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('./assets/fonts/manrope-cyrillic-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('./assets/fonts/manrope-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,41 +34,67 @@
  * Контраст текста проверен на WCAG AA (≥ 4.5:1) для всех пар «цвет текста на фоне»;
  * --border-strong (рамки полей ввода) — ≥ 3:1.
  */
+/*
+ * Палитра: сине-фиолетовая «стеклянная» тема. Контраст проверен по парам «цвет текста на фоне»:
+ * текст и приглушённый текст ≥ 4.5:1 (WCAG AA) на bg / surface / surface-2, brand и on-brand — ≥ 4.5:1,
+ * --border-strong (рамки полей ввода) — ≥ 3:1. Прозрачность «стекла» добавляется только в классах (bg-surface/80),
+ * сами токены непрозрачны, поэтому расчёт контраста не меняется.
+ */
 :root {
   color-scheme: light dark;
 
-  --bg: 244 246 248;
+  --bg: 236 238 251;
   --surface: 255 255 255;
-  --surface-2: 236 240 244;
-  --text: 15 23 42;
-  --muted: 82 96 115;
-  --border: 218 224 232;
-  --border-strong: 116 128 145;
-  --brand: 4 110 80;
-  --brand-hover: 3 90 66;
+  --surface-2: 238 240 252;
+  --text: 22 26 54;
+  --muted: 84 92 130;
+  --border: 214 218 240;
+  --border-strong: 120 128 165;
+  --brand: 79 70 229;
+  --brand-hover: 67 56 202;
   --on-brand: 255 255 255;
+  --accent: 144 97 249;
   --danger: 185 28 28;
   --income: 4 110 80;
   --expense: 190 18 60;
   --warning: 146 64 14;
+  /* пятна фона и тень «стекла» */
+  --orb-1: 143 155 255;
+  --orb-2: 209 155 255;
+  --orb-3: 127 216 255;
+  --glass-shadow: 56 60 150;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: 15 23 42;
-    --surface: 24 34 54;
-    --surface-2: 34 46 70;
-    --text: 241 245 249;
-    --muted: 160 174 192;
-    --border: 45 58 82;
-    --border-strong: 112 128 150;
-    --brand: 52 211 153;
-    --brand-hover: 110 231 183;
-    --on-brand: 5 30 22;
+    --bg: 8 10 24;
+    --surface: 24 27 58;
+    --surface-2: 38 42 82;
+    --text: 238 240 255;
+    --muted: 162 168 204;
+    --border: 48 54 100;
+    --border-strong: 120 128 175;
+    --brand: 165 180 252;
+    --brand-hover: 199 210 254;
+    --on-brand: 30 27 75;
+    --accent: 196 167 253;
     --danger: 248 113 113;
     --income: 74 222 128;
     --expense: 251 113 133;
     --warning: 251 191 36;
+    --orb-1: 59 63 201;
+    --orb-2: 122 63 201;
+    --orb-3: 28 111 168;
+    --glass-shadow: 0 0 0;
+  }
+}
+
+@keyframes backdrop-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2.5%, 2%, 0) scale(1.08);
   }
 }
 
@@ -57,7 +109,7 @@
   body {
     margin: 0;
     min-height: 100dvh;
-    background-color: rgb(var(--bg));
+    background-color: transparent;
     color: rgb(var(--text));
     font-family: theme('fontFamily.sans');
     font-size: 16px;
@@ -65,6 +117,20 @@
     -webkit-font-smoothing: antialiased;
     /* Резиновая прокрутка за краем страницы не должна «дёргать» шапку и нижнюю панель. */
     overscroll-behavior-y: none;
+  }
+
+  /* Фон: три больших размытых «пятна», медленно плывут. Лежит под всем содержимым и не принимает касаний. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(60vmax 60vmax at 6% -6%, rgb(var(--orb-1) / 0.55), transparent 62%),
+      radial-gradient(55vmax 55vmax at 104% 38%, rgb(var(--orb-2) / 0.5), transparent 62%),
+      radial-gradient(60vmax 60vmax at 34% 108%, rgb(var(--orb-3) / 0.5), transparent 62%);
+    animation: backdrop-drift 40s ease-in-out infinite alternate;
   }
 
   /* iOS приближает страницу, если у поля шрифт < 16px, поэтому у всех полей — минимум 16px. */
