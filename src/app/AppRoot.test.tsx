@@ -67,12 +67,12 @@ describe('локальный режим', () => {
 });
 
 describe('экран входа', () => {
-  it('без входа показывается форма; регистрации нет; приложение закрыто', async () => {
+  it('без входа показывается форма с переходом к регистрации; приложение закрыто', async () => {
     const { fake, td } = cloud({ session: null });
     renderAppRoot(<Marker />, { client: fake.client, deps: td.deps });
     expect(await findByRole('heading', { name: 'Вход', level: 1 })).toBeInTheDocument();
     expect(screen.queryByText('СОДЕРЖИМОЕ ПРИЛОЖЕНИЯ')).toBeNull();
-    expect(screen.queryByText(/регистрац|зарегистр|создать аккаунт/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' })).toBeInTheDocument();
     expect(td.opened).toEqual([]); // чужая база не открывается, пока никто не вошёл
   });
 

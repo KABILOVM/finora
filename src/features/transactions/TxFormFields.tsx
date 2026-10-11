@@ -59,6 +59,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
       {!isTransfer && (
         <CategoryPicker
           options={categories}
+          kind={form.kind === 'income' ? 'income' : 'expense'}
           value={form.categoryId}
           onChange={(categoryId) => c.set({ categoryId })}
           error={errors.category}

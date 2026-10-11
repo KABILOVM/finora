@@ -240,7 +240,14 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
     await dlg.getByRole('group', { name: 'Дата' }).getByRole('button', { name: 'Другая дата' }).click();
     await dlg.getByLabel('Дата операции').fill(tx.date);
   }
-  if (tx.category) await dlg.getByRole('group', { name: 'Категория' }).getByRole('button', { name: tx.category, exact: true }).click();
+  if (tx.category) {
+    const group = dlg.getByRole('group', { name: 'Категория' });
+    const chip = group.getByRole('button', { name: tx.category, exact: true });
+    await group.getByRole('button').first().waitFor();
+    // видны только основные категории: остальные под «Ещё»
+    if ((await chip.count()) === 0) await group.getByRole('button', { name: /^Ещё/ }).click();
+    await chip.click();
+  }
   if (tx.rate) {
     // Курса не было — поле на месте. Курс уже вводили раньше — он подставлен сам, а поле прячется за «Изменить».
     const field = dlg.getByRole('textbox', { name: /^Курс:/ });

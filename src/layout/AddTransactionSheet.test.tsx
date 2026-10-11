@@ -197,7 +197,25 @@ describe('кошелёк по умолчанию и частые категор�
     await openAddSheet(td);
     const labels = chipLabels('Категория');
     expect(labels.slice(0, 5)).toEqual(['Транспорт', 'Покупки', 'Еда', 'Продукты', 'Жильё']); // остальные — в порядке из затравки
-    expect(labels).toHaveLength(12);
+    // сразу видны 6 основных, остальные 6 — под «Ещё»; плюс чип «Новая»
+    expect(labels).toEqual(['Транспорт', 'Покупки', 'Еда', 'Продукты', 'Жильё', 'Связь', 'Ещё 6', 'Новая']);
+    await user.click(screen.getByRole('button', { name: /^Ещё 6/ }));
+    expect(chipLabels('Категория')).toHaveLength(13);
+  });
+
+  it('«Новая»: название → категория создана со значком и сразу выбрана; такая же по имени просто выбирается', async () => {
+    const td = await openAddSheet();
+    await user.click(screen.getByRole('button', { name: 'Новая категория' }));
+    await user.type(screen.getByRole('textbox', { name: 'Название новой категории' }), 'Кофе{Enter}');
+    await waitFor(() => expect(chipLabels('Категория')).toContain('Кофе'));
+    const created = (await td.td.stores[0]!.db.categories.toArray()).find((c) => c.name === 'Кофе');
+    expect(created).toMatchObject({ kind: 'expense', icon: 'i:cup' });
+    expect(screen.getByRole('button', { name: 'Кофе', pressed: true })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Новая категория' }));
+    await user.type(screen.getByRole('textbox', { name: 'Название новой категории' }), 'еда{Enter}');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Еда', pressed: true })).toBeInTheDocument());
+    expect((await td.td.stores[0]!.db.categories.toArray()).filter((c) => c.name.toLowerCase() === 'еда')).toHaveLength(1);
   });
 });
 
