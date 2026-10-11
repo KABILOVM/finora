@@ -124,8 +124,11 @@ export interface CategoryLite {
 export type WalletChoice = 'new' | UUID;
 
 export type WalletTarget =
-  /** how: saved — кошелёк, созданный прошлым импортом; name — совпал по названию и валюте; chosen — выбран вручную */
-  | { kind: 'existing'; id: UUID; name: string; how: 'saved' | 'name' | 'chosen' }
+  /**
+   * how: saved — кошелёк, созданный прошлым импортом; history — кошелёк, где уже лежат операции этого счёта из прошлых загрузок
+   * (человек направил счёт туда вручную); name — совпал по названию и валюте; chosen — выбран вручную
+   */
+  | { kind: 'existing'; id: UUID; name: string; how: 'saved' | 'history' | 'name' | 'chosen' }
   | { kind: 'create'; id: UUID; name: string }
   | { kind: 'blocked'; reason: string };
 
@@ -139,6 +142,8 @@ export interface PlanWallet {
   target: WalletTarget;
   /** Кошельки, которые можно выбрать вручную (живые, не в архиве, та же валюта). */
   candidates: { id: UUID; name: string }[];
+  /** Можно ли создать новый кошелёк для счёта: нельзя, если кошелёк с его детерминированным id уже есть (живой, в архиве или удалён). */
+  canCreate: boolean;
   /** Действует ли выбор человека (а не автоподбор). */
   chosen: boolean;
   /** Сколько операций этого счёта будет добавлено (кошелёк создаётся, только если их больше нуля). */
@@ -168,6 +173,27 @@ export interface PlanCategory {
 
 export type OpStatus = 'add' | 'exists' | 'review' | 'wait-rate' | 'blocked';
 
+/**
+ * Операция, которая уже лежит в базе (любая: из прошлого импорта, введённая вручную, перенесённая из копии).
+ * По ней планировщик узнаёт: удалена ли она, в каком кошельке лежит и совпадает ли по содержимому со строкой файла.
+ */
+export interface ExistingTx {
+  deleted: boolean;
+  kind: TxKind;
+  walletId: UUID;
+  toWalletId: UUID | null;
+  amountMinor: Minor;
+  toAmountMinor: Minor | null;
+  occurredOn: IsoDate;
+  note: string;
+}
+
+/** В каких кошельках лежат стороны уже имеющейся операции (null — такой стороны у операции нет). */
+export interface Placement {
+  out: UUID | null;
+  in: UUID | null;
+}
+
 export interface PlanOp {
   row: ZenRow;
   id: UUID;
@@ -177,6 +203,10 @@ export interface PlanOp {
   input?: TransactionInput;
   /** Операция уже есть, но была удалена: повторный импорт её не воскрешает. */
   existsDeleted?: boolean;
+  /** Только у 'exists': в каких кошельках она лежит на самом деле. Нет данных (старый вызов) — undefined. */
+  placed?: Placement;
+  /** Только у 'exists': найдена не по номеру, а по содержимому (дата, сумма, кошелёк, заметка): например, после переноса данных в аккаунт. */
+  byContent?: boolean;
 }
 
 export interface RateNeed {

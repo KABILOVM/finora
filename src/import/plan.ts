@@ -3,9 +3,10 @@ import { BASE_AMOUNT_MAX } from '@/db/validate';
 import { addMinor, fxSnapshot } from '@/domain/money';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { MAX_PER_UNIT, MIN_PER_UNIT } from '@/rates/parseUtil';
+import { buildContentIndex, contentKey, isDeletedEntry, placementOf, type ContentIndex, type ExistingMap } from './existing';
 import { collectAccounts, categoryKey, type PlanIds } from './ids';
 import { categoryIdOf, resolveCategories } from './planCategories';
-import { resolveWallet, targetWalletId } from './planWallets';
+import { resolveWallet, targetWalletId, walletHistory } from './planWallets';
 import { quoted } from './messages';
 import { pluralRu } from '@/lib/plural';
 import type {
@@ -32,8 +33,12 @@ export interface PlanInput {
   /** ВСЕ кошельки базы, в том числе архивные и удалённые (чтобы заметить конфликт с id прошлого импорта). */
   wallets: readonly WalletLite[];
   categories: readonly CategoryLite[];
-  /** id операции → удалена ли она. Все операции базы, включая удалённые: повторный импорт их не воскрешает. */
-  existing: ReadonlyMap<string, boolean>;
+  /**
+   * Все операции базы, включая удалённые: повторный импорт их не воскрешает. id → удалена ли (boolean) либо полные данные
+   * операции (ExistingTx, см. existing.ts). Только с полными данными работают проверка «по содержимому» (после переноса данных
+   * в аккаунт id перекодируются), выбор кошелька, где счёт уже лежит, и честный «остаток по файлу».
+   */
+  existing: ExistingMap;
   walletChoices?: Readonly<Record<string, WalletChoice>>;
   /** Курс «единиц базовой валюты за 1 единицу этой валюты», введённый человеком. */
   rates?: Readonly<Record<CurrencyCode, number | null | undefined>>;
@@ -80,9 +85,10 @@ export function buildPlan(input: PlanInput): ImportPlan {
   const accounts = collectAccounts(rows);
   const planWallets: PlanWallet[] = [];
   const walletByKey = new Map<string, PlanWallet>();
+  const history = walletHistory(rows, ids.tx, existing);
   for (const acc of accounts.values()) {
     const w: PlanWallet = {
-      ...resolveWallet(acc, wallets, ids.wallets.get(acc.key) ?? '', input.walletChoices?.[acc.key]),
+      ...resolveWallet(acc, wallets, ids.wallets.get(acc.key) ?? '', input.walletChoices?.[acc.key], history.get(acc.key)),
       addCount: 0,
       movementMinor: 0,
     };
@@ -117,14 +123,18 @@ export function buildPlan(input: PlanInput): ImportPlan {
     return { row, id: ids.tx[row.index] ?? '', status: 'review', reason: message };
   };
 
+  // Индекс «по содержимому» строится лениво: когда все строки найдены по номеру, он не нужен вовсе
+  let byContent: ContentIndex | null = null;
+  let contentHits = 0;
   const missingUse = new Map<string, number>();
   for (const row of rows) {
     const id = ids.tx[row.index] ?? '';
-    const isDeleted = existing.get(id);
-    if (isDeleted !== undefined) {
+    const found = existing.get(id);
+    if (found !== undefined) {
+      const isDeleted = isDeletedEntry(found);
       counts.exists++;
       if (isDeleted) counts.existsDeleted++;
-      ops.push({ row, id, status: 'exists', existsDeleted: isDeleted });
+      ops.push({ row, id, status: 'exists', existsDeleted: isDeleted, ...(typeof found === 'boolean' ? {} : { placed: placementOf(row.kind, found) }) });
       continue;
     }
     ops.push(planOne(row, id));
@@ -183,6 +193,26 @@ export function buildPlan(input: PlanInput): ImportPlan {
         rateAmount = side.amountMinor;
       }
       txInput = { ...base, walletId: wid, amountMinor: side.amountMinor };
+    }
+
+    // Не нашлась по номеру — ищем такую же операцию по содержимому (после переноса данных в аккаунт номера другие, а история та же)
+    byContent ??= buildContentIndex(existing, new Set(ids.tx));
+    const hit = byContent.take(
+      contentKey({
+        kind: txInput.kind,
+        occurredOn: txInput.occurredOn,
+        walletId: txInput.walletId,
+        toWalletId: txInput.toWalletId ?? null,
+        amountMinor: txInput.amountMinor,
+        toAmountMinor: txInput.toAmountMinor ?? null,
+        note: txInput.note ?? '',
+      }),
+    );
+    if (hit !== null) {
+      counts.exists++;
+      contentHits++;
+      if (hit === 'deleted') counts.existsDeleted++;
+      return { row, id, status: 'exists', existsDeleted: hit === 'deleted', byContent: true, placed: { out: row.outcome ? outId : null, in: row.income ? incId : null } };
     }
 
     if (rateCurrency !== null) {
@@ -244,6 +274,11 @@ export function buildPlan(input: PlanInput): ImportPlan {
   }
   if (parsed.namesTruncated > 0) {
     notes.push(`Названия длиннее 60 знаков (счета или категории) обрезаны: ${parsed.namesTruncated}.`);
+  }
+  if (contentHits > 0) {
+    notes.push(
+      `У ${contentHits} ${pluralRu(contentHits, 'операции', 'операций', 'операций')} совпали дата, сумма, кошелёк и заметка с теми, что уже есть у вас: они считаются загруженными раньше и повторно не добавятся (так бывает после переноса данных в аккаунт).`,
+    );
   }
   if (overflow.size > 0) notes.push('По некоторым кошелькам сумма операций слишком велика, остаток по файлу посчитать нельзя.');
 

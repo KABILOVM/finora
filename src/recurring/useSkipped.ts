@@ -14,9 +14,14 @@ export interface SkippedItem {
   skipped: boolean;
 }
 
-/** Строка создана «пропуском»: метка удаления равна метке создания (см. transactions.skipOccurrence). */
-export const wasSkipped = (tx: Pick<Transaction, 'createdAt' | 'deletedAt'>): boolean =>
-  tx.deletedAt !== null && Date.parse(tx.deletedAt) === Date.parse(tx.createdAt);
+/**
+ * Строка создана «пропуском» (transactions.skipOccurrence): её создали сразу удалённой и после этого не правили, поэтому метка
+ * последней правки равна метке создания. Метку удаления для этого не берём: сервер при приёме зажимает метки создания и правки
+ * до «сейчас + 5 минут», а метку удаления не трогает — у телефона с убежавшими вперёд часами они расходятся, и пропуск стал бы
+ * «Удалён из операций». Операция, которую провели и потом удалили, правилась позже создания (метки разные).
+ */
+export const wasSkipped = (tx: Pick<Transaction, 'createdAt' | 'clientUpdatedAt' | 'deletedAt'>): boolean =>
+  tx.deletedAt !== null && Date.parse(tx.clientUpdatedAt) === Date.parse(tx.createdAt);
 
 /**
  * Пропущенные (и удалённые после проведения) платежи по живым правилам за последние SKIPPED_DAYS дней, свежие первыми.

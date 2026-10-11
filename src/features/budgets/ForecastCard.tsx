@@ -8,7 +8,7 @@ import type { DailyForecast, DailyForecastOk, ForecastSkipped } from '@/domain/f
 import { formatMinor } from '@/domain/money';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
-import { daysText, longDate } from './budgetText';
+import { daysText, fitFontSize, longDate } from './budgetText';
 
 const SKIPPED_WHERE: Record<ForecastSkipped['source'], string> = { money: 'в кошельках', payment: 'в платежах', debt: 'в долгах' };
 
@@ -16,6 +16,9 @@ const SKIPPED_WHERE: Record<ForecastSkipped['source'], string> = { money: 'в к
 export function skippedText(skipped: readonly ForecastSkipped[]): string {
   return skipped.map((s) => `${formatMinor(s.amountMinor, s.currency)} (${SKIPPED_WHERE[s.source]})`).join(', ');
 }
+
+/** Сколько знаков в крупном числе «в день» (с «≈ »): по ним подбирается размер шрифта. */
+export const perDayChars = (f: DailyForecastOk): number => formatMinor(f.perDayMinor, f.base).length + (f.approximate ? 2 : 0);
 
 /** Крупное число «в день»; «≈», если оно приблизительное. */
 export function PerDay({ f, className }: { f: DailyForecastOk; className?: string }) {
@@ -39,7 +42,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 const EXPLAIN = [
   'Деньги на руках — это остатки кошельков: наличные, карты и счета. Накопления не считаем: их тратить не нужно.',
   'Считаем от сегодня до конца месяца. Если раньше придёт доход по регулярному платежу — только до дня перед ним.',
-  'Из денег вычитаем обязательное: регулярные платежи по расписанию, которые вы ещё не провели, и долги, которые нужно вернуть к этому сроку.',
+  'Из денег вычитаем обязательное: регулярные платежи и переводы в накопления по расписанию, которые вы ещё не провели, и долги, которые нужно вернуть к этому сроку.',
   'Что осталось, делим на число дней и округляем вниз. Так мы никогда не обещаем больше, чем есть.',
   'Деньги и платежи в валюте без курса в расчёт не входят — об этом написано под числом, а само число помечено «≈».',
 ] as const;
@@ -81,8 +84,10 @@ function Details({ f }: { f: DailyForecastOk }) {
           <MoneyText minor={-f.obligationsMinor} currency={f.base} tone="none" />
         </Row>
         <Row label="Сегодня потрачено">
-          <span className="money">
-            {formatMinor(f.spentTodayMinor, f.base)} <span className="font-normal text-muted">из {formatMinor(f.todayLimitMinor, f.base)}</span>
+          {/* Две отдельные суммы (каждая не рвётся), а не одна длинная строка: на узком экране со многозначными суммами (сум, тенге) «из …» переносится. */}
+          <span className="money">{formatMinor(f.spentTodayMinor, f.base)}</span>{' '}
+          <span className="font-normal text-muted">
+            из <span className="money">{formatMinor(f.todayLimitMinor, f.base)}</span>
           </span>
         </Row>
         <Row label="Обычно вы тратите">
@@ -171,7 +176,11 @@ export function ForecastCard({ forecast }: { forecast: DailyForecast | null | un
       <h2 id="forecast-title" className="text-base font-semibold text-muted">
         Осталось на день
       </h2>
-      <p data-testid="forecast-per-day" className="mt-0.5 text-[clamp(2rem,10vw,2.75rem)] font-bold leading-tight tracking-tight">
+      <p
+        data-testid="forecast-per-day"
+        className="mt-0.5 font-bold leading-tight tracking-tight"
+        style={{ fontSize: fitFontSize(perDayChars(forecast), '2rem', '10vw', '2.75rem') }}
+      >
         <PerDay f={forecast} />
       </p>
       <p className="mt-0.5 text-sm text-muted">

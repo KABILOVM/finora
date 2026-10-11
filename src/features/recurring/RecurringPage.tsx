@@ -179,6 +179,8 @@ export default function RecurringPage() {
     <>
       <PageHeader
         title="Регулярные платежи"
+        // на самом узком телефоне (320 px) заголовок переносится на вторую строку, а не обрезается многоточием
+        className="[&_h1]:whitespace-normal"
         actions={
           // На телефоне — только «+»: рядом с длинным заголовком слову «Добавить» не хватает места (подпись для скринридера есть всегда)
           <Button icon="plus" aria-label="Добавить платёж" onClick={() => setSheet({ kind: 'new' })}>

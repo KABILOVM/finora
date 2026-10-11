@@ -8,6 +8,7 @@ import { useToast } from '@/components/Toast';
 import { useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
+import { overpayAfterEdit, type EditOverpay } from '@/features/debts/editOverpay';
 import { TxLinkNotice } from '@/features/debts/TxLinkNotice';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
@@ -128,13 +129,15 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Правка платежа по долгу делает переплату больше: ждём подтверждения (как «Это переплата» в шите платежа)
+  const [overpay, setOverpay] = useState<EditOverpay | null>(null);
 
   // Сумма — первое, что правят: фокус на ней (после фокуса, который шит ставит сам)
   useEffect(() => {
     formRef.current?.querySelector<HTMLInputElement>('input.money')?.focus({ preventScroll: true });
   }, []);
 
-  const save = async () => {
+  const save = async (overpayConfirmed = false) => {
     if (busyRef.current) return;
     const prepared = c.prepare();
     if (!prepared) return;
@@ -150,6 +153,15 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
         // для «Перевода»: «У перевода не бывает долга…». Молча потерять или подменить связь нельзя.
         if (orig.debtId) patch.debtId = orig.debtId;
         if (orig.recurringRuleId) patch.recurringRuleId = orig.recurringRuleId;
+        if (!overpayConfirmed) {
+          // Опечатка «200» → «2000» не должна тихо превратить долг в «погашенный с переплатой»
+          const over = await overpayAfterEdit(store, orig, { ...orig, ...patch });
+          if (over) {
+            closing.current = false;
+            setOverpay(over);
+            return;
+          }
+        }
         await store.transactions.update(tx.id, patch);
       }
       prepared.rememberRate(); // курс, набранный руками, запоминаем только после успешного сохранения
@@ -239,6 +251,22 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
         loading={deleting}
         onConfirm={() => void remove()}
         onCancel={() => setConfirmOpen(false)}
+      />
+      <ConfirmDialog
+        open={overpay !== null}
+        title="Платежи больше долга"
+        message={
+          overpay
+            ? `После этой правки платежи по долгу станут больше его суммы на ${endSentence(formatMinor(overpay.overMinor, overpay.currency))} Если это опечатка (например, лишний ноль), вернитесь и поправьте сумму. Если так и есть — это переплата.`
+            : undefined
+        }
+        confirmLabel="Это переплата — сохранить"
+        cancelLabel="Поправить сумму"
+        onConfirm={() => {
+          setOverpay(null);
+          void save(true);
+        }}
+        onCancel={() => setOverpay(null)}
       />
     </>
   );

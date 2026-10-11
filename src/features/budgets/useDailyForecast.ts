@@ -7,6 +7,7 @@ import {
   computeDailyForecast,
   endOfMonth,
   floorDiv,
+  isSpendableWallet,
   occurrenceKey,
   usualSpendWindow,
   type DailyForecast,
@@ -15,8 +16,8 @@ import {
 } from '@/domain/forecast';
 import { occurrencesBetween } from '@/domain/schedule';
 import type { IsoDate, LocalRow, Transaction } from '@/domain/types';
-import { todayLocal } from '@/lib/dates';
 import { useRates } from '@/rates/hooks';
+import { useToday } from '@/recurring/useToday';
 
 type ForecastData = Omit<ForecastInput, 'getRate'>;
 type Loaded = { overflow: true } | { overflow: false; data: ForecastData };
@@ -72,8 +73,11 @@ async function loadForecastData(store: Store, today: IsoDate): Promise<Loaded | 
       }));
 
     const month = summarizeMonth(txs, today.slice(0, 7), base);
+    // «Сегодня потрачено» — только из тех кошельков, чьи деньги входят в «деньги на руках»: трата с накопления их не уменьшила
+    // и в «можно было потратить сегодня» (деньги на руках + потрачено сегодня) попасть не должна.
+    const moneyWalletIds = new Set(wallets.filter(isSpendableWallet).map((w) => w.id));
     const spentToday = summarizeDay(
-      txs.filter((t) => t.occurredOn === today),
+      txs.filter((t) => t.occurredOn === today && moneyWalletIds.has(t.walletId)),
       base,
     ).expenseMinor;
     const window = usualSpendWindow(firstOp, today);
@@ -110,7 +114,6 @@ async function loadForecastData(store: Store, today: IsoDate): Promise<Loaded | 
   const monthEnd = endOfMonth(today);
   const doneOccurrences = new Set<string>();
   for (const r of rules) {
-    if (r.kind !== 'expense' && r.kind !== 'income') continue;
     for (const date of occurrencesBetween(r, today, monthEnd)) {
       if (existingIds.has(await uuidV5(r.id, date))) doneOccurrences.add(occurrenceKey(r.id, date));
     }
@@ -120,12 +123,12 @@ async function loadForecastData(store: Store, today: IsoDate): Promise<Loaded | 
 
 /**
  * Прогноз «сколько можно тратить в день» для экрана (формула — в domain/forecast.ts). Пересчитывается сам после любой записи
- * в базу и после обновления курсов. undefined — считается (ничего не показываем, а не нули); null — настроек ещё нет.
+ * в базу, после обновления курсов и при смене даты. undefined — считается (ничего не показываем, а не нули); null — настроек ещё нет.
  */
 export function useDailyForecast(): DailyForecast | null | undefined {
   const store = useStore();
   const { getRate } = useRates();
-  const today = todayLocal();
+  const today = useToday(); // сама меняется за полночь и при возврате в приложение: «сегодня» не застревает на вчера
   const loaded = useLiveQuery(() => loadForecastData(store, today), [store, today]);
   return useMemo(() => {
     if (loaded === undefined) return undefined;

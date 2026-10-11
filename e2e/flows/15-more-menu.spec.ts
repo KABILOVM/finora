@@ -43,7 +43,7 @@ test.describe('15. Меню «Ещё»', () => {
     });
   }
 
-  test('заглушки новых разделов: «Скоро», каркас на месте, без ошибок', async ({ page }, testInfo) => {
+  test('новые разделы открываются: заголовок и каркас на месте, без ошибок', async ({ page }, testInfo) => {
     for (const [hash, title] of [
       ['/budgets', 'Бюджеты'],
       ['/recurring', 'Регулярные платежи'],
@@ -52,9 +52,8 @@ test.describe('15. Меню «Ещё»', () => {
     ] as const) {
       await openApp(page, hash);
       await expect(h1(page, title)).toBeVisible();
-      await expect(page.getByRole('heading', { level: 2, name: 'Скоро' })).toBeVisible();
       await expect(mainNav(page)).toBeVisible();
-      if (hash === '/budgets') await shot(page, '15-budgets-stub', testInfo);
+      if (hash === '/budgets') await shot(page, '15-budgets', testInfo);
     }
   });
 

@@ -11,7 +11,7 @@ import type { DebtPayment } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import { humanError, toastWithUndo, UNDO_MS } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
-import { todayLocal } from '@/lib/dates';
+import { useToday } from '@/recurring/useToday';
 import { DebtSheet } from './DebtSheet';
 import { DebtSummaryCard } from './DebtSummaryCard';
 import { DIRECTION_LABEL, ruDateShort } from './debtText';
@@ -64,7 +64,7 @@ export default function DebtDetailPage() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [deleting, setDeleting] = useState<DebtPayment | null>(null);
   const [busy, setBusy] = useState(false);
-  const today = todayLocal();
+  const today = useToday();
 
   if (view === undefined || lines === undefined) {
     return (

@@ -26,7 +26,7 @@ export function TxLinkNotice({ tx }: { tx: Linked }) {
       {debtId && (
         <p className="flex items-start gap-2 rounded-xl bg-brand/10 px-3 py-2 text-sm text-text">
           <Icon name="banknote" size={18} className="mt-0.5 shrink-0 text-brand" />
-          <span>
+          <span className="min-w-0 break-words">
             {found?.debt ? (
               <>
                 Эта операция относится к долгу «{found.debt.counterparty}». Связь сохранится; кошелёк — только в валюте долга (

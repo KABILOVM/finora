@@ -12,8 +12,8 @@ import { DEBT_OVERFLOW_MESSAGE, useStore } from '@/db';
 import type { DebtDirection } from '@/domain/types';
 import { humanError } from '@/features/transactions/txActions';
 import { cn } from '@/lib/cn';
-import { todayLocal } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
+import { useToday } from '@/recurring/useToday';
 import { groupDebts, overdueCount, remainingByCurrency, type DebtItem } from './debtSummary';
 import { DIRECTION_LABEL } from './debtText';
 import { DebtRow } from './DebtRow';
@@ -118,7 +118,7 @@ export default function DebtsPage() {
   const direction: DebtDirection = params.get('dir') === 'borrowed' ? 'borrowed' : 'lent';
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
-  const today = todayLocal();
+  const today = useToday();
 
   const setDirection = (d: DebtDirection) => setParams(d === 'lent' ? {} : { dir: d }, { replace: true });
   const groups = useMemo(() => groupDebts(data?.items ?? [], direction), [data, direction]);

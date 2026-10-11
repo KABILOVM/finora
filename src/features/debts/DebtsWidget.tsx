@@ -6,7 +6,7 @@ import { MoneyText } from '@/components/MoneyText';
 import { DEBT_OVERFLOW_MESSAGE } from '@/db';
 import type { DebtDirection } from '@/domain/types';
 import { cn } from '@/lib/cn';
-import { todayLocal } from '@/lib/dates';
+import { useToday } from '@/recurring/useToday';
 import { groupDebts, isOwing, nearestDue, overdueCount, remainingByCurrency, type DebtItem } from './debtSummary';
 import { dueInfo, DIRECTION_LABEL } from './debtText';
 import { useDebtsData } from './useDebtsData';
@@ -40,7 +40,7 @@ function Sum({ items, direction, base }: { items: readonly DebtItem[]; direction
  */
 export default function DebtsWidget() {
   const data = useDebtsData();
-  const today = todayLocal();
+  const today = useToday();
   const items = useMemo(() => data?.items ?? [], [data]);
   const owing = items.filter(isOwing);
   if (data === undefined || owing.length === 0) return null;
@@ -72,7 +72,7 @@ export default function DebtsWidget() {
           )}
         >
           {info.tone === 'overdue' && <Icon name="alert" size={18} className="shrink-0" />}
-          <span className="min-w-0">
+          <span className="min-w-0 break-words">
             {info.tone === 'overdue' ? (
               <>
                 {info.text.charAt(0).toUpperCase() + info.text.slice(1)}: <span className="font-semibold">{next.debt.counterparty}</span>

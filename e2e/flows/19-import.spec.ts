@@ -220,6 +220,31 @@ test.describe('19. Импорт из Zenmoney (CSV)', () => {
     expect(await walletRowText(page, 'Наличные')).toMatch(money('257,94 с.'));
   });
 
+  test('счёт, направленный вручную в свой кошелёк, при следующей загрузке идёт туда же, а не в новый', async ({ page }) => {
+    await openApp(page);
+    await openImport(page);
+    await pick(page, fixture('semicolon-ru.csv'));
+    await walletSelect(page, 'Карта Алиф').selectOption({ label: 'Наличные' });
+    await confirmImport(page, 3);
+    await expect(report(page, 'added')).toHaveText('3');
+
+    // Через время в выгрузке появилась ещё одна покупка по «Карте Алиф»; человек загружает файл снова и ничего не выбирает руками
+    const more = readFileSync(join(FIXTURES, 'semicolon-ru.csv'), 'utf8').trimEnd() + '\r\n09.03.2025;Продукты;Базар;Зелень;Карта Алиф;50,00;TJS;;;\r\n';
+    await page.getByRole('button', { name: 'Загрузить ещё файл' }).click();
+    await pick(page, csvBuffer('semicolon-ru.csv', more));
+    expect(await selectedText(walletSelect(page, 'Карта Алиф'))).toBe('Наличные');
+    await expect(page.getByText('новые пойдут туда же', { exact: false })).toBeVisible();
+    await expect(count(page, 'exists')).toHaveText('3');
+    await expect(count(page, 'add')).toHaveText('1');
+    await confirmImport(page, 1);
+    await expect(report(page, 'added')).toHaveText('1');
+    await expect(page.getByRole('list', { name: 'Остатки по файлу' })).toHaveCount(0); // нового кошелька нет — сверять нечего
+
+    await goSection(page, 'Кошельки');
+    await expect(page.getByRole('listitem').filter({ has: page.getByText('Карта Алиф', { exact: true }) })).toHaveCount(0);
+    expect(await walletRowText(page, 'Наличные')).toMatch(money('207,94 с.'));
+  });
+
   test('экран читается на телефоне и на ПК: ничего не обрезано, нет прокрутки вбок', async ({ page }, testInfo) => {
     await openApp(page);
     await openImport(page);

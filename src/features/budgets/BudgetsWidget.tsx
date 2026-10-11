@@ -5,10 +5,11 @@ import { pickWidgetBudgets } from '@/domain/budgetProgress';
 import type { DailyForecast } from '@/domain/forecast';
 import { formatMinor } from '@/domain/money';
 import { endSentence } from '@/features/transactions/txDisplay';
-import { monthKey, todayLocal } from '@/lib/dates';
+import { monthKey } from '@/lib/dates';
+import { useToday } from '@/recurring/useToday';
 import { BudgetRow } from './BudgetRow';
-import { budgetLabel, daysText, longDate } from './budgetText';
-import { PerDay, skippedText } from './ForecastCard';
+import { budgetLabel, daysText, fitFontSize, longDate } from './budgetText';
+import { PerDay, perDayChars, skippedText } from './ForecastCard';
 import { useBudgetsData, type BudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
 
@@ -20,7 +21,11 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
   if (forecast.status !== 'ok') return null;
   return (
     <>
-      <p data-testid="widget-per-day" className="mt-0.5 text-[clamp(1.75rem,8.4vw,2.25rem)] font-bold leading-tight tracking-tight">
+      <p
+        data-testid="widget-per-day"
+        className="mt-0.5 font-bold leading-tight tracking-tight"
+        style={{ fontSize: fitFontSize(perDayChars(forecast), '1.75rem', '8.4vw', '2.25rem') }}
+      >
         <PerDay f={forecast} />
       </p>
       <p className="text-[13px] text-muted">
@@ -64,7 +69,7 @@ function BudgetsPart({ data }: { data: BudgetsData }) {
  */
 export default function BudgetsWidget() {
   const forecast = useDailyForecast();
-  const data = useBudgetsData(monthKey(todayLocal()));
+  const data = useBudgetsData(monthKey(useToday()));
 
   if (forecast === undefined || data === undefined) {
     return (

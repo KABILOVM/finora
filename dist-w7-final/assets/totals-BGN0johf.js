@@ -1,0 +1,1 @@
+import{d as c,a2 as f}from"./index-Bz96m7ZV.js";function m(u,o,a){const i=new Map;for(const n of u)i.set(n.currency,c(i.get(n.currency)??0,n.balanceMinor));let r=0;const e=[];for(const[n,s]of i){if(n===o){r=c(r,s);continue}const t=a(n,o);if(t===null||!Number.isFinite(t)||t<=0){e.push(n);continue}r=c(r,f(s,n,o,t))}return{totalMinor:r,missing:e.sort()}}export{m as t};

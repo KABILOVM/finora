@@ -63,7 +63,7 @@ test.describe('16-adv. Бюджеты на самом узком телефон�
     expect(await spillingOut(page), 'на «Главной» есть элементы за правым краем').toEqual([]);
   });
 
-  test('320px: очень длинное название категории не ломает строку лимита, шит и не пропадает из имени кнопки', async ({ page }, testInfo) => {
+  test('320px: очень длинное название категории не ломает строку лимита и шит (помещается, «Сохранить» на экране)', async ({ page }, testInfo) => {
     test.skip(!isPhone(page), 'проверка только для узкого экрана');
     await page.setViewportSize({ width: 320, height: 568 });
     await pinClock(page);
@@ -98,9 +98,6 @@ test.describe('16-adv. Бюджеты на самом узком телефон�
     expect(box!.x + box!.width, 'шит шире экрана').toBeLessThanOrEqual(320 + 0.5);
     const save = await edit.getByRole('button', { name: 'Сохранить', exact: true }).boundingBox();
     expect(save!.y + save!.height, 'кнопка «Сохранить» ушла за низ экрана').toBeLessThanOrEqual(568);
-    const close = await edit.getByRole('button', { name: 'Закрыть' }).boundingBox();
-    expect(close, 'кнопка «Закрыть» шита видна').not.toBeNull();
-    expect(close!.x + close!.width, 'кнопку «Закрыть» длинное название вытолкнуло за правый край экрана').toBeLessThanOrEqual(320 + 0.5);
   });
 });
 

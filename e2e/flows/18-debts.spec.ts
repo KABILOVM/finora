@@ -426,4 +426,54 @@ test.describe('18. Долги и кредиты', () => {
     await expect(remaining(page)).toContainText(money('500 с.'));
     await expect(page.getByTestId('debt-summary')).toContainText(money('450 с.'));
   });
+
+  test('правка платежа в журнале: «200» → «2000» не проходит молча, а спрашивает про переплату', async ({ page }, testInfo) => {
+    await pinClock(page);
+    await openApp(page);
+    await goSection(page, 'Долги');
+    await addDebt(page, { name: 'Алишер', amount: '500', paper: true });
+    await debtLink(page, 'Алишер').click();
+    await addPayment(page, '200');
+    await expect(remaining(page)).toContainText(money('300 с.'));
+
+    await goSection(page, 'Операции');
+    await page.getByRole('button', { name: /Долг: Алишер/ }).click();
+    const edit = sheet(page, 'Правка операции');
+    await expect(edit).toBeVisible();
+    await eraseAmount(edit, 3);
+    await tapAmount(page, '2000');
+    await edit.getByRole('button', { name: 'Сохранить', exact: true }).click();
+
+    // вопрос поверх шита: кнопки помещаются в экран, платёж пока не записан
+    const ask = page.getByRole('alertdialog', { name: 'Платежи больше долга' });
+    await expect(ask).toBeVisible();
+    await expect(ask).toContainText('переплата');
+    await page.waitForTimeout(600);
+    await shot(page, '18-edit-overpay-ask', testInfo);
+    const vp = page.viewportSize()!;
+    for (const name of ['Поправить сумму', 'Это переплата — сохранить']) {
+      const box = await ask.getByRole('button', { name }).boundingBox();
+      expect(box, `кнопка «${name}» отрисована`).not.toBeNull();
+      expect(box!.y).toBeGreaterThanOrEqual(0);
+      expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    await noHorizontalScroll(page, 'вопрос о переплате');
+
+    // «Поправить сумму»: шит остаётся, в базе прежние 200
+    await ask.getByRole('button', { name: 'Поправить сумму' }).click();
+    await expect(ask).toBeHidden();
+    await expect(edit).toBeVisible();
+    await edit.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    await expect(ask).toBeVisible();
+
+    // подтверждение: платёж записан, на странице долга видна переплата
+    await ask.getByRole('button', { name: 'Это переплата — сохранить' }).click();
+    await expect(edit).toBeHidden();
+    await dismissToasts(page);
+    await goSection(page, 'Долги');
+    await debtLink(page, 'Алишер').click();
+    await expect(page.getByTestId('debt-summary')).toContainText('Переплата');
+    await expect(page.getByTestId('debt-summary')).toContainText(money('1 500 с.'));
+  });
 });

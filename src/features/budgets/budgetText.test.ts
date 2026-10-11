@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BudgetProgress } from '@/domain/budgetProgress';
-import { budgetLabel, daysText, excludedText, levelWord, longDate, restWord, spentWord } from './budgetText';
+import { budgetLabel, daysText, excludedText, fitFontSize, levelWord, longDate, restWord, spentWord } from './budgetText';
 
 const nb = (s: string) => s.replace(/\u00a0/g, ' ');
 type Compared = Extract<BudgetProgress, { comparable: true }>;
@@ -64,5 +64,15 @@ describe('тексты бюджетов', () => {
     expect(excludedText(3, 'USD')).toContain('3 операции внесены');
     expect(excludedText(7, 'USD')).toContain('7 операций внесено');
     expect(excludedText(2, 'USD')).toContain('(USD)');
+  });
+
+  it('fitFontSize: обычный clamp, но не крупнее, чем строка влезает по ширине экрана; короткая и длинная запись различаются', () => {
+    const short = fitFontSize(9, '2rem', '10vw', '2.75rem');
+    const long = fitFontSize(16, '2rem', '10vw', '2.75rem');
+    expect(short).toBe('min(clamp(2rem, 10vw, 2.75rem), calc((100vw - 4.5rem) / 5.04))');
+    expect(long).toBe('min(clamp(2rem, 10vw, 2.75rem), calc((100vw - 4.5rem) / 8.96))');
+    // мусорная длина не даёт деления на ноль и NaN
+    expect(fitFontSize(0, '2rem', '10vw', '2.75rem')).toContain('/ 0.56)');
+    expect(fitFontSize(Number.NaN, '2rem', '10vw', '2.75rem')).not.toContain('NaN');
   });
 });

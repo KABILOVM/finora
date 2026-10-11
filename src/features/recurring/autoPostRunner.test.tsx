@@ -7,7 +7,9 @@ import { ToastProvider } from '@/components/Toast';
 import type { RecurringInput, Store } from '@/db';
 import { addDays } from '@/lib/dates';
 import { opsDeps, pinToday, table, unpinToday, type OpsDeps } from '@/features/transactions/__fixtures__/opsKit';
-import { currentFailures, resetAutoPostState } from '@/recurring/autoPostState';
+import { currentFailures, requestAutoPostRun, resetAutoPostState } from '@/recurring/autoPostState';
+import { SyncProvider } from '@/sync/syncContext';
+import type { SyncEngineApi } from '@/sync/transport';
 import AutoPostRunner from './AutoPostRunner';
 import RecurringPage from './RecurringPage';
 import UpcomingWidget from './UpcomingWidget';
@@ -68,7 +70,7 @@ const liveTxs = async (td: OpsDeps) => (await txs(td)).filter((t) => t.deletedAt
 /** Платёж «Проводить само», созданный давно (иначе «историю» отсекла бы дата создания). */
 async function auto(s: Store, over: Partial<RecurringInput> & Pick<RecurringInput, 'walletId'>) {
   const r = await s.recurring.create({ kind: 'expense', amountMinor: 50_000, frequency: 'monthly', startOn: TODAY, autoPost: 1, ...over });
-  await s.db.recurring_rules.update(r.id, { createdAt: LONG_AGO });
+  await s.db.recurring_rules.update(r.id, { createdAt: LONG_AGO, clientUpdatedAt: LONG_AGO });
   return r;
 }
 
@@ -100,6 +102,12 @@ describe('AutoPostRunner: при открытии приложения', () => {
       await auto(s, { walletId: ids.cash });
     });
     await show(td, <AutoPostRunner />, { strict: true });
+    // В двойном режиме база открывается дважды, а подготовка данных идёт только в первом (отменённом) открытии: на нагруженной
+    // машине приложение успевает открыться раньше, чем появится правило. Ждём правило и просим проход, как при возврате на вкладку.
+    await eventually(async () => expect(await lastStore(td).db.recurring_rules.count()).toBe(1));
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
     await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
     await act(async () => {
       await new Promise((r) => setTimeout(r, 150));
@@ -190,6 +198,107 @@ describe('AutoPostRunner: возвращение на вкладку и смен
       vi.advanceTimersByTime(60_000);
     });
     await eventually(async () => expect((await liveTxs(td)).map((t) => t.occurredOn).sort()).toEqual([TODAY, '2026-10-16']));
+  });
+});
+
+/** Подставной движок синхронизации: каждый syncNow ждёт, пока тест его не отпустит. */
+function fakeEngine() {
+  const gates: Array<() => void> = [];
+  const syncNow = vi.fn(() => new Promise<void>((resolve) => void gates.push(resolve)));
+  const status = { phase: 'idle', pending: 0, quarantined: 0, lastSyncedAt: null, lastError: null } as const;
+  const engine: SyncEngineApi = { subscribe: () => () => undefined, getStatus: () => status, syncNow, start: vi.fn(), stop: vi.fn() };
+  return { engine, syncNow, release: () => gates.splice(0).forEach((open) => open()) };
+}
+const pause = (ms: number) =>
+  act(async () => {
+    await new Promise((r) => setTimeout(r, ms));
+  });
+const cashId = async (td: OpsDeps) => (await lastStore(td).db.wallets.toArray()).find((w) => w.name === 'Наличные')?.id ?? '';
+
+describe('AutoPostRunner: с облаком сначала обмен с сервером, потом проход', () => {
+  it('при открытии платёж не проводится, пока идёт обмен (чужой «Пропустить» мог ещё не прийти); после обмена — проводится', async () => {
+    const td = makeApp(async (s, ids) => {
+      await auto(s, { walletId: ids.cash, note: 'Аренда' });
+    });
+    const fake = fakeEngine();
+    await show(td, (
+      <SyncProvider engine={fake.engine}>
+        <AutoPostRunner />
+      </SyncProvider>
+    ));
+    await pause(250);
+    expect(fake.syncNow).toHaveBeenCalledTimes(1);
+    expect(await txs(td)).toHaveLength(0);
+
+    fake.release();
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
+    await waitFor(() => expect(screen.getByText('Проведено автоплатежей: 1')).toBeInTheDocument());
+  });
+
+  it('обмен завис: через отведённое время платёж всё равно проводится (сеть не держит автоплатежи вечно)', async () => {
+    const td = makeApp(async (s, ids) => {
+      await auto(s, { walletId: ids.cash, note: 'Аренда' });
+    });
+    const fake = fakeEngine();
+    await show(td, (
+      <SyncProvider engine={fake.engine}>
+        <AutoPostRunner syncWaitMs={150} />
+      </SyncProvider>
+    ));
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
+    expect(fake.syncNow).toHaveBeenCalledTimes(1);
+  });
+
+  it('возврат на вкладку: снова сначала обмен, потом проход; «сохранили правило» и новый день обмен не ждут', async () => {
+    const td = makeApp();
+    const fake = fakeEngine();
+    await show(td, (
+      <SyncProvider engine={fake.engine}>
+        <AutoPostRunner />
+      </SyncProvider>
+    ));
+    await waitFor(() => expect(fake.syncNow).toHaveBeenCalledTimes(1));
+    fake.release(); // обмен при открытии закончился
+    await pause(100);
+
+    await write(async () => {
+      await auto(lastStore(td), { walletId: await cashId(td), note: 'Подписка' });
+    });
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await pause(250);
+    expect(fake.syncNow).toHaveBeenCalledTimes(2);
+    expect(await txs(td)).toHaveLength(0); // ждёт обмена
+
+    fake.release();
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
+
+    await write(async () => {
+      await auto(lastStore(td), { walletId: await cashId(td), note: 'Ещё' });
+    });
+    act(() => requestAutoPostRun()); // как после «Сохранить» в окне правила: обмена не ждём
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(2));
+    expect(fake.syncNow).toHaveBeenCalledTimes(2);
+  });
+
+  it('два события подряд (visibilitychange и focus при возврате на вкладку) — один обмен, а не два', async () => {
+    const td = makeApp();
+    const fake = fakeEngine();
+    await show(td, (
+      <SyncProvider engine={fake.engine}>
+        <AutoPostRunner />
+      </SyncProvider>
+    ));
+    await waitFor(() => expect(fake.syncNow).toHaveBeenCalledTimes(1));
+    fake.release();
+    await pause(100);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    await pause(100);
+    expect(fake.syncNow).toHaveBeenCalledTimes(2);
   });
 });
 

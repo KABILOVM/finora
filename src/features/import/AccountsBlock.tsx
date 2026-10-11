@@ -19,8 +19,9 @@ function AccountRow({ w, onChoose }: { w: PlanWallet; onChoose: (key: string, ch
   const t = w.target;
   const label = `Кошелёк для счёта «${w.name}»`;
   const value = selectValue(w);
-  // «Создать новый» не предлагаем, если автоподбор нашёл кошелёк прошлого импорта: «новый» был бы тем же самым кошельком
-  const offerNew = !(t.kind === 'existing' && t.how === 'saved');
+  // «Создать новый» предлагаем, только если он правда создастся: когда кошелёк прошлого импорта уже есть (живой, в архиве или
+  // удалён), «новый» был бы тем же самым кошельком, а выбор ничего бы не менял
+  const offerNew = w.canCreate;
   return (
     <li className="flex flex-col gap-2 px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

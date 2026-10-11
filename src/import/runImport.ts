@@ -282,10 +282,17 @@ function reconcileLines(plan: ImportPlan, done: ReadonlySet<string>, createdNow:
     const next = cur + delta;
     sums.set(key, Number.isSafeInteger(next) ? next : null);
   };
+  // Уже имеющаяся операция может лежать в другом кошельке (счёт направляли в другой или операцию перенесли): её деньги не часть
+  // остатка этого кошелька, и подсказка «поправьте начальный остаток» посчитала бы их второй раз.
+  const targetId = (key: string): string | null => {
+    const t = wanted.get(key)?.target;
+    return t && t.kind !== 'blocked' ? t.id : null;
+  };
   for (const op of plan.ops) {
     if (op.status !== 'exists' && !(op.status === 'add' && done.has(op.id))) continue;
-    if (op.row.outcome) move(op.row.outcome.account.key, -op.row.outcome.amountMinor);
-    if (op.row.income) move(op.row.income.account.key, op.row.income.amountMinor);
+    const { outcome, income } = op.row;
+    if (outcome && (op.placed === undefined || op.placed.out === targetId(outcome.account.key))) move(outcome.account.key, -outcome.amountMinor);
+    if (income && (op.placed === undefined || op.placed.in === targetId(income.account.key))) move(income.account.key, income.amountMinor);
   }
   return [...wanted.values()].map((w) => {
     const sum = sums.get(w.key);

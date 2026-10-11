@@ -30,10 +30,11 @@ export function OpsPreview({ ops }: { ops: readonly PlanOp[] }) {
             const kind = op.row.kind;
             return (
               <li key={op.row.index} className="flex flex-col gap-1 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="min-w-0 break-words font-medium">{titleOf(op)}</span>
+                {/* Название и сумма в одной строке, а если вместе не помещаются (узкий экран, крупные суммы) — сумма уходит под название */}
+                <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-0.5">
+                  <span className="min-w-[10rem] flex-1 break-words font-medium">{titleOf(op)}</span>
                   <span
-                    className={cn('shrink-0 whitespace-nowrap font-semibold tabular-nums', kind === 'expense' && 'text-expense', kind === 'income' && 'text-income')}
+                    className={cn('ml-auto shrink-0 whitespace-nowrap font-semibold tabular-nums', kind === 'expense' && 'text-expense', kind === 'income' && 'text-income')}
                   >
                     {opAmountText(op)}
                   </span>

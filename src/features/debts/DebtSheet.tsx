@@ -68,10 +68,13 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   const toast = useToast();
   const wallets = useWallets();
   const settings = useSettings();
-  const editing = debt !== null;
+  // Долг запоминается при открытии: форма заполнена им, и с ним же сравниваем при сохранении. Если синхронизация тем временем
+  // принесла чужую правку, «живой» долг изменится, а форма — нет: сравнивать с живым значит откатить чужую правку.
+  const [orig] = useState(debt);
+  const editing = orig !== null;
 
   const [form, setForm] = useState<DebtFormState>(() =>
-    debt ? formFromDebt(debt) : emptyDebtForm(defaultDirection, base, todayLocal()),
+    orig ? formFromDebt(orig) : emptyDebtForm(defaultDirection, base, todayLocal()),
   );
   const [errors, setErrors] = useState<DebtFormErrors>({});
   const [wanted, setWanted] = useState(true);
@@ -84,11 +87,11 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
 
   // Направление и валюту репозиторий менять не даёт, когда по долгу есть операции или регулярные платежи: говорим об этом словами
   const linked = useLiveQuery(async () => {
-    if (!debt) return false;
+    if (!orig) return false;
     const { db } = store;
-    if ((await db.transactions.where('debtId').equals(debt.id).count()) > 0) return true;
-    return (await db.recurring_rules.filter((r) => r.debtId === debt.id && r.deletedAt === null).count()) > 0;
-  }, [store, debt?.id]);
+    if ((await db.transactions.where('debtId').equals(orig.id).count()) > 0) return true;
+    return (await db.recurring_rules.filter((r) => r.debtId === orig.id && r.deletedAt === null).count()) > 0;
+  }, [store, orig?.id]);
   const locked = editing && linked !== false;
 
   const candidates = (wallets ?? []).filter((w) => w.currency === form.currency);
@@ -148,7 +151,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
     busy.current = true;
     setSaving(true);
     try {
-      if (!debt) {
+      if (!orig) {
         const res = await saveNewDebt(store, {
           debtId: ids.current.debtId,
           debt: {
@@ -169,15 +172,16 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
         toast.success(res.tx ? 'Долг записан, деньги учтены в кошельке' : 'Долг записан «на бумаге»');
         onCreated?.(res.debt);
       } else {
+        // В базу уходит только то, что человек изменил против увиденного при открытии
         const patch: DebtPatch = {};
-        if (value.counterparty !== debt.counterparty) patch.counterparty = value.counterparty;
-        if (value.principalMinor !== debt.principalMinor) patch.principalMinor = value.principalMinor;
-        if (value.openedOn !== debt.openedOn) patch.openedOn = value.openedOn;
-        if (value.dueOn !== debt.dueOn) patch.dueOn = value.dueOn;
-        if (value.note !== debt.note) patch.note = value.note;
-        if (!locked && form.direction !== debt.direction) patch.direction = form.direction;
-        if (!locked && form.currency !== debt.currency) patch.currency = form.currency;
-        if (Object.keys(patch).length > 0) await store.debts.update(debt.id, patch);
+        if (value.counterparty !== orig.counterparty) patch.counterparty = value.counterparty;
+        if (value.principalMinor !== orig.principalMinor) patch.principalMinor = value.principalMinor;
+        if (value.openedOn !== orig.openedOn) patch.openedOn = value.openedOn;
+        if (value.dueOn !== orig.dueOn) patch.dueOn = value.dueOn;
+        if (value.note !== orig.note) patch.note = value.note;
+        if (!locked && form.direction !== orig.direction) patch.direction = form.direction;
+        if (!locked && form.currency !== orig.currency) patch.currency = form.currency;
+        if (Object.keys(patch).length > 0) await store.debts.update(orig.id, patch);
         toast.success('Долг сохранён');
       }
       onClose();

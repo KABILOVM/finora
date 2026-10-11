@@ -5,11 +5,18 @@ import { addDays, isValidIsoDate, todayLocal } from '@/lib/dates';
 /**
  * Что автопроведение имеет право провести. Чистые функции: ни базы, ни часов (сегодняшняя дата приходит параметром).
  *
- * Правило «не проводить историю»: берём даты не раньше самой поздней из трёх границ —
+ * Правило «не проводить историю»: берём даты не раньше самой поздней из четырёх границ —
  *  1) начало расписания (startOn),
  *  2) день, когда правило создано (по местным часам устройства),
- *  3) «сегодня − 60 дней».
+ *  3) день последней правки правила (по местным часам устройства),
+ *  4) «сегодня − 60 дней».
  * Всё более раннее остаётся в «Просроченных» и проводится только вручную: человек сам решает, что с этим делать.
+ *
+ * Зачем третья граница. Операция опознаётся по id = v5(правило, дата): новое расписание (другой день платежа, другая частота)
+ * даёт другие даты, и «уже проведено» их не закрывает. Платёж «действует» с того дня, как человек его правил: включил
+ * «Проводить само», поменял расписание, вернул из архива (всё это — правка правила, и она ставит новую метку). Дни до правки
+ * автоматика не трогает, иначе месяцы, уже проведённые по прежнему расписанию, записались бы второй раз.
+ * Цена: если правка пришла раньше, чем проведён пропущенный день (например, с другого устройства), этот день ждёт в «Просроченных».
  */
 
 export const AUTO_POST_MAX_AGE_DAYS = 60;
@@ -24,7 +31,7 @@ export const localDateOf: LocalDateOf = (iso) => {
   return Number.isFinite(ms) ? todayLocal(new Date(ms)) : null;
 };
 
-type RuleLike = Pick<RecurringRule, 'frequency' | 'intervalN' | 'startOn' | 'endOn' | 'createdAt'>;
+type RuleLike = Pick<RecurringRule, 'frequency' | 'intervalN' | 'startOn' | 'endOn' | 'createdAt' | 'clientUpdatedAt'>;
 
 const later = (a: IsoDate, b: IsoDate): IsoDate => (a >= b ? a : b);
 
@@ -33,7 +40,10 @@ export function autoPostWindow(rule: RuleLike, today: IsoDate, toLocal: LocalDat
   if (!isValidIsoDate(today)) return null;
   // Время создания не прочитать — историю не трогаем, берём только сегодняшний день.
   const created = toLocal(rule.createdAt) ?? today;
-  const from = later(later(rule.startOn, created), addDays(today, -AUTO_POST_MAX_AGE_DAYS));
+  // То же для последней правки. Метка из будущего (часы устройства убегали вперёд) сегодняшние платежи не откладывает.
+  const changedOn = toLocal(rule.clientUpdatedAt) ?? today;
+  const changed = changedOn > today ? today : changedOn;
+  const from = later(later(later(rule.startOn, created), changed), addDays(today, -AUTO_POST_MAX_AGE_DAYS));
   return from > today ? null : { from, to: today };
 }
 

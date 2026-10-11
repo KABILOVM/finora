@@ -62,11 +62,13 @@ export function UpcomingRow({ item, today, lookups, failure, onPost, onSkip }: U
           {v.second && <p className="money text-xs text-muted">{v.second}</p>}
         </div>
       </div>
-      <div className="mt-2 flex gap-2 pl-[3.25rem]">
-        <Button className="flex-1" aria-label={`Провести: ${label}`} onClick={onPost}>
+      {/* Отступ под значок — только там, где две кнопки с подписями в него помещаются (от 390 px); на узком экране кнопки идут
+          во всю ширину карточки, а если и так тесно (крупный шрифт) — вторая переносится на новую строку, но не выходит за край */}
+      <div className="mt-2 flex flex-wrap gap-2 min-[390px]:pl-[3.25rem]">
+        <Button className="min-w-[7.5rem] flex-1 !px-3" aria-label={`Провести: ${label}`} onClick={onPost}>
           Провести
         </Button>
-        <Button variant="secondary" className="flex-1" aria-label={`Пропустить: ${label}`} onClick={onSkip}>
+        <Button variant="secondary" className="min-w-[7.5rem] flex-1 !px-3" aria-label={`Пропустить: ${label}`} onClick={onSkip}>
           Пропустить
         </Button>
       </div>

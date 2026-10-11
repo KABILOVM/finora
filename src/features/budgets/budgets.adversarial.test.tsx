@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually } from '@/app/testkit';
-import { act, findByRole, screen, waitFor } from '@/components/testUtils';
+import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { formatMinor } from '@/domain/money';
 import { opsDeps, pinToday, showApp, table, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
@@ -92,6 +92,25 @@ describe('атака: приложение простояло через пол�
 
     await eventually(() => expect(text(card())).toContain('Считаем до 30 ноября: 30 дней включая сегодня'), 3000);
   });
+
+  it('экран «Бюджеты»: «текущий» месяц переезжает на новый сам, а вручную выбранный прошлый остаётся на месте', async () => {
+    vi.setSystemTime(new Date(2026, 9, 31, 23, 50, 0));
+    const td = opsDeps([table()], { setup: async (s) => void (await baseSetup(s)) });
+    await showApp(<BudgetsPage />, td, '/budgets');
+    await findByRole('heading', { name: 'Бюджеты', level: 1 });
+    await waitFor(() => expect(text(document.body)).toContain('Октябрь 2026'));
+
+    await wakeUpAt(new Date(2026, 10, 1, 7, 30, 0));
+    await eventually(() => expect(text(document.body)).toContain('Ноябрь 2026'), 3000);
+    expect(text(document.body)).not.toContain('Октябрь 2026');
+
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    await waitFor(() => expect(text(document.body)).toContain('Октябрь 2026'));
+    await wakeUpAt(new Date(2026, 10, 2, 7, 30, 0)); // следующий день: выбранный вручную месяц не сбрасывается
+    await act(async () => {});
+    expect(text(document.body)).toContain('Октябрь 2026');
+    expect(text(document.body)).not.toContain('Ноябрь 2026');
+  });
 });
 
 describe('атака: деньги уходят из тех, что «на руках», не как расход', () => {
@@ -104,6 +123,39 @@ describe('атака: деньги уходят из тех, что «на ру�
     });
     // (250 000 − 100 000) ÷ 17 = 8 823,5 → 88,23 с. в день. Без вычитания показывает 147,05 и деньги кончатся раньше срока
     expect(perDay()).toBe(fmt(8_823));
+    expect(detail('Платежи и долги')).toBe(fmt(-100_000));
+  });
+
+  it('проведённый перевод в копилку второй раз не вычитается (деньги с «Наличных» уже ушли)', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      const box = await savings(s);
+      const rule = await s.recurring.create({ kind: 'transfer', walletId: i.cash, toWalletId: box.id, amountMinor: 100_000, frequency: 'monthly', startOn: '2026-10-20' });
+      await s.transactions.createFromRule(rule.id, '2026-10-20'); // на руках стало 1 500
+    });
+    expect(detail('Платежи и долги')).toBe(fmt(0));
+    expect(perDay()).toBe(fmt(8_823)); // 150 000 ÷ 17, а не (150 000 − 100 000) ÷ 17
+  });
+
+  it('пропущенный перевод в копилку не вычитается', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      const box = await savings(s);
+      const rule = await s.recurring.create({ kind: 'transfer', walletId: i.cash, toWalletId: box.id, amountMinor: 100_000, frequency: 'monthly', startOn: '2026-10-20' });
+      await s.transactions.skipOccurrence(rule.id, '2026-10-20');
+    });
+    expect(detail('Платежи и долги')).toBe(fmt(0));
+    expect(perDay()).toBe(fmt(14_705));
+  });
+
+  it('регулярный перевод между обычными кошельками (наличные → карта) деньги на руках не уменьшает', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      const card = await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' });
+      await s.recurring.create({ kind: 'transfer', walletId: i.cash, toWalletId: card.id, amountMinor: 100_000, frequency: 'monthly', startOn: '2026-10-20' });
+    });
+    expect(detail('Платежи и долги')).toBe(fmt(0));
+    expect(perDay()).toBe(fmt(14_705));
   });
 
   it('регулярный ДОХОД в копилку не пополняет деньги на руках и не должен обрывать горизонт', async () => {
@@ -137,6 +189,19 @@ describe('атака: трата не из «денег на руках»', () =
     expect(perDay()).toBe(fmt(14_705)); // 250 000 ÷ 17: деньги на руках не менялись
     // «можно было сегодня» = то же 147,05, а не (2 500 + 1 700) ÷ 17 = 247,05
     expect(detail('Сегодня потрачено')).toMatch(new RegExp(`из ${fmt(14_705).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+    // деньги на руках не менялись, поэтому и ложного «потрачено больше, чем можно» быть не должно
+    expect(detail('Сегодня потрачено')).toMatch(new RegExp(`^${fmt(0).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} из `));
+    expect(text(card())).not.toContain('Сегодня потрачено больше');
+  });
+
+  it('трата сегодня с обычного кошелька по-прежнему учитывается: 500 с. из 147,05 с.', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 50_000, categoryId: i.cats['Еда'] ?? null, occurredOn: '2026-10-15' });
+    });
+    // деньги на руках после траты: 2 000, до конца месяца 17 дней → 117,64 в день; утром можно было (2 000 + 500) ÷ 17 = 147,05
+    expect(perDay()).toBe(fmt(11_764));
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(50_000)} из ${fmt(14_705)}`);
   });
 });
 

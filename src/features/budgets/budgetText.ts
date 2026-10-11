@@ -67,3 +67,13 @@ export function budgetLabel(
 export function excludedText(count: number, base: CurrencyCode): string {
   return `Часть операций не учтена: ${count} ${pluralRu(count, 'операция внесена', 'операции внесены', 'операций внесено')} в другой основной валюте, чем сейчас (${base}). Потрачено может быть больше.`;
 }
+
+/**
+ * Размер крупного числа «в день»: обычный clamp(min, vw, max), но не крупнее, чем строка из `chars` знаков влезает по ширине экрана
+ * (знак ≈ 0,56 em; на карточку с рамкой и отступами и поля страницы уходит 4,5 rem). Нужен для многозначных сумм (сум, тенге) на
+ * самых узких экранах: без него «1 103 848,94 сум» упиралось в край карточки. На широком экране и для коротких сумм ничего не меняет.
+ */
+export function fitFontSize(chars: number, min: string, vw: string, max: string): string {
+  const n = Number.isFinite(chars) ? Math.max(1, Math.floor(chars)) : 1;
+  return `min(clamp(${min}, ${vw}, ${max}), calc((100vw - 4.5rem) / ${(n * 0.56).toFixed(2)}))`;
+}

@@ -110,20 +110,19 @@ describe('переходы из страницы «Ещё»', () => {
   });
 });
 
-describe('заглушки новых разделов', () => {
+describe('новые разделы', () => {
   it.each([
     ['/budgets', 'Бюджеты'],
     ['/recurring', 'Регулярные платежи'],
     ['/debts', 'Долги и кредиты'],
     ['/import', 'Импорт из Zenmoney'],
-  ])('%s: заголовок, «Скоро», каркас на месте', async (path, title) => {
+  ])('%s: заголовок и каркас на месте', async (path, title) => {
     renderAt(path);
     await findByRole('heading', { name: title, level: 1 });
-    expect(await findByRole('heading', { name: 'Скоро', level: 2 })).toBeInTheDocument();
     expect(navs().length).toBeGreaterThanOrEqual(2);
   });
 
-  it('с заглушки можно вернуться на «Ещё» через нижнюю панель', async () => {
+  it('из раздела можно вернуться на «Ещё» через нижнюю панель', async () => {
     renderAt('/budgets');
     await findByRole('heading', { name: 'Бюджеты', level: 1 });
     await user.click(linkIn(bottomNav(), 'Ещё'));

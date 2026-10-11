@@ -11,8 +11,9 @@ import { formatMinor } from '@/domain/money';
 import type { Budget, LocalRow } from '@/domain/types';
 import { MonthSwitcher } from '@/features/transactions/MonthSwitcher';
 import { humanError } from '@/features/transactions/txActions';
-import { monthKey, todayLocal } from '@/lib/dates';
+import { monthKey } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
+import { useToday } from '@/recurring/useToday';
 import { BudgetRow } from './BudgetRow';
 import { BudgetSheet } from './BudgetSheet';
 import { budgetLabel, excludedText } from './budgetText';
@@ -29,8 +30,10 @@ type SheetState = { kind: 'new' } | { kind: 'edit'; budget: LocalRow<Budget> };
 export default function BudgetsPage() {
   const store = useStore();
   const toast = useToast();
-  const currentMonth = monthKey(todayLocal());
-  const [month, setMonth] = useState(currentMonth);
+  const currentMonth = monthKey(useToday());
+  // Выбранный вручную месяц; null — «текущий»: он сам переезжает на новый месяц, если экран простоял через полночь 1-го числа.
+  const [picked, setPicked] = useState<string | null>(null);
+  const month = picked ?? currentMonth;
   const forecast = useDailyForecast();
   const data = useBudgetsData(month);
   const expenseCategories = useCategories('expense');
@@ -60,8 +63,10 @@ export default function BudgetsPage() {
 
   const ready = data !== undefined && data !== null && !('overflow' in data);
   const addButton = (
-    <Button icon="plus" disabled={!ready} onClick={() => setSheet({ kind: 'new' })}>
-      Добавить лимит
+    // Короткая подпись, как на «Кошельках» и «Категориях»: с длинной на узком экране (320px) заголовок «Бюджеты» обрезался до «Бюд…».
+    // Для скринридера и поиска по имени кнопка по-прежнему «Добавить лимит».
+    <Button icon="plus" aria-label="Добавить лимит" disabled={!ready} onClick={() => setSheet({ kind: 'new' })}>
+      Добавить
     </Button>
   );
 
@@ -80,7 +85,7 @@ export default function BudgetsPage() {
     const { base, active, archived, categories, summary, progress } = data;
     content = (
       <>
-        <MonthSwitcher month={month} max={currentMonth} onChange={setMonth} />
+        <MonthSwitcher month={month} max={currentMonth} onChange={(m) => setPicked(m === currentMonth ? null : m)} />
         {active.length === 0 ? (
           <EmptyState
             icon="pie"

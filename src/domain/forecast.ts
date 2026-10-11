@@ -9,10 +9,13 @@ import type { CurrencyCode, DebtDirection, IsoDate, IsoDateTime, Minor, TxKind, 
  * Сегодняшнюю дату вызывающий передаёт сам (todayLocal()).
  *
  *  1. «Деньги на руках» = остатки кошельков cash / card / bank / other (БЕЗ накопления), в основной валюте.
+ *     Всё остальное считается ТОЛЬКО по этим же деньгам: правило на кошельке-накоплении (доход туда, расход оттуда)
+ *     на «деньги на руках» не влияет — ни горизонт не обрывает, ни из них не вычитается.
  *  2. Горизонт: от сегодня (включительно) до конца месяца; если раньше будет ожидаемый ДОХОД по регулярному правилу
- *     (ещё не проведённый и не пропущенный, строго после сегодня) — до дня ПЕРЕД ним. Дней осталось ≥ 1.
- *  3. Обязательное до конца горизонта вычитается: расходные правила по расписанию (проведённые и пропущенные за дату не считаются)
- *     и остаток по долгам «я должен» со сроком возврата не позже конца горизонта (просроченные — тоже: они уже должны быть отданы).
+ *     (ещё не проведённый и не пропущенный, строго после сегодня, на обычный кошелёк) — до дня ПЕРЕД ним. Дней осталось ≥ 1.
+ *  3. Обязательное до конца горизонта вычитается: расходные правила по расписанию (проведённые и пропущенные за дату не считаются),
+ *     регулярные переводы с обычного кошелька на накопления (деньги уходят из тратимых) и остаток по долгам «я должен» со сроком
+ *     возврата не позже конца горизонта (просроченные — тоже: они уже должны быть отданы).
  *     Платёж по долгу, который уже учтён остатком долга, второй раз не вычитается.
  *  4. perDay = max(0, floor((деньги − обязательное) / днейОсталось)). Все деления целочисленные, округление вниз:
  *     никогда не обещаем больше, чем есть. Деньги, платежи и долги в валюте без курса в расчёт не входят — это возвращается в skipped.
@@ -20,6 +23,12 @@ import type { CurrencyCode, DebtDirection, IsoDate, IsoDateTime, Minor, TxKind, 
 
 /** Виды кошельков, чьи деньги можно тратить. Накопления — нет. */
 export const SPENDABLE_KINDS: readonly WalletKind[] = ['cash', 'card', 'bank', 'other'];
+const isSpendableKind = (kind: WalletKind | undefined): boolean => kind !== undefined && SPENDABLE_KINDS.includes(kind);
+
+/** Деньги этого кошелька входят в «деньги на руках»: он не в архиве и не накопление. */
+export function isSpendableWallet(w: Pick<ForecastWallet, 'kind' | 'archivedAt'>): boolean {
+  return w.archivedAt === null && isSpendableKind(w.kind);
+}
 /** За сколько последних дней считается «обычно вы тратите в день». */
 export const USUAL_WINDOW_DAYS = 30;
 
@@ -34,7 +43,9 @@ export interface ForecastRule extends ScheduleRule {
   id: UUID;
   kind: TxKind;
   walletId: UUID;
-  /** В валюте кошелька правила. */
+  /** Только у переводов: кошелёк-получатель. */
+  toWalletId?: UUID | null;
+  /** В валюте кошелька правила (у перевода — списывается с walletId). */
   amountMinor: Minor;
   debtId: UUID | null;
   archivedAt: IsoDateTime | null;
@@ -75,7 +86,7 @@ export interface ForecastInput {
   debts: readonly ForecastDebt[];
   /** Единиц `to` за 1 единицу `from`; null — курса нет. */
   getRate: (from: CurrencyCode, to: CurrencyCode) => number | null;
-  /** Расходы сегодня (без долгов, с комиссиями), в основной валюте. */
+  /** Расходы сегодня (без долгов, с комиссиями), в основной валюте, ТОЛЬКО из кошельков, чьи деньги входят в «деньги на руках». */
   spentTodayMinor: Minor;
   /** Средний расход в день за последние дни (usualPerDay); null — истории ещё нет. */
   usualPerDayMinor: Minor | null;
@@ -238,14 +249,18 @@ function budgetPart(b: ForecastTotalBudget | null, base: CurrencyCode, today: Is
   };
 }
 
-/** Ближайший ещё не проведённый доход строго после сегодня и не позже конца месяца. */
-function nextIncomeDate(input: ForecastInput, monthEnd: IsoDate): IsoDate | null {
+/**
+ * Ближайший ещё не проведённый доход строго после сегодня и не позже конца месяца.
+ * Доход на накопления (или на неизвестный кошелёк) на деньги на руках не приходит, поэтому горизонт не обрывает.
+ */
+function nextIncomeDate(input: ForecastInput, monthEnd: IsoDate, kindOfWallet: ReadonlyMap<UUID, WalletKind>): IsoDate | null {
   const { today, rules, doneOccurrences } = input;
   if (today >= monthEnd) return null;
   const from = addDays(today, 1);
   let best: IsoDate | null = null;
   for (const r of rules) {
     if (r.kind !== 'income' || r.deletedAt !== null || r.archivedAt !== null) continue;
+    if (!isSpendableKind(kindOfWallet.get(r.walletId))) continue;
     for (const date of occurrencesBetween(r, from, monthEnd)) {
       if (doneOccurrences.has(occurrenceKey(r.id, date))) continue;
       if (best === null || date < best) best = date;
@@ -253,6 +268,22 @@ function nextIncomeDate(input: ForecastInput, monthEnd: IsoDate): IsoDate | null
     }
   }
   return best;
+}
+
+/**
+ * Уходят ли деньги правила из «денег на руках»: 'pays' — да (расход с обычного кошелька или перевод с него на накопления),
+ * 'none' — нет (расход с накопления, перевод между обычными кошельками, доход), 'unknown' — кошелёк не найден, понять нельзя.
+ */
+function leavesSpendable(r: ForecastRule, kindOfWallet: ReadonlyMap<UUID, WalletKind>): 'pays' | 'none' | 'unknown' {
+  const from = kindOfWallet.get(r.walletId);
+  if (r.kind === 'expense') return from === undefined ? 'unknown' : isSpendableKind(from) ? 'pays' : 'none';
+  if (r.kind === 'transfer') {
+    if (!r.toWalletId) return 'none'; // перевод без получателя: вычитать нечего
+    const to = kindOfWallet.get(r.toWalletId);
+    if (from === undefined || to === undefined) return 'unknown';
+    return isSpendableKind(from) && !isSpendableKind(to) ? 'pays' : 'none';
+  }
+  return 'none';
 }
 
 /**
@@ -281,7 +312,8 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
 
     // 2. горизонт
     const monthEnd = endOfMonth(today);
-    const incomeDate = nextIncomeDate(input, monthEnd);
+    const kindOfWallet = new Map(input.wallets.map((w) => [w.id, w.kind] as const));
+    const incomeDate = nextIncomeDate(input, monthEnd, kindOfWallet);
     const horizonEnd = incomeDate === null ? monthEnd : addDays(incomeDate, -1);
     const daysLeft = daysBetween(today, horizonEnd) + 1;
 
@@ -305,12 +337,14 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
     const paymentCountByCurrency = new Map<CurrencyCode, number>();
     let unknownWalletPayments = 0;
     for (const r of input.rules) {
-      if (r.kind !== 'expense' || r.deletedAt !== null || r.archivedAt !== null) continue;
+      if (r.deletedAt !== null || r.archivedAt !== null) continue;
+      const leaves = leavesSpendable(r, kindOfWallet);
+      if (leaves === 'none') continue;
       if (r.debtId !== null && debtIdsDue.has(r.debtId)) continue; // уже учтено остатком долга
       for (const date of occurrencesBetween(r, today, horizonEnd)) {
         if (input.doneOccurrences.has(occurrenceKey(r.id, date))) continue;
         const currency = currencyOfWallet.get(r.walletId);
-        if (currency === undefined) {
+        if (leaves === 'unknown' || currency === undefined) {
           unknownWalletPayments++;
           continue;
         }

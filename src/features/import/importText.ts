@@ -26,6 +26,7 @@ export function walletNote(t: WalletTarget): string {
       return t.reason;
     case 'existing':
       if (t.how === 'saved') return 'Кошелёк, созданный прошлым импортом.';
+      if (t.how === 'history') return 'Сюда уже попали операции этого счёта при прошлой загрузке: новые пойдут туда же.';
       if (t.how === 'name') return 'Найден у вас по названию и валюте.';
       return 'Выбран вами.';
   }

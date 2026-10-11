@@ -66,6 +66,8 @@ async function openPage(setup?: Setup, path = '/budgets') {
   );
   await findByRole('heading', { name: 'Бюджеты', level: 1 });
   await waitFor(() => expect(screen.queryByText('Считаем…')).toBeNull());
+  // Прогноз читается отдельным запросом: ждём и его (серый каркас карточки уходит), иначе под нагрузкой тест видит ещё пустую карточку.
+  await waitFor(() => expect(document.querySelector('[aria-busy="true"][aria-label="Сколько можно тратить в день"]')).toBeNull());
   return td;
 }
 

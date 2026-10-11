@@ -1,8 +1,9 @@
 import type { Store } from '@/db';
 import { decodeBytes } from '@/import/decode';
+import { loadExisting } from '@/import/existing';
 import { computeIds, type PlanIds } from '@/import/ids';
 import { parseZenmoney } from '@/import/parse';
-import { ImportFileError, MAX_FILE_BYTES, type ParsedFile } from '@/import/types';
+import { ImportFileError, MAX_FILE_BYTES, type ExistingTx, type ParsedFile } from '@/import/types';
 
 /** Читает выбранный файл как байты. Blob.arrayBuffer() есть не везде — запасной путь через FileReader. */
 function readBytes(file: Blob): Promise<Uint8Array> {
@@ -22,8 +23,8 @@ export interface ImportSession {
   fileName: string;
   parsed: ParsedFile;
   ids: PlanIds;
-  /** id операции → удалена ли она (все операции базы, включая удалённые). */
-  existing: Map<string, boolean>;
+  /** Все операции базы, включая удалённые: id → данные операции (удалена ли, где лежит, что в ней). */
+  existing: Map<string, ExistingTx>;
 }
 
 /**
@@ -38,8 +39,6 @@ export async function loadImportFile(store: Store, file: File): Promise<ImportSe
   await paint(); // дать экрану показать «Читаем файл…» до тяжёлого разбора
   const parsed = parseZenmoney(text, encoding);
   const ids = await computeIds(store.userId, parsed);
-  const all = await store.db.transactions.toCollection().primaryKeys();
-  const deleted = new Set(await store.db.transactions.filter((t) => t.deletedAt !== null).primaryKeys());
-  const existing = new Map<string, boolean>(all.map((id) => [id, deleted.has(id)] as const));
+  const existing = await loadExisting(store);
   return { fileName: file.name, parsed, ids, existing };
 }

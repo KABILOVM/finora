@@ -36,7 +36,8 @@ async function mkRule(
     ...input,
   });
   if (createdAt === null) return rule;
-  await store.db.recurring_rules.update(rule.id, { createdAt });
+  // «давно создан и с тех пор не правился»: у правила две метки времени, граница окна смотрит на обе
+  await store.db.recurring_rules.update(rule.id, { createdAt, clientUpdatedAt: createdAt });
   return (await store.db.recurring_rules.get(rule.id)) as LocalRow<RecurringRule>;
 }
 

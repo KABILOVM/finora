@@ -7,9 +7,15 @@ import { useRates } from '@/rates/hooks';
 import { runAutoPost, type AutoPostResult } from '@/recurring/autoPost';
 import { onAutoPostRequest, publishFailures, takeNewMissingRates } from '@/recurring/autoPostState';
 import { pairText } from '@/recurring/fx';
+import { useSyncEnabled, useSyncNow } from '@/sync/syncContext';
 
 /** Как часто проверять, что наступил новый день (мс). */
 const DAY_CHECK_MS = 60_000;
+/**
+ * Сколько ждём обмен с сервером перед проходом при открытии приложения или возврате на вкладку (мс). Дольше не ждём: медленная
+ * или зависшая сеть не должна навсегда задержать автоплатежи (без сети обмен заканчивается сразу).
+ */
+const SYNC_WAIT_MS = 10_000;
 /** Сколько проходов подряд делаем, если за один не уместились все платежи (лимит записей за проход). */
 const MAX_PASSES = 5;
 
@@ -37,7 +43,7 @@ class Silent extends Component<{ children: ReactNode }, { failed: boolean }> {
   }
 }
 
-function Engine({ store }: { store: Store }) {
+function Engine({ store, syncWaitMs }: { store: Store; syncWaitMs: number }) {
   const toast = useToast();
   const navigate = useNavigate();
   const { getRate, refreshing } = useRates();
@@ -51,6 +57,14 @@ function Engine({ store }: { store: Store }) {
   toastRef.current = toast;
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
+  const syncNow = useSyncNow();
+  const syncNowRef = useRef(syncNow);
+  syncNowRef.current = syncNow;
+  const syncEnabled = useSyncEnabled();
+  const syncEnabledRef = useRef(syncEnabled);
+  syncEnabledRef.current = syncEnabled;
+  const syncWaitRef = useRef(syncWaitMs);
+  syncWaitRef.current = syncWaitMs;
   const requestRef = useRef<(() => void) | null>(null);
   const mountedOnce = useRef(false);
 
@@ -84,17 +98,51 @@ function Engine({ store }: { store: Store }) {
       return { posted: result.posted, capped: result.capped };
     };
 
-    const request = () => {
+    /**
+     * Свежий обмен с сервером перед проходом. Без него устройство, которое давно не открывали, провело бы платёж по старым данным:
+     * пропуск или исправленную сумму с другого устройства оно ещё не видело, а его запись («последний побеждает») затёрла бы чужое.
+     * Без облака (локальный режим) и без сети ждать нечего; зависшую сеть ждём не дольше SYNC_WAIT_MS.
+     */
+    const freshSync = async (): Promise<void> => {
+      if (!syncEnabledRef.current) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, syncWaitRef.current);
+      });
+      try {
+        await Promise.race([syncNowRef.current().catch(() => undefined), timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    // Открытие, возврат на вкладку: сначала обмен с сервером (fresh), потом проход. Остальные поводы (сохранили правило,
+    // наступил новый день, обновились курсы) проходят сразу: данные устройства в этот момент свежие.
+    let needFresh = false;
+    let waiting = false; // ждём обмен: проход ещё не начался и сам увидит всё, что изменилось за это время
+
+    const request = (fresh = false) => {
       if (cancelled) return;
       if (running) {
-        again = true;
+        if (!waiting) again = true;
         return;
       }
+      if (fresh) needFresh = true;
       running = true;
       void (async () => {
         try {
           let posted = 0;
           for (let n = 0; n < MAX_PASSES; n++) {
+            if (needFresh) {
+              needFresh = false;
+              waiting = true;
+              try {
+                await freshSync();
+              } finally {
+                waiting = false;
+              }
+              if (cancelled) return;
+            }
             again = false;
             const r = await pass();
             posted += r.posted;
@@ -110,25 +158,26 @@ function Engine({ store }: { store: Store }) {
         }
       })();
     };
-    requestRef.current = request;
+    requestRef.current = () => request();
 
-    request(); // приложение открыто
+    request(true); // приложение открыто
     const onVisible = () => {
-      if (document.visibilityState === 'visible') request();
+      if (document.visibilityState === 'visible') request(true);
     };
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', request);
+    const onFocus = () => request(true);
+    window.addEventListener('focus', onFocus);
     const dayTimer = setInterval(() => {
       if (todayLocal() !== lastDay) request(); // наступил новый день
     }, DAY_CHECK_MS);
-    const off = onAutoPostRequest(request);
+    const off = onAutoPostRequest(() => request());
 
     return () => {
       cancelled = true;
       requestRef.current = null;
       clearInterval(dayTimer);
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', request);
+      window.removeEventListener('focus', onFocus);
       off();
     };
   }, [store]);
@@ -148,13 +197,14 @@ function Engine({ store }: { store: Store }) {
 /**
  * Невидимый компонент: проводит платежи «Проводить само», когда приложение открыли, вернулись на вкладку или наступил новый день.
  * Без хранилища (экран входа) не делает ничего. Правила проведения — в src/recurring/autoPost.ts и plan.ts.
+ * syncWaitMs — сколько ждать обмен с сервером перед проходом (подменяется только в тестах).
  */
-export default function AutoPostRunner() {
+export default function AutoPostRunner({ syncWaitMs = SYNC_WAIT_MS }: { syncWaitMs?: number } = {}) {
   const store = useOptionalStore();
   if (!store) return null;
   return (
     <Silent key={store.userId}>
-      <Engine store={store} />
+      <Engine store={store} syncWaitMs={syncWaitMs} />
     </Silent>
   );
 }

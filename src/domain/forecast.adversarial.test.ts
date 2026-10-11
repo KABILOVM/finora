@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeDailyForecast,
+  occurrenceKey,
   type DailyForecast,
   type DailyForecastOk,
   type ForecastInput,
@@ -63,6 +64,107 @@ describe('атака: правила на кошельке-накоплении 
     const f = calc({ ...twoWallets, rules: [rule('from-box', { kind: 'expense', walletId: 'box', amountMinor: 40_000, startOn: '2026-10-25' })] });
     expect(f.paymentsMinor).toBe(0);
     expect(f.perDayMinor).toBe(10_000);
+  });
+
+  it('расход с копилки и доход в копилку вместе: деньги на руках и горизонт не меняются', () => {
+    const f = calc({
+      ...twoWallets,
+      rules: [
+        rule('from-box', { kind: 'expense', walletId: 'box', amountMinor: 40_000, startOn: '2026-10-24' }),
+        rule('interest', { kind: 'income', walletId: 'box', amountMinor: 5_000, startOn: '2026-10-23' }),
+      ],
+    });
+    expect(f).toMatchObject({ incomeDate: null, daysLeft: 10, paymentsMinor: 0, paymentsCount: 0, perDayMinor: 10_000, approximate: false });
+  });
+});
+
+describe('атака: регулярный перевод из тратимых денег в копилку — деньги на руках уменьшатся', () => {
+  const wallets = [wallet('cash'), wallet('card', { kind: 'card' }), wallet('box', { kind: 'savings' }), wallet('usd', { currency: 'USD' })];
+  const balances = new Map([['cash', 100_000], ['card', 0], ['box', 900_000], ['usd', 0]]);
+  const transfer = (id: string, over: Partial<ForecastRule> = {}) =>
+    rule(id, { kind: 'transfer', walletId: 'cash', toWalletId: 'box', amountMinor: 40_000, startOn: '2026-10-25', ...over });
+
+  it('вычитается как платёж: (1 000 − 400) ÷ 10 дней = 60 в день', () => {
+    const f = calc({ wallets, balances, rules: [transfer('save')] });
+    expect(f.paymentsMinor).toBe(40_000);
+    expect(f.paymentsCount).toBe(1);
+    expect(f.perDayMinor).toBe(6_000);
+    expect(f.approximate).toBe(false);
+  });
+
+  it('повторяющийся перевод: каждая дата внутри горизонта', () => {
+    const f = calc({ wallets, balances, rules: [transfer('weekly', { frequency: 'weekly', startOn: '2026-10-22', amountMinor: 10_000 })] });
+    // 22 и 29 октября
+    expect(f.paymentsCount).toBe(2);
+    expect(f.paymentsMinor).toBe(20_000);
+  });
+
+  it('уже проведённый или пропущенный перевод второй раз не вычитается', () => {
+    const f = calc({ wallets, balances, rules: [transfer('save')], doneOccurrences: new Set([occurrenceKey('save', '2026-10-25')]) });
+    expect(f.paymentsMinor).toBe(0);
+    expect(f.paymentsCount).toBe(0);
+  });
+
+  it('перевод между обычными кошельками (наличные → карта) деньги на руках не уменьшает', () => {
+    const f = calc({ wallets, balances, rules: [transfer('move', { toWalletId: 'card' })] });
+    expect(f.paymentsMinor).toBe(0);
+    expect(f.perDayMinor).toBe(10_000);
+  });
+
+  it('перевод ИЗ копилки на руки в расчёт не входит (ни как платёж, ни как доход)', () => {
+    const f = calc({ wallets, balances, rules: [transfer('take', { walletId: 'box', toWalletId: 'cash' })] });
+    expect(f.paymentsMinor).toBe(0);
+    expect(f.incomeDate).toBeNull();
+    expect(f.perDayMinor).toBe(10_000);
+  });
+
+  it('перевод с долларового кошелька в копилку: сумма в долларах, пересчёт по курсу, число приблизительное', () => {
+    const f = calc({
+      wallets,
+      balances,
+      rules: [transfer('usd-save', { walletId: 'usd', amountMinor: 1_000 })],
+      getRate: (from, to) => (from === to ? 1 : from === 'USD' && to === 'TJS' ? 10.9 : null),
+    });
+    expect(f.paymentsMinor).toBe(10_900);
+    expect(f.approximate).toBe(true);
+  });
+
+  it('перевод после конца горизонта (раньше придёт доход) не вычитается', () => {
+    const f = calc({ wallets, balances, rules: [transfer('late', { startOn: '2026-10-28' }), rule('salary', { kind: 'income', startOn: '2026-10-25' })] });
+    expect(f.horizonEnd).toBe('2026-10-24');
+    expect(f.paymentsMinor).toBe(0);
+  });
+
+  it('архивный и удалённый перевод не вычитаются', () => {
+    const f = calc({
+      wallets,
+      balances,
+      rules: [transfer('a', { archivedAt: '2026-10-01T00:00:00.000Z' }), transfer('d', { deletedAt: '2026-10-01T00:00:00.000Z' })],
+    });
+    expect(f.paymentsMinor).toBe(0);
+  });
+
+  it('получатель не найден: платёж не вычитается, но об этом сказано; перевод без получателя ничего не вычитает', () => {
+    const lost = calc({ wallets, balances, rules: [transfer('ghost', { toWalletId: 'нет-такого' })] });
+    expect(lost.unknownWalletPayments).toBe(1);
+    expect(lost.paymentsMinor).toBe(0);
+    expect(lost.approximate).toBe(true);
+    const none = calc({ wallets, balances, rules: [transfer('none', { toWalletId: null })] });
+    expect(none.unknownWalletPayments).toBe(0);
+    expect(none.paymentsMinor).toBe(0);
+  });
+
+  it('перевод в копилку больше денег на руках: нехватка названа точно', () => {
+    const f = calc({ wallets, balances, rules: [transfer('big', { amountMinor: 130_000 })] });
+    expect(f.notEnough).toBe(true);
+    expect(f.shortfallMinor).toBe(30_000);
+    expect(f.perDayMinor).toBe(0);
+  });
+
+  it('перевод на копилку в последний день месяца: сегодня 31-е, платёж сегодня же', () => {
+    const f = calc({ today: '2026-10-31', wallets, balances, rules: [transfer('last', { startOn: '2026-10-31' })] });
+    expect(f.daysLeft).toBe(1);
+    expect(f.perDayMinor).toBe(60_000);
   });
 });
 
