@@ -158,9 +158,42 @@ function renderDashboard(){
  </div>
  <div class="card"><div class="section-head"><h2>Бюджеты</h2><button class="text-btn" data-goto="budgets">Все ${ic("chevron")}</button></div>${state.budgets.length?`<div class="ring-grid">${state.budgets.slice(0,4).map(budgetItem).join("")}</div>`:emptyHtml("target","Лимитов нет",`<button class="primary-btn" data-goto="budgets">${ic("plus")}</button>`)}</div>`;
 }
+const txFilter={q:"",type:"all",period:"all",wallet:"all"};
+function filteredTx(){
+ const f=txFilter,q=f.q.trim().toLowerCase(),weekAgo=iso(new Date(today.getFullYear(),today.getMonth(),today.getDate()-6)),mkey=iso(today).slice(0,7);
+ return state.transactions.map((t,i)=>[t,i]).filter(([t])=>
+  (f.type==="all"||t.type===f.type)&&(f.wallet==="all"||t.walletId===f.wallet||t.toWalletId===f.wallet)&&
+  (f.period==="all"||(f.period==="week"?t.date>=weekAgo:t.date.slice(0,7)===mkey))&&
+  (!q||[t.note,t.category,wallet(t.walletId).name,String(t.amount)].join(" ").toLowerCase().includes(q))
+ ).sort((a,b)=>b[0].date.localeCompare(a[0].date)||b[1]-a[1]).map(x=>x[0]);
+}
+function dayLabel(d){
+ const t0=iso(today),y=iso(new Date(today.getFullYear(),today.getMonth(),today.getDate()-1));
+ return d===t0?"Сегодня":d===y?"Вчера":dateLabel(d);
+}
+function txListHtml(){
+ const list=filteredTx();
+ if(!list.length)return state.transactions.length?emptyHtml("search","Ничего не найдено"):emptyHtml("list","Операций нет",`<button class="primary-btn" data-add="expense">${ic("plus")}<span>Добавить</span></button>`);
+ const groups=[];for(const t of list){const g=groups[groups.length-1];if(g&&g.date===t.date)g.items.push(t);else groups.push({date:t.date,items:[t]});}
+ return groups.map(g=>{
+  const net=g.items.reduce((a,t)=>a+(t.type==="transfer"?0:txBase(t)*(t.type==="income"?1:-1)),0);
+  return `<div class="day"><div class="day-head"><span>${dayLabel(g.date)}</span>${net?`<span class="${net>0?"positive":"negative"}">${net>0?"+":"−"}${fmt(Math.abs(net),state.baseCurrency)}</span>`:""}</div><div class="transactions">${g.items.map(t=>transactionHtml(t,true)).join("")}</div></div>`;
+ }).join("");
+}
+function txCountLabel(){const n=filteredTx().length,all=state.transactions.length;return n===all?String(all):`${n} / ${all}`;}
 function renderTransactions(){
- const list=[...state.transactions].sort((a,b)=>b.date.localeCompare(a.date));
- return `<div class="card"><div class="section-head"><h2>История</h2><span class="pill">${list.length}</span></div>${list.length?`<div class="transactions">${list.map(t=>transactionHtml(t,true)).join("")}</div>`:emptyHtml("list","Операций нет",`<button class="primary-btn" data-add="expense">${ic("plus")}<span>Добавить</span></button>`)}</div>`;
+ if(txFilter.wallet!=="all"&&!state.wallets.some(w=>w.id===txFilter.wallet))txFilter.wallet="all";
+ const f=txFilter,seg=(name,items)=>`<div class="segmented sm" data-filter="${name}">${items.map(([v,l])=>`<button type="button" data-v="${v}" class="${f[name]===v?"selected":""}">${l}</button>`).join("")}</div>`;
+ return `<div class="card"><div class="section-head"><h2>История</h2><span class="pill" id="txCount">${txCountLabel()}</span></div>
+  <label class="field-pill wide tx-search">${ic("search")}<input id="txSearch" type="search" placeholder="Поиск" value="${escapeHtml(f.q)}" aria-label="Поиск" autocomplete="off"><button type="button" class="eye" id="txSearchClear" aria-label="Очистить" ${f.q?"":"hidden"}>${ic("x")}</button></label>
+  <div class="filters">${seg("type",[["all","Все"],["expense","Расходы"],["income","Доходы"],["transfer","Переводы"]])}${seg("period",[["all","Всё"],["month","Месяц"],["week","Неделя"]])}</div>
+  ${state.wallets.length>1?`<div class="wallet-pick" data-filter="wallet"><button type="button" class="chip ${f.wallet==="all"?"selected":""}" data-v="all">Все</button>${state.wallets.map(w=>`<button type="button" class="chip ${f.wallet===w.id?"selected":""}" data-v="${w.id}">${walletGlyph(w)}<span>${escapeHtml(w.name)}</span></button>`).join("")}</div>`:""}
+  <div id="txList">${txListHtml()}</div></div>`;
+}
+function refreshTxList(){
+ $("#txList").innerHTML=txListHtml();$("#txCount").textContent=txCountLabel();
+ const l=$("#txList");l.classList.remove("swap");void l.offsetWidth;l.classList.add("swap");
+ bindTxRows();$$("#txList [data-add]").forEach(b=>b.onclick=()=>openModal(b.dataset.add));
 }
 function renderWallets(){
  const picks=(name,items,fn)=>`<div class="chip-row" data-pick="${name}">${items.map((v,i)=>fn(v,i)).join("")}</div><input type="hidden" name="${name}" value="${items[0]}">`;
@@ -332,17 +365,25 @@ function bindPicks(){
   const input=box.closest("form").elements[box.dataset.pick];if(input)input.value=b.dataset.v;
  }));
 }
-function bindView(){
- $$("[data-goto]").forEach(b=>b.onclick=()=>goto(b.dataset.goto));
- $$("[data-add]").forEach(b=>b.onclick=()=>openModal(b.dataset.add));
- const eye=$("#heroEye");if(eye)eye.onclick=()=>{localStorage.setItem("finora-hide",localStorage.getItem("finora-hide")==="1"?"0":"1");render();};
- bindPicks();
+function bindTxRows(){
  $$("[data-delete]").forEach(b=>b.onclick=e=>{e.stopPropagation();deleteTx(b.dataset.delete,b.closest(".swipe"));});
  $$("[data-edit]").forEach(el=>el.onclick=e=>{
   if(e.target.closest("[data-delete]"))return;
   const row=el.closest(".swipe");if(row&&row.classList.contains("open")){closeRow();return;}
   const t=state.transactions.find(x=>x.id===el.dataset.edit);if(t)openModal(t.type,t);
  });
+}
+function bindView(){
+ $$("[data-goto]").forEach(b=>b.onclick=()=>goto(b.dataset.goto));
+ $$("[data-add]").forEach(b=>b.onclick=()=>openModal(b.dataset.add));
+ const eye=$("#heroEye");if(eye)eye.onclick=()=>{localStorage.setItem("finora-hide",localStorage.getItem("finora-hide")==="1"?"0":"1");render();};
+ bindPicks();
+ bindTxRows();
+ const ts=$("#txSearch");if(ts){
+  ts.oninput=()=>{txFilter.q=ts.value;$("#txSearchClear").hidden=!ts.value;refreshTxList();};
+  $("#txSearchClear").onclick=()=>{ts.value="";txFilter.q="";$("#txSearchClear").hidden=true;refreshTxList();ts.focus();};
+ }
+ $$("[data-filter]").forEach(box=>box.addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(!b)return;txFilter[box.dataset.filter]=b.dataset.v;box.querySelectorAll("[data-v]").forEach(x=>x.classList.toggle("selected",x===b));refreshTxList();}));
  $$("[data-delete-budget]").forEach(b=>b.onclick=e=>{e.stopPropagation();const c=b.dataset.deleteBudget;undoable("Лимит удалён",()=>{state.budgets=state.budgets.filter(x=>x.category!==c);});});
  $$("[data-budget]").forEach(el=>el.onclick=e=>{
   if(e.target.closest("[data-delete-budget]"))return;

@@ -462,3 +462,17 @@ h2{font-size:16px;letter-spacing:-.2px;margin:0;font-weight:720}
 .chip-x{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;color:var(--muted);margin-left:2px;transition:background .2s,color .2s}
 .chip-x:hover{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
 .chip-x .ic{font-size:13px}
+
+/* ───── Поиск и фильтры ───── */
+.tx-search{margin-bottom:10px}
+.tx-search input[type=search]{-webkit-appearance:none;appearance:none}
+.tx-search input::-webkit-search-cancel-button{display:none}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.filters .segmented{flex:1 1 220px}
+.segmented.sm button{padding:7px 8px;font-size:12.5px}
+#txList.swap{animation:fade .25s ease both}
+.day+.day{margin-top:6px}
+.day-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--muted);padding:12px 0 2px;text-transform:uppercase;letter-spacing:.6px}
+.day-head span:last-child{text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
+.day .swipe:last-child{border-bottom:0}
+.eye[hidden]{display:none}
