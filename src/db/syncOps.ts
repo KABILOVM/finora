@@ -4,7 +4,7 @@ import { SYNC_TABLES, type EntityOf, type SyncTableName } from '@/sync/tables';
 import type { Clock } from './clock';
 import { cursorKey, META_LAST_STAMP, type FinoraDB, type MetaValue } from './database';
 import { ValidationError } from './errors';
-import { mergeRemoteRow, pickColumns } from './syncMerge';
+import { mergeRemoteRow, pickColumns, type MergeContext } from './syncMerge';
 
 /**
  * Примитивы для движка синхронизации. Движок только оркестрирует (когда слать, когда забирать),
@@ -30,6 +30,11 @@ export interface ApplyResult {
   keptLocal: number;
   /** Сколько неотправленных локальных правок проиграли более новой серверной версии (входят в applied). */
   lostLocal: number;
+  /**
+   * Сколько неотправленных правок сложены с серверной версией по группам полей и остались в очереди с новой меткой.
+   * Такие строки надо отправить ещё раз: сервер их версии пока не видел.
+   */
+  merged: number;
 }
 
 export interface SyncCounts {
@@ -152,7 +157,8 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
           const p = pushed[i];
           if (!row || !p || row.dirty !== 1) return;
           if (row.clientUpdatedAt !== p.clientUpdatedAt || row.deviceId !== p.deviceId) return;
-          cleared.push({ ...row, dirty: 0, syncError: null });
+          const { dirtyBase: _confirmed, ...rest } = row as AnyRow & { dirtyBase?: unknown };
+          cleared.push({ ...rest, dirty: 0, syncError: null } as AnyRow);
         });
         if (cleared.length > 0) await tbl.bulkPut(cleared);
         return cleared.length;
@@ -230,10 +236,18 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
         const ids = [...new Set(incoming.map((r) => r.entity.id))];
         (await tbl.bulkGet(ids)).forEach((row, i) => known.set(ids[i] as string, row));
 
-        const result: ApplyResult = { applied: 0, keptLocal: 0, lostLocal: 0 };
+        // Слитая правка получает метку больше всех, что мы видели, — иначе сервер молча проигнорировал бы её как устаревшую.
+        // Метке с СЕРВЕРА верим и тогда, когда она «из будущего» по нашим часам: сервер сам не отдаёт метки дальше своего
+        // «сейчас + 5 минут» (зажимает их), а наши часы могут отставать на часы или дни. Не поверив, мы выдали бы правке метку
+        // старше серверной версии: сервер молча проигнорировал бы её, а мы сочли бы отправленной — устройства разошлись бы
+        // навсегда (проверка границ 2000–2100 остаётся).
+        for (const st of stampsDesc) if (clock.observe(st, true)) break;
+        const merge: MergeContext = { table, stamp: () => clock.tick(), deviceId: clock.deviceId };
+
+        const result: ApplyResult = { applied: 0, keptLocal: 0, lostLocal: 0, merged: 0 };
         const dirtyIds = new Set<string>();
         for (const { entity, serverSeq } of incoming) {
-          const m = mergeRemoteRow(known.get(entity.id), entity, serverSeq);
+          const m = mergeRemoteRow(known.get(entity.id), entity, serverSeq, merge);
           if (m.row) {
             known.set(entity.id, m.row);
             dirtyIds.add(entity.id);
@@ -243,15 +257,11 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
             result.applied++;
             result.lostLocal++;
           } else if (m.outcome === 'keptLocal') result.keptLocal++;
+          else if (m.outcome === 'merged') result.merged++;
         }
         const toWrite = [...dirtyIds].map((id) => known.get(id)).filter((r): r is AnyRow => r !== undefined);
         if (toWrite.length > 0) await tbl.bulkPut(toWrite);
 
-        // Следующие правки этого устройства будут новее всего, что мы видели. Метке с СЕРВЕРА верим и тогда, когда она
-        // «из будущего» по нашим часам: сервер сам не отдаёт метки дальше своего «сейчас + 5 минут» (зажимает их), а наши часы
-        // могут отставать на часы или дни. Не поверив, мы выдали бы правке метку старше серверной версии: сервер молча
-        // проигнорировал бы её, а мы сочли бы отправленной — устройства разошлись бы навсегда (проверка границ 2000–2100 остаётся).
-        for (const st of stampsDesc) if (clock.observe(st, true)) break;
         await db.meta.put({ key: cursorKey(table), value: Math.max(cursor, nextCursor) });
         return result;
       });

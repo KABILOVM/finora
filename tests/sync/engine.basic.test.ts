@@ -187,8 +187,12 @@ describe('правка во время отправки', () => {
     gate.open();
     await cycle;
 
+    // Сначала версия «в пути» (первая не очистила строку). Правка поверх неё сделана до того, как мы узнали номер версии, которую
+    // сервер присвоил нашей же отправке, поэтому вторая отправка получает отказ «версия ушла вперёд», устройство забирает
+    // собственную версию и отправляет правку заново — уже с верной ожидаемой версией. Ничего не теряется.
     const pushes = sp.pushes('wallets');
-    expect(pushes).toHaveLength(2); // сначала версия «в пути», потом новая (первая не очистила строку)
+    expect(pushes).toHaveLength(3);
+    expect(sp.pulls('wallets').length).toBeGreaterThanOrEqual(2); // между отказом и повтором
     expect(serverRows(server, 'wallets').find((r) => r['id'] === w.id)?.['name']).toBe('Копилка 2');
     expect(await a.store.db.wallets.get(w.id)).toMatchObject({ name: 'Копилка 2', dirty: 0 });
     expect(a.engine.getStatus().pending).toBe(0);

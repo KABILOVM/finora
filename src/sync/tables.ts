@@ -12,6 +12,14 @@ export type SyncTableName = (typeof SYNC_TABLES)[number];
 
 export type WireValue = string | number | boolean | null;
 export type WireRow = Record<string, WireValue>;
+
+/**
+ * Служебная колонка ЗАПРОСА (в таблицах она всегда пустая): версия строки на сервере (server_seq), поверх которой сделана правка.
+ * Сервер принимает правку существующей строки, только если эта версия всё ещё текущая (проверка и запись — compare-and-set),
+ * иначе отвечает отказом 'conflict' (см. transport.ts). Значения: нет колонки / null — без проверки (старые клиенты, «последний побеждает»);
+ * 0 — «строки на сервере нет»; n ≥ 1 — «строка на сервере в версии n».
+ */
+export const BASE_SEQ_COLUMN = 'base_seq';
 /** Строка, пришедшая с сервера: плюс курсор. */
 export type PulledRow = WireRow & { server_seq: number };
 
@@ -95,6 +103,27 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
   },
 };
 
+/**
+ * Группы полей для слияния правок двух устройств (см. db/syncMerge.ts). Группа — неделимая единица: правки РАЗНЫХ групп одной
+ * строки (заметку с одного телефона, сумму с другого) складываются, а правки одной группы решает «новее побеждает» — целиком группой.
+ * Поля, связанные проверками сервера (CHECK transactions_transfer_shape / plain_shape: вид, кошельки, суммы, категория, курс),
+ * живут в одной группе: так слияние не соберёт строку, которую сервер отвергнет.
+ * Каждая колонка договора, кроме служебных (MERGE_META_FIELDS), входит ровно в одну группу — это проверяет тест.
+ */
+export const MERGE_META_FIELDS: readonly string[] = ['id', 'createdAt', 'clientUpdatedAt', 'deviceId'];
+
+export const MERGE_GROUPS: Record<SyncTableName, ReadonlyArray<readonly string[]>> = {
+  settings: [['baseCurrency'], ['locale'], ['weekStartsOn'], ['defaultWalletId'], ['deletedAt']],
+  wallets: [['name'], ['currency', 'openingBalanceMinor'], ['kind'], ['color', 'icon'], ['sortOrder'], ['archivedAt'], ['deletedAt']],
+  categories: [['name'], ['kind'], ['parentId'], ['color', 'icon'], ['sortOrder'], ['archivedAt'], ['deletedAt']],
+  transactions: [
+    ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
+    ['occurredOn'],
+    ['note'],
+    ['deletedAt'],
+  ],
+};
+
 export type EntityOf<T extends SyncTableName> = T extends 'settings'
   ? Settings
   : T extends 'wallets'
@@ -110,14 +139,18 @@ export class WireError extends Error {
   }
 }
 
-/** Сущность → строка для отправки. user_id/server_seq сервер ставит сам; локальные поля (dirty и т.п.) не уходят. */
-export function toWire(table: SyncTableName, entity: Entity): WireRow {
+/**
+ * Сущность → строка для отправки. user_id/server_seq сервер ставит сам; локальные поля (dirty и т.п.) не уходят.
+ * baseSeq — версия строки на сервере, поверх которой сделана правка (см. BASE_SEQ_COLUMN); не задана — проверки версии не будет.
+ */
+export function toWire(table: SyncTableName, entity: Entity, baseSeq?: number): WireRow {
   const row: WireRow = {};
   const src = entity as unknown as Record<string, unknown>;
   for (const c of TABLE_SPECS[table].columns) {
     const v = src[c.field];
     row[c.column] = v === undefined ? null : (v as WireValue);
   }
+  if (baseSeq !== undefined) row[BASE_SEQ_COLUMN] = baseSeq;
   return row;
 }
 

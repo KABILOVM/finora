@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Transaction } from '@electric-sql/pglite';
-import { SYNC_TABLES, TABLE_SPECS, toWire } from '@/sync/tables';
+import { BASE_SEQ_COLUMN, SYNC_TABLES, TABLE_SPECS, toWire } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
 import { runConformance } from './conformance';
 import { makeCategory, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
@@ -79,7 +79,7 @@ describe('схема: структура', () => {
       [spec.remote],
     );
     const actual = new Map(res.rows.map((r) => [r.column_name, r]));
-    const expected = [...spec.columns.map((c) => c.column), 'user_id', 'server_seq', 'server_updated_at'];
+    const expected = [...spec.columns.map((c) => c.column), 'user_id', 'server_seq', 'server_updated_at', BASE_SEQ_COLUMN];
     expect([...actual.keys()].sort()).toEqual([...expected].sort());
     for (const c of spec.columns) {
       const r = actual.get(c.column);
@@ -90,6 +90,8 @@ describe('схема: структура', () => {
     expect(actual.get('user_id')).toMatchObject({ data_type: 'uuid', is_nullable: 'NO' });
     expect(actual.get('server_seq')).toMatchObject({ data_type: 'bigint', is_nullable: 'NO' });
     expect(actual.get('server_updated_at')).toMatchObject({ data_type: 'timestamp with time zone', is_nullable: 'NO' });
+    // служебная колонка запроса: версия, поверх которой сделана правка; в таблице пуста всегда (см. триггер sync_guard)
+    expect(actual.get(BASE_SEQ_COLUMN)).toMatchObject({ data_type: 'bigint', is_nullable: 'YES' });
   });
 
   it('двойное (и тройное) применение схемы: объекты не дублируются, данные на месте', async () => {

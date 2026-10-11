@@ -4,7 +4,7 @@ import { computeBalances } from '@/domain/balances';
 import { ValidationError, type Store } from '@/db';
 import type { Entity } from '@/domain/types';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
-import { SYNC_TABLES, TABLE_SPECS, fromWire, type SyncTableName } from '@/sync/tables';
+import { MERGE_GROUPS, SYNC_TABLES, TABLE_SPECS, fromWire, type SyncTableName } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
 import { USER, openDevice, snapshotOf, type Device } from './engineHarness';
 
@@ -13,8 +13,12 @@ import { USER, openDevice, snapshotOf, type Device } from './engineHarness';
  * настройки), случайные уходы в офлайн и порядок синхронизаций, затем «тихий» этап до полной синхронизации.
  * Инварианты:
  *  1. данные на всех устройствах и на сервере совпадают;
- *  2. у каждой записи побеждает версия с наибольшей парой (метка, устройство) из ВСЕХ когда-либо сделанных; ни одна запись не потеряна и не продублирована;
- *  3. остатки кошельков на всех устройствах равны и равны остаткам, посчитанным по победившим версиям;
+ *  2. ни одна запись не потеряна и не продублирована. Правки РАЗНЫХ групп полей одной записи складываются (MERGE_GROUPS,
+ *     db/syncMerge.ts), поэтому итог — не обязательно одна из сделанных версий целиком; зато значение каждой группы взято у
+ *     какой-то из сделанных версий (слияние ничего не выдумывает). Метку итоговой версии не сравниваем: два устройства могли
+ *     независимо поставить одно и то же значение, и тогда на сервере остаётся метка того, чья версия дошла первой.
+ *     Точная проверка слияния двух устройств — в merge.adversarial.test.ts;
+ *  3. остатки кошельков на всех устройствах равны между собой и равны посчитанным по итоговым данным сервера;
  *  4. очередь пуста, карантина нет.
  */
 
@@ -252,18 +256,22 @@ async function checkInvariants(w: World): Promise<void> {
   expect(onServer.categories).toEqual(norm(first).categories);
   expect(onServer.transactions).toEqual(norm(first).transactions);
 
-  // 2. победитель по LWW, ничего не потеряно и не продублировано
+  // 2. ничего не потеряно и не продублировано; слияние по группам не выдумывает значений
   const win = winners(w);
   for (const t of SYNC_TABLES) {
     expect(onServer[t].map((e) => e.id).sort(), `таблица ${t}: набор записей`).toEqual([...win[t].keys()].sort());
-    for (const e of onServer[t]) expect(e, `${t}/${e.id}: победившая версия`).toEqual(win[t].get(e.id));
+    for (const e of onServer[t]) {
+      const versions = [...(w.history[t].get(e.id)?.values() ?? [])] as unknown as Row[];
+      for (const group of MERGE_GROUPS[t]) {
+        const got = e as unknown as Row;
+        const fromSomeVersion = versions.some((v) => group.every((f) => Object.is(v[f] ?? null, got[f] ?? null)));
+        expect(fromSomeVersion, `${t}/${e.id}: группа «${group.join('+')}» взята у одной из сделанных версий`).toBe(true);
+      }
+    }
   }
 
-  // 3. остатки: равны на всех устройствах и равны посчитанным по победившим версиям
-  const model = computeBalances(
-    [...win.wallets.values()] as never,
-    [...win.transactions.values()] as never,
-  );
+  // 3. остатки: равны на всех устройствах и равны посчитанным по итоговым данным сервера
+  const model = computeBalances(onServer.wallets as never, onServer.transactions as never);
   for (const [i, s] of snaps.entries()) {
     const got = computeBalances(s.wallets, s.transactions);
     expect([...got.entries()].sort(), `остатки устройства ${i}`).toEqual([...model.entries()].sort());
@@ -328,7 +336,7 @@ describe('сходимость: заданные сценарии', () => {
     await checkInvariants(w);
   };
 
-  it('удаление операции на одном устройстве и правка её суммы на другом: побеждает более поздняя, остаток один на всех', async () => {
+  it('удаление операции на одном устройстве и правка её суммы на другом: удаление и новая сумма сохраняются (разные группы), остаток один на всех', async () => {
     const w = await makeWorld(2, [0, 0]);
     await bootstrap(w);
     await apply(w, { t: 'tx-create', d: 0, kind: 'expense', w: 0, to: 0, amount: 5_000, cat: -1 });
@@ -338,10 +346,13 @@ describe('сходимость: заданные сценарии', () => {
     await apply(w, { t: 'offline', d: 1 });
     await apply(w, { t: 'tx-delete', d: 0, i: 0, restore: false });
     await apply(w, { t: 'tick', ms: 10 });
-    await apply(w, { t: 'tx-update', d: 1, i: 0, amount: 7_000 }); // позже удаления: воскрешает с новой суммой
+    await apply(w, { t: 'tx-update', d: 1, i: 0, amount: 7_000 }); // позже удаления, но удаление и сумма — разные группы полей
     await finish(w);
+    // Раньше правка суммы «воскрешала» запись целиком (побеждала вся строка с большей меткой). Теперь слияние по группам: удаление
+    // не отменяется чужой правкой, которую сделали, не зная о нём, а новая сумма не пропадает (запись можно восстановить).
     const tx = (await w.devices[0]!.store.db.transactions.toArray())[0];
-    expect(tx).toMatchObject({ amountMinor: 7_000, deletedAt: null });
+    expect(tx).toMatchObject({ amountMinor: 7_000 });
+    expect(tx?.deletedAt).not.toBeNull();
   });
 
   it('три устройства правят одно имя: побеждает самая поздняя метка, равные метки решает id устройства', async () => {

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { TABLE_SPECS, type PulledRow, type SyncTableName, type WireRow } from './tables';
+import { BASE_SEQ_COLUMN, TABLE_SPECS, type PulledRow, type SyncTableName, type WireRow } from './tables';
 import type { SessionAwareTransport } from './session';
 import { TransportError } from './transport';
 
@@ -31,11 +31,13 @@ const textOf = (e: PostgrestFailure | null | undefined, fallback: string): strin
  *  2. HTTP 401, PGRST301/PGRST303 (просроченный или неверный JWT), SQLSTATE 28000 → 'auth'.
  *     Статус 401 сильнее кода: если сессия потеряна, supabase-js шлёт запрос с анонимным ключом, и Postgres отвечает 42501 —
  *     это «войдите заново», а не «данные плохие» (иначе вся очередь ушла бы в карантин);
- *  3. 21000, 22xxx, 23xxx, 42501 → 'rejected' (повтор тех же данных не поможет);
- *  4. HTTP 400 без кода («Bad Request» от шлюза или фильтра): запрос неверен сам по себе, повтор тех же данных не поможет.
+ *  3. 40001 (триггер sync_guard: версия строки на сервере ушла вперёд) → 'conflict': не ошибка данных, нужно забрать свежее и
+ *     объединить. Смотрим на код, а не на статус: статус для класса 40 у PostgREST другой, чем у 4xx-ошибок данных;
+ *  4. 21000, 22xxx, 23xxx, 42501 → 'rejected' (повтор тех же данных не поможет);
+ *  5. HTTP 400 без кода («Bad Request» от шлюза или фильтра): запрос неверен сам по себе, повтор тех же данных не поможет.
  *     Иначе одна «ядовитая» запись вечно держала бы всю очередь (повтор пачки с ней всегда падает) → 'rejected':
  *     движок найдёт виновника делением пачки пополам и отправит остальное;
- *  5. всё остальное (5xx, перегрузка, неизвестные коды, ошибки схемы с кодом PGRST…) → 'server'.
+ *  6. всё остальное (5xx, перегрузка, неизвестные коды, ошибки схемы с кодом PGRST…) → 'server'.
  */
 export function classifyPostgrestError(error: unknown, status?: number): TransportError {
   const e = (typeof error === 'object' && error !== null ? error : { message: String(error) }) as PostgrestFailure;
@@ -49,6 +51,9 @@ export function classifyPostgrestError(error: unknown, status?: number): Transpo
   }
   if (status === 401 || code === 'PGRST301' || code === 'PGRST303' || code === '28000') {
     return new TransportError('auth', `Сессия недействительна: ${message}`, code);
+  }
+  if (code === '40001') {
+    return new TransportError('conflict', `Версия строки на сервере ушла вперёд: ${message}`, code);
   }
   if (code !== undefined && (code === '21000' || code === '42501' || DATA_ERROR_CODE.test(code))) {
     return new TransportError('rejected', `Сервер отверг данные: ${message}`, code);
@@ -69,6 +74,19 @@ export function toWellFormed(text: string): string {
   for (const ch of text) out += ch.length === 1 && ch >= '\uD800' && ch <= '\uDFFF' ? '\uFFFD' : ch;
   return out;
 }
+
+/** Строка без проверки версии (для сервера, у которого нет колонки base_seq). */
+const withoutBase = (row: WireRow): WireRow => {
+  if (!(BASE_SEQ_COLUMN in row)) return row;
+  const { [BASE_SEQ_COLUMN]: _dropped, ...rest } = row;
+  return rest;
+};
+
+/** PostgREST не нашёл колонку base_seq в кэше схемы: сервер не обновлён. */
+const isMissingBaseColumn = (error: unknown): boolean => {
+  const e = error as PostgrestFailure | null;
+  return e?.code === 'PGRST204' && typeof e.message === 'string' && e.message.includes(`'${BASE_SEQ_COLUMN}'`);
+};
 
 const wellFormedRow = (row: WireRow): WireRow => {
   let copy: WireRow | null = null;
@@ -108,6 +126,12 @@ interface SessionResult {
 /** Транспорт поверх supabase-js. Только чтение и upsert — прямых UPDATE и RPC здесь нет (решает триггер sync_guard на сервере). */
 export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTransportOptions = {}): SessionAwareTransport {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  /**
+   * false — сервер ответил, что колонки base_seq нет: схема в Supabase ещё не обновлена (приложение обновляется само, а
+   * supabase/schema.sql владелец запускает руками). Пока вкладка открыта, шлём правки без проверки версии, как раньше, —
+   * лучше работающая синхронизация «последний побеждает», чем остановленная.
+   */
+  let versionCheck = true;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new RangeError(`timeoutMs: ожидалось положительное число, получено ${timeoutMs}`);
 
   /** Один запрос с жёстким таймаутом: отмена через AbortController + гонка с таймером (на случай клиента, не слушающего отмену). */
@@ -164,9 +188,15 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
       const remote = checkTable(table);
       if (!Array.isArray(rows)) throw new TypeError('rows: ожидался массив');
       if (rows.length === 0) return; // пустая пачка — без запроса
-      // upsert по id; ответ «minimal» (тело не нужно); принять или проигнорировать правку решает триггер на сервере
+      // upsert по id; ответ «minimal» (тело не нужно); принять, проигнорировать или отвергнуть правку решает триггер на сервере
       const wire = rows.map(wellFormedRow);
-      const res = await request<PostgrestResult>((signal) => client.from(remote).upsert(wire, { onConflict: 'id' }).abortSignal(signal));
+      const send = (payload: WireRow[]) =>
+        request<PostgrestResult>((signal) => client.from(remote).upsert(payload, { onConflict: 'id' }).abortSignal(signal));
+      let res = await send(versionCheck ? wire : wire.map(withoutBase));
+      if (res.error && versionCheck && isMissingBaseColumn(res.error)) {
+        versionCheck = false;
+        res = await send(wire.map(withoutBase));
+      }
       if (res.error) throw classifyPostgrestError(res.error, res.status);
     },
 

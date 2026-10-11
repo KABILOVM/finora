@@ -1,4 +1,4 @@
-import { TABLE_SPECS, type SyncTableName, type WireRow } from './tables';
+import { BASE_SEQ_COLUMN, TABLE_SPECS, type SyncTableName, type WireRow } from './tables';
 import { TransportError } from './transport';
 
 /**
@@ -18,6 +18,9 @@ const PG_BIGINT_MAX = 9.2e18;
 
 /** Колонки, которые клиент может прислать, но сервер их игнорирует и ставит сам. */
 export const SERVER_COLUMNS = ['user_id', 'server_seq', 'server_updated_at'] as const;
+
+/** Все служебные колонки запроса: серверные + base_seq (версия, поверх которой сделана правка; в таблице всегда пуста). */
+export const REQUEST_COLUMNS: readonly string[] = [...SERVER_COLUMNS, BASE_SEQ_COLUMN];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -121,8 +124,26 @@ export function coerceRow(table: SyncTableName, wire: WireRow): Rec {
     throw rejected('invalid input syntax for type bigint: column "server_seq"', '22P02');
   }
   if (wire['server_updated_at'] != null) parseTimestamp(wire['server_updated_at'], 'server_updated_at');
+  const base: unknown = wire[BASE_SEQ_COLUMN];
+  if (base != null) {
+    if (typeof base !== 'number' || !Number.isInteger(base)) throw rejected(`invalid input syntax for type bigint: column "${BASE_SEQ_COLUMN}"`, '22P02');
+    if (Math.abs(base) > PG_BIGINT_MAX) throw rejected(`bigint out of range: column "${BASE_SEQ_COLUMN}"`, '22003');
+  }
   return out;
 }
+
+/** Ожидаемая версия строки из запроса; null — проверки версии нет. Отрицательная — отказ (как в триггере sync_guard). */
+export function baseSeqOf(wire: WireRow): number | null {
+  const base: unknown = wire[BASE_SEQ_COLUMN];
+  if (base === undefined || base === null) return null;
+  const n = base as number; // тип и диапазон проверил coerceRow
+  if (n < 0) throw rejected(`${BASE_SEQ_COLUMN} must not be negative`, '22023');
+  return n;
+}
+
+/** Версия строки на сервере ушла вперёд (триггер sync_guard: errcode 40001). Клиент забирает свежее, объединяет и отправляет заново. */
+export const conflict = (table: string, id: string, actual: number, expected: number): TransportError =>
+  new TransportError('conflict', `sync_conflict: row ${id} of "${table}" is at version ${actual}, the write expected ${expected}`, '40001');
 
 const tsOk = (v: Cell): boolean => typeof v === 'number' && v >= MIN_TS_MS && v <= MAX_TS_MS;
 const tsOkOrNull = (v: Cell): boolean => v === null || tsOk(v);

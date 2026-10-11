@@ -22,15 +22,22 @@ export interface PullResult {
   applied: number;
   /** Сколько записей пришлось переписать, чтобы операции не поменяли смысл (см. reconcile.ts): они ждут отправки. */
   repaired: number;
+  /** Сколько неотправленных правок слито с чужими по группам полей (см. db/syncMerge.ts): они остались в очереди и ждут отправки. */
+  merged: number;
 }
 
-async function pullTable(ctx: PhaseCtx, table: SyncTableName, watch: Watch): Promise<{ unreadable: boolean; applied: number }> {
+async function pullTable(
+  ctx: PhaseCtx,
+  table: SyncTableName,
+  watch: Watch,
+): Promise<{ unreadable: boolean; applied: number; merged: number }> {
   let applied = 0;
+  let merged = 0;
   let cursor = await ctx.store.sync.getCursor(table);
   for (;;) {
     ctx.check();
     const raw = await ctx.transport.pull(table, cursor, PULL_PAGE);
-    if (raw.length === 0) return { unreadable: false, applied };
+    if (raw.length === 0) return { unreadable: false, applied, merged };
 
     // Разбираем строки по порядку. Нечитаемую НЕ пропускаем: останавливаемся перед ней, а принятое до неё сохраняем.
     const good: RemoteRow<SyncTableName>[] = [];
@@ -51,16 +58,18 @@ async function pullTable(ctx: PhaseCtx, table: SyncTableName, watch: Watch): Pro
       if (maxSeq <= cursor) throw new TransportError('server', `Сервер вернул строки не новее курса ${cursor} (таблица ${table})`);
       try {
         await noteIncoming(ctx.store, table, good, watch); // пока в базе ещё локальные версии
-        applied += (await ctx.store.sync.applyRemotePage(table, good, maxSeq)).applied;
+        const page = await ctx.store.sync.applyRemotePage(table, good, maxSeq);
+        applied += page.applied;
+        merged += page.merged;
       } catch (e) {
         // страница не прошла проверку базы целиком — как нечитаемая: ничего не записано, курс на месте
-        if (e instanceof ValidationError) return { unreadable: true, applied };
+        if (e instanceof ValidationError) return { unreadable: true, applied, merged };
         throw e;
       }
       cursor = maxSeq;
     }
-    if (unreadable) return { unreadable: true, applied };
-    if (raw.length < PULL_PAGE) return { unreadable: false, applied };
+    if (unreadable) return { unreadable: true, applied, merged };
+    if (raw.length < PULL_PAGE) return { unreadable: false, applied, merged };
   }
 }
 
@@ -69,13 +78,14 @@ async function pullTable(ctx: PhaseCtx, table: SyncTableName, watch: Watch): Pro
  * В конце (даже если получение прервалось на середине) проверяется согласованность того, что уже записано.
  */
 export async function pullAll(ctx: PhaseCtx): Promise<PullResult> {
-  const total: PullResult = { unreadable: false, applied: 0, repaired: 0 };
+  const total: PullResult = { unreadable: false, applied: 0, repaired: 0, merged: 0 };
   const watch = newWatch();
   let failure: { error: unknown } | null = null;
   try {
     for (const table of SYNC_TABLES) {
       const r = await pullTable(ctx, table, watch);
       total.applied += r.applied;
+      total.merged += r.merged;
       if (r.unreadable) total.unreadable = true;
     }
   } catch (error) {

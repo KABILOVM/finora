@@ -38,7 +38,15 @@ export interface PushStats {
   sent: number;
   /** Строк помещено в карантин. */
   quarantined: number;
+  /**
+   * true — сервер отверг пачку: версия строки там ушла вперёд (другое устройство записало раньше). Отправка остановлена:
+   * нужно забрать свежее и объединить (pullAll), потом отправить заново — ожидаемые версии строк к тому времени обновятся.
+   */
+  conflicted: boolean;
 }
+
+/** Внутренний сигнал: сервер ответил 'conflict', дальше пачку делить бессмысленно (виновных искать не надо — достаточно забрать свежее). */
+class ConflictSignal extends Error {}
 
 export class BisectBudgetError extends Error {
   constructor() {
@@ -101,11 +109,14 @@ async function pushBatch(ctx: PushCtx, table: SyncTableName, rows: readonly Row[
     ctx.budget.left--;
   }
   try {
+    // Каждая правка несёт версию сервера, поверх которой сделана (0 — строки на сервере ещё нет): если там уже записали
+    // другое, сервер отвергнет пачку, и мы сначала заберём чужое и объединим (см. PushStats.conflicted).
     await ctx.transport.push(
       table,
-      rows.map((r) => toWire(table, r as never)),
+      rows.map((r) => toWire(table, r as never, r.serverSeq ?? 0)),
     );
   } catch (e) {
+    if (e instanceof TransportError && e.kind === 'conflict') throw new ConflictSignal();
     if (!(e instanceof TransportError) || e.kind !== 'rejected') throw e;
     if (rows.length === 1) {
       const row = rows[0] as Row;
@@ -218,13 +229,22 @@ async function pushTable(ctx: PushCtx, table: SyncTableName, stats: PushStats): 
   return skip.size;
 }
 
-/** Отправляет всё, что ждёт, по таблицам в порядке зависимостей (родители раньше детей). Возвращает итоги. */
+/**
+ * Отправляет всё, что ждёт, по таблицам в порядке зависимостей (родители раньше детей). Возвращает итоги.
+ * Если сервер ответил 'conflict', отправка останавливается (conflicted = true): пачку с конфликтом сервер не записал, остальные
+ * таблицы ждут — после получения чужих правок и слияния вызывающий отправит всё заново (см. engine.ts).
+ */
 export async function pushAll(ctx: PushCtx): Promise<PushStats> {
-  const stats: PushStats = { sent: 0, quarantined: 0 };
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    let deferred = 0;
-    for (const table of SYNC_TABLES) deferred += await pushTable(ctx, table, stats);
-    if (deferred === 0) break;
+  const stats: PushStats = { sent: 0, quarantined: 0, conflicted: false };
+  try {
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      let deferred = 0;
+      for (const table of SYNC_TABLES) deferred += await pushTable(ctx, table, stats);
+      if (deferred === 0) break;
+    }
+  } catch (e) {
+    if (!(e instanceof ConflictSignal)) throw e;
+    stats.conflicted = true;
   }
   return stats;
 }

@@ -1,8 +1,10 @@
 import {
-  SERVER_COLUMNS,
+  REQUEST_COLUMNS,
+  baseSeqOf,
   checkConstraints,
   checkForeignKeys,
   coerceRow,
+  conflict,
   formatTimestamp,
   rejected,
   type Rec,
@@ -12,7 +14,8 @@ import type { SessionAwareTransport } from './session';
 import { TransportError, type SyncTransport, type TransportErrorKind } from './transport';
 
 /**
- * Сервер в памяти, повторяющий семантику supabase/schema.sql (LWW, зажим меток, server_seq, изоляция пользователей, отказ пачки целиком).
+ * Сервер в памяти, повторяющий семантику supabase/schema.sql (LWW, проверка версии base_seq, зажим меток, server_seq,
+ * изоляция пользователей, отказ пачки целиком).
  * Нужен для тестов, демо-режима и сценариев отказов. Обязан проходить tests/sync/conformance.ts.
  */
 export interface MemoryServer {
@@ -94,6 +97,7 @@ function emit(table: SyncTableName, r: Stored): PulledRow {
     out[c.column] = c.type === 'ts' && typeof v === 'number' ? formatTimestamp(v) : v;
   }
   out['user_id'] = r.userId;
+  out['base_seq'] = null; // служебная колонка запроса: в таблице всегда пуста (триггер обнуляет), но select * её отдаёт
   out['server_seq'] = r.seq;
   out['server_updated_at'] = formatTimestamp(r.updatedMs);
   return out as PulledRow;
@@ -109,6 +113,7 @@ const FAIL_TEXT: Record<TransportErrorKind, { message: string; code?: string }> 
   auth: { message: 'JWT expired (имитация сбоя)', code: 'PGRST301' },
   rejected: { message: 'Сервер отверг запрос (имитация сбоя)', code: '23514' },
   server: { message: 'Сервер недоступен (имитация сбоя)', code: '500' },
+  conflict: { message: 'Версия строки на сервере ушла вперёд (имитация сбоя)', code: '40001' },
 };
 
 export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer {
@@ -161,7 +166,7 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
     if (rows.length === 0) return;
 
     // Как PostgREST: колонки — объединение ключей пачки; неизвестная колонка отвергает запрос до базы.
-    const known = new Set<string>([...TABLE_SPECS[table].columns.map((c) => c.column), ...SERVER_COLUMNS]);
+    const known = new Set<string>([...TABLE_SPECS[table].columns.map((c) => c.column), ...REQUEST_COLUMNS]);
     const batchCols = new Set<string>();
     for (const row of rows) {
       if (typeof row !== 'object' || row === null || Array.isArray(row)) {
@@ -196,6 +201,19 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
       const createdMs = Math.min(Number(proposed['created_at']), limitMs);
       proposed['created_at'] = createdMs;
       proposed['client_updated_at'] = stampFor(userId, table, id, device, Number(proposed['client_updated_at']), limitMs, stagedLedger);
+
+      // проверка версии (compare-and-set) — в том же месте, где её делает триггер: после зажима метки, до выдачи номера.
+      // Строку видим так же, как её видит триггер: с учётом строк этой же пачки, уже вставленных до неё.
+      const expected = baseSeqOf(wire);
+      if (expected !== null) {
+        const current = stagedOf(id);
+        if (current && current.userId === userId && expected !== current.seq) {
+          // точный повтор уже принятой правки (ответ потерялся) — не конфликт, а no-op: ниже его отсеет правило «побеждает большая метка»
+          const replay =
+            Number(proposed['client_updated_at']) === Number(current.data['client_updated_at']) && device === String(current.data['device_id']);
+          if (!replay) throw conflict(table, id, current.seq, expected);
+        }
+      }
       seqCounter++;
 
       // 2) проверки на предложенную строку выполняются ДО разбора конфликта

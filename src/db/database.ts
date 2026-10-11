@@ -1,6 +1,7 @@
 import Dexie, { type DexieOptions, type EntityTable, type Table } from 'dexie';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
 import { SYNC_TABLES, type EntityOf, type SyncTableName } from '@/sync/tables';
+import { snapshotRow } from './syncMerge';
 
 /** Служебное значение в таблице meta: курсоры синхронизации, lastSyncedAt, последняя метка часов. */
 export type MetaValue = string | number | boolean | null;
@@ -25,6 +26,10 @@ export function dbNameFor(userId: string): string {
  *  - dirty — что ждёт отправки; [dirty+clientUpdatedAt] — очередь отправки «старые первыми»;
  *  - transactions: occurredOn (периоды), walletId/toWalletId (история кошелька, проверки), categoryId.
  * Остатки кошельков НЕ хранятся (считаются из операций, см. domain/balances.ts).
+ *
+ * dirtyBase: когда «чистая» строка (dirty 0) любой записью становится «грязной» (dirty 1), база сама кладёт в неё снимок
+ * прежней, серверной версии. Это единственное место, где он берётся, — репозитории, импорт и согласование о нём не знают
+ * и не могут про него забыть. Снимок нужен трёхстороннему слиянию (syncMerge.ts); пока строка «грязная», он не меняется.
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -43,6 +48,13 @@ export class FinoraDB extends Dexie {
         'id, dirty, occurredOn, walletId, toWalletId, categoryId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
       meta: 'key',
     });
+    for (const name of SYNC_TABLES) {
+      this.table(name).hook('updating', (changes, _key, current) => {
+        const was = current as unknown as Record<string, unknown>;
+        if (was['dirty'] === 0 && (changes as Record<string, unknown>)['dirty'] === 1) return { dirtyBase: snapshotRow(name, was) };
+        return undefined;
+      });
+    }
   }
 
   /** Таблица синхронизируемой сущности по имени. */

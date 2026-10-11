@@ -48,11 +48,23 @@ const BACKOFF_MAX_MS = 300_000;
 const AUTH_PROBE_MS = 300_000;
 /** Сколько раз за цикл можно переписать данные ради согласованности и отправить их (дальше — со следующего цикла). */
 const MAX_REPAIR_ROUNDS = 3;
+/**
+ * Сколько раз за одну отправку можно «получить чужое, слить и отправить заново», когда сервер говорит, что версия строки ушла
+ * вперёд. Одного раунда хватает почти всегда; больше — другое устройство пишет ту же строку прямо сейчас: передохнём и повторим.
+ */
+const MAX_CONFLICT_ROUNDS = 5;
 
 /** Движок выключен посреди цикла: цикл тихо обрывается. */
 class DisposedSignal extends Error {}
 /** Данные с сервера не читаются этой версией приложения. */
 class UnreadableSignal extends Error {}
+/** Сервер раз за разом отвечает, что версия строки ушла вперёд: другое устройство пишет её прямо сейчас. */
+class ConflictLoopError extends Error {
+  constructor() {
+    super('Записи одновременно меняются на другом устройстве — повторим чуть позже');
+    this.name = 'ConflictLoopError';
+  }
+}
 
 const INITIAL_STATUS: SyncStatus = { phase: 'idle', pending: 0, quarantined: 0, lastSyncedAt: null, lastError: null };
 
@@ -194,6 +206,20 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     }, delay);
   }
 
+  /**
+   * Отправка с разбором конфликтов версий. Если сервер отверг пачку, потому что строка там уже ушла вперёд (другое устройство
+   * записало раньше), забираем чужие правки и сливаем с нашими по группам полей (pullAll → store.sync.applyRemotePage), после
+   * чего отправляем заново: у слитых строк уже новая версия сервера и новая метка. Ничего не теряется и не затирается:
+   * сервер не записал из отвергнутой пачки ничего.
+   */
+  async function pushSettled(ctx: PushCtx): Promise<void> {
+    for (let round = 0; ; round++) {
+      if (!(await pushAll(ctx)).conflicted) return;
+      if (round >= MAX_CONFLICT_ROUNDS) throw new ConflictLoopError();
+      if ((await pullAll(ctx)).unreadable) throw new UnreadableSignal();
+    }
+  }
+
   /** Один заход: (первая загрузка + затравка) → отправка → получение. Бросает при любой беде. */
   async function runOnce(ctx: PushCtx): Promise<void> {
     if ((await store.sync.getMeta(META_INITIAL_PULL)) !== true) {
@@ -209,15 +235,16 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
       }
       await store.sync.setMeta(META_INITIAL_PULL, true);
     }
-    await pushAll(ctx);
+    await pushSettled(ctx);
     await refreshCounts();
     // Обязательно забираем после отправки: сервер мог оставить свою, более новую версию — принимаем её.
-    // Если пришедшее пришлось согласовать с операциями (см. reconcile.ts), исправленное сразу уходит на сервер.
+    // Если пришедшее пришлось согласовать с операциями (см. reconcile.ts) или слить с нашей неотправленной правкой
+    // (db/syncMerge.ts), результат сразу уходит на сервер.
     for (let round = 0; ; round++) {
       const pulled = await pullAll(ctx);
       if (pulled.unreadable) throw new UnreadableSignal();
-      if (pulled.repaired === 0 || round >= MAX_REPAIR_ROUNDS) break;
-      await pushAll(ctx);
+      if ((pulled.repaired === 0 && pulled.merged === 0) || round >= MAX_REPAIR_ROUNDS) break;
+      await pushSettled(ctx);
       await refreshCounts();
     }
   }
@@ -283,7 +310,7 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     if (e instanceof TransportError && e.kind === 'network') return { phase: 'offline', message: 'Нет связи с сервером' };
     if (e instanceof TransportError && e.kind === 'server') return { phase: 'error', message: 'Сервер временно недоступен' };
     if (e instanceof UnreadableSignal) return { phase: 'error', message: UNREADABLE_MESSAGE };
-    if (e instanceof BisectBudgetError) return { phase: 'error', message: e.message };
+    if (e instanceof BisectBudgetError || e instanceof ConflictLoopError) return { phase: 'error', message: e.message };
     if (e instanceof TransportError) return { phase: 'error', message: `Сервер отверг запрос: ${e.message}` };
     return { phase: 'error', message: errorText(e) };
   }

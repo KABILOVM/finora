@@ -89,6 +89,49 @@ describe('запросы', () => {
     expect(q.chain).toEqual(['upsert', 'abortSignal']);
   });
 
+  it('push: ожидаемая версия строки (base_seq) уходит в теле запроса как есть — проверку делает сервер', async () => {
+    const { client, queries } = fakeClient(() => ({ data: null, error: null, status: 201 }));
+    const rows = [toWire('wallets', makeWallet(), 0), toWire('wallets', makeWallet(), 17)];
+    await createSupabaseTransport(client).push('wallets', rows);
+    expect((queries[0] as Query).rows).toEqual(rows);
+    expect(((queries[0] as Query).rows as Array<Record<string, unknown>>).map((r) => r['base_seq'])).toEqual([0, 17]);
+  });
+
+  it('push: сервер без колонки base_seq (схема не обновлена, PGRST204) — повтор без неё, дальше без проверки версии, как раньше', async () => {
+    const missing = { code: 'PGRST204', message: "Could not find the 'base_seq' column of 'wallets' in the schema cache" };
+    const { client, queries } = fakeClient((q) => {
+      const rows = q.rows as Array<Record<string, unknown>>;
+      return rows.some((r) => 'base_seq' in r) ? { data: null, error: missing, status: 400 } : { data: null, error: null, status: 201 };
+    });
+    const t = createSupabaseTransport(client);
+    const w = makeWallet();
+    const { base_seq: _dropped, ...withoutBase } = toWire('wallets', w, 5);
+    await t.push('wallets', [toWire('wallets', w, 5)]); // один повтор, ошибки наружу нет
+    expect(queries).toHaveLength(2);
+    expect((queries[0] as Query).rows).toEqual([toWire('wallets', w, 5)]);
+    expect((queries[1] as Query).rows).toEqual([withoutBase]); // те же данные, только без служебной колонки
+    await t.push('wallets', [toWire('wallets', makeWallet(), 6)]); // запомнил: первый запрос уже без колонки
+    expect(queries).toHaveLength(3);
+    expect(((queries[2] as Query).rows as Array<Record<string, unknown>>).every((r) => !('base_seq' in r))).toBe(true);
+  });
+
+  it('push: PGRST204 про ДРУГУЮ колонку — по-прежнему ошибка сервера, а не тихий повтор без проверки версии', async () => {
+    const other = { code: 'PGRST204', message: "Could not find the 'nope' column of 'wallets' in the schema cache" };
+    const { client, queries } = fakeClient(() => ({ data: null, error: other, status: 400 }));
+    const err = await createSupabaseTransport(client).push('wallets', [toWire('wallets', makeWallet(), 5)]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TransportError);
+    expect((err as TransportError).kind).toBe('server');
+    expect(queries).toHaveLength(1);
+  });
+
+  it('push: конфликт версии (40001) — TransportError conflict без повторов внутри транспорта', async () => {
+    const { client, queries } = fakeClient(() => ({ data: null, error: { code: '40001', message: 'sync_conflict: row x of "wallets" is at version 9, the write expected 5' }, status: 500 }));
+    const err = await createSupabaseTransport(client).push('wallets', [toWire('wallets', makeWallet(), 5)]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TransportError);
+    expect(err).toMatchObject({ kind: 'conflict', code: '40001', retryable: false });
+    expect(queries).toHaveLength(1);
+  });
+
   it('push: пустая пачка не делает запроса', async () => {
     const { client, queries } = fakeClient(() => ({ data: null, error: null, status: 201 }));
     await createSupabaseTransport(client).push('wallets', []);
@@ -150,7 +193,10 @@ describe('разбор ошибок PostgREST', () => {
     ['429 слишком часто', { error: { message: 'Too many requests' }, status: 429 }, 'server'],
     ['таймаут запроса в базе 57014', { error: pg('57014'), status: 500 }, 'server'],
     ['взаимная блокировка 40P01', { error: pg('40P01'), status: 500 }, 'server'],
-    ['сбой сериализации 40001', { error: pg('40001'), status: 409 }, 'server'],
+    // 40001 — ответ триггера sync_guard «версия строки на сервере ушла вперёд»: не ошибка данных и не сбой сервера, а повод
+    // забрать свежее, объединить и отправить заново. Код решает, статус (у PostgREST для класса 40 он 500, у других — 409) нет.
+    ['сбой сериализации / конфликт версии 40001 (статус 409)', { error: pg('40001'), status: 409 }, 'conflict'],
+    ['сбой сериализации / конфликт версии 40001 (статус 500)', { error: pg('40001'), status: 500 }, 'conflict'],
     ['слишком много соединений 53300', { error: pg('53300'), status: 503 }, 'server'],
     ['нет таблицы 42P01 (схема не применена) — не карантин', { error: pg('42P01'), status: 404 }, 'server'],
     ['нет колонки 42703 — не карантин', { error: pg('42703'), status: 400 }, 'server'],

@@ -46,7 +46,7 @@ export interface Actor {
 
 /**
  * Ошибка Postgres → TransportError.
- * 28000 → 'auth'; 23xxx и 42501 → 'rejected'; прочее → 'server'.
+ * 28000 → 'auth'; 40001 → 'conflict'; 23xxx и 42501 → 'rejected'; прочее → 'server'.
  * Отступление от буквы договора: классы 22xxx (мусор в значении: не число, не uuid, переполнение) и 21000 (две строки
  * с одним id в одной пачке) тоже 'rejected' — PostgREST отвечает на них кодом 400, и повтор тех же данных не поможет,
  * а 'server' (повторять) заклинил бы очередь отправки на отравленной записи навсегда.
@@ -57,6 +57,8 @@ export function toTransportError(e: unknown): TransportError {
   const code = (e as { code?: unknown } | null)?.code;
   if (typeof code !== 'string') return new TransportError('server', message);
   if (code === '28000') return new TransportError('auth', message, code);
+  // 40001 — проверка версии не прошла (триггер sync_guard: «sync_conflict»); PostgREST отдаёт её кодом, статус не важен
+  if (code === '40001') return new TransportError('conflict', message, code);
   if (code.startsWith('23') || code.startsWith('22') || code === '42501' || code === '21000') {
     return new TransportError('rejected', message, code);
   }

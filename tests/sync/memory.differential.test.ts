@@ -10,6 +10,7 @@ import { createPgliteServer, type PgliteServer } from './pglite';
 
 /**
  * Дифференциальная проверка: одни и те же случайные пачки идут и на сервер в памяти, и на НАСТОЯЩУЮ схему (PGlite).
+ * В пачках случайно встречается проверка версии (base_seq): верная, устаревшая, «строки нет», отрицательная.
  * После каждой пачки сравниваем исход (принято / вид и код отказа) и состояние таблиц (все поля, порядок по server_seq).
  * Postgres здесь — эталон: если расходятся, чинится сервер в памяти.
  */
@@ -39,8 +40,17 @@ interface Spec {
     ref: number; // на какие кошелёк/категорию ссылаться
     ref2: number;
     kind: number;
+    /** Какую ожидаемую версию (base_seq) нести: см. BASE_MODES. */
+    base: number;
   }>;
 }
+
+/**
+ * Режимы base_seq (проверка версии): нет колонки вовсе, null, «строки нет» (0), текущая версия строки на сервере, устаревшая,
+ * версия «из будущего» и отрицательная (её сервер отвергает). Текущую версию каждый сервер подставляет свою:
+ * номера server_seq у сервера в памяти и у Postgres разные, а вот исход обязан быть одинаковым.
+ */
+const BASE_MODES = ['absent', 'null', 'zero', 'current', 'current', 'current', 'stale', 'ahead', 'negative'] as const;
 
 interface Focus {
   stamps: number[];
@@ -67,6 +77,7 @@ const specArb = (f: Focus): fc.Arbitrary<Spec> =>
         ref: fc.integer({ min: 0, max: 5 }),
         ref2: fc.integer({ min: 0, max: 5 }),
         kind: fc.integer({ min: 0, max: 3 }),
+        base: fc.integer({ min: 0, max: BASE_MODES.length - 1 }),
       }),
       { minLength: 1, maxLength: 3 },
     ),
@@ -79,7 +90,7 @@ function normalize(rows: Array<Record<string, unknown>>, table: SyncTableName, n
     .map((r) => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(r)) {
-        if (k === 'server_seq' || k === 'server_updated_at') continue;
+        if (k === 'server_seq' || k === 'server_updated_at') continue; // base_seq в таблице всегда пуста — это тоже сравнивается
         if (tsCols.has(k) && typeof v === 'string') {
           const ms = Date.parse(v);
           out[k] = ms > nowMs + 6 * MIN ? 'далёкое будущее' : ms > nowMs + 4.5 * MIN ? 'зажато «сейчас + 5 минут»' : ms;
@@ -156,22 +167,76 @@ async function compare(specs: Spec[]): Promise<void> {
     }
   };
 
+  const texts: string[] = []; // тексты отказов обоих серверов — только для сообщения об ошибке
   const outcome = async (run: () => Promise<void>): Promise<string> => {
     try {
       await run();
+      texts.push('принято');
       return 'принято';
     } catch (e) {
       if (!(e instanceof TransportError)) throw e;
+      texts.push(e.message);
       return `${e.kind}:${e.code ?? ''}`;
     }
   };
 
+  /** Текущая версия строки у каждого из серверов (того пользователя, что пишет); undefined — строки у него нет. */
+  const currentSeq = {
+    mem: (uid: string, table: SyncTableName, id: string): number | undefined => mem.dump(uid, table).find((r) => r['id'] === id)?.server_seq,
+    pg: async (uid: string, table: SyncTableName, id: string): Promise<number | undefined> => {
+      const res = await pg.db.query<{ s: string | number }>(`select server_seq as s from public.${TABLE_SPECS[table].remote} where id = $1 and user_id = $2`, [id, uid]);
+      return res.rows[0] === undefined ? undefined : Number(res.rows[0].s);
+    },
+  };
+  const withBase = (row: WireRow, mode: (typeof BASE_MODES)[number], current: number | undefined): WireRow => {
+    switch (mode) {
+      case 'absent':
+        return row;
+      case 'null':
+        return { ...row, base_seq: null };
+      case 'zero':
+        return { ...row, base_seq: 0 };
+      // Строки на сервере ещё нет: «текущая» версия — 0 («строки нет»), а «устаревшая» и «из будущего» — число, которого нет ни у
+      // одного из серверов. Нельзя брать маленькое число: у сервера в памяти оно совпало бы с номером соседней строки той же пачки
+      // (номера server_seq у двух серверов разные), и исходы разошлись бы не из-за правил, а из-за совпадения чисел.
+      case 'current':
+        return { ...row, base_seq: current ?? 0 };
+      case 'stale':
+        return { ...row, base_seq: current === undefined ? 9_000_000_001 : current - 1 };
+      case 'ahead':
+        return { ...row, base_seq: (current ?? 0) + 9_000_000_000 };
+      case 'negative':
+        return { ...row, base_seq: -1 };
+    }
+  };
+
   for (const [step, spec] of specs.entries()) {
-    const batch = spec.rows.map((r) => build(spec, r));
     const uid = users[spec.user] as string;
-    const a = await outcome(() => mem.transportFor(uid).push(spec.table, batch));
-    const b = await outcome(() => pg.transportFor(uid).push(spec.table, batch));
-    expect(a, `шаг ${step}: исход пачки ${spec.table} (память против Postgres)`).toBe(b);
+    // строки строятся ОДИН раз (фабрики ведут счётчики): обоим серверам уходит одно и то же, различается только base_seq
+    // Строка с уже встречавшимся в пачке id идёт без проверки версии: клиент такие пачки не шлёт (движок убирает дубли по id), а
+    // «точный повтор» двух таких строк с метками из будущего у серверов различается на микросекунды (память зажимает метку по
+    // одной границе на пачку, Postgres — по своей на каждую строку); это отличие не видно нигде, кроме как здесь.
+    const seenIds = new Set<string>();
+    const built = spec.rows.map((r) => {
+      const row = build(spec, r);
+      const id = String(row['id']);
+      const mode = seenIds.has(id) ? 'absent' : (BASE_MODES[r.base] as (typeof BASE_MODES)[number]);
+      seenIds.add(id);
+      return { row, mode };
+    });
+    const batchFor = async (current: (id: string) => Promise<number | undefined> | number | undefined): Promise<WireRow[]> =>
+      Promise.all(built.map(async ({ row, mode }) => withBase(row, mode, await current(String(row['id'])))));
+    const memBatch = await batchFor((id) => currentSeq.mem(uid, spec.table, id));
+    const pgBatch = await batchFor((id) => currentSeq.pg(uid, spec.table, id));
+    const before = {
+      mem: mem.dump(uid, spec.table).map((r) => `${String(r['id']).slice(-4)}:seq${String(r['server_seq'])}@${String(r['client_updated_at'])}/${String(r['device_id']).slice(0, 8)}`).join(', '),
+      pg: (await pg.db.query<{ t: string }>(`select id::text || ':seq' || server_seq || '@' || client_updated_at || '/' || left(device_id, 8) as t from public.${TABLE_SPECS[spec.table].remote} where user_id = $1 order by server_seq`, [uid])).rows.map((r) => r.t.replace(/^.*(.{4}:seq)/, '$1')).join(', '),
+    };
+    const a = await outcome(() => mem.transportFor(uid).push(spec.table, memBatch));
+    const b = await outcome(() => pg.transportFor(uid).push(spec.table, pgBatch));
+    const brief = (batch: WireRow[]) =>
+      batch.map((r) => `${String(r['id']).slice(-4)}@${String(r['client_updated_at'])}/${String(r['device_id']).slice(0, 8)} base=${String(r['base_seq'])}`).join('; ');
+    expect(a, `шаг ${step}: исход пачки ${spec.table} (память против Postgres)\n  память: ${texts.at(-2)}\n  Postgres: ${texts.at(-1)}\n  до пачки (память): ${before.mem}\n  до пачки (Postgres): ${before.pg}\n  пачка (память): ${brief(memBatch)}\n  пачка (Postgres): ${brief(pgBatch)}`).toBe(b);
     // состояние всех таблиц обоих пользователей
     for (const table of ['settings', 'wallets', 'categories', 'transactions'] as const) {
       for (const u of users) {

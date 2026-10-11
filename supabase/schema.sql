@@ -29,6 +29,10 @@
 -- ПРАВИЛА, КОТОРЫЕ ЗДЕСЬ ЗАШИТЫ
 --   * Физического удаления нет ни у кого: удаление = deleted_at (нет политик и прав DELETE).
 --   * user_id всегда ставит сервер (из входа), присланное клиентом значение игнорируется.
+--   * Проверка версии (compare-and-set): правка может нести base_seq — номер server_seq, поверх которого она сделана.
+--     Если строка на сервере уже ушла дальше (другое устройство записало раньше), вся пачка отвергается ошибкой 40001
+--     «sync_conflict», ничего не записывается; клиент забирает свежее, объединяет и отправляет заново. Точный повтор уже
+--     принятой правки (та же пара client_updated_at, device_id) — не конфликт. Без base_seq проверки нет (старые клиенты).
 --   * Правка принимается, только если (client_updated_at, device_id) СТРОГО больше сохранённой;
 --     иначе она молча игнорируется — повторная отправка безопасна.
 --   * Метка дальше «сейчас + 5 минут» зажимается, а повтор такой же правки получает ту же зажатую метку
@@ -234,6 +238,16 @@ create table if not exists public.transactions (
 );
 
 
+-- 2.5. Служебная колонка запроса base_seq -------------------------------------------------------
+-- Через неё клиент говорит «моя правка сделана поверх версии N» (0 — «строки ещё нет»). PostgREST умеет только
+-- insert ... on conflict do update без условий, поэтому условие проверяет триггер sync_guard. В таблице колонка ВСЕГДА пустая:
+-- триггер обнуляет её, так что значение прошлой отправки не может повлиять на следующую (в том числе от старого клиента).
+-- Таблицы уже могут существовать, поэтому колонка добавляется отдельно; запуск повторяется безопасно.
+alter table public.settings     add column if not exists base_seq bigint;
+alter table public.wallets      add column if not exists base_seq bigint;
+alter table public.categories   add column if not exists base_seq bigint;
+alter table public.transactions add column if not exists base_seq bigint;
+
 -- 3. Защитный триггер синхронизации -----------------------------------------------
 -- SECURITY DEFINER: выполняется с правами владельца, потому что обычный пользователь не имеет
 -- доступа к схеме private (там счётчик server_seq). search_path = '' — функция не может быть
@@ -293,6 +307,11 @@ declare
   v_uid   uuid        := auth.uid();
   -- метки из будущего (часы устройства убежали) зажимаются до «сейчас + 5 минут», см. private.sync_stamp
   v_limit timestamptz := clock_timestamp() + interval '5 minutes';
+  -- строка, которая уже лежит на сервере (для проверки версии)
+  v_old_seq    bigint;
+  v_old_stamp  timestamptz;
+  v_old_device text;
+  v_old_uid    uuid;
 begin
   if v_uid is null then
     raise exception 'Нужно войти в систему' using errcode = '28000';
@@ -307,6 +326,29 @@ begin
     new.user_id := v_uid;                       -- присланное клиентом значение игнорируется
     if new.created_at > v_limit then new.created_at := v_limit; end if;
     new.client_updated_at := private.sync_stamp(v_uid, tg_table_name, new.id, new.device_id, new.client_updated_at, v_limit);
+
+    -- Проверка версии. Срабатывает на вставку предложенной строки, ДО разбора конфликта по id: если строка уже есть, дальше
+    -- её обновит ветка DO UPDATE, а мы успеваем отвергнуть правку, сделанную поверх устаревшей версии. Блокировка выше держится
+    -- до конца транзакции, поэтому прочитанная версия не изменится до записи. Чужую строку (тот же id у другого пользователя)
+    -- не трогаем: её отвергнет политика доступа, как и раньше.
+    if new.base_seq is not null then
+      if new.base_seq < 0 then
+        raise exception 'base_seq must not be negative' using errcode = '22023';
+      end if;
+      execute format('select server_seq, client_updated_at, device_id, user_id from %I.%I where id = $1', tg_table_schema, tg_table_name)
+        into v_old_seq, v_old_stamp, v_old_device, v_old_uid using new.id;
+      if v_old_seq is not null and v_old_uid = v_uid and new.base_seq <> v_old_seq
+         -- точный повтор уже принятой правки (ответ потерялся) — не конфликт: ниже его отсеет правило «побеждает большая метка»
+         and not (new.client_updated_at = v_old_stamp and new.device_id collate "C" = v_old_device collate "C")
+      then
+        raise exception 'sync_conflict: row % of "%" is at version %, the write expected %', new.id, tg_table_name, v_old_seq, new.base_seq
+          using errcode = '40001',
+                detail = format('table=%s id=%s server_seq=%s expected=%s', tg_table_name, new.id, v_old_seq, new.base_seq),
+                hint = 'Fetch the newer row, merge it with the local edit and send again.';
+      end if;
+      new.base_seq := null; -- в таблице колонка всегда пустая
+    end if;
+
     new.server_seq := nextval('private.sync_seq');
     new.server_updated_at := clock_timestamp();
     return new;
@@ -318,6 +360,7 @@ begin
     raise exception 'Менять user_id и id нельзя' using errcode = '42501';
   end if;
   new.created_at := old.created_at;
+  new.base_seq := null; -- проверку версии сделала вставка (см. выше); прямой UPDATE её не использует, а значение в таблице не хранится
   new.client_updated_at := private.sync_stamp(v_uid, tg_table_name, new.id, new.device_id, new.client_updated_at, v_limit);
 
   -- Устаревшая правка или повтор: строка не меняется, ошибки нет.

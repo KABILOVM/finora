@@ -118,6 +118,19 @@ describe('diag: здоровая база (контроль — чтобы ат�
   });
 });
 
+describe('diag: схема старше приложения — нет служебной колонки проверки версии base_seq', () => {
+  it('«Таблицы в базе» говорит, что схема не совпадает с приложением и что делать (заново выполнить schema.sql); после выполнения всё ok', async () => {
+    await addRates(3);
+    await pg.db.exec('alter table public.wallets drop column base_seq');
+    const old = await run();
+    expect(old.by.schema.status).toBe('fail');
+    expect(old.by.schema.message).toMatch(/wallets/);
+    expect(old.by.schema.message).toMatch(/schema\.sql/);
+    await pg.applySchema(); // владелец выполнил файл заново: колонка вернулась
+    expect(overallStatus((await run()).steps)).toBe('ok');
+  });
+});
+
 // Политику UPDATE (если её одну удалили, а права остались) без правки настоящих данных не проверить: подробности в README
 // («Что проверка не умеет»). Права на вставку и обновление (grant) проверка видит: она шлёт тот же upsert, что и синхронизация.
 describe('diag: шаг «Запись» повторяет настоящую отправку: upsert (insert ... on conflict do update) во все четыре таблицы', () => {

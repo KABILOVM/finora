@@ -453,5 +453,106 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       }
       expect(A.userId).not.toBe(B.userId);
     });
+
+    describe('12. проверка версии (base_seq): правка принимается, только если строка на сервере всё ещё в той версии, поверх которой она сделана', () => {
+      const withBase = (row: WireRow, base: number | null): WireRow => ({ ...row, base_seq: base });
+
+      it.each(SYNC_TABLES)('(%s) верная версия принимается, устаревшая — отказ conflict (даже с более новой меткой), «строки нет» = 0', async (table) => {
+        const c = await setup(table);
+        const row = (n: number, offset: number, device: string, base: number | null) => withBase(c.subj.row(n, c.at(offset, device)), base);
+
+        await c.t.push(table, [row(1, 0, 'dev-a', 0)]); // создание: «строки на сервере нет»
+        const first = await c.get();
+        expect(markerOf(table, first)).toBe(1);
+        expect(first['base_seq'] ?? null, 'в таблице служебная колонка base_seq всегда пуста').toBeNull();
+
+        await c.t.push(table, [row(2, 10_000, 'dev-a', first.server_seq)]); // верная версия
+        const second = await c.get();
+        expect(markerOf(table, second)).toBe(2);
+        expect(second.server_seq).toBeGreaterThan(first.server_seq);
+        expect(second['base_seq'] ?? null).toBeNull();
+
+        // устаревшая версия: правка с БОЛЬШЕЙ меткой (часы устройства убежали вперёд) всё равно не затирает чужую
+        const stale = await failure(c.t.push(table, [row(3, 60_000, 'dev-b', first.server_seq)]));
+        expect(stale.kind, stale.message).toBe('conflict');
+        expect(stale.retryable).toBe(false);
+        expect(await c.get()).toEqual(second);
+
+        // «строки нет» для уже существующей — тоже конфликт
+        expect((await failure(c.t.push(table, [row(4, 60_000, 'dev-b', 0)]))).kind).toBe('conflict');
+        // версия «из будущего» — тоже: совпадать должна ровно текущая
+        expect((await failure(c.t.push(table, [row(5, 60_000, 'dev-b', second.server_seq + 1_000)]))).kind).toBe('conflict');
+        expect(await c.get()).toEqual(second);
+
+        // без проверки (колонки нет или null) — прежнее правило «побеждает большая метка»
+        await c.t.push(table, [c.subj.row(6, c.at(70_000, 'dev-b'))]);
+        expect(markerOf(table, await c.get())).toBe(6);
+        await c.t.push(table, [row(7, 80_000, 'dev-b', null)]);
+        expect(markerOf(table, await c.get())).toBe(7);
+      });
+
+      it.each(SYNC_TABLES)('(%s) точный повтор уже принятой правки — не конфликт и не новая запись, даже если версия в нём устарела', async (table) => {
+        const c = await setup(table);
+        const row = (n: number, offset: number, device: string, base: number) => withBase(c.subj.row(n, c.at(offset, device)), base);
+        await c.t.push(table, [row(1, 0, 'dev-a', 0)]);
+        const v1 = (await c.get()).server_seq;
+        await c.t.push(table, [row(2, 10_000, 'dev-a', v1)]); // принята; ответ «потерялся», устройство шлёт то же самое с прежней версией
+        const applied = await c.get();
+        await c.t.push(table, [row(2, 10_000, 'dev-a', v1)]);
+        await c.t.push(table, [row(2, 10_000, 'dev-a', 0)]);
+        expect(await c.get()).toEqual(applied); // ни ошибки, ни нового номера
+        // а ДРУГАЯ правка с той же устаревшей версией — конфликт
+        expect((await failure(c.t.push(table, [row(3, 10_000, 'dev-b', v1)]))).kind).toBe('conflict');
+        expect(await c.get()).toEqual(applied);
+      });
+
+      it('конфликт одной строки отвергает всю пачку: ничего из неё не записывается', async () => {
+        const c = await setup('wallets');
+        await c.t.push('wallets', [withBase(c.subj.row(1, c.at(0, 'dev-a')), 0)]);
+        const before = await pullAll(c.t, 'wallets');
+        const fresh = makeWallet({ createdAt: iso(c.t0 - HOUR), clientUpdatedAt: iso(c.t0 - HOUR) });
+        const batch = [withBase(toWire('wallets', fresh), 0), withBase(c.subj.row(2, c.at(10_000, 'dev-b')), 0)]; // вторая — «строки нет», а она есть
+        expect((await failure(c.t.push('wallets', batch))).kind).toBe('conflict');
+        expect(await pullAll(c.t, 'wallets')).toEqual(before);
+        expect(await find(c.t, 'wallets', fresh.id)).toBeUndefined();
+      });
+
+      it('значение base_seq в таблице не хранится: следующая правка без проверки не сталкивается с «памятью» прошлой', async () => {
+        const c = await setup('wallets');
+        await c.t.push('wallets', [withBase(c.subj.row(1, c.at(0, 'dev-a')), 0)]);
+        const v1 = (await c.get()).server_seq;
+        await c.t.push('wallets', [withBase(c.subj.row(2, c.at(10_000, 'dev-a')), v1)]);
+        const stored = await c.get();
+        expect(stored['base_seq'] ?? null).toBeNull();
+        // старый клиент не знает про base_seq вовсе — его правка не должна упереться в ранее присланное значение
+        await c.t.push('wallets', [c.subj.row(3, c.at(20_000, 'dev-old'))]);
+        expect(markerOf('wallets', await c.get())).toBe(3);
+      });
+
+      it('отрицательная версия — отказ данных, а не конфликт; повтор не поможет', async () => {
+        const c = await setup('wallets');
+        await expectRejected(c.t.push('wallets', [withBase(c.subj.row(1, c.at(0, 'dev-a')), -1)]));
+        await c.t.push('wallets', [withBase(c.subj.row(2, c.at(0, 'dev-a')), 0)]);
+        await expectRejected(c.t.push('wallets', [withBase(c.subj.row(3, c.at(10_000, 'dev-a')), -5)]));
+        expect(markerOf('wallets', await c.get())).toBe(2);
+      });
+
+      it('чужая строка с тем же id: версию чужой строки не выдаём — отказ как раньше (доступ), а не conflict', async () => {
+        const A = await setup('wallets');
+        await A.t.push('wallets', [withBase(A.subj.row(1, A.at(0, 'dev-a')), 0)]);
+        const snap = await A.get();
+        const B = fresh();
+        const evil = withBase({ ...A.subj.row(9, A.at(60_000, 'dev-z')), id: A.subj.id }, snap.server_seq + 7);
+        const err = await B.t.push('wallets', [evil]).then(
+          () => null,
+          (e: unknown) => e,
+        );
+        if (err !== null) {
+          expect(err).toBeInstanceOf(TransportError);
+          expect((err as TransportError).kind, 'про чужую строку не должно быть видно, что её версия не совпала').not.toBe('conflict');
+        }
+        expect(await A.get()).toEqual(snap);
+      });
+    });
   });
 }
