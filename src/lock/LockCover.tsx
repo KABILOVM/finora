@@ -82,10 +82,11 @@ export function LockCover({ state, cloud, onUnlock, onLeave }: LockCoverProps) {
   const attempt = async (source: 'button' | 'auto') => {
     if (credentialId === null) return;
     if (source === 'button') setMessage(null);
-    setChecking(true);
+    // Автозапрос при показе кнопку не блокирует: заблокированная кнопка теряет фокус, и он потом оставался на «Не получается?».
+    if (source === 'button') setChecking(true);
     const result = await verifyLock(credentialId);
     if (!alive.current) return;
-    setChecking(false);
+    if (source === 'button') setChecking(false);
     if (result.ok) {
       onUnlock();
     } else if (source === 'button') {
