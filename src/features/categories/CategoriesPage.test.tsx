@@ -30,7 +30,8 @@ describe('экран «Категории»', () => {
     await user.click(screen.getByRole('radio', { name: 'Доходы' }));
     await waitFor(() => expect(screen.getByText('Зарплата')).toBeInTheDocument());
     expect(screen.queryByText('Еда')).toBeNull();
-    expect(screen.getByText('💼')).toBeInTheDocument();
+    // значок «💼» рисуется иконкой (svg), а не текстом
+    expect(screen.getByText('Зарплата').closest('li')?.querySelector('svg')).not.toBeNull();
   });
 
   it('есть ссылка назад в «Настройки»', async () => {
@@ -43,12 +44,12 @@ describe('экран «Категории»', () => {
     await user.click(screen.getByRole('button', { name: 'Добавить' }));
     await findByRole('dialog', { name: 'Новая категория расходов' });
     await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Кафе');
-    await user.click(screen.getByRole('button', { name: '☕' }));
+    await user.click(screen.getByRole('button', { name: 'Кофе' }));
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(screen.getByText('Кафе')).toBeInTheDocument());
     const created = (await store(td).db.categories.toArray()).find((c) => c.name === 'Кафе');
-    expect(created).toMatchObject({ kind: 'expense', icon: '☕', parentId: null, archivedAt: null });
+    expect(created).toMatchObject({ kind: 'expense', icon: 'i:cup', parentId: null, archivedAt: null });
   });
 
   it('на вкладке «Доходы» создаётся категория дохода', async () => {
@@ -85,12 +86,12 @@ describe('экран «Категории»', () => {
     await findByRole('dialog', { name: 'Правка категории' });
     await user.clear(screen.getByRole('textbox', { name: 'Название' }));
     await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Питание');
-    await user.click(screen.getByRole('button', { name: '🍞' }));
+    await user.click(screen.getByRole('button', { name: 'Книги' }));
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await eventually(async () => {
       const after = await store(td).db.categories.get(before?.id ?? '');
-      expect(after).toMatchObject({ name: 'Питание', icon: '🍞', kind: 'expense', color: before?.color, archivedAt: null });
+      expect(after).toMatchObject({ name: 'Питание', icon: 'i:book', kind: 'expense', color: before?.color, archivedAt: null });
     });
     expect(screen.getByText('Питание')).toBeInTheDocument();
   });

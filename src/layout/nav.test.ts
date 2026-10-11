@@ -50,12 +50,12 @@ describe('isNavActive: боковая панель ПК', () => {
     ['/budgets', ['Бюджеты']],
     ['/recurring', ['Платежи']],
     ['/debts', ['Долги']],
-    ['/more', ['Ещё']],
-    ['/import', ['Ещё']],
-    ['/settings/categories', ['Ещё']],
+    ['/more', []], // на ПК пункта «Ещё» нет
+    ['/import', ['Настройки']],
+    ['/settings/categories', ['Настройки']],
     ['/settings', ['Настройки']],
     ['/settings/', ['Настройки']],
-  ])('на %s подсвечен ровно один пункт', (path, expected) => {
+  ])('на %s подсвечено: %j', (path, expected) => {
     expect(active(path)).toEqual(expected);
   });
 

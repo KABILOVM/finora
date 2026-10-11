@@ -8,7 +8,6 @@ import { useStore, ValidationError } from '@/db';
 import type { IsoDate, LocalRow, Minor, RecurringRule } from '@/domain/types';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { FxNotice } from '@/features/transactions/FxNotice';
-import { ReceivedField } from '@/features/transactions/ReceivedField';
 import { GENERIC_SAVE_ERROR, NOTE_MAX, ruDate } from '@/features/transactions/txForm';
 import { fxViewFor } from '@/recurring/fx';
 import {
@@ -20,6 +19,7 @@ import {
   type PostFormState,
 } from '@/recurring/postForm';
 import { buildReceivedView, receivedAmount } from '@/recurring/received';
+import { ReceivedPart } from './ReceivedPart';
 import { viewRule } from '@/recurring/ruleView';
 import { relativeText } from '@/recurring/upcoming';
 import { useRateService, useRates } from '@/rates/hooks';
@@ -188,12 +188,12 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
         </FieldGroup>
 
         {isTransfer && received && (
-          <ReceivedField
+          <ReceivedPart
             view={received}
             amountMinor={form.amountMinor}
             onChange={(v) => set({ receivedOverride: v })}
             onUseSuggested={() => set({ receivedOverride: undefined })}
-            onFeeOpen={(open) => set({ feeOpen: open, receivedOverride: undefined })}
+            onFeeOpen={(open: boolean) => set({ feeOpen: open, receivedOverride: undefined })}
             error={errors.toAmount}
           />
         )}

@@ -103,7 +103,7 @@ describe('атака 3: импорт копии и синхронизация', 
     await findByRole('alertdialog', { name: 'Копия из другого аккаунта' });
     await user.click(screen.getByRole('button', { name: 'Загрузить в этот аккаунт' }));
     await waitFor(() => expect(text()).toMatch(/Копия загружена/));
-    expect(text()).toMatch(/Добавлено записей: \d+/);
+    expect(text()).toMatch(/Добавлено: \d+ · обновлено: \d+/);
 
     // всё импортированное лежит на сервере
     await eventually(async () => expect((await a.store.sync.counts()).pending).toBe(0), 15_000);
@@ -124,7 +124,7 @@ describe('атака 3: импорт копии и синхронизация', 
     await chooseFile(json);
     await findByRole('alertdialog', { name: 'Копия из другого аккаунта' });
     await user.click(screen.getByRole('button', { name: 'Загрузить в этот аккаунт' }));
-    await waitFor(() => expect(text()).toMatch(/Добавлено записей: 0/));
+    await waitFor(() => expect(text()).toMatch(/Добавлено: 0 · обновлено: \d+/));
     expect((await a.store.sync.counts()).pending).toBe(0);
     await act(async () => void (await a.engine.syncNow()));
     await b.engine.syncNow();
@@ -159,8 +159,7 @@ describe('атака 3: импорт копии и синхронизация', 
     await findByRole('alertdialog', { name: 'Загрузить копию?' });
     await user.click(screen.getByRole('button', { name: 'Загрузить' }));
     await waitFor(() => expect(text()).toMatch(/Копия загружена/));
-    expect(text()).toMatch(/Добавлено записей: 0/);
-    expect(text()).toMatch(/Заменено более новыми из файла: 0/);
+    expect(text()).toMatch(/Добавлено: 0 · обновлено: 0/);
     await act(async () => void (await a.engine.syncNow()));
     await b.engine.syncNow();
     for (const s of [a.store, b.store]) {

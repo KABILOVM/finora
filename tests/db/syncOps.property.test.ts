@@ -10,7 +10,9 @@ import { remoteWallet, stamp } from './helpers';
  * страниц с сервера, сбоев записи, повторов страниц и скачков часов.
  * Проверки не повторяют код слияния, а сверяют результат с МОДЕЛЬЮ состояния строки (она описана правилами, а не кодом):
  *  1) чистая строка без памяти заменяется серверной; грязная БЕЗ групп (импорт) — побеждает большая пара (метка, устройство);
- *     созданная здесь и ни разу не правленная — принимает серверную; строка с памятью о правке имени («имя» — единственная
+ *     созданная здесь, ни разу не правленная и ещё не видевшая сервера (другое устройство независимо создало ту же запись) — как
+ *     «целиком»: побеждает большая пара, иначе проверка версии при записи (base_seq) отдавала бы выигрыш тому, кто синхронизируется
+ *     вторым; уже видевшая сервер, но не правленная — принимает серверную; строка с памятью о правке имени («имя» — единственная
  *     группа) спорит с сервером по МЕТКАМ: правка именем побеждает, если её метка (at) позже метки серверной версии. Выигравшая
  *     правка остаётся с меткой прежней (если она и так новее серверной) либо с новой, строго больше серверной и прежней —
  *     иначе сервер молча проигнорировал бы отправку;
@@ -64,6 +66,8 @@ interface Model {
    */
   kind: 'plain' | 'new' | 'edit' | 'whole';
   at?: string;
+  /** Для 'new': сервер этой записи ещё не видели (serverSeq === null) — при встрече с чужой версией решает большая пара. */
+  unseen?: boolean;
 }
 const keyOf = (v: { stamp: string; device: string }) => `${v.stamp}|${v.device}`;
 const cmp = (a: { stamp: string; device: string }, b: { stamp: string; device: string }) =>
@@ -139,7 +143,15 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
             const prev = model.get(id);
             // создание — «новая»; первая правка (чистой, новой или отправленной) — запоминает время правки; импортная остаётся «целиком»
             const kind: Model['kind'] = !prev ? 'new' : prev.kind === 'whole' ? 'whole' : 'edit';
-            model.set(id, { name, stamp: saved.clientUpdatedAt, device: saved.deviceId, dirty: true, kind, ...(kind === 'edit' ? { at: saved.clientUpdatedAt } : {}) });
+            model.set(id, {
+              name,
+              stamp: saved.clientUpdatedAt,
+              device: saved.deviceId,
+              dirty: true,
+              kind,
+              ...(kind === 'edit' ? { at: saved.clientUpdatedAt } : {}),
+              ...(kind === 'new' ? { unseen: true } : {}),
+            });
           };
           const doSnapshot = async (i: number) => {
             const row = await rowOf(IDS[i]!);
@@ -193,7 +205,12 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
                 const res = await store.sync.applyRemotePage('wallets', [{ entity, serverSeq: seq }], seq);
                 expect(res.applied + res.keptLocal, `${step}: учтена ровно одна строка`).toBe(1);
                 const remoteModel: Model = { name, stamp: cand.stamp, device: cand.device, dirty: false, kind: 'plain' };
-                if (!before || before.kind === 'plain' || before.kind === 'new') {
+                if (before?.kind === 'new' && before.unseen && before.dirty) {
+                  // созданная здесь запись, сервера ещё не видевшая: чужая независимая версия — побеждает большая пара
+                  if (cmp(cand, before) > 0) model.set(id, remoteModel);
+                  else model.set(id, { ...before, unseen: false }); // своя остаётся (уйдёт с известной версией сервера)
+                  expect(res.merged, step).toBe(0);
+                } else if (!before || before.kind === 'plain' || before.kind === 'new') {
                   model.set(id, remoteModel); // вставка / замена чистой / принимает серверную (создана здесь, не правлена)
                   expect(res.merged, step).toBe(0);
                 } else if (before.kind === 'whole') {

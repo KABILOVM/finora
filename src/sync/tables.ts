@@ -20,6 +20,14 @@ export type SyncTableName = (typeof SYNC_TABLES)[number];
 
 export type WireValue = string | number | boolean | null;
 export type WireRow = Record<string, WireValue>;
+
+/**
+ * Служебная колонка ЗАПРОСА (в таблицах она всегда пустая): версия строки на сервере (server_seq), поверх которой сделана правка.
+ * Сервер принимает правку существующей строки, только если эта версия всё ещё текущая (проверка и запись — compare-and-set),
+ * иначе отвечает отказом 'conflict' (см. transport.ts). Значения: нет колонки / null — без проверки (старые клиенты, «последний побеждает»);
+ * 0 — «строки на сервере нет»; n ≥ 1 — «строка на сервере в версии n».
+ */
+export const BASE_SEQ_COLUMN = 'base_seq';
 /** Строка, пришедшая с сервера: плюс курсор. */
 export type PulledRow = WireRow & { server_seq: number };
 
@@ -172,14 +180,18 @@ export class WireError extends Error {
   }
 }
 
-/** Сущность → строка для отправки. user_id/server_seq сервер ставит сам; локальные поля (dirty и т.п.) не уходят. */
-export function toWire(table: SyncTableName, entity: Entity): WireRow {
+/**
+ * Сущность → строка для отправки. user_id/server_seq сервер ставит сам; локальные поля (dirty и т.п.) не уходят.
+ * baseSeq — версия строки на сервере, поверх которой сделана правка (см. BASE_SEQ_COLUMN); не задана — проверки версии не будет.
+ */
+export function toWire(table: SyncTableName, entity: Entity, baseSeq?: number): WireRow {
   const row: WireRow = {};
   const src = entity as unknown as Record<string, unknown>;
   for (const c of TABLE_SPECS[table].columns) {
     const v = src[c.field];
     row[c.column] = v === undefined ? null : (v as WireValue);
   }
+  if (baseSeq !== undefined) row[BASE_SEQ_COLUMN] = baseSeq;
   return row;
 }
 

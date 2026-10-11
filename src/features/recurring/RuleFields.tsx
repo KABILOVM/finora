@@ -6,10 +6,10 @@ import type { CurrencyCode, Debt, LocalRow, Minor, TxKind, Wallet } from '@/doma
 import { CategoryPicker } from '@/features/transactions/CategoryPicker';
 import { walletOptions } from '@/features/transactions/ContextRow';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
-import { ReceivedField } from '@/features/transactions/ReceivedField';
 import { NOTE_MAX } from '@/features/transactions/txForm';
 import type { ReceivedView } from '@/features/transactions/useTxFormController';
 import type { RuleFormErrors, RuleFormState } from '@/recurring/ruleForm';
+import { ReceivedPart } from './ReceivedPart';
 
 const KINDS: readonly SegmentOption<TxKind>[] = [
   { value: 'expense', label: 'Расход', tone: 'expense' },
@@ -88,18 +88,18 @@ export function RuleFields(p: RuleFieldsProps) {
       </FieldGroup>
 
       {isTransfer && p.received && (
-        <ReceivedField
+        <ReceivedPart
           view={p.received}
           amountMinor={form.amountMinor}
           onChange={(v) => p.onChange({ receivedOverride: v })}
           onUseSuggested={() => p.onChange({ receivedOverride: undefined })}
-          onFeeOpen={(open) => p.onChange({ feeOpen: open, receivedOverride: undefined })}
+          onFeeOpen={(open: boolean) => p.onChange({ feeOpen: open, receivedOverride: undefined })}
           error={errors.toAmount}
         />
       )}
 
       {!isTransfer && (
-        <CategoryPicker options={p.categories} value={form.categoryId} onChange={(categoryId) => p.onChange({ categoryId })} error={errors.category} />
+        <CategoryPicker kind={form.kind === 'income' ? 'income' : 'expense'} options={p.categories} value={form.categoryId} onChange={(categoryId) => p.onChange({ categoryId })} error={errors.category} />
       )}
 
       {!isTransfer && p.debts.length > 0 && (

@@ -93,6 +93,7 @@ describe('правка операции по долгу', () => {
 
   it('правка только заметки или даты тоже оставляет связь с долгом', async () => {
     const { td, ids, onClose } = await openEdit((i) => i.issue);
+    await user.click(screen.getByRole('button', { name: 'Заметка' })); // заметка скрыта, пока её не откроют
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'наличными');
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());

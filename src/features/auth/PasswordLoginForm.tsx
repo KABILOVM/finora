@@ -7,6 +7,8 @@ import { FormError, OfflineNotice } from './LoginNotices';
 export interface PasswordLoginFormProps {
   email: string;
   onEmailChange(value: string): void;
+  /** true — регистрация (почта и пароль от 8 символов), иначе вход. */
+  signUp?: boolean;
 }
 
 /**
@@ -14,12 +16,13 @@ export interface PasswordLoginFormProps {
  * пароль именно через это): autocomplete username / current-password, постоянные id и name, подпись клавиши Enter.
  * method="post": если страница по какой-то причине отправит форму сама, пароль уйдёт в теле запроса, а не в адресе.
  */
-export function PasswordLoginForm({ email, onEmailChange }: PasswordLoginFormProps) {
+export function PasswordLoginForm({ email, onEmailChange, signUp = false }: PasswordLoginFormProps) {
   const auth = useAuth();
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmSent, setConfirmSent] = useState(false);
   const busyRef = useRef(false);
 
   const submit = async (e: FormEvent) => {
@@ -28,10 +31,15 @@ export function PasswordLoginForm({ email, onEmailChange }: PasswordLoginFormPro
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const result = await auth.signIn(email, password);
+    const result = signUp ? await auth.signUp(email, password) : await auth.signIn(email, password);
     // при успехе экран заменится сам (состояние входа изменилось), поэтому состояние здесь трогаем только при ошибке
     if (!result.ok) {
       setError(result.message);
+      setBusy(false);
+      busyRef.current = false;
+    } else if (result.confirm) {
+      // аккаунт создан, но войти можно только после письма
+      setConfirmSent(true);
       setBusy(false);
       busyRef.current = false;
     }
@@ -61,7 +69,7 @@ export function PasswordLoginForm({ email, onEmailChange }: PasswordLoginFormPro
           id="login-password"
           name="password"
           type={showPassword ? 'text' : 'password'}
-          autoComplete="current-password"
+          autoComplete={signUp ? 'new-password' : 'current-password'}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
@@ -81,11 +89,17 @@ export function PasswordLoginForm({ email, onEmailChange }: PasswordLoginFormPro
         </button>
       </div>
 
+      {signUp && <p className="-mt-2 text-sm text-muted">Пароль — от 8 символов</p>}
+      {confirmSent && (
+        <p role="status" className="rounded-xl bg-income/10 p-3 font-medium text-income">
+          Мы отправили письмо на {email.trim()}. Подтвердите почту по ссылке в нём, затем войдите.
+        </p>
+      )}
       <OfflineNotice />
       <FormError message={error} />
 
       <Button type="submit" size="lg" fullWidth loading={busy}>
-        Войти
+        {signUp ? 'Создать аккаунт' : 'Войти'}
       </Button>
     </form>
   );

@@ -309,12 +309,37 @@ describe('карантин и «вся запись»', () => {
     expect(await row(store)).toMatchObject({ dirty: 0, syncError: null });
   });
 
-  it('новая строка, созданная здесь и ни разу не правленная: нечего терять — принимает серверную версию', async () => {
-    const store = await makeStore({ now: () => T0, deviceId: 'device-local-0001' });
-    await store.wallets.create({ name: 'моя', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-1' });
-    const r = await store.sync.applyRemotePage('wallets', page(remote({ color: '#222222', clientUpdatedAt: OLD }), 2), 2);
-    expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 0, merged: 0 });
-    expect(await row(store)).toMatchObject({ name: 'исх', color: '#222222', dirty: 0 });
+  describe('новая строка, созданная здесь и ни разу не правленная', () => {
+    const fresh = async () => {
+      const store = await makeStore({ now: () => T0, deviceId: 'device-local-0001' });
+      await store.wallets.create({ name: 'моя', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-1' });
+      return store;
+    };
+
+    it('другое устройство независимо создало ту же запись, и его версия новее: принимает серверную', async () => {
+      const store = await fresh();
+      const r = await store.sync.applyRemotePage('wallets', page(remote({ color: '#222222', clientUpdatedAt: NEW }), 2), 2);
+      expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 1, merged: 0 });
+      expect(await row(store)).toMatchObject({ name: 'исх', color: '#222222', dirty: 0, serverSeq: 2 });
+    });
+
+    it('...а его версия старее нашей: наша остаётся и уйдёт уже с известной версией сервера (проверка версии при записи)', async () => {
+      const store = await fresh();
+      const r = await store.sync.applyRemotePage('wallets', page(remote({ color: '#222222', clientUpdatedAt: OLD }), 2), 2);
+      expect(r).toEqual({ applied: 0, keptLocal: 1, lostLocal: 0, merged: 0 });
+      expect(await row(store)).toMatchObject({ name: 'моя', color: '#000000', dirty: 1, serverSeq: 2, deviceId: 'device-local-0001' });
+      expect((await store.sync.listDirty('wallets', 10)).map((x) => x.id)).toEqual(['w-1']);
+    });
+
+    it('на сервере наша же отправленная версия (ответ потерялся), которую успело поправить другое устройство: принимает серверную', async () => {
+      const store = await fresh();
+      const created = (await row(store))!;
+      // метка сервера может быть и меньше нашей (наши часы ушли вперёд, сервер зажал метку), но создание — наше
+      const theirs = { ...toEntity(created), color: '#222222', clientUpdatedAt: OLD, deviceId: 'device-local-0001' };
+      const r = await store.sync.applyRemotePage('wallets', page(theirs as Wallet, 2), 2);
+      expect(r.merged).toBe(0);
+      expect(await row(store)).toMatchObject({ color: '#222222', dirty: 0 });
+    });
   });
 
   it('новая строка, созданная здесь и ПРАВЛЕННАЯ до подтверждения: правка остаётся, остальное — серверное', async () => {

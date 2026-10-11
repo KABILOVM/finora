@@ -6,8 +6,6 @@ const MORE: ReadonlyArray<readonly [string, string, string]> = [
   ['Бюджеты', 'Бюджеты', '#/budgets'],
   ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
   ['Долги и кредиты', 'Долги и кредиты', '#/debts'],
-  ['Категории', 'Категории', '#/settings/categories'],
-  ['Импорт из Zenmoney', 'Импорт из Zenmoney', '#/import'],
   ['Настройки', 'Настройки', '#/settings'],
 ];
 
@@ -21,7 +19,8 @@ const lit = async (page: Page): Promise<string[]> => {
 };
 
 test.describe('15. Меню «Ещё»', () => {
-  test('«Ещё» открывает страницу «Ещё» со всеми разделами и пояснениями', async ({ page }, testInfo) => {
+  test('«Ещё» (телефон) открывает страницу «Ещё» со всеми разделами', async ({ page }, testInfo) => {
+    test.skip(!isPhone(page), 'на ПК пункта «Ещё» нет: всё в боковой панели');
     await openApp(page);
     await goSection(page, 'Ещё');
     expect(hashOf(page)).toBe('#/more');
@@ -43,7 +42,7 @@ test.describe('15. Меню «Ещё»', () => {
     });
   }
 
-  test('новые разделы открываются: заголовок и каркас на месте, без ошибок', async ({ page }, testInfo) => {
+  test('заглушки новых разделов: «Скоро», каркас на месте, без ошибок', async ({ page }, testInfo) => {
     for (const [hash, title] of [
       ['/budgets', 'Бюджеты'],
       ['/recurring', 'Регулярные платежи'],
@@ -52,8 +51,9 @@ test.describe('15. Меню «Ещё»', () => {
     ] as const) {
       await openApp(page, hash);
       await expect(h1(page, title)).toBeVisible();
+      await expect(page.getByRole('heading', { level: 2, name: 'Скоро' })).toBeVisible();
       await expect(mainNav(page)).toBeVisible();
-      if (hash === '/budgets') await shot(page, '15-budgets', testInfo);
+      if (hash === '/budgets') await shot(page, '15-budgets-stub', testInfo);
     }
   });
 
@@ -75,7 +75,6 @@ test.describe('15. Меню «Ещё»', () => {
       ['Платежи', 'Регулярные платежи', '#/recurring'],
       ['Долги', 'Долги и кредиты', '#/debts'],
       ['Настройки', 'Настройки', '#/settings'],
-      ['Ещё', 'Ещё', '#/more'],
     ] as const) {
       await mainNav(page).getByRole('link', { name, exact: true }).click();
       await expect(h1(page, title)).toBeVisible();
@@ -95,7 +94,22 @@ test.describe('15. Меню «Ещё»', () => {
     }
   });
 
+  test('ПК: пункта «Ещё» в боковой панели нет, категории и импорт — внутри «Настроек»', async ({ page }) => {
+    test.skip(isPhone(page), 'боковая панель только на ПК');
+    await openApp(page);
+    await expect(mainNav(page).getByRole('link', { name: 'Ещё' })).toHaveCount(0);
+    await goSection(page, 'Настройки');
+    await page.getByRole('main').getByRole('link', { name: 'Категории', exact: true }).click();
+    await expect(h1(page, 'Категории')).toBeVisible();
+    expect(await lit(page)).toEqual(['Настройки']);
+    await goSection(page, 'Настройки');
+    await page.getByRole('main').getByRole('link', { name: 'Импорт из Zenmoney', exact: true }).click();
+    await expect(h1(page, 'Импорт из Zenmoney')).toBeVisible();
+    expect(await lit(page)).toEqual(['Настройки']);
+  });
+
   test('кнопка «Назад» из раздела возвращает на «Ещё»', async ({ page }) => {
+    test.skip(!isPhone(page), '«Ещё» только на телефоне');
     await openApp(page);
     await openFromMore(page, 'Бюджеты');
     await expect(h1(page, 'Бюджеты')).toBeVisible();

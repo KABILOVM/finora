@@ -32,7 +32,8 @@ export type AuthState =
   | { status: 'signed-in'; user: AuthUser }
   | { status: 'offline-known'; user: AuthUser };
 
-export type AuthResult = { ok: true } | { ok: false; message: string };
+/** `confirm: true` — регистрация прошла, но Supabase просит подтвердить почту по письму: войти можно только после этого. */
+export type AuthResult = { ok: true; confirm?: boolean } | { ok: false; message: string };
 
 /** Ровно та часть клиента Supabase, которую использует вход. Настоящий SupabaseClient ей подходит; в тестах — подмена. */
 export type AuthClientLike = {
@@ -43,6 +44,7 @@ export type AuthClientLike = {
     | 'signInWithPassword'
     | 'signInWithOtp'
     | 'verifyOtp'
+    | 'signUp'
     | 'signOut'
     | 'updateUser'
     | 'refreshSession'
@@ -64,6 +66,8 @@ export interface AuthApi {
   requestEmailCode(email: string): Promise<AuthResult>;
   /** Вход по коду, шаг 2: проверить код из письма. Дальше всё как у входа по паролю. */
   verifyEmailCode(email: string, code: string): Promise<AuthResult>;
+  /** Регистрация по почте и паролю. Если подтверждение почты не нужно — сразу входит. */
+  signUp(email: string, password: string): Promise<AuthResult>;
   /** Выход с этого устройства. Локальная база пользователя СОХРАНЯЕТСЯ. Не бросает ошибок. */
   signOut(): Promise<void>;
   changePassword(password: string, repeat: string): Promise<AuthResult>;
@@ -306,6 +310,32 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
     [enter],
   );
 
+  const signUp = useCallback(async (emailRaw: string, password: string): Promise<AuthResult> => {
+    const c = clientRef.current;
+    if (!c) return { ok: false, message: 'Облако не подключено: регистрация не нужна' };
+    const email = emailRaw.trim().toLowerCase();
+    if (email === '' || !email.includes('@')) return { ok: false, message: 'Введите почту, например name@example.com' };
+    const problem = checkNewPassword(password, password);
+    if (problem) return { ok: false, message: problem };
+    try {
+      const { data, error } = await c.auth.signUp({ email, password });
+      if (error) return { ok: false, message: describeAuthError(error, 'sign-up') };
+      // Почта уже занята: при включённом подтверждении Supabase не выдаёт ошибку, а возвращает пользователя без «identities»
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        return { ok: false, message: 'Эта почта уже зарегистрирована. Войдите.' };
+      }
+      const user = userOf(data.session);
+      if (!user) return { ok: true, confirm: true };
+      epochRef.current++;
+      leftRef.current = false;
+      writeLastUser(user);
+      setState({ status: 'signed-in', user });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: describeAuthError(e, 'sign-up') };
+    }
+  }, []);
+
   const signOut = useCallback(async (): Promise<void> => {
     const c = clientRef.current;
     if (!c) return;
@@ -361,10 +391,11 @@ export function AuthProvider({ client, bootTimeoutMs = DEFAULT_BOOT_TIMEOUT_MS, 
       signIn,
       requestEmailCode,
       verifyEmailCode,
+      signUp,
       signOut,
       changePassword,
     }),
-    [client, state, signIn, requestEmailCode, verifyEmailCode, signOut, changePassword],
+    [client, state, signIn, requestEmailCode, verifyEmailCode, signUp, signOut, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -88,7 +88,10 @@ describe('правка платежа по долгу: вопрос про пе�
 
   it('платёж, который уже был с переплатой: правка заметки сохраняется без вопроса', async () => {
     const { td, ids, onClose } = await openEditOfPayment(80_000);
-    await user.type(screen.getByRole('textbox', { name: 'Заметка' }), 'вернул с запасом');
+    // в новой форме заметка скрыта, пока её не откроют
+    const noteButton = screen.queryByRole('button', { name: 'Заметка' });
+    if (noteButton) await user.click(noteButton);
+    await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'вернул с запасом');
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('alertdialog', { name: askName })).toBeNull();

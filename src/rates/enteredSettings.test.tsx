@@ -89,7 +89,8 @@ describe('Настройки: введённые в операциях курс�
     const { service } = setup([], { now: () => NOW });
     service.rememberEnteredRate('USD', 'TJS', 11);
     service.rememberEnteredRate('EUR', 'TJS', 12);
-    await openSettings(service);
+    const td = await openSettings(service);
+    await write(() => td.stores[0]!.wallets.create({ ...usdWallet, name: 'Евро', currency: 'EUR' }));
     await waitFor(() => expect(entered()).not.toBeNull());
     await user.click(screen.getByRole('button', { name: 'Сбросить введённый курс EUR' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Сбросить введённый курс EUR' })).toBeNull());

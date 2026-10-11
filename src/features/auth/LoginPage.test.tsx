@@ -21,14 +21,73 @@ async function openLogin(opts: Parameters<typeof fakeAuthClient>[0] = { session:
 }
 
 describe('экран входа', () => {
-  it('поля подписаны, у почты подходящая клавиатура, нет ссылки на регистрацию, есть пояснение про закрытый круг', async () => {
+  it('поля подписаны, у почты подходящая клавиатура, есть переход к регистрации', async () => {
     await openLogin();
     const email = screen.getByRole('textbox', { name: 'Почта' }) as HTMLInputElement;
     expect(email.type).toBe('email');
     expect(email.autocomplete).toBe('username');
     expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.autocomplete).toBe('current-password');
-    expect(screen.getByText(/Аккаунты создаёт владелец приложения/)).toBeInTheDocument();
-    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' })).toBeInTheDocument();
+  });
+
+  describe('регистрация', () => {
+    const NEW = { email: 'new@example.com', password: 'new-password-1' };
+    const fill = async (email: string, password: string) => {
+      await user.type(screen.getByRole('textbox', { name: 'Почта' }), email);
+      await user.type(document.querySelector('input[type="password"]') as HTMLInputElement, password);
+    };
+
+    it('режим переключается туда и обратно, у пароля автозаполнение «новый пароль»', async () => {
+      await openLogin();
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      expect(screen.getByRole('heading', { name: 'Регистрация', level: 1 })).toBeInTheDocument();
+      expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.autocomplete).toBe('new-password');
+      await user.click(screen.getByRole('button', { name: 'Уже есть аккаунт? Войти' }));
+      expect(screen.getByRole('heading', { name: 'Вход', level: 1 })).toBeInTheDocument();
+    });
+
+    it('новая почта и пароль: аккаунт создан, человек сразу внутри', async () => {
+      const { fake } = await openLogin();
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      await fill(NEW.email, NEW.password);
+      await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
+      await waitFor(() => expect(screen.getByText('ПРИЛОЖЕНИЕ')).toBeInTheDocument());
+      expect(fake.calls.signUp).toBe(1);
+    });
+
+    it('короткий пароль: понятная ошибка, на сервер ничего не уходит', async () => {
+      const { fake } = await openLogin();
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      await fill(NEW.email, 'short');
+      await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
+      expect(await findByRole('alert')).toHaveTextContent('не короче 8 символов');
+      expect(fake.calls.signUp).toBe(0);
+    });
+
+    it('почта уже занята: «Эта почта уже зарегистрирована. Войдите.»', async () => {
+      await openLogin();
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      await fill(ALICE.email, 'another-password');
+      await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
+      expect(await findByRole('alert')).toHaveTextContent('Эта почта уже зарегистрирована. Войдите.');
+    });
+
+    it('включено подтверждение почты: сказано проверить письмо, внутрь не пускает', async () => {
+      await openLogin({ session: null, signup: 'confirm' });
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      await fill(NEW.email, NEW.password);
+      await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
+      expect(await findByRole('status')).toHaveTextContent('Подтвердите почту');
+      expect(screen.queryByText('ПРИЛОЖЕНИЕ')).toBeNull();
+    });
+
+    it('владелец отключил регистрацию: понятное сообщение', async () => {
+      await openLogin({ session: null, signup: 'disabled' });
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      await fill(NEW.email, NEW.password);
+      await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
+      expect(await findByRole('alert')).toHaveTextContent('Регистрация отключена');
+    });
   });
 
   it('«Показать пароль» / «Скрыть пароль» переключает тип поля', async () => {

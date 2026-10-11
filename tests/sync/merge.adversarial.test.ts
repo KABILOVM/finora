@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
+import { toWire } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
 import { USER, openDevice, settle, snapshotOf, spy, type Device, type Spy } from './engineHarness';
 
@@ -17,18 +18,23 @@ interface Rig {
   walletId: string;
 }
 
-/** Два устройства одного пользователя, обе синхронизированы, одна операция «такси» на 100,00. У A транспорт обёрнут шпионом. */
-async function rig(): Promise<Rig> {
+/**
+ * Два устройства одного пользователя, обе синхронизированы, одна операция «такси» на 100,00. У A транспорт обёрнут шпионом.
+ * skew — на сколько миллисекунд часы устройства убежали вперёд (отрицательное — отстают); по умолчанию часы идут верно.
+ */
+async function rig(skew: { a?: number; b?: number } = {}): Promise<Rig> {
   const server = createMemoryServer();
   let spyA!: Spy;
+  const clock = (ms: number | undefined) => (ms ? () => Date.now() + ms : undefined);
   const a = await openDevice(server, 'dev-a', {
     seed: true,
+    now: clock(skew.a),
     wrap: (inner) => {
       spyA = spy(inner);
       return spyA.transport;
     },
   });
-  const b = await openDevice(server, 'dev-b', { seed: true });
+  const b = await openDevice(server, 'dev-b', { seed: true, now: clock(skew.b) });
   await a.engine.syncNow();
   await b.engine.syncNow();
   const wallet = (await a.store.db.wallets.toArray())[0]!;
@@ -349,5 +355,127 @@ describe('слияние: сервер отверг объединённую з�
     expect(r.a.engine.getStatus()).toMatchObject({ pending: 0, quarantined: 0 });
     expect(await snapshotOf(r.a.store)).toEqual(await snapshotOf(r.b.store));
     await settle(5);
+  });
+});
+
+describe('слияние: расхождение часов за окно сервера и проверка версии (base_seq)', () => {
+  const HOUR = 3_600_000;
+
+  /**
+   * Чужое устройство B успевает записать операцию в окне между предварительным забором A и отправкой A (забор уже ответил, отправка
+   * ещё не ушла). Если метка отправки A БОЛЬШЕ серверной (часы A убежали за окно «сейчас + 5 минут»), сервер раньше принимал строку A
+   * целиком и затирал правку B другой группы; если МЕНЬШЕ — правка A молча пропадала. Теперь отправка A несёт версию, поверх которой
+   * сделана, сервер её отвергает, и A забирает чужое, объединяет и отправляет заново.
+   */
+  const inWindow = (r: Rig, writeB: () => Promise<void>): void => {
+    let fired = false;
+    r.spyA.onPull = async (table, _after, rows) => {
+      if (table === 'transactions' && !fired) {
+        fired = true;
+        await writeB();
+        await r.b.engine.syncNow();
+      }
+      return rows;
+    };
+  };
+  const converge = async (r: Rig): Promise<void> => {
+    for (let i = 0; i < 3; i++) {
+      await r.a.engine.syncNow();
+      await r.b.engine.syncNow();
+    }
+    for (const d of [r.a, r.b]) expect(d.engine.getStatus(), `${d.deviceId}: статус`).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0, lastError: null });
+    expect(await snapshotOf(r.a.store)).toEqual(await snapshotOf(r.b.store));
+  };
+
+  it.each([
+    ['часы A на час вперёд: метка отправки A БОЛЬШЕ серверной', HOUR],
+    ['часы A на час назад: метка отправки A МЕНЬШЕ серверной', -HOUR],
+    ['часы A на 10 минут вперёд (шире окна 5 минут)', 10 * 60_000],
+  ])('%s: сумма B и заметка A сохраняются обе', async (_name, skewA) => {
+    const r = await rig({ a: skewA });
+    await r.a.store.transactions.update(r.txId, { note: 'заметка с A' });
+    inWindow(r, () => r.b.store.transactions.update(r.txId, { amountMinor: 77_700 }).then(() => undefined));
+    r.spyA.calls.length = 0;
+    await r.a.engine.syncNow();
+    expect(r.spyA.pushes('transactions'), 'первая отправка отвергнута проверкой версии, вторая (после слияния) принята').toHaveLength(2);
+    await converge(r);
+    expect(serverTx(r)['amount_minor'], 'сумма B затёрта отправкой A, не знавшей о ней').toBe(77_700);
+    expect(serverTx(r)['note']).toBe('заметка с A');
+  });
+
+  it.each([
+    ['часы A на час вперёд', HOUR],
+    ['часы A на час назад', -HOUR],
+  ])('%s: заметка B в окне, сумма A — обе сохраняются (группы наоборот)', async (_name, skewA) => {
+    const r = await rig({ a: skewA });
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    inWindow(r, () => r.b.store.transactions.update(r.txId, { note: 'заметка с B' }).then(() => undefined));
+    await r.a.engine.syncNow();
+    await converge(r);
+    expect(serverTx(r)['amount_minor']).toBe(20_000);
+    expect(serverTx(r)['note']).toBe('заметка с B');
+  });
+
+  it('обе стороны правят одну группу: побеждает правка с более поздней меткой, устройства и сервер сходятся (часы A на час вперёд — выигрывает A)', async () => {
+    const r = await rig({ a: HOUR });
+    await r.a.store.transactions.update(r.txId, { amountMinor: 11_000 });
+    inWindow(r, () => r.b.store.transactions.update(r.txId, { amountMinor: 25_000 }).then(() => undefined));
+    await r.a.engine.syncNow();
+    await converge(r);
+    expect(serverTx(r)['amount_minor']).toBe(11_000);
+    expect((await r.b.store.db.transactions.get(r.txId))!.amountMinor).toBe(11_000);
+  });
+
+  it('контроль: клиент без base_seq (старая версия приложения) по-прежнему затирает чужую правку — вот от чего защищает проверка версии', async () => {
+    const r = await rig();
+    await r.b.store.transactions.update(r.txId, { amountMinor: 77_700 });
+    await r.b.engine.syncNow();
+    const stale = { ...(await r.a.store.db.transactions.get(r.txId))!, note: 'старый клиент', clientUpdatedAt: new Date(Date.now() + HOUR).toISOString(), deviceId: 'dev-old' };
+    await r.server.transportFor(USER).push('transactions', [toWire('transactions', stale)]); // без base_seq: проверки версии нет
+    expect(serverTx(r)).toMatchObject({ note: 'старый клиент', amount_minor: 10_000 });
+    // а та же правка с base_seq отвергается и ничего не записывает
+    const sent = await r.server
+      .transportFor(USER)
+      .push('transactions', [toWire('transactions', { ...stale, note: 'новый клиент', deviceId: 'dev-new', clientUpdatedAt: new Date(Date.now() + HOUR + 1).toISOString() }, 1)])
+      .then(
+        () => 'принято',
+        (e: unknown) => (e as TransportError).kind,
+      );
+    expect(sent).toBe('conflict');
+    expect(serverTx(r)).toMatchObject({ note: 'старый клиент' });
+  });
+
+  it('ответ потерялся, хотя сервер правку принял: повтор не считается конфликтом и не двигает server_seq', async () => {
+    const r = await rig({ a: HOUR });
+    await r.a.store.transactions.update(r.txId, { note: 'правка A' });
+    r.spyA.loseResponses = 1;
+    await r.a.engine.syncNow(); // сервер принял, ответ потерялся
+    const seq = serverTx(r)['server_seq'];
+    r.spyA.calls.length = 0;
+    await r.a.engine.syncNow(); // предварительный забор уже видит свою правку; если отправка всё же уходит — это точный повтор с устаревшей версией
+    expect(serverTx(r)['server_seq'], 'повтор не двигает номер версии').toBe(seq);
+    expect(r.spyA.pushes('transactions').length, 'не больше одной отправки: без отказа проверки версии и повторов').toBeLessThanOrEqual(1);
+    await converge(r);
+    expect(serverTx(r)['note']).toBe('правка A');
+  });
+
+  it('чужое устройство пишет ту же запись перед каждой нашей отправкой: цикл останавливается с понятной ошибкой, следующий доходит', async () => {
+    const r = await rig();
+    let writes = 0;
+    r.spyA.onPush = async (table) => {
+      if (table !== 'transactions' || writes >= 8) return;
+      writes++;
+      await r.b.store.transactions.update(r.txId, { note: `B-${writes}` });
+      await r.b.engine.syncNow(); // B успевает раньше каждой отправки A
+    };
+    await r.a.store.transactions.update(r.txId, { occurredOn: '2026-10-20' });
+    await r.a.engine.syncNow();
+    expect(r.a.engine.getStatus()).toMatchObject({ phase: 'error', pending: 1 });
+    expect(r.a.engine.getStatus().lastError).toMatch(/меняются на другом устройстве/);
+    expect((await r.a.store.db.transactions.get(r.txId))!.occurredOn, 'правка A не потеряна').toBe('2026-10-20');
+    await r.a.engine.syncNow(); // помехи кончились
+    await converge(r);
+    expect(serverTx(r)['occurred_on']).toBe('2026-10-20');
+    expect(String(serverTx(r)['note'])).toMatch(/^B-\d$/);
   });
 });

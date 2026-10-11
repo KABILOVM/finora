@@ -174,25 +174,17 @@ test.describe('Облачный режим: CSP и Supabase', () => {
     });
     test.info().annotations.push({ type: 'indexedDB', description: String(idb) });
 
-    // Проверка облака
-    await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: 'Ещё', exact: true }).first().click();
-    await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
-    await page.getByRole('button', { name: 'Проверить', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Скопировать отчёт' })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Скопировать отчёт' }).click();
-    await page.waitForTimeout(300);
-    const manual = await page.getByLabel('Отчёт для копирования').inputValue({ timeout: 1500 }).catch(() => '');
-    const clip =
-      manual ||
-      (await page.evaluate(() => Promise.race([navigator.clipboard.readText(), new Promise<string>((ok) => setTimeout(() => ok(''), 3000))]).catch(() => '')));
-    if (process.env.SEC_DEBUG) console.log(`--- отчёт ---\n${clip}\n--- localStorage: ${JSON.stringify(ls).replace(ACCESS, '<ACCESS>')}\n--- idb: ${idb}\n--- консоль:\n${logs.join('\n')}`);
-    expect(clip.length, 'отчёт получен (из буфера или из текстового поля)').toBeGreaterThan(50);
-    for (const secret of [EMAIL, ACCESS, REFRESH, ANON, PASSWORD, USER_ID, 'friend.secret']) {
-      expect(clip, `отчёт содержит секрет: ${secret}`).not.toContain(secret);
+    // экран «Настройки» не показывает секретов
+    const nav = page.getByRole('navigation', { name: 'Основная навигация' });
+    if ((await nav.getByRole('link', { name: 'Настройки', exact: true }).count()) > 0) {
+      await nav.getByRole('link', { name: 'Настройки', exact: true }).first().click(); // ПК: пункт боковой панели
+    } else {
+      await nav.getByRole('link', { name: 'Ещё', exact: true }).first().click(); // телефон: через «Ещё»
+      await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
     }
-    // то же — в тексте экрана результатов
     const body = await page.locator('body').innerText();
     for (const secret of [ACCESS, REFRESH, ANON, PASSWORD]) expect(body).not.toContain(secret);
+    if (process.env.SEC_DEBUG) console.log(`--- localStorage: ${JSON.stringify(ls).replace(ACCESS, '<ACCESS>')}\n--- idb: ${idb}\n--- консоль:\n${logs.join('\n')}`);
 
     // консоль: ни токенов, ни пароля, ни ключа
     for (const secret of [ACCESS, REFRESH, ANON, PASSWORD]) {

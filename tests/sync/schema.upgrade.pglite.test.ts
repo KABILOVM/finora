@@ -146,7 +146,8 @@ describe('схема: обновление с этапа 1 на этап 2 по�
     await s.applySchema(); // обновление
     const after = await dumpAll(s, STAGE1_TABLES);
     for (const t of STAGE1_TABLES) {
-      const expected = t === 'transactions' ? before[t]!.map((r) => ({ ...r, debt_id: null, recurring_rule_id: null })) : before[t];
+      // новые колонки пусты: у всех старых таблиц — служебная base_seq (проверка версии), у операций — ещё debt_id и recurring_rule_id
+      const expected = before[t]!.map((r) => ({ ...r, base_seq: null, ...(t === 'transactions' ? { debt_id: null, recurring_rule_id: null } : {}) }));
       expect(after[t], t).toEqual(expected);
     }
 

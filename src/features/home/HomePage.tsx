@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
@@ -7,17 +8,14 @@ import { InstallHint } from '@/components/InstallHint';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { useBalances, useSettings, useWallets } from '@/db';
-import { formatMinor } from '@/domain/money';
 import BudgetsWidget from '@/features/budgets/BudgetsWidget';
 import DebtsWidget from '@/features/debts/DebtsWidget';
 import UpcomingWidget from '@/features/recurring/UpcomingWidget';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
-import { endSentence } from '@/features/transactions/txDisplay';
-import { ruDate } from '@/features/transactions/txForm';
 import { monthKey, todayLocal } from '@/lib/dates';
-import { enteredNote } from '@/rates/enteredText';
 import { useRates } from '@/rates/hooks';
 import { computeHomeTotal } from './homeData';
+import { HomeHero } from './HomeHero';
 import { MonthCard } from './MonthCard';
 import { RecentOps } from './RecentOps';
 
@@ -90,40 +88,8 @@ export default function HomePage() {
     <>
       <InstallHint className="mb-2" />
       <PageHeader title="Главная" className={HEADER_CLASS} />
-      <div className="flex flex-col gap-3 md:gap-6">
-        <Card aria-label="Всего денег" data-testid="home-total" className="!py-3 md:!py-4">
-          <p className="text-sm text-muted">Всего</p>
-          {total ? (
-            <>
-              {/* Размер цифр плавно уменьшается на узком экране: длинная сумма не должна уходить за край (и обрезаться). */}
-              <p className="mt-0.5 text-[clamp(1.625rem,8.4vw,2.25rem)] font-bold leading-tight tracking-tight">
-                {total.approximate && <span title="Приблизительно: часть денег пересчитана по курсу">≈ </span>}
-                <MoneyText minor={total.totalMinor} currency={base} tone={total.totalMinor < 0 ? 'expense' : 'none'} />
-              </p>
-              {total.approximate && total.missing.length === 0 && total.viaOtherRates && (
-                <p className="mt-0.5 text-[13px] text-muted">Остатки в других валютах пересчитаны по курсу.</p>
-              )}
-              {total.entered.length > 0 && (
-                <p className="mt-0.5 text-[13px] text-muted" data-testid="home-total-entered">
-                  {enteredNote(total.entered)}
-                </p>
-              )}
-              {total.missing.length > 0 && (
-                <p className="mt-2 text-sm font-medium text-warning">
-                  Не вошло в итог — нет курса:{' '}
-                  {endSentence(total.missing.map((m) => formatMinor(m.balanceMinor, m.currency)).join(', '))}
-                </p>
-              )}
-              {total.stale.length > 0 && (
-                <p className="mt-2 text-sm font-medium text-warning">
-                  Курс устарел ({total.stale.map((s) => `${s.currency} на ${ruDate(s.asOf)}`).join(', ')}) — итог может быть неточным.
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="mt-1 text-4xl font-bold">—</p>
-          )}
-        </Card>
+      <div className="stagger flex flex-col gap-3 md:gap-6">
+        <HomeHero total={total ?? null} base={base} />
 
         <section aria-labelledby="home-wallets">
           <div className="-mb-1 -mt-1 flex items-center justify-between gap-3 px-1">
@@ -142,9 +108,7 @@ export default function HomePage() {
                 <li key={w.id} className="min-w-[8.5rem] shrink-0 grow snap-start sm:min-w-0">
                   <Card className="h-full !p-3">
                     <div className="flex items-center gap-2">
-                      <span aria-hidden="true" className="text-xl">
-                        {w.icon}
-                      </span>
+                      <Glyph value={w.icon} color={w.color} size={30} />
                       <span className="min-w-0 max-w-[9rem] truncate text-sm font-medium sm:max-w-none">{w.name}</span>
                     </div>
                     <MoneyText

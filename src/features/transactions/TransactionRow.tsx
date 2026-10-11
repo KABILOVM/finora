@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { Badge } from '@/components/Badge';
 import { ListRow } from '@/components/ListRow';
 import { MoneyText } from '@/components/MoneyText';
@@ -29,13 +30,7 @@ export function TransactionRow({ tx, wallets, categories, syncEnabled, onOpen }:
     <ListRow
       onClick={() => onOpen(tx.id)}
       leading={
-        <span
-          aria-hidden="true"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-xl"
-          style={v.color ? { backgroundColor: `${v.color}26` } : undefined}
-        >
-          {v.icon}
-        </span>
+        <Glyph value={v.icon} color={v.color ?? undefined} size={40} />
       }
       title={title}
       subtitle={

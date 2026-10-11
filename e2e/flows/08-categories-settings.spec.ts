@@ -1,9 +1,9 @@
-import { addTx, dismissToasts, expect, fillTx, goSection, openApp, openFromMore, shot, sheet, test } from '../helpers';
+import { addTx, openCategories, createWallet, dismissToasts, expect, fillTx, goSection, openApp, shot, sheet, test } from '../helpers';
 
 test.describe('8. Категории и настройки', () => {
   test('добавить категорию, она доступна при внесении; архивировать — пропадает из выбора, возвращается из архива', async ({ page }, testInfo) => {
     await openApp(page);
-    await openFromMore(page, 'Категории'); // новый путь: «Ещё» → «Категории»
+    await openCategories(page);
     await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
 
     // Добавить «Кафе»
@@ -33,7 +33,7 @@ test.describe('8. Категории и настройки', () => {
     await dismissToasts(page);
 
     // Архивировать
-    await openFromMore(page, 'Категории'); // новый путь: «Ещё» → «Категории»
+    await openCategories(page);
     await page.getByRole('button', { name: /^Кафе/ }).click();
     dlg = sheet(page, 'Правка категории');
     await dlg.getByRole('button', { name: 'Убрать в архив' }).click();
@@ -86,43 +86,28 @@ test.describe('8. Категории и настройки', () => {
     await expect(page.getByRole('button', { name: /Фриланс/ })).toContainText('250');
   });
 
-  test('«Настройки»: видны все разделы; в локальном режиме облако объяснено честно; «Проверка данных» ничего не находит в чистых данных', async ({ page }, testInfo) => {
+  test('«Настройки»: только нужное, технических разделов нет; курсы появляются вместе с валютным кошельком', async ({ page }, testInfo) => {
     await openApp(page);
     await addTx(page, { amount: '12,5', category: 'Еда' });
     await goSection(page, 'Настройки');
-    for (const title of [
-      'Аккаунт', 'Синхронизация', 'Проверка облака', 'Валюта учёта', 'Курсы валют', 'Резервная копия', 'Проверка данных', 'Хранилище', 'О приложении',
-    ]) {
+    for (const title of ['Оформление', 'Валюта учёта', 'Резервная копия']) {
       await expect(page.getByRole('region', { name: title }), `раздел «${title}»`).toBeVisible();
     }
-
-    // Проверка облака: локальный режим объяснён, кнопки «Проверить» нет — нечего изображать
-    const cloud = page.getByRole('region', { name: 'Проверка облака' });
-    await expect(cloud).toContainText('Облако пока не подключено, поэтому проверять нечего');
-    await expect(cloud.getByRole('button', { name: 'Проверить' })).toHaveCount(0);
-    await expect(cloud.getByRole('link', { name: /README/ })).toBeVisible();
-
-    // Синхронизация: честно «не подключено», а не «Синхронизировано»
-    const sync = page.getByRole('region', { name: 'Синхронизация' });
-    await expect(sync).toContainText('Облако не подключено');
-    await expect(sync.getByText('Синхронизировано')).toHaveCount(0);
-    await expect(sync.getByRole('button', { name: /Синхронизировать/ })).toHaveCount(0);
-
-    // Курсы: в сети курсов нет, это сказано словами (а не пустой экран)
-    const rates = page.getByRole('region', { name: 'Курсы валют' });
-    await expect(rates.getByRole('button', { name: 'Обновить курсы' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'О приложении' })).toContainText('только на этом устройстве');
-
-    // Проверка данных
-    const check = page.getByRole('region', { name: 'Проверка данных' });
-    await check.getByRole('button', { name: 'Проверить данные' }).click();
-    await expect(check).toContainText('Проблем не найдено. Проверено 1 операция');
+    for (const title of ['Аккаунт', 'Синхронизация', 'Проверка облака', 'Курсы валют', 'Проверка данных', 'Хранилище', 'Установка на телефон', 'О приложении']) {
+      await expect(page.getByRole('region', { name: title }), `лишний раздел «${title}»`).toHaveCount(0);
+    }
     await shot(page, '08-settings', testInfo);
+
+    // кошелёк в другой валюте → нужны курсы → раздел появился
+    await createWallet(page, { name: 'Доллары', currency: 'USD' });
+    await goSection(page, 'Настройки');
+    await expect(page.getByRole('region', { name: 'Курсы валют' }).getByRole('button', { name: 'Обновить курсы' })).toBeVisible();
   });
 
   test('«Обновить курсы» без доступа к источникам: понятная ошибка, приложение не ломается, остатки на месте', async ({ page }) => {
     await openApp(page);
     await addTx(page, { amount: '12,5', category: 'Еда' });
+    await createWallet(page, { name: 'Доллары', currency: 'USD' });
     await goSection(page, 'Настройки');
     await page.getByRole('button', { name: 'Обновить курсы' }).click();
     // человек видит, что не получилось (тост или строка «Последняя попытка не удалась»), а не вечную крутилку

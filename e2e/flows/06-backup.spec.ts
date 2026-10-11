@@ -55,7 +55,7 @@ test.describe('6. Резервная копия', () => {
     // Скачать JSON
     await goSection(page, 'Настройки');
     const jsonPath = testInfo.outputPath('backup.json');
-    const jsonName = await saveDownload(page, 'Скачать копию (JSON)', jsonPath);
+    const jsonName = await saveDownload(page, 'Сохранить копию', jsonPath);
     expect(jsonName).toMatch(/^finora-backup-\d{4}-\d{2}-\d{2}\.json$/);
     const backup = JSON.parse(readFileSync(jsonPath, 'utf8'));
     expect(backup.format).toBe('finora-backup');
@@ -65,7 +65,7 @@ test.describe('6. Резервная копия', () => {
 
     // Скачать CSV
     const csvPath = testInfo.outputPath('ops.csv');
-    const csvName = await saveDownload(page, 'Скачать операции (CSV)', csvPath);
+    const csvName = await saveDownload(page, 'Операции в таблицу (CSV)', csvPath);
     expect(csvName).toMatch(/^finora-transactions-\d{4}-\d{2}-\d{2}\.csv$/);
     const csvBytes = readFileSync(csvPath);
     expect(csvBytes.length).toBeGreaterThan(50);

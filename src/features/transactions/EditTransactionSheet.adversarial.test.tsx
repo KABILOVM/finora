@@ -64,6 +64,7 @@ describe('правка: чужая правка, пришедшая пока ш�
     // синхронизация принесла исправленную сумму 1000 → 15000, пока шит открыт
     await write(() => storeOf(td).transactions.update(ids.tx, { amountMinor: 15_000 }));
 
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     const note = screen.getByRole('textbox', { name: /^Заметка/ });
     await user.type(note, ' с коллегой');
     await save();

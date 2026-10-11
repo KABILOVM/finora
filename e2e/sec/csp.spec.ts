@@ -251,12 +251,12 @@ test.describe('CSP в настоящем браузере', () => {
     await expect(sheet(page, /Сверка/)).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // «Настройки»: все разделы, курсы (сеть к nbt/jsdelivr), проверка данных, выгрузки
+    // «Настройки»: все разделы, курсы (сеть к nbt/jsdelivr), выгрузки
+    await createWallet(page, { name: 'Доллары', currency: 'USD' });
     await goSection(page, 'Настройки');
     await page.getByRole('button', { name: 'Обновить курсы' }).click();
     await expect.poll(() => external.length, { message: 'запросов курсов не было' }).toBeGreaterThan(0);
-    await page.getByRole('button', { name: 'Проверить данные' }).click();
-    for (const name of ['Скачать копию (JSON)', 'Скачать операции (CSV)']) {
+    for (const name of ['Сохранить копию', 'Операции в таблицу (CSV)']) {
       const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name }).click()]);
       expect(dl.suggestedFilename()).toMatch(/^finora-/);
     }

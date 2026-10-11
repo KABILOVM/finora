@@ -1,10 +1,13 @@
 import { cn } from '@/lib/cn';
+import { Glyph } from './Glyph';
 
 export interface ChipOption {
   value: string;
   label: string;
-  /** Эмодзи или короткий символ перед названием. */
+  /** Значок перед названием: «i:cup», «b:alif» или эмодзи (см. Glyph). */
   icon?: string;
+  /** Цвет значка (#rrggbb). */
+  color?: string;
 }
 
 export interface ChipPickerProps {
@@ -40,13 +43,13 @@ export function ChipPicker({ options, value, onChange, ariaLabel, layout = 'wrap
             aria-pressed={selected}
             onClick={() => onChange(opt.value)}
             className={cn(
-              'inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border px-4 text-base font-medium transition-colors',
+              'inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-full border px-4 text-base font-medium transition duration-200 ease-spring active:scale-95',
               selected
                 ? 'border-brand bg-brand/10 text-brand'
                 : 'border-border bg-surface text-text hover:bg-surface-2',
             )}
           >
-            {opt.icon && <span aria-hidden="true">{opt.icon}</span>}
+            {opt.icon && <Glyph value={opt.icon} color={opt.color} size={26} />}
             <span className="whitespace-nowrap">{opt.label}</span>
           </button>
         );

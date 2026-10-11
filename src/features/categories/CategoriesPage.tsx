@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/Button';
@@ -22,15 +23,7 @@ const TABS = [
 ] as const;
 
 function CategoryIcon({ category }: { category: Category }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex h-10 w-10 items-center justify-center rounded-full text-xl"
-      style={{ backgroundColor: `${category.color}26` }}
-    >
-      {category.icon}
-    </span>
-  );
+  return <Glyph value={category.icon} color={category.color} size={40} />;
 }
 
 /** Категории (без подкатегорий): две вкладки, добавить, переименовать, сменить значок, архив и возврат. */

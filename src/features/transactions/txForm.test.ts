@@ -193,14 +193,16 @@ describe('formFromTx', () => {
   };
   const of = (t: Transaction) => formFromTx(t, (id) => currencies[id]);
 
-  it('перевод с комиссией: поле «Получено» открыто и заполнено', () => {
+  it('перевод с комиссией: комиссия открыта и равна разнице', () => {
     expect(of(base)).toMatchObject({
       kind: 'transfer',
       amountMinor: 10_000,
       walletId: 'a',
       toWalletId: 'b',
-      toAmountOverride: 9800,
+      toAmountOverride: undefined,
       feeOpen: true,
+      feeMode: 'amount',
+      feeAmount: 200, // 100,00 списано − 98,00 получено
       date: { mode: 'date', value: '2026-10-05' },
       note: 'комиссия',
     });

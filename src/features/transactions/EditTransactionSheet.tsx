@@ -120,7 +120,7 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
     if (kind === 'transfer') return [];
     return categories
       .filter((x) => x.kind === kind && (x.archivedAt === null || x.id === orig.categoryId))
-      .map((x) => ({ value: x.id, label: x.archivedAt === null ? x.name : `${x.name} (в архиве)`, icon: x.icon }));
+      .map((x) => ({ value: x.id, label: x.archivedAt === null ? x.name : `${x.name} (в архиве)`, icon: x.icon, color: x.color }));
   }, [categories, kind, orig.categoryId]);
 
   useScrollToError(formRef, c.errors);

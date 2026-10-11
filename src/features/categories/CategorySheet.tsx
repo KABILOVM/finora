@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/Button';
-import { EmojiPicker } from '@/components/EmojiPicker';
+import { GlyphPicker } from '@/components/GlyphPicker';
 import { Sheet } from '@/components/Sheet';
 import { TextInput } from '@/components/Field';
 import { useToast } from '@/components/Toast';
@@ -105,7 +105,7 @@ export function CategorySheet({ category, kind, others, onClose, onArchive }: Ca
         />
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold">Значок</span>
-          <EmojiPicker value={icon} onChange={setIcon} ariaLabel="Значок категории" />
+          <GlyphPicker value={icon} color={color} onChange={setIcon} ariaLabel="Значок категории" />
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold">Цвет</span>

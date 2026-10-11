@@ -18,7 +18,7 @@ import {
   type Probe,
   type StepResult,
 } from './diagnosticsProbe';
-import { SYNC_TABLES, TABLE_SPECS } from './tables';
+import { BASE_SEQ_COLUMN, SYNC_TABLES, TABLE_SPECS } from './tables';
 
 /**
  * «Проверка облака»: по шагам говорит владельцу, что в облаке настроено правильно, а что нет, и что делать.
@@ -120,9 +120,16 @@ const ALL_TABLES = [...USER_TABLES, RATES_TABLE];
 const READ_LIMIT = 50;
 const RATES_LIMIT = 10;
 
-/** Колонки, которые читает настоящая синхронизация: если какой-то нет, схема в облаке старая или чужая. */
+/**
+ * Колонки, которые читает и пишет настоящая синхронизация: если какой-то нет, схема в облаке старая или чужая.
+ * base_seq — служебная колонка проверки версии: без неё приложение продолжает работать, но не защищает от затирания чужой правки,
+ * поэтому владельцу нужно заново выполнить supabase/schema.sql.
+ */
 const READ_COLUMNS = new Map<string, string>(
-  SYNC_TABLES.map((t) => [TABLE_SPECS[t].remote, [...TABLE_SPECS[t].columns.map((c) => c.column), 'user_id', 'server_seq', 'server_updated_at'].join(',')]),
+  SYNC_TABLES.map((t) => [
+    TABLE_SPECS[t].remote,
+    [...TABLE_SPECS[t].columns.map((c) => c.column), 'user_id', 'server_seq', 'server_updated_at', BASE_SEQ_COLUMN].join(','),
+  ]),
 );
 const RATES_COLUMNS = 'as_of,source,fetched_at';
 

@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Button } from './Button';
 import { ChipPicker } from './ChipPicker';
-import { EmojiPicker, DEFAULT_EMOJIS } from './EmojiPicker';
+import { GlyphPicker } from './GlyphPicker';
+import { Glyph } from './Glyph';
+import { GLYPH_CHOICES, resolveGlyph } from './glyphs';
 import { EmptyState } from './EmptyState';
 import { TextArea, TextInput } from './Field';
 import { Icon, ICON_NAMES } from './Icon';
@@ -150,7 +152,7 @@ describe('Segmented', () => {
   });
 });
 
-describe('ChipPicker и EmojiPicker', () => {
+describe('ChipPicker и GlyphPicker', () => {
   it('ChipPicker: выбор по нажатию, aria-pressed у выбранного', async () => {
     const onChange = vi.fn();
     render(
@@ -169,16 +171,28 @@ describe('ChipPicker и EmojiPicker', () => {
     expect(onChange).toHaveBeenCalledWith('home');
   });
 
-  it('EmojiPicker: выбор значка, выбранный отмечен', async () => {
+  it('GlyphPicker: выбор значка, выбранный отмечен; старое эмодзи отмечает подходящую иконку', async () => {
     const onChange = vi.fn();
-    render(<EmojiPicker value="🍔" onChange={onChange} />);
-    expect(screen.getByRole('button', { name: '🍔', pressed: true })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '🏠' }));
-    expect(onChange).toHaveBeenCalledWith('🏠');
+    render(<GlyphPicker value="🍔" onChange={onChange} />);
+    expect(screen.getByRole('button', { name: 'Еда', pressed: true })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Дом' }));
+    expect(onChange).toHaveBeenCalledWith('i:home');
   });
 
-  it('в наборе эмодзи нет повторов', () => {
-    expect(new Set(DEFAULT_EMOJIS).size).toBe(DEFAULT_EMOJIS.length);
+  it('в наборе значков нет повторов, и все они известны Glyph', () => {
+    expect(new Set(GLYPH_CHOICES).size).toBe(GLYPH_CHOICES.length);
+    for (const name of GLYPH_CHOICES) expect(resolveGlyph(`i:${name}`)).toEqual({ kind: 'icon', name });
+  });
+
+  it('Glyph: иконка, знак банка и незнакомое эмодзи', () => {
+    const icon = render(<Glyph value="i:cup" color="#f97316" />);
+    expect(icon.container.querySelector('svg')).not.toBeNull();
+    icon.unmount();
+    const bank = render(<Glyph value="b:alif" />);
+    expect(bank.container.querySelector('svg')).not.toBeNull();
+    bank.unmount();
+    const text = render(<Glyph value="🦄" />);
+    expect(text.container.textContent).toBe('🦄');
   });
 });
 

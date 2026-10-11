@@ -1,5 +1,6 @@
 import { useLocation, type Location } from 'react-router-dom';
 import type { IconName } from '@/components/Icon';
+import type { TxKind } from '@/domain/types';
 
 export interface NavItem {
   to: string;
@@ -25,7 +26,8 @@ export const MORE_SECTIONS = ['/more', '/budgets', '/recurring', '/debts', '/set
 
 /**
  * Пункты меню. На телефоне «+» (добавить операцию) вставляется между вторым и третьим пунктом.
- * На ПК места больше: в основной группе Бюджеты, Платежи и Долги, внизу «Ещё» и «Настройки».
+ * На ПК места больше: в основной группе Бюджеты, Платежи и Долги, внизу «Настройки». Пункта «Ещё» на ПК нет:
+ * это меню только для телефона, где в нижней панели не хватает места. Категории и импорт лежат внутри «Настроек».
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Главная', sideLabel: 'Главная', icon: 'home', end: true, phone: true, side: 'main' },
@@ -40,12 +42,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     sideLabel: 'Ещё',
     icon: 'more',
     phone: true,
-    side: 'bottom',
     phoneActiveOn: MORE_SECTIONS,
-    // «Настройки» на ПК — отдельный пункт, поэтому «Ещё» там подсвечивается на «Ещё», импорте и категориях
-    sideActiveOn: ['/more', '/import', '/settings/categories'],
   },
-  { to: '/settings', label: 'Настройки', sideLabel: 'Настройки', icon: 'sliders', end: true, side: 'bottom' },
+  // На ПК подсвечен и внутри «Настроек»: категории и импорт — их части
+  { to: '/settings', label: 'Настройки', sideLabel: 'Настройки', icon: 'sliders', side: 'bottom', sideActiveOn: ['/settings', '/import'] },
 ];
 
 /** Путь без хвостовых «/» и в нижнем регистре (маршруты регистр не различают, подсветка тоже). */
@@ -72,11 +72,11 @@ export const ADD_LABEL = 'Добавить операцию';
 export interface AddLinkProps {
   to: string;
   /** Страница, поверх которой откроется шит: после закрытия возвращаемся на неё. */
-  state: { background: Location };
+  state: { background: Location; kind?: TxKind };
 }
 
 /** Свойства для <Link {...useAddLink()}>: шит «Новая операция» открывается поверх текущей страницы. */
-export function useAddLink(): AddLinkProps {
+export function useAddLink(kind?: TxKind): AddLinkProps {
   const location = useLocation();
-  return { to: ADD_PATH, state: { background: location } };
+  return { to: ADD_PATH, state: kind ? { background: location, kind } : { background: location } };
 }

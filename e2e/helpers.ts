@@ -178,10 +178,17 @@ export async function goSection(page: Page, section: Section): Promise<void> {
   await expect(page.getByText('Загрузка…')).toHaveCount(0);
 }
 
-/** Перейти на страницу «Ещё» и открыть её пункт по названию на странице (Бюджеты, Категории, Импорт из Zenmoney, Настройки…). */
+/** Страница «Ещё» (только телефон) и её пункт по названию: Бюджеты, Регулярные платежи, Долги и кредиты, Настройки. */
 export async function openFromMore(page: Page, title: string): Promise<void> {
   await goSection(page, 'Ещё');
   await page.getByRole('main').getByRole('link', { name: title, exact: true }).click();
+}
+
+/** Экран «Категории»: Настройки → Категории (на телефоне «Настройки» лежат за «Ещё»). */
+export async function openCategories(page: Page): Promise<void> {
+  await goSection(page, 'Настройки');
+  await page.getByRole('main').getByRole('link', { name: 'Категории', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
 }
 
 /** Кнопка «+»: на телефоне — кругляш в нижней панели, на ПК — «Добавить операцию» в боковой панели. */
@@ -212,7 +219,7 @@ export interface TxInput {
   wallet?: string;
   /** Перевод: «куда». */
   toWallet?: string;
-  /** Перевод: сумма «Получено» (комиссия или другая валюта). */
+  /** Перевод: сколько получено. Между валютами — поле «Получено»; в одной валюте разница со списанием вводится как комиссия. */
   received?: string;
   /** Операция в чужой валюте без курса: курс, который вводит человек. */
   rate?: string;
@@ -240,7 +247,14 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
     await dlg.getByRole('group', { name: 'Дата' }).getByRole('button', { name: 'Другая дата' }).click();
     await dlg.getByLabel('Дата операции').fill(tx.date);
   }
-  if (tx.category) await dlg.getByRole('group', { name: 'Категория' }).getByRole('button', { name: tx.category, exact: true }).click();
+  if (tx.category) {
+    const group = dlg.getByRole('group', { name: 'Категория' });
+    const chip = group.getByRole('button', { name: tx.category, exact: true });
+    await group.getByRole('button').first().waitFor();
+    // видны только основные категории: остальные под «Ещё»
+    if ((await chip.count()) === 0) await group.getByRole('button', { name: /^Ещё/ }).click();
+    await chip.click();
+  }
   if (tx.rate) {
     // Курса не было — поле на месте. Курс уже вводили раньше — он подставлен сам, а поле прячется за «Изменить».
     const field = dlg.getByRole('textbox', { name: /^Курс:/ });
@@ -250,12 +264,20 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
   }
   await tapAmount(page, tx.amount);
   if (tx.received) {
-    // Одна валюта: поле «Получено» (комиссия) спрятано за кнопкой «Указать комиссию»
-    const fee = dlg.getByRole('button', { name: 'Указать комиссию' });
-    if ((await fee.count()) > 0) await fee.click();
-    await dlg.getByRole('textbox', { name: /^Получено/ }).fill(tx.received);
+    const received = dlg.getByRole('textbox', { name: /^Получено/ });
+    if ((await received.count()) > 0) {
+      await received.fill(tx.received);
+    } else {
+      // Одна валюта: комиссия = списано − получено, вводится кнопкой «%» → «Комиссия»
+      const num = (t: string) => Number(t.replace(/[\s  ]/g, '').replace(',', '.'));
+      await dlg.getByRole('button', { name: 'Комиссия', exact: true }).click();
+      await dlg.getByRole('textbox', { name: /^Комиссия/ }).fill(String(Math.round((num(tx.amount) - num(tx.received)) * 100) / 100).replace('.', ','));
+    }
   }
-  if (tx.note) await dlg.getByRole('textbox', { name: 'Заметка' }).fill(tx.note);
+  if (tx.note) {
+    await dlg.getByRole('button', { name: 'Заметка', exact: true }).click();
+    await dlg.getByRole('textbox', { name: 'Заметка' }).fill(tx.note);
+  }
   return dlg;
 }
 

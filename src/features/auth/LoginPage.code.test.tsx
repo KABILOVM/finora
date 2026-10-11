@@ -68,11 +68,11 @@ describe('переключатель способа входа', () => {
     expect(document.querySelector('input[type="password"]')).not.toBeNull();
   });
 
-  it('на экране нет ссылок (регистрации нет), есть пояснение про закрытый круг', async () => {
+  it('на экране нет ссылок, регистрация доступна кнопкой (только по паролю: кодом новых людей не создаём)', async () => {
     await openLogin();
     await chooseCode();
     expect(screen.queryByRole('link')).toBeNull();
-    expect(screen.getByText(/Аккаунты создаёт владелец приложения/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' })).toBeInTheDocument();
   });
 });
 
