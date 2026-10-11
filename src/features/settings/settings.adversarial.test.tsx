@@ -211,7 +211,10 @@ describe('ATTACK: данные, начатые без облака (локаль
       await waitFor(() => expect(screen.getByText('Копия загружена')).toBeInTheDocument());
       await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     }
-    expect((await store().db.transactions.toArray()).filter((t) => t.walletId === w.id)).toHaveLength(1);
-    expect((await store().db.wallets.toArray()).filter((x) => x.name === 'Мои наличные')).toHaveLength(1);
+    // у записей из чужой копии свои id (иначе они столкнулись бы на сервере с чужими строками), поэтому ищем по названию
+    const imported = (await store().db.wallets.toArray()).filter((x) => x.name === 'Мои наличные');
+    expect(imported).toHaveLength(1);
+    expect(imported[0]!.id).not.toBe(w.id);
+    expect((await store().db.transactions.toArray()).filter((t) => t.walletId === imported[0]!.id)).toHaveLength(1);
   });
 });

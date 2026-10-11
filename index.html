@@ -2,6 +2,26 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      Политика безопасности страницы (CSP): запрещает всё, что не перечислено. Если кто-то сумеет подсунуть в страницу
+      чужой скрипт (XSS), браузер его не выполнит, а токен входа Supabase (лежит в localStorage) не уйдёт на чужой сервер.
+      ДУБЛИРУЕТ заголовок из vercel.json (там же frame-ancestors, в <meta> он не работает): `vite preview` и локальная
+      раздача заголовков не отдают. Менять оба места ОДИНАКОВО; тест e2e/sec/csp.spec.ts сверяет их.
+      script-src 'self' — без unsafe-inline/unsafe-eval: в сборке нет встроенных скриптов (Vite и PWA кладут только файлы).
+      ЕДИНСТВЕННОЕ отличие от заголовка: здесь style-src 'self' 'unsafe-inline', а в vercel.json строго style-src 'self'.
+      Причина: `npm run dev` вставляет CSS как <style>, при строгой политике страница в разработке остаётся без стилей
+      (проверено). В боевой сборке стили лежат файлом, а React ставит style={{…}} через CSSOM (element.style.x = …),
+      которое политика не блокирует (проверено в браузере на всех экранах), поэтому на Vercel действует строгий
+      заголовок (браузер применяет заголовок и мета вместе, побеждает более строгий).
+      connect-src: *.supabase.co — облако; nbt.tj, jsdelivr.net, currency-api.pages.dev — курсы валют (src/rates).
+      Свой домен Supabase (не *.supabase.co) сюда нужно добавить вручную, иначе браузер его заблокирует.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.nbt.tj https://cdn.jsdelivr.net https://latest.currency-api.pages.dev; worker-src 'self'; manifest-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
+    <!-- Адрес приложения не уходит в запросах к источникам курсов и по ссылкам (дублирует заголовок Referrer-Policy из vercel.json). -->
+    <meta name="referrer" content="no-referrer" />
     <!-- Масштабирование НЕ запрещаем (доступность). viewport-fit=cover — чтобы работали safe-area на iPhone. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Finora — учёт денег</title>

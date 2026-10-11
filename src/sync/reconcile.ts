@@ -16,12 +16,26 @@ import type { SyncTableName } from './tables';
  * разойдётся по остальным устройствам. Чужая операция никогда не меняется и не удаляется.
  *
  * Проверяются только записи, которых коснулось это получение, а полный просмотр операций кошелька — только если есть подозрение.
+ *
+ * Не у всякой операции есть признак, в какой валюте кошелька она записана: у «в базовой валюте» он есть (курс 1, источник same),
+ * а у операции в иностранной валюте (10,00 $ с курсом) и у перевода — нет (снимок хранит только базовую валюту). Для них решает
+ * свидетельство того, кто записал: устройство, чья операция лежит в кошельке, помнит, в какой валюте кошелька оно её вводило
+ * («владеет» валютой), и возвращает кошелёк к ней. Чужие операции этим не двигаются: так устройства не могут бесконечно
+ * переключать валюту друг у друга (см. OWN_REVERT_PREFIX).
  */
+
+/** Ключ в meta: метка нашего возврата валюты кошелька `<префикс><id кошелька>`. Чужая версия, пришедшая на смену нашему возврату, ему не возражает. */
+export const OWN_REVERT_PREFIX = 'reconcile:wallet:';
 
 /** Что запомнить по ходу получения, чтобы потом проверить. Живёт один заход (для пересчёта хватает данных в базе). */
 export interface Watch {
   /** Валюта кошелька ДО чужой версии, сменившей её, если у кошелька к тому времени уже были операции. */
   pinnedCurrency: Map<UUID, string>;
+  /**
+   * Валюта кошелька ДО чужой версии, сменившей её, если одну из операций кошелька записало ЭТО устройство (его deviceId):
+   * оно знает, в какой валюте вводило сумму, даже когда сама операция этого не хранит (иностранная валюта, перевод).
+   */
+  ownedCurrency: Map<UUID, string>;
   /** Пришедшие операции: кошелёк → «базовая валюта / по какому курсу» (см. factOf). Хватает горстки вариантов на кошелёк. */
   walletFacts: Map<UUID, Set<string>>;
   /** Пришедшие живые операции: категория → виды операций. */
@@ -32,6 +46,7 @@ export interface Watch {
 
 export const newWatch = (): Watch => ({
   pinnedCurrency: new Map(),
+  ownedCurrency: new Map(),
   walletFacts: new Map(),
   categoryKinds: new Map(),
   suspectCategories: new Set(),
@@ -51,6 +66,13 @@ const factFits = (fact: string, currency: string): boolean =>
 async function hasTransactions(db: FinoraDB, walletId: UUID): Promise<boolean> {
   if ((await db.transactions.where('walletId').equals(walletId).count()) > 0) return true;
   return (await db.transactions.where('toWalletId').equals(walletId).count()) > 0;
+}
+
+/** Есть ли в кошельке (в любой роли, и среди удалённых) операция, последней записанная этим устройством. */
+async function hasOwnTransaction(db: FinoraDB, walletId: UUID, deviceId: string): Promise<boolean> {
+  const mine = (t: { deviceId: string }) => t.deviceId === deviceId;
+  if ((await db.transactions.where('walletId').equals(walletId).filter(mine).first()) !== undefined) return true;
+  return (await db.transactions.where('toWalletId').equals(walletId).filter(mine).first()) !== undefined;
 }
 
 const hasLiveOperation = async (db: FinoraDB, categoryId: UUID): Promise<boolean> =>
@@ -73,7 +95,15 @@ export async function noteIncoming(
     for (const [i, w] of incoming.entries()) {
       const was = local[i];
       if (!was || was.deletedAt !== null || was.currency === w.currency || watch.pinnedCurrency.has(was.id)) continue;
-      if (await hasTransactions(db, was.id)) watch.pinnedCurrency.set(was.id, was.currency);
+      if (!(await hasTransactions(db, was.id))) continue;
+      watch.pinnedCurrency.set(was.id, was.currency);
+      // Чужая версия сменила валюту, а в кошельке лежат наши операции. Исключение — кошелёк, чью валюту мы сами вернули по такому же
+      // свидетельству: версия, пришедшая на смену нашему возврату, — ответ другого устройства с тем же правом голоса. Спорить с ней
+      // значило бы переключать валюту туда-сюда без конца (в худшем случае обе стороны правы, и тогда победит последняя).
+      const revertStamp = (await db.meta.get(OWN_REVERT_PREFIX + was.id))?.value;
+      if (revertStamp !== was.clientUpdatedAt && (await hasOwnTransaction(db, was.id, store.deviceId))) {
+        watch.ownedCurrency.set(was.id, was.currency);
+      }
     }
   } else if (table === 'categories') {
     const incoming = rows.map((r) => r.entity as Category);
@@ -98,11 +128,17 @@ export async function noteIncoming(
 }
 
 /** Какой валюте должен соответствовать кошелёк, чтобы все его операции читались правильно; null — менять нечего или неясно на что. */
-async function planWallet(db: FinoraDB, id: UUID, pin: string | undefined): Promise<string | null> {
+async function planWallet(db: FinoraDB, id: UUID, pin: string | undefined, owned: string | undefined): Promise<string | null> {
   const w = await db.wallets.get(id);
   if (!w || w.deletedAt !== null) return null;
   // удалённые операции тоже считаются: при восстановлении они снова встанут в кошелёк
-  const txs = (await db.transactions.where('walletId').equals(id).toArray()).filter((t) => t.kind !== 'transfer');
+  const outgoing = await db.transactions.where('walletId').equals(id).toArray();
+  const txs = outgoing.filter((t) => t.kind !== 'transfer');
+  const hasTransfers = outgoing.length > txs.length || (await db.transactions.where('toWalletId').equals(id).count()) > 0;
+  if (txs.length === 0 && !hasTransfers) return null;
+  // Наши операции записаны в валюте `owned`, чужая правка её сменила: возвращаем, если операции с признаком валюты не против.
+  // Перевод на/с такого кошелька в той же валюте читался как «столько же в столько же» — в другой валюте он создал бы деньги.
+  if (owned !== undefined && owned !== w.currency && fits(txs, owned)) return owned;
   if (txs.length === 0 || fits(txs, w.currency)) return null;
   const candidates = [...(pin !== undefined ? [pin] : []), ...txs.filter((t) => t.fxSource === 'same').map((t) => t.baseCurrency)];
   return candidates.find((c) => c !== w.currency && fits(txs, c)) ?? null;
@@ -129,18 +165,22 @@ export async function reconcile(store: Store, watch: Watch): Promise<number> {
     const ctx = internalContext(store);
     let fixed = 0;
 
-    const wallets = new Set<UUID>(watch.pinnedCurrency.keys());
+    const wallets = new Set<UUID>([...watch.pinnedCurrency.keys(), ...watch.ownedCurrency.keys()]);
     for (const [id, facts] of watch.walletFacts) {
       const w = await db.wallets.get(id);
       if (w && w.deletedAt === null && ![...facts].every((f) => factFits(f, w.currency))) wallets.add(id);
     }
     for (const id of wallets) {
-      if ((await planWallet(db, id, watch.pinnedCurrency.get(id))) === null) continue;
+      const pin = watch.pinnedCurrency.get(id);
+      const owned = watch.ownedCurrency.get(id);
+      if ((await planWallet(db, id, pin, owned)) === null) continue;
       const done = await writeTx(ctx, [db.wallets, db.transactions], async () => {
-        const target = await planWallet(db, id, watch.pinnedCurrency.get(id)); // заново, уже внутри записи
+        const target = await planWallet(db, id, pin, owned); // заново, уже внутри записи
         const w = await db.wallets.get(id);
         if (target === null || !w) return false;
-        await db.wallets.put({ ...w, currency: target, ...touch(ctx).fields });
+        const t = touch(ctx);
+        await db.wallets.put({ ...w, currency: target, ...t.fields });
+        await db.meta.put({ key: OWN_REVERT_PREFIX + id, value: t.stamp }); // см. noteIncoming: на ответ другого устройства не возражаем
         return true;
       });
       if (done) fixed++;

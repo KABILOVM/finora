@@ -1,7 +1,7 @@
 /** Модуль «data»: локальная база устройства, репозитории, хуки, затравка, резервная копия, примитивы синхронизации. */
 
 export { openStore, type Store, type OpenStoreOptions } from './store';
-export { StoreProvider, useStore } from './storeContext';
+export { StoreProvider, useOptionalStore, useStore } from './storeContext';
 
 export { FinoraDB, META_LAST_SYNCED_AT, type MetaRow, type MetaValue } from './database';
 export { FxRequiredError, ValidationError } from './errors';
@@ -37,6 +37,7 @@ export {
 } from './hooks';
 
 export { ensureSeeded } from './seed';
-export { exportBackup, exportTransactionsCsv, importBackup, type BackupFile, type ImportResult } from './backup';
+export { countUserData } from './localData';
+export { exportBackup, exportTransactionsCsv, importBackup, type BackupFile, type ImportOptions, type ImportResult } from './backup';
 
 export type { SyncOps, SyncCounts, PushedRef, RemoteRow, ApplyResult } from './syncOps';

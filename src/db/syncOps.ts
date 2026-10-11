@@ -247,8 +247,11 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
         const toWrite = [...dirtyIds].map((id) => known.get(id)).filter((r): r is AnyRow => r !== undefined);
         if (toWrite.length > 0) await tbl.bulkPut(toWrite);
 
-        // следующие правки этого устройства будут новее всего, что мы видели
-        for (const st of stampsDesc) if (clock.observe(st)) break;
+        // Следующие правки этого устройства будут новее всего, что мы видели. Метке с СЕРВЕРА верим и тогда, когда она
+        // «из будущего» по нашим часам: сервер сам не отдаёт метки дальше своего «сейчас + 5 минут» (зажимает их), а наши часы
+        // могут отставать на часы или дни. Не поверив, мы выдали бы правке метку старше серверной версии: сервер молча
+        // проигнорировал бы её, а мы сочли бы отправленной — устройства разошлись бы навсегда (проверка границ 2000–2100 остаётся).
+        for (const st of stampsDesc) if (clock.observe(st, true)) break;
         await db.meta.put({ key: cursorKey(table), value: Math.max(cursor, nextCursor) });
         return result;
       });

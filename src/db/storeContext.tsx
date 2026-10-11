@@ -14,6 +14,11 @@ export function useStore(): Store {
   return store;
 }
 
+/** Хранилище текущего пользователя или null, если провайдера нет. В отличие от useStore не бросает ошибку. */
+export function useOptionalStore(): Store | null {
+  return useContext(StoreContext);
+}
+
 /** Id владельца текущего хранилища или null, если провайдера нет. В отличие от useStore не бросает ошибку. */
 export function useStoreUserId(): string | null {
   return useContext(StoreContext)?.userId ?? null;

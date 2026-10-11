@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useOptionalStore } from '@/db';
 import type { SyncEngineApi, SyncStatus } from './transport';
 
 /**
@@ -25,13 +27,24 @@ export function SyncProvider({ engine, children }: { engine: SyncEngineApi | nul
   return <SyncContext.Provider value={engine}>{children}</SyncContext.Provider>;
 }
 
-/** Текущий статус синхронизации. В локальном режиме — нейтральный статус (см. useSyncEnabled). */
+/**
+ * Текущий статус синхронизации. В локальном режиме — нейтральный статус (см. useSyncEnabled).
+ * Очередь («ждут отправки», «не принято сервером») берётся не меньшей, чем в самой базе: соседняя вкладка того же устройства
+ * пишет в ту же базу своим хранилищем, и движок этой вкладки об её записи не знает. Без этого бейдж писал бы «Синхронизировано»
+ * при неотправленной записи. Меньше, чем насчитал движок, число не становится.
+ */
 export function useSyncStatus(): SyncStatus {
   const engine = useContext(SyncContext);
-  return useSyncExternalStore(
+  const store = useOptionalStore();
+  const status = useSyncExternalStore(
     engine ? (cb) => engine.subscribe(cb) : noopSubscribe,
     engine ? () => engine.getStatus() : getLocalStatus,
   );
+  const queue = useLiveQuery(() => (engine && store ? store.sync.counts() : undefined), [engine, store]);
+  return useMemo(() => {
+    if (!queue || (queue.pending <= status.pending && queue.quarantined <= status.quarantined)) return status;
+    return { ...status, pending: Math.max(status.pending, queue.pending), quarantined: Math.max(status.quarantined, queue.quarantined) };
+  }, [status, queue]);
 }
 
 /** false в локальном режиме: данные есть только на этом устройстве. */

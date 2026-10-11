@@ -9,12 +9,13 @@ import { SyncProvider, useSyncStatus } from '@/sync/syncContext';
 import { BootScreen } from './BootScreen';
 import { useAppEnv } from './env';
 import { FirstLoadScreen } from './FirstLoadScreen';
+import { LocalDataProvider, localDataToOffer } from './localData';
 import { StoreErrorScreen } from './StoreErrorScreen';
 
 type Phase =
   | { kind: 'opening' }
   | { kind: 'error'; error: unknown }
-  | { kind: 'ready'; store: Store; engine: SyncEngine | null; initialPullDone: boolean };
+  | { kind: 'ready'; store: Store; engine: SyncEngine | null; initialPullDone: boolean; localData: number };
 
 /** Освободить ресурсы сеанса. Чуть позже, чем размонтирование: сначала React сам остановит SyncProvider. */
 function release(engine: SyncEngine | null, store: Store | null): void {
@@ -82,7 +83,7 @@ export function UserSession({ user, children }: UserSessionProps) {
         if (!client) {
           await ensureSeeded(opened);
           if (cancelled) return free();
-          setPhase({ kind: 'ready', store: opened, engine: null, initialPullDone: true });
+          setPhase({ kind: 'ready', store: opened, engine: null, initialPullDone: true, localData: 0 });
           return;
         }
         const engine = deps.createEngine({
@@ -95,8 +96,10 @@ export function UserSession({ user, children }: UserSessionProps) {
         });
         res.engine = engine;
         const done = (await opened.sync.getMeta(META_INITIAL_PULL)) === true;
+        // Учёт без входа, который велся на этом устройстве до подключения облака, в аккаунте не виден: скажем об этом человеку.
+        const localData = await localDataToOffer(deps, opened);
         if (cancelled) return free();
-        setPhase({ kind: 'ready', store: opened, engine, initialPullDone: done });
+        setPhase({ kind: 'ready', store: opened, engine, initialPullDone: done, localData });
       } catch (error) {
         console.error('Не удалось открыть данные:', error);
         free();
@@ -123,9 +126,11 @@ export function UserSession({ user, children }: UserSessionProps) {
   return (
     <StoreProvider store={phase.store}>
       <SyncProvider engine={phase.engine}>
-        <ReadyGate store={phase.store} cloud={phase.engine !== null} initialPullDone={phase.initialPullDone}>
-          {children}
-        </ReadyGate>
+        <LocalDataProvider value={{ count: phase.localData }}>
+          <ReadyGate store={phase.store} cloud={phase.engine !== null} initialPullDone={phase.initialPullDone}>
+            {children}
+          </ReadyGate>
+        </LocalDataProvider>
       </SyncProvider>
     </StoreProvider>
   );

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { FinoraDB, openStore, type Store } from '@/db';
+import { LOCAL_USER_ID } from '@/auth/config';
+import { countUserData, FinoraDB, openStore, type Store } from '@/db';
 import { apiProvider } from '@/rates/api';
 import { nbtProvider } from '@/rates/nbt';
 import { serverProvider, type RatesClient } from '@/rates/server';
@@ -23,6 +24,12 @@ export interface SessionDeps {
   createRates(client: SupabaseClient | null): RateService;
   /** Физически удалить локальную базу пользователя с этого устройства. */
   deleteLocalData(userId: string): Promise<void>;
+  /**
+   * Сколько записей осталось на этом устройстве от учёта БЕЗ входа (локальный режим). После подключения облака приложение
+   * открывает базу вошедшего пользователя, а эта остаётся нетронутой, но невидимой: о ней нужно сказать и предложить перенос.
+   * Нет метода — считается, что таких записей нет.
+   */
+  countLocalModeData?(): Promise<number>;
 }
 
 export function createDefaultRates(client: SupabaseClient | null): RateService {
@@ -41,4 +48,5 @@ export const defaultDeps: SessionDeps = {
     // Экземпляр базы нужен только для имени и удаления; открытые соединения Dexie закрывает сама.
     await new FinoraDB(userId).delete();
   },
+  countLocalModeData: () => countUserData(LOCAL_USER_ID),
 };

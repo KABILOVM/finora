@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { useSyncEnabled } from '@/sync/syncContext';
+import { LocalDataNotice } from './LocalDataNotice';
 import { LocalModeBanner } from './LocalOnly';
 
 /** Где показывать плашку локального режима: на «Главной» и в «Настройках». */
@@ -14,6 +15,7 @@ export function PageNotices() {
   return (
     <>
       {!syncEnabled && showsBanner(pathname) && <LocalModeBanner />}
+      {syncEnabled && showsBanner(pathname) && <LocalDataNotice />}
       <Outlet />
     </>
   );

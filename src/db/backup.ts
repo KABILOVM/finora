@@ -3,7 +3,9 @@ import type { Category, Entity, LocalFields, LocalRow, Settings, SyncFields, Tra
 import { TABLE_SPECS, type SyncTableName } from '@/sync/tables';
 import { BACKUP_FORMAT, BACKUP_VERSION, parseBackup, type BackupFile } from './backupSchema';
 import { fail } from './errors';
+import { defaultId, FINORA_NAMESPACE, isUuid, uuidV5 } from './ids';
 import { writeTx } from './repoContext';
+import { SEED_SLUGS } from './seed';
 import { internalContext, type Store } from './store';
 import { compareVersion, TRANSFER_CREATES_MONEY_TEXT, transferCreatesMoney } from './validate';
 
@@ -48,6 +50,14 @@ export interface ImportResult {
   keptLocal: number;
 }
 
+export interface ImportOptions {
+  /**
+   * Чья это копия (id пользователя, в чьей базе она сделана), если известно и блока настроек в файле нет.
+   * Тогда стартовые кошелёк и категории копии совпадут со стартовыми записями этого аккаунта, а не продублируются.
+   */
+  sourceUserId?: string;
+}
+
 type Row<T> = LocalRow<T & SyncFields>;
 
 /**
@@ -85,6 +95,48 @@ function mergeTable<E extends SyncFields, R extends E & LocalFields>(
 const index = <R extends { id: string }>(rows: readonly R[]): Map<string, R> => new Map(rows.map((r) => [r.id, r]));
 
 /**
+ * Свои id для чужой копии. На сервере первичный ключ id ОДИН НА ВСЕХ пользователей: запись с id, который уже занят
+ * чужой строкой (копия другого или старого аккаунта, копия из локального режима, загруженная во второй аккаунт),
+ * сервер отвергает навсегда (нет прав на чужую строку), и она висит «не принята сервером» без шанса уйти.
+ * Поэтому каждый id из такого файла заменяется на производный от (этот пользователь + прежний id), а все ссылки
+ * (родитель категории, кошелёк и категория операции) переписываются так же. Производный id не случаен: тот же файл
+ * второй раз даёт те же id, поэтому повторная загрузка ничего не плодит (записи сливаются по правилу «новее побеждает»),
+ * и два устройства одного аккаунта, загрузив один файл, получают одни и те же записи. Ссылка на запись, которой нет в файле,
+ * остаётся как есть: её существование проверит импорт.
+ */
+async function withAccountIds(file: BackupFile, userId: string, sourceUserId?: string): Promise<BackupFile> {
+  // Стартовые записи (кошелёк «Наличные», категории) у каждого пользователя свои, но выводятся из его id по одним и тем же slug.
+  // Если известно, чья это копия, её стартовые записи сопоставляются со стартовыми записями ЭТОГО пользователя, а не плодят дубли.
+  const seeded = new Map<string, string>();
+  if (sourceUserId !== undefined && isUuid(sourceUserId)) {
+    for (const slug of SEED_SLUGS) seeded.set(await defaultId(sourceUserId, slug), await defaultId(userId, slug));
+  }
+  const derive = async (kind: string, ids: readonly string[]): Promise<Map<string, string>> => {
+    const out = new Map<string, string>();
+    for (const id of ids) out.set(id, seeded.get(id) ?? (await uuidV5(FINORA_NAMESPACE, `${userId}:import:${kind}:${id}`)));
+    return out;
+  };
+  const [w, c, t] = await Promise.all([
+    derive('wallet', file.wallets.map((x) => x.id)),
+    derive('category', file.categories.map((x) => x.id)),
+    derive('transaction', file.transactions.map((x) => x.id)),
+  ]);
+  const pick = (m: Map<string, string>, id: string | null): string | null => (id === null ? null : (m.get(id) ?? id));
+  return {
+    ...file,
+    wallets: file.wallets.map((x) => ({ ...x, id: w.get(x.id) ?? x.id })),
+    categories: file.categories.map((x) => ({ ...x, id: c.get(x.id) ?? x.id, parentId: pick(c, x.parentId) })),
+    transactions: file.transactions.map((x) => ({
+      ...x,
+      id: t.get(x.id) ?? x.id,
+      walletId: pick(w, x.walletId) ?? x.walletId,
+      toWalletId: pick(w, x.toWalletId),
+      categoryId: pick(c, x.categoryId),
+    })),
+  };
+}
+
+/**
  * Импорт резервной копии.
  *  1) Весь файл проверяется до первой записи (структура, типы, границы, дубли id): ошибка — в базе ничего не меняется.
  *  2) Слияние по id по правилу «новее побеждает»: импорт НИКОГДА не затирает более новые локальные данные.
@@ -94,10 +146,15 @@ const index = <R extends { id: string }>(rows: readonly R[]): Map<string, R> => 
  *  4) Всё записывается одной транзакцией; импортированное помечается dirty и уйдёт в облако.
  *  5) Копия с блоком настроек ДРУГОГО аккаунта отвергается. Копия БЕЗ блока настроек принимается: восстановить свои данные
  *     в новый аккаунт после потери старого — законный сценарий, отказ его сломал бы (принятое решение, не упущение).
+ *     Такая копия — не своя (свою всегда сопровождает блок настроек с id этого аккаунта): её записи получают СВОИ id
+ *     (см. withAccountIds), иначе они столкнулись бы на сервере с чужими строками с теми же id и ушли бы в карантин.
+ *     Копия со своим блоком настроек сохраняет id: те же записи уже могут быть на сервере и на других устройствах.
  */
-export async function importBackup(store: Store, data: unknown): Promise<ImportResult> {
+export async function importBackup(store: Store, data: unknown, options: ImportOptions = {}): Promise<ImportResult> {
   const ctx = internalContext(store);
-  const file = parseBackup(data, { userId: store.userId, nowMs: Date.now() });
+  const parsed = parseBackup(data, { userId: store.userId, nowMs: Date.now() });
+  // id считаются ДО транзакции Dexie: ожидание не-Dexie промисов (crypto) внутри неё закрыло бы транзакцию
+  const file = parsed.settings === null ? await withAccountIds(parsed, store.userId, options.sourceUserId) : parsed;
   const { db } = store;
   const tally: ImportResult = { added: 0, replaced: 0, keptLocal: 0 };
 

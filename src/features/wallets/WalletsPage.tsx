@@ -167,7 +167,8 @@ export default function WalletsPage() {
                     trailing={<MoneyText minor={bal} currency={w.currency} tone={bal < 0 ? 'expense' : 'none'} className="font-semibold" />}
                     onClick={() => setSheet({ kind: 'edit', wallet: w })}
                   />
-                  <Button variant="ghost" aria-label={`Сверка: ${w.name}`} onClick={() => setReconciling(w)}>
+                  {/* узкие px: на экране 320 px каждая клетка нужна названию и валюте кошелька */}
+                  <Button variant="ghost" className="shrink-0 !px-2" aria-label={`Сверка: ${w.name}`} onClick={() => setReconciling(w)}>
                     Сверка
                   </Button>
                 </li>

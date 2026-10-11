@@ -127,11 +127,12 @@ describe('Настройки: аккаунт', () => {
     expect(screen.getByText(/Недоступно, пока не всё отправлено в облако/)).toBeInTheDocument();
   });
 
-  it('«Выйти и удалить»: статус «чисто», но в базе есть неотправленное → отказ с объяснением, ничего не удалено', async () => {
+  it('«Выйти и удалить»: в базе есть неотправленное, а движок об этом не знает (запись соседней вкладки) → кнопка недоступна, ничего не удалено', async () => {
     const { td, store, fake } = await openCloudSettings();
     await eventually(async () => expect((await store().sync.counts()).pending).toBeGreaterThan(0));
-    await user.click(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' }));
-    expect(await waitFor(() => screen.getByText(/Есть неотправленные записи: удалять данные с устройства нельзя/))).toBeInTheDocument();
+    // статус берётся и из самой базы: кнопка не ждёт, пока движок пересчитает очередь
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' })).toBeDisabled());
+    expect(screen.getByText(/Недоступно, пока не всё отправлено в облако/)).toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(td.deleted).toEqual([]);
     expect(fake.calls.signOut).toBe(0);
@@ -147,6 +148,7 @@ describe('Настройки: аккаунт', () => {
     const { store, fake } = await openCloudSettings({ td });
     await eventually(async () => expect(await store().sync.getMeta('initialPullDone')).toBe(true));
     await markAllPushed(store());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' }));
     const dialog = await findByRole('alertdialog');
     expect(dialog).toHaveTextContent('Удалить данные с этого устройства?');
@@ -170,6 +172,7 @@ describe('Настройки: аккаунт', () => {
     const { td, store, fake } = await openCloudSettings();
     await eventually(async () => expect(await store().sync.getMeta('initialPullDone')).toBe(true));
     await markAllPushed(store());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' }));
     await findByRole('alertdialog');
     await write(() =>

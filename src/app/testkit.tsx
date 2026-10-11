@@ -8,7 +8,8 @@ import { StrictMode, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { act, fire, render, screen } from '@/components/testUtils';
 import { ToastProvider } from '@/components/Toast';
-import { FinoraDB, openStore, type Store } from '@/db';
+import { LOCAL_USER_ID } from '@/auth/config';
+import { countUserData, FinoraDB, openStore, type Store } from '@/db';
 import { createRateService } from '@/rates/service';
 import { createMemoryRateStorage } from '@/rates/storage';
 import { META_INITIAL_PULL, type CreateSyncEngineOptions, type SyncEngine } from '@/sync/engine';
@@ -264,6 +265,7 @@ export function makeTestDeps(options: TestDepsOptions = {}): TestDeps {
       deleted.push(userId);
       await new FinoraDB(userId, dexie).delete();
     },
+    countLocalModeData: () => countUserData(LOCAL_USER_ID, dexie),
   };
   return { deps, factory, control, engines, stores, opened, deleted };
 }
