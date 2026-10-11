@@ -1,4 +1,4 @@
-import { addTx, createWallet, expect, goSection, openApp, test, waitReady } from '../helpers';
+import { addTx, createWallet, dismissInstallPrompt, expect, goSection, openApp, test, waitReady } from '../helpers';
 
 // Каждый тест в этом проекте дополнительно проверяется автоматически: pageerror и console.error (кроме сетевых сбоев) = провал.
 test.describe('9. Нет ошибок в консоли', () => {
@@ -26,6 +26,7 @@ test.describe('9. Нет ошибок в консоли', () => {
     await add.getByRole('button', { name: 'Закрыть' }).click();
     await expect(add).toBeHidden();
     await expect(page).toHaveURL(/#\/$/);
+    await dismissInstallPrompt(page); // окно установки (телефон) появляется на «Главной» и мешало бы дальнейшим проверкам
 
     // несуществующий маршрут → «Главная»
     await page.goto('/#/нет-такой-страницы');

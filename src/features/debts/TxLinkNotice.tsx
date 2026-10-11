@@ -16,7 +16,10 @@ export function TxLinkNotice({ tx }: { tx: Linked }) {
   const debtId = tx.debtId;
   // Обёртка в объект: «долга нет» (debt: null) отличается от «ещё читается» (undefined)
   const found = useLiveQuery(
-    async () => ({ debt: debtId && store ? ((await store.db.debts.get(debtId)) ?? null) : null }),
+    async () => {
+      const d = debtId && store ? await store.db.debts.get(debtId) : undefined;
+      return { debt: d && d.deletedAt === null ? d : null }; // удалённый долг — как отсутствующий
+    },
     [store, debtId],
   );
   if (!debtId && !tx.recurringRuleId) return null;

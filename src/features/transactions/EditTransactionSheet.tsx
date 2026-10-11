@@ -10,6 +10,7 @@ import { formatMinor } from '@/domain/money';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
 import { overpayAfterEdit, type EditOverpay } from '@/features/debts/editOverpay';
 import { TxLinkNotice } from '@/features/debts/TxLinkNotice';
+import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
 import { changedFields, formFromTx, GENERIC_SAVE_ERROR } from './txForm';
@@ -40,6 +41,7 @@ export default function EditTransactionSheet({ id, onClose }: EditTransactionShe
   const settings = useSettings();
   // Обёртка в объект: «операции нет» (tx: null) отличается от «ещё читается» (undefined)
   const found = useLiveQuery(async () => ({ tx: (await store.db.transactions.get(id)) ?? null }), [store, id]);
+  const pop = usePopularity();
 
   /** true: окно закрываем мы сами (сохранили или удалили) — сообщение «не найдена» не нужно. */
   const closing = useRef(false);
@@ -55,7 +57,7 @@ export default function EditTransactionSheet({ id, onClose }: EditTransactionShe
     // сообщение показываем один раз — при переходе в состояние «операции нет»
   }, [gone, toast]);
 
-  if (!found || !wallets || !categories || settings === undefined) return null;
+  if (!found || !wallets || !categories || settings === undefined || !pop) return null;
 
   if (gone) {
     if (closing.current) return null;
@@ -85,6 +87,7 @@ export default function EditTransactionSheet({ id, onClose }: EditTransactionShe
       wallets={wallets}
       categories={categories}
       settings={settings}
+      pop={pop}
       onClose={onClose}
       closing={closing}
     />
@@ -96,11 +99,12 @@ interface EditFormProps {
   wallets: readonly LocalRow<Wallet>[];
   categories: readonly LocalRow<Category>[];
   settings: LocalRow<Settings>;
+  pop: Popularity;
   onClose: () => void;
   closing: { current: boolean };
 }
 
-function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditFormProps) {
+function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: EditFormProps) {
   const store = useStore();
   const toast = useToast();
   const formRef = useRef<HTMLDivElement>(null);
@@ -118,10 +122,13 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
   const kind = c.form.kind;
   const categoryOptions = useMemo(() => {
     if (kind === 'transfer') return [];
-    return categories
-      .filter((x) => x.kind === kind && (x.archivedAt === null || x.id === orig.categoryId))
-      .map((x) => ({ value: x.id, label: x.archivedAt === null ? x.name : `${x.name} (в архиве)`, icon: x.icon, color: x.color }));
-  }, [categories, kind, orig.categoryId]);
+    return rankCategories(
+      categories.filter((x) => x.archivedAt === null || x.id === orig.categoryId),
+      kind,
+      pop,
+    ).map((x) => ({ value: x.id, label: x.archivedAt === null ? x.name : `${x.name} (в архиве)`, icon: x.icon, color: x.color }));
+  }, [categories, kind, orig.categoryId, pop]);
+  const selectableRanked = useMemo(() => rankWallets(selectable, pop), [selectable, pop]);
 
   useScrollToError(formRef, c.errors);
 
@@ -239,7 +246,7 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
       >
         <div ref={formRef}>
           <TxLinkNotice tx={orig} />
-          <TxFormFields c={c} wallets={selectable} categories={categoryOptions} />
+          <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} />
         </div>
       </Sheet>
       <ConfirmDialog

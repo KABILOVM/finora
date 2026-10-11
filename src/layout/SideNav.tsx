@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
 import { Icon } from '@/components/Icon';
 import { Logo } from '@/components/Logo';
+import { Wordmark } from '@/components/Wordmark';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/cn';
 import { ADD_LABEL, isNavActive, NAV_ITEMS, useAddLink, type NavItem } from './nav';
@@ -35,7 +36,7 @@ export function SideNav({ status }: { status?: ReactNode }) {
     <aside className="fixed bottom-3 left-3 top-3 z-30 hidden w-56 flex-col gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-surface/70 px-3 py-5 shadow-card backdrop-blur-xl md:flex">
       <div className="flex items-center gap-3 px-3">
         <Logo size={36} />
-        <span className="text-xl font-bold tracking-tight">Finora</span>
+        <Wordmark className="text-xl" />
       </div>
       <Link {...addLink} className={cn(buttonClasses('primary', 'md', true), 'whitespace-nowrap')}>
         <Icon name="plus" size={22} strokeWidth={2.5} />

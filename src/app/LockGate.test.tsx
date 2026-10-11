@@ -328,6 +328,16 @@ describe('закрытие после ухода из приложения', () 
     await waitFor(() => expect(cover()).toBeNull());
   });
 
+  it('касание самой заслонки (не кнопки) тоже просит Face ID: одно касание вместо прицеливания в кнопку', async () => {
+    await unlockedWith(0);
+    setVisibility('hidden');
+    setVisibility('visible');
+    expect(cover()).not.toBeNull();
+    fake.mode = 'ok';
+    await user.click(cover() as HTMLElement);
+    await waitFor(() => expect(cover()).toBeNull());
+  });
+
   it('приложение под заслонкой не пересоздаётся при закрытии и открытии', async () => {
     await unlockedWith(0);
     const node = appButton();

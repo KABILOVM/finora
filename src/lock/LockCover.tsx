@@ -133,6 +133,13 @@ export function LockCover({ state, cloud, onUnlock, onLeave }: LockCoverProps) {
       aria-describedby={descId}
       tabIndex={-1}
       data-lock-cover=""
+      // Коснуться экрана в любом месте — то же, что нажать «Открыть»: одно касание вместо прицеливания в кнопку (и жест, без которого
+      // iPhone не покажет запрос Face ID). Кнопки и ссылки работают сами по себе.
+      onClick={(e) => {
+        if (view !== 'main' || state.kind !== 'on' || checking || leaving) return;
+        if ((e.target as HTMLElement).closest('button, a')) return;
+        void attempt('button');
+      }}
       className="fixed inset-0 z-[1000] flex flex-col items-center overflow-y-auto overscroll-contain bg-bg px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] text-text outline-none"
     >
       <div className="my-auto flex w-full max-w-sm flex-col items-center gap-4 py-6 text-center">
@@ -147,7 +154,7 @@ export function LockCover({ state, cloud, onUnlock, onLeave }: LockCoverProps) {
             </h2>
             <p id={descId} className="text-muted">
               {state.kind === 'on'
-                ? 'Подтвердите, что это вы: Face ID, отпечаток или код экрана.'
+                ? 'Коснитесь экрана и подтвердите, что это вы: Face ID, отпечаток или код экрана.'
                 : 'Запись о замке на этом устройстве повреждена, поэтому открыть его по Face ID не получится.'}
             </p>
 

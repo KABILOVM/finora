@@ -28,7 +28,11 @@ async function addRule(page: Page, r: RuleInput): Promise<void> {
   await page.getByRole('button', { name: 'Добавить платёж', exact: true }).click();
   const dlg = sheet(page, 'Новый регулярный платёж');
   await expect(dlg).toBeVisible();
-  if (r.wallet) await dlg.getByRole('group', { name: 'Кошелёк' }).getByRole('button', { name: new RegExp(r.wallet) }).click();
+  if (r.wallet) {
+    // кошелёк — пилюля со списком: открыть и выбрать
+    await dlg.getByRole('button', { name: /^Кошелёк:/ }).click();
+    await dlg.getByRole('group', { name: 'Кошелёк' }).getByRole('button', { name: new RegExp(r.wallet) }).click();
+  }
   await dlg.getByRole('textbox', { name: /^Сумма/ }).fill(r.amount);
   if (r.category) {
     const group = dlg.getByRole('group', { name: 'Категория' });
@@ -40,7 +44,10 @@ async function addRule(page: Page, r: RuleInput): Promise<void> {
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
   }
   await dlg.getByRole('textbox', { name: 'Название или заметка' }).fill(r.note);
-  if (r.frequency) await dlg.getByRole('group', { name: 'Периодичность' }).getByRole('button', { name: r.frequency, exact: true }).click();
+  if (r.frequency) {
+    await dlg.getByRole('button', { name: /^Периодичность:/ }).click();
+    await dlg.getByRole('group', { name: 'Периодичность' }).getByRole('button', { name: r.frequency, exact: true }).click();
+  }
   if (r.start) await dlg.getByLabel('Первый платёж').fill(r.start);
   if (r.auto) await dlg.getByRole('switch', { name: 'Проводить само' }).click();
   await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();

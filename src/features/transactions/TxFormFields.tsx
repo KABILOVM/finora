@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AmountInput } from '@/components/AmountInput';
 import { Icon } from '@/components/Icon';
 import { cn } from '@/lib/cn';
@@ -28,6 +28,17 @@ const COMPACT_KEYPAD =
   '[@media(min-height:701px)_and_(max-height:800px)]:[&_button]:!min-h-[48px] ' +
   '[@media(max-height:700px)]:[&_button]:!min-h-[44px] [@media(max-height:700px)]:!gap-1 ' +
   '[@media(max-height:700px)]:[&_.items-baseline]:!py-0 [@media(max-height:700px)]:[&_.money]:!text-4xl';
+
+/**
+ * Комиссия открыта: строка в 44–48 px появляется над клавишами, а окно не должно ни расти, ни прокручиваться.
+ * Поэтому клавиши и поле суммы чуть ужимаются (на низком экране — до 40 px), на высоком — остаются крупнее.
+ * Селекторы те же, что в COMPACT_KEYPAD, но правила целиком заменяют его.
+ */
+const FEE_KEYPAD =
+  '[&_button]:!min-h-[44px] [&_[role=group]]:!gap-1 !gap-1 [&_.items-baseline]:!py-0 [&_.money]:!text-3xl ' +
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_button]:!min-h-[46px] ' +
+  '[@media(min-height:801px)]:[&_button]:!min-h-[50px] [@media(min-height:801px)]:[&_[role=group]]:!gap-1.5 ' +
+  '[@media(max-height:700px)]:[&_button]:!min-h-[40px]';
 
 export interface TxFormFieldsProps {
   c: TxFormController;
@@ -84,9 +95,35 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
   const feeAvailable = (form.kind === 'expense' && !c.editing) || (isTransfer && c.received?.mode === 'fee');
   const feeOpen = feeAvailable && (form.feeOpen || !!errors.fee);
 
+  // Высота формы без комиссии запоминается: с комиссией окно не должно становиться ни выше, ни ниже.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const closedHeight = useRef(0);
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (feeOpen) {
+      if (closedHeight.current > 0) el.style.minHeight = `${closedHeight.current}px`;
+      return;
+    }
+    el.style.minHeight = '';
+    closedHeight.current = el.offsetHeight;
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      closedHeight.current = el.offsetHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [feeOpen]);
+
   return (
-    <div className="flex flex-col gap-3 md:gap-5">
-      <Segmented ariaLabel="Вид операции" options={KINDS} value={form.kind} onChange={c.setKind} />
+    <div ref={rootRef} className={cn('flex flex-col gap-3 md:gap-5', feeOpen && '[@media(max-height:700px)]:gap-1.5')}>
+      <Segmented
+        ariaLabel="Вид операции"
+        options={KINDS}
+        value={form.kind}
+        onChange={c.setKind}
+        className={feeOpen ? '[@media(max-height:700px)]:[&_button]:!min-h-[40px]' : undefined}
+      />
 
       {/* Кошелёк и дата видны над клавиатурой: человек всегда знает, куда запишется операция */}
       <div className="flex flex-col gap-3">
@@ -154,7 +191,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
           label={isTransfer ? 'Сумма списания' : 'Сумма'}
           tone={form.kind === 'expense' ? 'expense' : form.kind === 'income' ? 'income' : 'neutral'}
           error={errors.amount}
-          className={COMPACT_KEYPAD}
+          className={feeOpen ? FEE_KEYPAD : COMPACT_KEYPAD}
           autoFocus
         />
       </div>

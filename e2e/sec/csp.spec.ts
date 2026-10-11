@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
-import { addTx, createWallet, dismissToasts, expect, goSection, sheet, test, waitReady } from '../helpers';
+import { addTx, createWallet, dismissInstallPrompt, dismissToasts, expect, goSection, sheet, test, waitReady } from '../helpers';
 import { applyCsp, supabaseConnectSources } from '../../vite.config';
 import { DIST, ROOT, buildVariant, headersFor, parseCsp, readVercel, recordViolations, startHeaderServer, type HeaderServer } from './helpers';
 
@@ -224,6 +224,7 @@ test.describe('CSP в настоящем браузере', () => {
 
     await page.goto(`${srv.origin}/#/`);
     await waitReady(page);
+    await dismissInstallPrompt(page);
 
     // операции: расход, доход, перевод между своими кошельками
     await createWallet(page, { name: 'Карта', opening: '50' });
@@ -269,6 +270,7 @@ test.describe('CSP в настоящем браузере', () => {
     // страница с неизвестным адресом и экран входа по прямой ссылке
     await page.goto(`${srv.origin}/#/nonexistent?next=https://evil.example`);
     await waitReady(page);
+    await dismissInstallPrompt(page);
 
     expect(await violations(), 'нарушения CSP').toEqual([]);
     // запросы курсов дошли только до хостов из белого списка
@@ -286,6 +288,7 @@ test.describe('CSP в настоящем браузере', () => {
     const violations = await recordViolations(page);
     await page.goto(`${srv.origin}/#/`);
     await waitReady(page);
+    await dismissInstallPrompt(page);
 
     // Проверки идут из файла со СВОЕГО адреса (его CSP разрешает): так eval и т. п. исполняются в обычных условиях страницы.
     // page.evaluate для eval не годится: протокол отладки сам разрешает eval в обход CSP.
@@ -340,17 +343,20 @@ test.describe('CSP в настоящем браузере', () => {
     const violations = await recordViolations(page);
     await page.goto(`${srv.origin}/#/`);
     await waitReady(page);
+    await dismissInstallPrompt(page);
     await page.evaluate(async () => {
       const reg = await navigator.serviceWorker.ready;
       if (!reg.active) throw new Error('воркер не активен');
     });
     await page.reload();
     await waitReady(page);
+    await dismissInstallPrompt(page);
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
 
     await page.context().setOffline(true);
     await page.reload();
     await waitReady(page);
+    await dismissInstallPrompt(page);
     await goSection(page, 'Настройки');
     await page.context().setOffline(false);
     expect(await violations(), 'нарушения CSP при работе воркера').toEqual([]);

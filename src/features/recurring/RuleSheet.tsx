@@ -6,7 +6,8 @@ import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { useStore, ValidationError } from '@/db';
 import { sortByOrderThenName } from '@/db/sort';
-import type { IsoDate, LocalRow, Minor, RecurringRule, TxKind } from '@/domain/types';
+import { rankCategories, rankWallets, usePopularity } from '@/features/transactions/popularity';
+import type { CategoryKind, IsoDate, LocalRow, Minor, RecurringRule, TxKind } from '@/domain/types';
 import { firstOtherWallet, GENERIC_SAVE_ERROR, pickDefaultWallet } from '@/features/transactions/txForm';
 import { useScrollToError } from '@/features/transactions/useScrollToError';
 import { useRates } from '@/rates/hooks';
@@ -62,15 +63,15 @@ export function RuleSheet({ rule: liveRule, lookups, today, onClose }: RuleSheet
   const { base } = lookups;
 
   // Кошельки для выбора: не в архиве; уже выбранный в старом платеже остаётся, даже если его убрали в архив.
-  const selectable = useMemo(
-    () =>
-      sortByOrderThenName(
-        [...lookups.wallets.values()].filter(
-          (w) => w.deletedAt === null && (w.archivedAt === null || w.id === rule?.walletId || w.id === rule?.toWalletId),
-        ),
+  const pop = usePopularity();
+  const selectable = useMemo(() => {
+    const list = sortByOrderThenName(
+      [...lookups.wallets.values()].filter(
+        (w) => w.deletedAt === null && (w.archivedAt === null || w.id === rule?.walletId || w.id === rule?.toWalletId),
       ),
-    [lookups.wallets, rule?.walletId, rule?.toWalletId],
-  );
+    );
+    return pop ? rankWallets(list, pop) : list;
+  }, [lookups.wallets, rule?.walletId, rule?.toWalletId, pop]);
 
   const [initial] = useState<RuleFormState>(() =>
     rule
@@ -96,8 +97,9 @@ export function RuleSheet({ rule: liveRule, lookups, today, onClose }: RuleSheet
     const list = [...lookups.categories.values()].filter(
       (c) => c.deletedAt === null && c.kind === form.kind && (c.archivedAt === null || c.id === form.categoryId),
     );
-    return sortByOrderThenName(list).map((c) => ({ value: c.id, label: c.name, icon: c.icon }));
-  }, [lookups.categories, form.kind, form.categoryId, isTransfer]);
+    const ordered = pop && !isTransfer ? rankCategories(list, form.kind as CategoryKind, pop) : sortByOrderThenName(list);
+    return ordered.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }));
+  }, [lookups.categories, form.kind, form.categoryId, isTransfer, pop]);
 
   const debts = useMemo(
     () =>
@@ -261,7 +263,7 @@ export function RuleSheet({ rule: liveRule, lookups, today, onClose }: RuleSheet
           </div>
         }
       >
-        <div ref={bodyRef} className="flex flex-col gap-6">
+        <div ref={bodyRef} className="flex flex-col gap-4">
           <RuleFields
             form={form}
             errors={errors}

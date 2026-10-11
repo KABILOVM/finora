@@ -1,4 +1,4 @@
-import type { CurrencyCode, Debt, DebtDirection, IsoDate, LocalRow, Minor, UUID } from '@/domain/types';
+import type { CurrencyCode, Debt, DebtDirection, IsoDate, LocalRow, Minor, Transaction, UUID } from '@/domain/types';
 import { ValidationError } from './errors';
 import { newId } from './ids';
 import { cleanPatch, sameFields, touch, withDirtyGroups, writeTx, type RepoContext } from './repoContext';
@@ -18,6 +18,23 @@ export interface DebtInput {
 
 export type DebtPatch = Partial<DebtInput>;
 
+/**
+ * Как удалить долг:
+ *  - 'keep-operations' — только долг; его операции остаются обычными (debtId обнуляется), остатки кошельков не меняются;
+ *  - 'with-operations' — долг и все его живые операции (остатки кошельков возвращаются к состоянию «до долга»).
+ */
+export type DebtDeleteMode = 'keep-operations' | 'with-operations';
+
+/** Что именно сделало удаление: по этому описанию его можно отменить (undoDelete). Пустые списки — удалять было нечего (повтор). */
+export interface DebtDeletion {
+  debtId: UUID;
+  mode: DebtDeleteMode;
+  /** Операции, которые затронуло удаление (отвязаны от долга или удалены — по режиму). */
+  txIds: UUID[];
+  /** Регулярные платежи по этому долгу, которые ушли в архив. */
+  ruleIds: UUID[];
+}
+
 export interface DebtsRepo {
   create(input: DebtInput, opts?: { id?: UUID }): Promise<LocalRow<Debt>>;
   /** Направление и валюту нельзя менять, когда по долгу уже есть операции или регулярные платежи: суммы поменяли бы смысл. */
@@ -28,6 +45,14 @@ export interface DebtsRepo {
   /** В архив (скрыть из списков). Операции и остаток сохраняются. Повтор безопасен. */
   archive(id: UUID): Promise<LocalRow<Debt>>;
   restore(id: UUID): Promise<LocalRow<Debt>>;
+  /**
+   * Мягкое удаление долга (deletedAt) вместе с последствиями, ОДНОЙ транзакцией базы: либо всё, либо ничего.
+   * Регулярные платежи по долгу уходят в архив (debtId сохраняется: вернуть платёж из архива можно, но проводиться как обычный
+   * расход он не станет — автопроведение скажет «долг удалён»). Уже удалённый долг — ничего не меняет (пустой результат).
+   */
+  softDelete(id: UUID, mode: DebtDeleteMode): Promise<DebtDeletion>;
+  /** Отмена удаления: возвращает долг и то, что затронуло удаление (то, что с тех пор успели изменить иначе, не трогает). Повтор безопасен. */
+  undoDelete(deletion: DebtDeletion): Promise<LocalRow<Debt>>;
 }
 
 const INPUT_KEYS = ['direction', 'counterparty', 'principalMinor', 'currency', 'openedOn', 'dueOn', 'note'] as const;
@@ -136,6 +161,58 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
 
     async restore(id) {
       return save(id, (cur) => ({ ...dataOf(cur), archivedAt: null }));
+    },
+
+    async softDelete(id, mode) {
+      if (mode !== 'keep-operations' && mode !== 'with-operations') throw new ValidationError('Не понятно, как удалять долг');
+      return writeTx(ctx, [db.debts, db.transactions, db.recurring_rules], async () => {
+        const cur = await db.debts.get(id);
+        if (!cur) throw new ValidationError('Долг не найден');
+        if (cur.deletedAt !== null) return { debtId: id, mode, txIds: [], ruleIds: [] };
+
+        const txs = (await db.transactions.where('debtId').equals(id).toArray()).filter((t) => t.deletedAt === null);
+        for (const t of txs) {
+          const { stamp, fields } = touch(ctx);
+          const next: LocalRow<Transaction> = mode === 'with-operations' ? { ...t, deletedAt: stamp, ...fields } : { ...t, debtId: null, ...fields };
+          await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, next));
+        }
+        const rules = (await db.recurring_rules.toArray()).filter((r) => r.debtId === id && r.deletedAt === null && r.archivedAt === null);
+        for (const r of rules) {
+          const { stamp, fields } = touch(ctx);
+          await db.recurring_rules.put(withDirtyGroups('recurring_rules', r, { ...r, archivedAt: stamp, ...fields }));
+        }
+        const { stamp, fields } = touch(ctx);
+        await db.debts.put(withDirtyGroups<LocalRow<Debt>>('debts', cur, { ...cur, deletedAt: stamp, ...fields }));
+        return { debtId: id, mode, txIds: txs.map((t) => t.id), ruleIds: rules.map((r) => r.id) };
+      });
+    },
+
+    async undoDelete(deletion) {
+      const { debtId, mode } = deletion;
+      return writeTx(ctx, [db.debts, db.transactions, db.recurring_rules], async () => {
+        const cur = await db.debts.get(debtId);
+        if (!cur) throw new ValidationError('Долг не найден');
+        if (cur.deletedAt === null) return cur; // уже возвращён
+        for (const txId of deletion.txIds) {
+          const t = await db.transactions.get(txId);
+          if (!t) continue;
+          if (mode === 'with-operations') {
+            if (t.deletedAt === null) continue;
+            await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, { ...t, deletedAt: null, ...touch(ctx).fields }));
+          } else {
+            if (t.deletedAt !== null || t.debtId !== null) continue; // с тех пор удалена или привязана к другому долгу
+            await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, { ...t, debtId, ...touch(ctx).fields }));
+          }
+        }
+        for (const ruleId of deletion.ruleIds) {
+          const r = await db.recurring_rules.get(ruleId);
+          if (!r || r.deletedAt !== null || r.archivedAt === null || r.debtId !== debtId) continue;
+          await db.recurring_rules.put(withDirtyGroups('recurring_rules', r, { ...r, archivedAt: null, ...touch(ctx).fields }));
+        }
+        const row = withDirtyGroups<LocalRow<Debt>>('debts', cur, { ...cur, deletedAt: null, ...touch(ctx).fields });
+        await db.debts.put(row);
+        return row;
+      });
     },
   };
 }

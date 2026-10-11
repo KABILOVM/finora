@@ -32,9 +32,11 @@ describe('экран входа', () => {
 
   describe('регистрация', () => {
     const NEW = { email: 'new@example.com', password: 'new-password-1' };
-    const fill = async (email: string, password: string) => {
+    const fill = async (email: string, password: string, repeat: string | null = password) => {
       await user.type(screen.getByRole('textbox', { name: 'Почта' }), email);
-      await user.type(document.querySelector('input[type="password"]') as HTMLInputElement, password);
+      const fields = document.querySelectorAll<HTMLInputElement>('input[type="password"]');
+      await user.type(fields[0] as HTMLInputElement, password);
+      if (repeat !== null) await user.type(fields[1] as HTMLInputElement, repeat);
     };
 
     it('режим переключается туда и обратно, у пароля автозаполнение «новый пароль»', async () => {
@@ -55,12 +57,35 @@ describe('экран входа', () => {
       expect(fake.calls.signUp).toBe(1);
     });
 
+    it('второе поле «Повторите пароль» есть только при регистрации; пароли не совпали — ошибка, на сервер ничего не уходит', async () => {
+      const { fake } = await openLogin();
+      expect(document.getElementById('login-password-repeat')).toBeNull();
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      expect(document.getElementById('login-password-repeat')).not.toBeNull();
+      await fill(NEW.email, NEW.password, `${NEW.password}x`);
+      await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
+      expect(await findByRole('alert')).toHaveTextContent('Пароли не совпадают');
+      expect(fake.calls.signUp).toBe(0);
+    });
+
+    it('«глазок» внутри поля показывает и скрывает сразу оба пароля; кнопка одна', async () => {
+      await openLogin();
+      await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+      expect(screen.getAllByRole('button', { name: 'Показать пароль' })).toHaveLength(1);
+      await user.click(screen.getByRole('button', { name: 'Показать пароль' }));
+      expect(document.querySelectorAll('input[type="password"]')).toHaveLength(0);
+      expect(document.getElementById('login-password')).toHaveAttribute('type', 'text');
+      expect(document.getElementById('login-password-repeat')).toHaveAttribute('type', 'text');
+      await user.click(screen.getByRole('button', { name: 'Скрыть пароль' }));
+      expect(document.querySelectorAll('input[type="password"]')).toHaveLength(2);
+    });
+
     it('короткий пароль: понятная ошибка, на сервер ничего не уходит', async () => {
       const { fake } = await openLogin();
       await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
-      await fill(NEW.email, 'short');
+      await fill(NEW.email, 'abc');
       await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
-      expect(await findByRole('alert')).toHaveTextContent('не короче 8 символов');
+      expect(await findByRole('alert')).toHaveTextContent('не короче 6 символов');
       expect(fake.calls.signUp).toBe(0);
     });
 
