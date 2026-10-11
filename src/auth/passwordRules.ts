@@ -1,4 +1,4 @@
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 6;
 
 /** Проверка нового пароля при смене. Возвращает текст ошибки по-русски или null, если всё хорошо. */
 export function checkNewPassword(password: string, repeat: string): string | null {

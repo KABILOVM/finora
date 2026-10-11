@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Spinner } from '@/components/Button';
 import { Logo } from '@/components/Logo';
+import { Wordmark } from '@/components/Wordmark';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useOnline } from '@/components/OnlineBadge';
 import { cn } from '@/lib/cn';
@@ -39,7 +40,7 @@ export function AppShell({ status }: AppShellProps) {
             <div className="flex shrink-0 items-center gap-2">
               <Logo size={28} />
               {/* Без сети на узком экране слово «Finora» уступает место индикаторам: они должны уместиться в одну строку. */}
-              <span className={cn('text-lg font-bold tracking-tight', !online && 'max-[419px]:sr-only')}>Finora</span>
+              <Wordmark className={cn('text-lg', !online && 'max-[419px]:sr-only')} />
             </div>
             <div className="flex min-w-0 items-center gap-1">
               {status && <div className="header-status">{status}</div>}

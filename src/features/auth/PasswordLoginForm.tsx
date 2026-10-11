@@ -1,13 +1,15 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
+import { checkNewPassword, MIN_PASSWORD_LENGTH } from '@/auth/passwordRules';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/Field';
 import { FormError, OfflineNotice } from './LoginNotices';
+import { PasswordField } from './PasswordField';
 
 export interface PasswordLoginFormProps {
   email: string;
   onEmailChange(value: string): void;
-  /** true — регистрация (почта и пароль от 8 символов), иначе вход. */
+  /** true — регистрация (почта, пароль и его повтор), иначе вход. */
   signUp?: boolean;
 }
 
@@ -19,6 +21,7 @@ export interface PasswordLoginFormProps {
 export function PasswordLoginForm({ email, onEmailChange, signUp = false }: PasswordLoginFormProps) {
   const auth = useAuth();
   const [password, setPassword] = useState('');
+  const [repeat, setRepeat] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +34,16 @@ export function PasswordLoginForm({ email, onEmailChange, signUp = false }: Pass
     busyRef.current = true;
     setBusy(true);
     setError(null);
+    if (signUp) {
+      // пароль набирают дважды, чтобы опечатка не закрыла вход в новый аккаунт
+      const problem = checkNewPassword(password, repeat);
+      if (problem) {
+        setError(problem);
+        setBusy(false);
+        busyRef.current = false;
+        return;
+      }
+    }
     const result = signUp ? await auth.signUp(email, password) : await auth.signIn(email, password);
     // при успехе экран заменится сам (состояние входа изменилось), поэтому состояние здесь трогаем только при ошибке
     if (!result.ok) {
@@ -63,33 +76,41 @@ export function PasswordLoginForm({ email, onEmailChange, signUp = false }: Pass
         disabled={busy}
         required
       />
-      <div className="flex flex-col gap-1.5">
-        <TextInput
-          label="Пароль"
-          id="login-password"
-          name="password"
-          type={showPassword ? 'text' : 'password'}
-          autoComplete={signUp ? 'new-password' : 'current-password'}
+      <PasswordField
+        label="Пароль"
+        id="login-password"
+        name="password"
+        shown={showPassword}
+        onToggleShown={() => setShowPassword((v) => !v)}
+        autoComplete={signUp ? 'new-password' : 'current-password'}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint={signUp ? 'next' : 'go'}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        disabled={busy}
+        hint={signUp ? `Не короче ${MIN_PASSWORD_LENGTH} символов` : undefined}
+        required
+      />
+      {signUp && (
+        <PasswordField
+          label="Повторите пароль"
+          id="login-password-repeat"
+          name="password-repeat"
+          shown={showPassword}
+          autoComplete="new-password"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
           enterKeyHint="go"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          value={repeat}
+          onChange={(e) => setRepeat(e.target.value)}
           disabled={busy}
           required
         />
-        <button
-          type="button"
-          onClick={() => setShowPassword((v) => !v)}
-          aria-pressed={showPassword}
-          className="min-h-[44px] self-start rounded-lg px-1 text-base font-semibold text-brand"
-        >
-          {showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-        </button>
-      </div>
+      )}
 
-      {signUp && <p className="-mt-2 text-sm text-muted">Пароль — от 8 символов</p>}
       {confirmSent && (
         <p role="status" className="rounded-xl bg-income/10 p-3 font-medium text-income">
           Мы отправили письмо на {email.trim()}. Подтвердите почту по ссылке в нём, затем войдите.

@@ -284,7 +284,7 @@ describe('changePassword', () => {
   it('короткий пароль и несовпадение повтора отвергаются до запроса', async () => {
     const { fake, auth } = setup({ session: ALICE });
     await waitFor(() => expect(auth.api.state.status).toBe('signed-in'));
-    expect(await auth.api.changePassword('1234567', '1234567')).toMatchObject({ ok: false });
+    expect(await auth.api.changePassword('12345', '12345')).toMatchObject({ ok: false });
     expect(await auth.api.changePassword('12345678', '123456789')).toEqual({ ok: false, message: 'Пароли не совпадают' });
     expect(fake.calls.updateUser).toBe(0);
   });

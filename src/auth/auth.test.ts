@@ -97,7 +97,7 @@ describe('lastUser', () => {
 
 describe('checkNewPassword', () => {
   it('короткий пароль', () => {
-    expect(checkNewPassword('1234567', '1234567')).toContain(String(MIN_PASSWORD_LENGTH));
+    expect(checkNewPassword('12345', '12345')).toContain(String(MIN_PASSWORD_LENGTH));
   });
   it('ровно 8 символов проходит', () => {
     expect(checkNewPassword('12345678', '12345678')).toBeNull();
