@@ -37,6 +37,24 @@
   </main>
 </div>
 
+<div class="auth loading" id="authScreen">
+  <div class="auth-card glass">
+    <div class="auth-logo" id="authLogo"></div>
+    <h2 class="auth-title">Finora</h2>
+    <div class="segmented" id="authTabs" role="tablist">
+      <button type="button" data-mode="login" class="selected">Вход</button>
+      <button type="button" data-mode="signup">Регистрация</button>
+    </div>
+    <form id="authForm" class="form" novalidate>
+      <label class="field-pill wide"><svg class="ic"><use href="#i-mail"/></svg><input id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="Email" aria-label="Email"></label>
+      <label class="field-pill wide"><svg class="ic"><use href="#i-lock"/></svg><input id="authPass" type="password" autocomplete="current-password" placeholder="Пароль" aria-label="Пароль"><button type="button" class="eye" id="authEye" aria-label="Показать пароль"><svg class="ic"><use href="#i-eye"/></svg></button></label>
+      <div class="auth-msg" id="authMsg" role="alert"></div>
+      <button class="primary-btn big" type="submit" id="authSubmit"><span class="spin"></span><span id="authSubmitText">Войти</span></button>
+    </form>
+    <button type="button" class="text-btn" id="authGuest">Без аккаунта</button>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modalBackdrop" hidden>
   <form class="modal" id="transactionForm" novalidate>
     <div class="sheet-grip" id="sheetGrip"></div>

@@ -81,6 +81,20 @@ function budgetItem(b){
  return `<div class="ring-card"><div class="ring" style="--h:${m.h}"><svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="19"/><circle class="ring-fg ${cls}" cx="22" cy="22" r="19" style="--c:${C};stroke-dasharray:${C};stroke-dashoffset:${(C*(1-Math.min(1,p/100))).toFixed(2)}"/></svg><span class="cat-ic" style="--h:${m.h}">${ic(m.icon)}</span></div><div><div class="wallet-name">${escapeHtml(b.category)}</div><div class="wallet-sub"><b class="${p>=100?"negative":""}">${fmt(used)}</b> / ${fmt(lim)}</div></div></div>`;
 }
 
+/* ряд баланса по дням (назад от текущего) и сглаженная линия для графика в шапке */
+function balanceSeries(days){
+ const net={};state.transactions.forEach(t=>{if(t.type==="transfer")return;net[t.date]=(net[t.date]||0)+txBase(t)*(t.type==="income"?1:-1);});
+ const out=[];let bal=totalBalance();
+ for(let i=0;i<=days;i++){out.unshift(bal);bal-=net[iso(new Date(today.getFullYear(),today.getMonth(),today.getDate()-i))]||0;}
+ return out;
+}
+function sparkPath(p){
+ const W=300,H=90,min=Math.min(...p),max=Math.max(...p),span=max-min;
+ const pts=p.map((v,i)=>[i/(p.length-1)*W,span?H-10-(v-min)/span*(H-26):H/2]);
+ let d=`M${pts[0][0]} ${pts[0][1].toFixed(1)}`;
+ for(let i=0;i<pts.length-1;i++){const [x0,y0]=pts[Math.max(0,i-1)],[x1,y1]=pts[i],[x2,y2]=pts[i+1],[x3,y3]=pts[Math.min(pts.length-1,i+2)];d+=` C${(x1+(x2-x0)/6).toFixed(1)} ${(y1+(y2-y0)/6).toFixed(1)} ${(x2-(x3-x1)/6).toFixed(1)} ${(y2-(y3-y1)/6).toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;}
+ return {d,last:pts[pts.length-1][1]};
+}
 /* ───── экраны ───── */
 function renderDashboard(){
  const mt=monthTx(),spent=expenses(mt),earned=incomes(mt),bal=totalBalance(),days=monthRemainingDays(),base=state.baseCurrency;
@@ -90,14 +104,22 @@ function renderDashboard(){
  const bars=Array.from({length:6},(_,i)=>{const d=new Date(today.getFullYear(),today.getMonth()-5+i,1);const key=iso(d).slice(0,7);const v=state.transactions.filter(t=>t.type==="expense"&&t.date.slice(0,7)===key).reduce((a,t)=>a+txBase(t),0);return {label:d.toLocaleDateString("ru-RU",{month:"short"}).replace(".",""),value:v};});
  const maxBar=Math.max(1,...bars.map(b=>b.value));
  const recent=[...state.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+ const hide=localStorage.getItem("finora-hide")==="1",series=balanceSeries(14),sp=sparkPath(series),delta=series[series.length-1]-series[0];
+ const amt=(v,key,pre="")=>hide?`<span>${pre}••••</span>`:cnt(v,base,key,pre);
  return `<div class="card hero">
-  <div class="metric-label">${ic("wallet")}<span>Баланс</span></div>
-  <div class="hero-balance">${cnt(bal,base,"bal")}</div>
-  <div class="chips"><span class="flow-chip">${ic("income")}${cnt(earned,base,"inc","+")}</span><span class="flow-chip">${ic("expense")}${cnt(spent,base,"exp","−")}</span></div>
-  <div class="quick-actions">
-   <button class="quick" data-add="expense">${ic("expense")}<span>Расход</span></button>
-   <button class="quick" data-add="income">${ic("income")}<span>Доход</span></button>
-   <button class="quick" data-add="transfer">${ic("transfer")}<span>Перевод</span></button>
+  <div class="hero-main">
+   <div class="hero-top"><div class="metric-label">${ic("wallet")}<span>Баланс</span></div><button class="hero-eye" id="heroEye" aria-label="${hide?"Показать сумму":"Скрыть сумму"}" title="${hide?"Показать":"Скрыть"}">${ic(hide?"eyeoff":"eye")}</button></div>
+   <div class="hero-balance">${hide?`<span>•••• ${base}</span>`:cnt(bal,base,"bal")}</div>
+   <div class="chips"><span class="flow-chip in">${ic("income")}${amt(earned,"inc","+")}</span><span class="flow-chip out">${ic("expense")}${amt(spent,"exp","−")}</span></div>
+  </div>
+  <div class="hero-chart" aria-hidden="true">
+   <div class="hero-chart-head"><span>14 дн.</span>${hide?"":`<b class="${delta>=0?"up":"down"}">${delta>=0?"+":"−"}${fmt(Math.abs(delta),base)}</b>`}</div>
+   <div class="spark-box"><svg class="spark" viewBox="0 0 300 90"><defs><linearGradient id="spf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><path class="spark-area" d="${sp.d} L300 90 L0 90Z" fill="url(#spf)"/><path class="spark-line" d="${sp.d}" pathLength="1"/></svg><span class="spark-dot" style="top:${(sp.last/90*100).toFixed(1)}%"></span></div>
+  </div>
+  <div class="hero-actions">
+   <button class="quick exp" data-add="expense">${ic("expense")}<span>Расход</span></button>
+   <button class="quick inc" data-add="income">${ic("income")}<span>Доход</span></button>
+   <button class="quick trf" data-add="transfer">${ic("transfer")}<span>Перевод</span></button>
   </div>
  </div>
  ${state.wallets.length?"":`<div class="card onboard"><div class="wallet-left"><span class="cat-ic lg" style="--h:230">${ic("wallet")}</span><div><h2>Первый кошелёк</h2><div class="metric-foot">Карта или наличные</div></div></div><button class="primary-btn" data-goto="wallets">${ic("plus")}<span>Создать</span></button></div>`}
@@ -125,7 +147,7 @@ function renderTransactions(){
 function renderWallets(){
  const picks=(name,items,fn)=>`<div class="chip-row" data-pick="${name}">${items.map((v,i)=>fn(v,i)).join("")}</div><input type="hidden" name="${name}" value="${items[0]}">`;
  return `<div class="grid page-grid">${state.wallets.map(w=>`<div class="card"><div class="section-head"><div class="wallet-left">${walletIc(w,"lg")}<div><h2>${escapeHtml(w.name)}</h2><div class="wallet-sub">${WALLET_LABEL[w.type]||""} · ${w.currency}</div></div></div><button class="row-del always" data-delete-wallet="${w.id}" aria-label="Удалить" title="Удалить">${ic("trash")}</button></div><div class="metric-value">${cnt(w.balance,w.currency,"w"+w.id)}</div>${w.currency!==state.baseCurrency?`<div class="metric-foot">≈ ${fmt(convert(w.balance,w.currency))}</div>`:""}</div>`).join("")}
- <div class="card"><div class="section-head"><h2>Новый</h2><span class="cat-ic sm" style="--h:230">${ic("plus")}</span></div>
+ <div class="card"><div class="section-head"><h2>Новый</h2></div>
   <form id="walletForm" class="form">
    <div class="chip-row" id="bankPick">${Object.entries(BANKS).map(([id,b])=>`<button type="button" class="chip" data-v="${id}" title="${b.name}">${bankTile(id,"xs")}<span>${b.name}</span></button>`).join("")}</div><input type="hidden" name="bank" value="">
    <input class="input" name="name" required maxlength="40" placeholder="Название" aria-label="Название">
@@ -138,7 +160,7 @@ function renderWallets(){
 function renderBudgets(){
  return `<div class="grid two-col">
   <div class="card"><div class="section-head"><h2>Лимиты</h2></div>${state.budgets.length?`<div class="ring-grid">${state.budgets.map(budgetItem).join("")}</div>`:emptyHtml("target","Лимитов нет")}</div>
-  <div class="card"><div class="section-head"><h2>Новый лимит</h2><span class="cat-ic sm" style="--h:230">${ic("plus")}</span></div>
+  <div class="card"><div class="section-head"><h2>Новый лимит</h2></div>
    <form id="budgetForm" class="form">
     <div class="cat-grid" data-pick="category" style="margin:0">${categories.expense.map((c,i)=>{const m=catMeta(c);return `<button type="button" class="cat-tile ${i?"":"selected"}" data-v="${escapeHtml(c)}" style="--h:${m.h}"><span class="cat-ic sm" style="--h:${m.h}">${ic(m.icon)}</span><span>${escapeHtml(c)}</span></button>`;}).join("")}</div>
     <input type="hidden" name="category" value="${categories.expense[0]}">
@@ -165,18 +187,15 @@ function renderAnalytics(){
  <div class="card"><div class="section-head"><h2>Валюты</h2></div>${currencies.map(c=>{const n=state.wallets.filter(w=>w.currency===c).reduce((a,w)=>a+w.balance,0);return n?`<div class="balance-row"><div class="wallet-left"><span class="cat-ic sm txt" style="--h:230">${curGlyph[c]}</span><div class="wallet-name">${c}</div></div><div class="wallet-amount">${fmt(n,c)}<div class="wallet-sub">≈ ${fmt(convert(n,c))}</div></div></div>`:"";}).join("")||emptyHtml("wallet","Нет кошельков")}</div>`;
 }
 function renderSettings(){
+ const cs=window.FinoraCloud?window.FinoraCloud.status():{configured:false,signedIn:false,label:"Локально",hint:""};
  return `<div class="card">
   <div class="settings-row"><div class="lead"><span class="cat-ic sm" style="--h:255">${ic(state.theme==="dark"?"moon":"sun")}</span></div><div class="segmented" id="themeSeg"><button type="button" data-theme-set="light" class="${state.theme==="light"?"selected":""}" aria-label="Светлая">${ic("sun")}</button><button type="button" data-theme-set="dark" class="${state.theme==="dark"?"selected":""}" aria-label="Тёмная">${ic("moon")}</button></div></div>
   <div class="settings-row"><div class="lead"><span class="cat-ic sm" style="--h:150">${ic("money")}</span></div><div class="chip-row">${currencies.map(c=>`<button type="button" class="chip ${state.baseCurrency===c?"selected":""}" data-base="${c}">${c}</button>`).join("")}</div></div>
  </div>
- <div class="card"><div class="section-head"><h2>Аккаунт</h2><span class="pill" id="cloudStatus">…</span></div>
-  <p class="metric-foot" id="cloudHint" style="margin:0 0 14px"></p>
-  <form id="cloudAuthForm" class="form">
-   <label class="field-pill wide">${ic("mail")}<input id="cloudEmail" type="email" autocomplete="email" required placeholder="Email" aria-label="Email"></label>
-   <label class="field-pill wide">${ic("lock")}<input id="cloudPassword" type="password" minlength="8" autocomplete="current-password" required placeholder="Пароль" aria-label="Пароль"></label>
-   <div class="chip-row"><button class="primary-btn" type="submit" id="cloudLogin">${ic("login")}<span>Войти</span></button><button class="secondary-btn" type="button" id="cloudSignup">${ic("user")}<span>Регистрация</span></button><button class="secondary-btn" type="button" id="cloudLogout" hidden>${ic("logout")}<span>Выйти</span></button></div>
-  </form>
-  <div class="chip-row" style="margin-top:14px"><button class="secondary-btn" type="button" id="cloudPull">${ic("clouddown")}<span>Из облака</span></button><button class="secondary-btn" type="button" id="cloudPush">${ic("cloudup")}<span>В облако</span></button></div>
+ <div class="card"><div class="section-head"><h2>Аккаунт</h2><span class="pill" id="cloudStatus">${escapeHtml(cs.signedIn?"Синхронизация":cs.label)}</span></div>
+  ${cs.signedIn?`<div class="settings-row" style="padding-top:0"><div class="lead"><span class="cat-ic sm" style="--h:230">${ic("user")}</span><span class="email-text">${escapeHtml(cs.email||"")}</span></div></div><div class="chip-row" style="margin-top:12px"><button class="secondary-btn" type="button" id="cloudPull">${ic("clouddown")}<span>Из облака</span></button><button class="secondary-btn" type="button" id="cloudPush">${ic("cloudup")}<span>В облако</span></button><button class="secondary-btn" type="button" id="cloudLogout">${ic("logout")}<span>Выйти</span></button></div>`
+   :cs.configured?`<button class="primary-btn" type="button" id="openAuth">${ic("login")}<span>Войти</span></button>`
+   :`<p class="metric-foot" style="margin:0">${escapeHtml(cs.hint||"")}</p>`}
  </div>
  <div class="attrib">Иконки: Solar (CC BY 4.0) · Lucide (ISC)</div>`;
 }
@@ -282,6 +301,7 @@ function bindPicks(){
 function bindView(){
  $$("[data-goto]").forEach(b=>b.onclick=()=>goto(b.dataset.goto));
  $$("[data-add]").forEach(b=>b.onclick=()=>openModal(b.dataset.add));
+ const eye=$("#heroEye");if(eye)eye.onclick=()=>{localStorage.setItem("finora-hide",localStorage.getItem("finora-hide")==="1"?"0":"1");render();};
  bindPicks();
  $$("[data-delete]").forEach(b=>b.onclick=e=>{e.stopPropagation();const t=state.transactions.find(x=>x.id===b.dataset.delete);if(!t)return;
   const row=b.closest(".swipe");if(row)row.classList.add("removing");
@@ -297,10 +317,9 @@ function bindView(){
  const pf=$("#paydayForm");if(pf)pf.onsubmit=e=>{e.preventDefault();const f=new FormData(pf);state.paydays=state.paydays.map((p,i)=>({...p,date:Math.max(1,Math.min(31,Number(f.get("day"+i)||p.date))),amount:Math.max(0,Number(f.get("amount"+i)||0)),currency:f.get("currency"+i)||p.currency}));save();render();toast("Сохранено");};
  $$("[data-theme-set]").forEach(b=>b.onclick=()=>{state.theme=b.dataset.themeSet;save();applyTheme();render();});
  $$("[data-base]").forEach(b=>b.onclick=()=>{state.baseCurrency=b.dataset.base;save();render();});
- const cloudStatus=$("#cloudStatus"); if(cloudStatus && window.FinoraCloud){const cs=window.FinoraCloud.status();cloudStatus.textContent=cs.label;$("#cloudHint").textContent=cs.hint;const logout=$("#cloudLogout");if(logout)logout.hidden=!cs.signedIn;const login=$("#cloudLogin");if(login)login.disabled=!cs.configured;const signup=$("#cloudSignup");if(signup)signup.disabled=!cs.configured;}
- const authForm=$("#cloudAuthForm");if(authForm)authForm.onsubmit=async e=>{e.preventDefault();try{await window.FinoraCloud.signIn($("#cloudEmail").value,$("#cloudPassword").value);const remote=await window.FinoraCloud.pullState();state=remote||structuredClone(seed);localStorage.setItem("finora-state",JSON.stringify(state));save();render();toast(remote?"Данные загружены":"Вход выполнен");}catch(err){warn("Ошибка входа: "+(err.message||"проверь настройки"));}};
- const signup=$("#cloudSignup");if(signup)signup.onclick=async()=>{try{const result=await window.FinoraCloud.signUp($("#cloudEmail").value,$("#cloudPassword").value);if(result.session){const remote=await window.FinoraCloud.pullState();state=remote||structuredClone(seed);localStorage.setItem("finora-state",JSON.stringify(state));save();}render();toast(result.session?"Аккаунт создан":"Аккаунт создан. Теперь войди");}catch(err){warn("Ошибка регистрации: "+(err.message||"проверь настройки"));}};
- const logout=$("#cloudLogout");if(logout)logout.onclick=async()=>{try{await window.FinoraCloud.signOut();state=structuredClone(seed);localStorage.setItem("finora-state",JSON.stringify(state));render();toast("Вы вышли");}catch(err){warn("Ошибка выхода");}};
+ const openAuth=$("#openAuth");if(openAuth)openAuth.onclick=()=>showAuth();
+ const logout=$("#cloudLogout");if(logout)logout.onclick=async()=>{try{await window.FinoraCloud.signOut();}catch{}
+  state=structuredClone(seed);localStorage.setItem("finora-state",JSON.stringify(state));localStorage.removeItem("finora-had-session");localStorage.removeItem("finora-guest");render();showAuth();};
  const pull=$("#cloudPull");if(pull)pull.onclick=async()=>{try{if(!confirm("Заменить локальные данные данными из облака?"))return;const remote=await window.FinoraCloud.pullState();if(!remote){warn("В облаке пусто");return;}state=remote;localStorage.setItem("finora-state",JSON.stringify(state));render();toast("Загружено из облака",{icon:"clouddown"});}catch(err){warn("Не удалось загрузить: "+(err.message||"проверь вход и схему БД"));}};
  const push=$("#cloudPush");if(push)push.onclick=async()=>{try{await window.FinoraCloud.pushNow(state);toast("Сохранено в облаке",{icon:"cloudup"});}catch(err){warn("Не удалось сохранить: "+(err.message||"проверь вход и схему БД"));}};
 }
@@ -379,6 +398,89 @@ const sheet=$("#transactionForm");
 });
 
 if(reducedMotion)document.querySelector(".logo")?.pauseAnimations?.();
-if("serviceWorker" in navigator && location.protocol!=="file:"){window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));}
+if("serviceWorker" in navigator && location.protocol!=="file:"){
+ /* новая версия приложения: один раз перезагружаем страницу, чтобы сразу показать свежие файлы */
+ const hadController=!!navigator.serviceWorker.controller;let reloaded=false;
+ navigator.serviceWorker.addEventListener("controllerchange",()=>{if(hadController&&!reloaded){reloaded=true;location.reload();}});
+ window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+}
+
+/* ───── вход и регистрация ───── */
+const authEl=$("#authScreen"),auth={mode:"login",busy:false};
+const cloud=()=>window.FinoraCloud;
+function authText(err){
+ const m=String(err?.message||err||"");
+ if(/invalid login/i.test(m))return "Неверная почта или пароль";
+ if(/already (been )?registered/i.test(m))return "Такой аккаунт уже есть. Войдите";
+ if(/not confirmed/i.test(m))return "Подтвердите почту: мы отправили письмо";
+ if(/valid email|invalid.*email/i.test(m))return "Проверьте email";
+ if(/at least|too short|weak/i.test(m))return "Пароль не короче 8 символов";
+ if(/rate limit|too many|seconds/i.test(m))return "Слишком много попыток. Подождите минуту";
+ if(/fetch|network/i.test(m))return "Нет соединения с интернетом";
+ return m||"Не получилось. Попробуйте ещё раз";
+}
+function authMsg(text,ok=false){const el=$("#authMsg");el.textContent=text;el.classList.toggle("show",!!text);el.classList.toggle("ok",ok);if(text&&!ok)shake($("#authForm"));}
+function setAuthMode(mode){
+ auth.mode=mode;authMsg("");
+ $$("#authTabs button").forEach(b=>b.classList.toggle("selected",b.dataset.mode===mode));
+ $("#authSubmitText").textContent=mode==="login"?"Войти":"Создать аккаунт";
+ $("#authPass").autocomplete=mode==="login"?"current-password":"new-password";
+ $("#authPass").placeholder=mode==="login"?"Пароль":"Пароль · от 8 символов";
+}
+function showAuth(mode="login"){
+ if(!$("#authLogo").firstChild)$("#authLogo").innerHTML=$(".brand-mark").innerHTML.replace(/id="b/g,'id="a').replace(/url\(#b/g,'url(#a');
+ setAuthMode(mode);authEl.hidden=false;authEl.classList.remove("loading","leaving");
+ setTimeout(()=>{if(!isMobile())$("#authEmail").focus({preventScroll:true});},500);
+}
+function hideAuth(){
+ if(authEl.hidden)return;
+ authEl.classList.remove("loading");authEl.classList.add("leaving");
+ setTimeout(()=>{authEl.hidden=true;authEl.classList.remove("leaving");},reducedMotion?0:480);
+}
+/* после успешного входа: берём данные из облака, а если там пусто — отправляем туда локальные */
+async function afterAuth(){
+ localStorage.removeItem("finora-guest");localStorage.setItem("finora-had-session","1");
+ let remote=null;try{remote=await cloud().pullState();}catch{}
+ if(remote){
+  if(state.wallets.length||state.transactions.length)localStorage.setItem("finora-local-backup",JSON.stringify(state));
+  state=remote;localStorage.setItem("finora-state",JSON.stringify(state));
+ }else{cloud().pushNow(state).catch(()=>{});}
+ hideAuth();render(true);
+}
+$("#authTabs").addEventListener("click",e=>{const b=e.target.closest("[data-mode]");if(b)setAuthMode(b.dataset.mode);});
+$("#authEye").onclick=()=>{const i=$("#authPass"),show=i.type==="password";i.type=show?"text":"password";$("#authEye").innerHTML=ic(show?"eyeoff":"eye");$("#authEye").setAttribute("aria-label",show?"Скрыть пароль":"Показать пароль");};
+$("#authGuest").onclick=()=>{localStorage.setItem("finora-guest","1");hideAuth();};
+$("#authForm").onsubmit=async e=>{
+ e.preventDefault();if(auth.busy)return;
+ const email=$("#authEmail").value.trim(),pw=$("#authPass").value;
+ if(!/^\S+@\S+\.\S+$/.test(email)){authMsg("Проверьте email");$("#authEmail").focus();return;}
+ if(!pw||(auth.mode==="signup"&&pw.length<8)){authMsg("Пароль не короче 8 символов");$("#authPass").focus();return;}
+ auth.busy=true;$("#authSubmit").classList.add("busy");authMsg("");
+ try{
+  if(auth.mode==="login"){await cloud().signIn(email,pw);await afterAuth();}
+  else{
+   const r=await cloud().signUp(email,pw);
+   if(r.session)await afterAuth();
+   else{setAuthMode("login");authMsg("Мы отправили письмо. Подтвердите почту и войдите",true);}
+  }
+ }catch(err){authMsg(authText(err));}
+ finally{auth.busy=false;$("#authSubmit").classList.remove("busy");}
+};
+/* запуск: если вход уже выполнялся, Supabase помнит сессию — входим сами, без формы */
+async function bootAuth(){
+ if(!cloud()||!cloud().status().configured){hideAuth();return;}
+ const initP=cloud().init().catch(()=>{});
+ await Promise.race([initP,new Promise(r=>setTimeout(r,3500))]);
+ const cs=cloud().status();
+ if(cs.signedIn){
+  localStorage.setItem("finora-had-session","1");hideAuth();updateSync();
+  if(!state.wallets.length&&!state.transactions.length){try{const r=await cloud().pullState();if(r){state=r;localStorage.setItem("finora-state",JSON.stringify(state));render(false);}}catch{}}
+  return;
+ }
+ const offlineKnown=localStorage.getItem("finora-had-session")==="1"&&cs.label==="Ошибка подключения";
+ if(localStorage.getItem("finora-guest")==="1"||offlineKnown){hideAuth();return;}
+ showAuth();
+ initP.then(()=>{if(!authEl.hidden&&!auth.busy&&cloud().status().signedIn)afterAuth();});
+}
 render(true);
-if(window.FinoraCloud) window.FinoraCloud.init().then(()=>{updateSync();if(currentView==="settings")render();}).catch(()=>{});
+bootAuth();
