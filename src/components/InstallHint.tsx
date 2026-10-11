@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
+import { useInstallPromptOpen } from '@/install/promptOpen';
 import { IconButton } from './IconButton';
 
 export const INSTALL_HINT_KEY = 'finora.installHint.dismissed';
@@ -43,7 +44,8 @@ function writeDismissed(): void {
  */
 export function InstallHint({ className }: { className?: string }) {
   const [visible, setVisible] = useState(() => isIosSafari() && !isStandalone() && !readDismissed());
-  if (!visible) return null;
+  const promptOpen = useInstallPromptOpen(); // большое окно установки сейчас на экране — не дублируем его
+  if (!visible || promptOpen) return null;
   return (
     <div
       role="note"

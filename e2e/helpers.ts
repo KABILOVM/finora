@@ -110,6 +110,33 @@ export function moneyExact(text: string): RegExp {
 export async function openApp(page: Page, hash = '/'): Promise<void> {
   await page.goto(`/#${hash}`);
   await waitReady(page);
+  await dismissInstallPrompt(page);
+}
+
+/**
+ * Окно «Установить Finora на экран телефона» появляется через ~1,5 с после входа (только на телефоне) и перекрывает экран.
+ * Дождаться его и закрыть кнопкой «Не сейчас»; на ПК и если окно не появилось — ничего не делает.
+ * Сценарий про само окно (25-install-prompt) этот помощник не вызывает.
+ */
+export async function dismissInstallPrompt(page: Page): Promise<void> {
+  if (!isPhone(page)) return;
+  // уже закрывали (или установили) — окно не появится, ждать нечего
+  const remembered = await page.evaluate(() => {
+    try {
+      return localStorage.getItem('finora.installPrompt.v1') !== null;
+    } catch {
+      return false;
+    }
+  });
+  if (remembered) return;
+  const dlg = page.getByRole('dialog', { name: 'Установить Finora на экран телефона' });
+  try {
+    await dlg.waitFor({ state: 'visible', timeout: 4000 });
+  } catch {
+    return; // не появилось: уже закрывали, замок, приложение «установлено»
+  }
+  await dlg.getByRole('button', { name: 'Не сейчас' }).click();
+  await expect(dlg).toBeHidden();
 }
 
 export async function waitReady(page: Page): Promise<void> {

@@ -36,7 +36,8 @@ test.describe('1. Первый запуск', () => {
     await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(dlg).toBeHidden();
 
-    const taps = await page.evaluate(() => (window as unknown as { __taps: string[] }).__taps);
+    // «Не сейчас» в окне установки (его закрывает openApp) — не часть сценария внесения расхода
+    const taps = (await page.evaluate(() => (window as unknown as { __taps: string[] }).__taps)).filter((t) => t !== 'Не сейчас');
     const digitTaps = taps.filter((t) => /^[0-9]$|^Запятая$/.test(t));
     const otherTaps = taps.filter((t) => !/^[0-9]$|^Запятая$/.test(t));
     testInfo.annotations.push({ type: 'taps', description: `все: ${taps.join(' | ')}` });
