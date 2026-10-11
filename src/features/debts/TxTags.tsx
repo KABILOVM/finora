@@ -6,13 +6,16 @@ import type { Transaction } from '@/domain/types';
 import { txTags } from '@/features/transactions/txDisplay';
 
 /**
- * Имя долга по id. Включая архивные и закрытые: у старой операции метка не должна пропадать.
+ * Имя долга по id. Включая архивные и закрытые: у старой операции метка не должна пропадать. Удалённый долг — null.
  * undefined — ещё читается; null — долга нет (или нет хранилища).
  */
 export function useDebtName(debtId: string | null | undefined): string | null | undefined {
   const store = useOptionalStore();
   return useLiveQuery(
-    async () => (store && debtId ? ((await store.db.debts.get(debtId))?.counterparty ?? null) : null),
+    async () => {
+      const d = store && debtId ? await store.db.debts.get(debtId) : undefined;
+      return d && d.deletedAt === null ? d.counterparty : null; // удалённый долг — как неизвестный: просто «Долг»
+    },
     [store, debtId],
   );
 }

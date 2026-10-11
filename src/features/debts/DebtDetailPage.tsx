@@ -6,20 +6,21 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
-import { useDebtView, useStore } from '@/db';
+import { useDebtView, useStore, type DebtDeleteMode, type DebtDeletion } from '@/db';
 import type { DebtPayment } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import { humanError, toastWithUndo, UNDO_MS } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { useToday } from '@/recurring/useToday';
 import { DebtSheet } from './DebtSheet';
+import { DeleteDebtDialog } from './DeleteDebtDialog';
 import { DebtSummaryCard } from './DebtSummaryCard';
 import { DIRECTION_LABEL, ruDateShort } from './debtText';
 import { IssuesNotice, PaymentsList } from './PaymentsList';
 import { PaymentSheet } from './PaymentSheet';
 import { useDebtLines } from './useDebtLines';
 
-type Dialog = 'close' | 'payment' | 'edit' | null;
+type Dialog = 'close' | 'payment' | 'edit' | 'delete' | null;
 
 function BackLink({ dir }: { dir?: string }) {
   return (
@@ -143,6 +144,21 @@ export default function DebtDetailPage() {
       () => toast.success('Долг возвращён из архива'),
     );
 
+  const deleteDebt = async (mode: DebtDeleteMode) => {
+    let deletion: DebtDeletion | null = null;
+    const ok = await run(
+      async () => {
+        deletion = await store.debts.softDelete(debt.id, mode);
+      },
+      'Не удалось удалить долг. Ничего не изменилось — попробуйте ещё раз.',
+    );
+    if (!ok || deletion === null) return;
+    const done: DebtDeletion = deletion;
+    setDialog(null);
+    toastWithUndo(toast, 'Долг удалён', () => store.debts.undoDelete(done), 'Долг возвращён');
+    navigate(`/debts?dir=${debt.direction}`, { replace: true });
+  };
+
   const removePayment = async () => {
     const p = deleting;
     if (!p) return;
@@ -214,6 +230,23 @@ export default function DebtDetailPage() {
         onDelete={setDeleting}
       />
 
+      <div className="mt-8 flex justify-center">
+        <Button variant="ghost" className="!text-danger" disabled={busy} onClick={() => setDialog('delete')}>
+          Удалить долг
+        </Button>
+      </div>
+
+      <DeleteDebtDialog
+        open={dialog === 'delete'}
+        debtId={debt.id}
+        counterparty={debt.counterparty}
+        txs={lines.txs}
+        wallets={lines.wallets}
+        base={base}
+        loading={busy}
+        onConfirm={(mode) => void deleteDebt(mode)}
+        onCancel={() => setDialog(null)}
+      />
       <ConfirmDialog
         open={dialog === 'close'}
         title="Закрыть долг?"
