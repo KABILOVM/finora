@@ -18,6 +18,7 @@ import { emptyDebtForm, validateDebtForm, type DebtFormErrors, type DebtFormStat
 import { DIRECTION_ACTION, DIRECTION_LABEL, DIRECTION_NAME_LABEL } from './debtText';
 import { DayField, DueField } from './DebtDates';
 import { DebtMoneySection } from './DebtMoneySection';
+import { rankWallets, usePopularity } from '@/features/transactions/popularity';
 import { useWalletFx } from './useWalletFx';
 
 export interface DebtSheetProps {
@@ -94,6 +95,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   }, [store, orig?.id]);
   const locked = editing && linked !== false;
 
+  const pop = usePopularity();
   const candidates = (wallets ?? []).filter((w) => w.currency === form.currency);
   const defaultWalletId = settings?.defaultWalletId ?? null;
   const walletId =
@@ -105,7 +107,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   const wallet = candidates.find((w) => w.id === walletId);
   const fx = useWalletFx(moneyOn ? wallet?.currency : undefined, base);
 
-  if (wallets === undefined || settings === undefined) return null;
+  if (wallets === undefined || settings === undefined || pop === undefined) return null;
 
   const set = (patch: Partial<DebtFormState>) => {
     setForm((f) => ({ ...f, ...patch }));
@@ -312,7 +314,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             direction={form.direction}
             currency={form.currency}
             amountMinor={form.amountMinor}
-            candidates={candidates}
+            candidates={rankWallets(candidates, pop)}
             wanted={wanted}
             onWanted={setWanted}
             walletId={walletId}

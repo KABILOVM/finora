@@ -8,6 +8,8 @@ export interface SegmentOption<T extends string> {
   label: string;
   /** Цвет выбранного сегмента: расход — красный, доход — зелёный. */
   tone?: SegmentTone;
+  /** Название для скринридера, если видимая подпись короче («%» → «Проценты»). */
+  ariaLabel?: string;
 }
 
 export interface SegmentedProps<T extends string> {
@@ -16,6 +18,8 @@ export interface SegmentedProps<T extends string> {
   onChange: (value: T) => void;
   /** Название группы для скринридера, например «Тип операции». */
   ariaLabel: string;
+  /** Тонкий вариант для строки в 48 px: меньше отступы и шрифт, кнопки по-прежнему 44 px. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -26,7 +30,7 @@ const ACTIVE: Record<SegmentTone, string> = {
 };
 
 /** Переключатель из 2–4 вариантов (Расход / Доход / Перевод). Стрелки ←/→ переключают, Tab — выходит из группы. */
-export function Segmented<T extends string>({ options, value, onChange, ariaLabel, className }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ options, value, onChange, ariaLabel, compact = false, className }: SegmentedProps<T>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const move = (from: number, delta: number) => {
@@ -51,7 +55,7 @@ export function Segmented<T extends string>({ options, value, onChange, ariaLabe
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn('grid gap-1 rounded-2xl bg-surface-2 p-1', className)}
+      className={cn('grid rounded-2xl bg-surface-2', compact ? 'gap-0.5 p-0.5' : 'gap-1 p-1', className)}
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
       {options.map((opt, i) => {
@@ -65,12 +69,14 @@ export function Segmented<T extends string>({ options, value, onChange, ariaLabe
             type="button"
             role="radio"
             aria-checked={selected}
+            aria-label={opt.ariaLabel}
             // Roving tabindex: в группу заходим одним Tab, внутри — стрелками.
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(opt.value)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
-              'min-h-[44px] rounded-xl px-3 text-base font-semibold transition-colors',
+              'min-h-[44px] rounded-xl font-semibold transition-colors',
+              compact ? 'px-1 text-sm' : 'px-3 text-base',
               selected ? ACTIVE[opt.tone ?? 'brand'] : 'text-muted hover:text-text',
             )}
           >

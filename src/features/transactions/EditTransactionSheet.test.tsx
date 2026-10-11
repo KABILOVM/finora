@@ -127,7 +127,8 @@ describe('шит правки: поля заполнены', () => {
     expect(contextChip('Откуда').getAttribute('aria-label')).toBe('Откуда: Наличные · TJS');
     expect(contextChip('Куда').getAttribute('aria-label')).toBe('Куда: Доллары · USD');
     await user.click(contextChip('Куда'));
-    expect(chipLabels('Куда')).toEqual(['Карта · TJS', 'Доллары · USD']);
+    // самый используемый кошелёк первым: у «Долларов» есть перевод, у «Карты» операций нет
+    expect(chipLabels('Куда')).toEqual(['Доллары · USD', 'Карта · TJS']);
     expect(chip('Куда', 'Доллары · USD')).toHaveAttribute('aria-pressed', 'true');
   });
 });
@@ -409,7 +410,7 @@ describe('архивный кошелёк и категория', () => {
     expect(contextChip('Кошелёк').getAttribute('aria-label')).toBe('Кошелёк: Карта');
     // в списке кошельков — только он и неархивные; архивные «Доллары» не предлагаются
     await user.click(contextChip('Кошелёк'));
-    expect(chipLabels('Кошелёк')).toEqual(['Наличные', 'Карта']);
+    expect(chipLabels('Кошелёк')).toEqual(['Карта', 'Наличные']);
     await user.click(contextChip('Кошелёк'));
     expect(screen.getByRole('button', { name: 'Еда (в архиве)' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));

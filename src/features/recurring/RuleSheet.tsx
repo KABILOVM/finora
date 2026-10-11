@@ -96,7 +96,7 @@ export function RuleSheet({ rule: liveRule, lookups, today, onClose }: RuleSheet
     const list = [...lookups.categories.values()].filter(
       (c) => c.deletedAt === null && c.kind === form.kind && (c.archivedAt === null || c.id === form.categoryId),
     );
-    return sortByOrderThenName(list).map((c) => ({ value: c.id, label: c.name, icon: c.icon }));
+    return sortByOrderThenName(list).map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }));
   }, [lookups.categories, form.kind, form.categoryId, isTransfer]);
 
   const debts = useMemo(
@@ -261,7 +261,7 @@ export function RuleSheet({ rule: liveRule, lookups, today, onClose }: RuleSheet
           </div>
         }
       >
-        <div ref={bodyRef} className="flex flex-col gap-6">
+        <div ref={bodyRef} className="flex flex-col gap-4">
           <RuleFields
             form={form}
             errors={errors}

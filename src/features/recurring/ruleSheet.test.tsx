@@ -51,6 +51,12 @@ const save = () => user.click(screen.getByRole('button', { name: 'Сохрани
 const mk = (s: Store, over: Partial<RecurringInput> & Pick<RecurringInput, 'walletId'>) =>
   s.recurring.create({ kind: 'expense', amountMinor: 50_000, frequency: 'monthly', startOn: TODAY, ...over });
 
+/** Пилюля со списком (кошелёк, долг, периодичность): открыть список по началу подписи и выбрать вариант. */
+async function pick(pill: string, group: string, option: string) {
+  await user.click(screen.getByRole('button', { name: new RegExp(`^${pill}:`) }));
+  await user.click(chip(group, option));
+}
+
 async function openNew() {
   await user.click(screen.getByRole('button', { name: 'Добавить платёж' }));
   return findByRole('dialog', { name: 'Новый регулярный платёж' });
@@ -100,9 +106,9 @@ describe('новый регулярный платёж', () => {
     await openPage();
     await openNew();
     expect(preview()).toBe('Ближайшие даты: Сегодня; вс, 15 ноя; вт, 15 дек; пт, 15 янв 2027');
-    await user.click(chip('Периодичность', 'Неделя'));
+    await pick('Периодичность', 'Периодичность', 'Неделя');
     expect(preview()).toBe('Ближайшие даты: Сегодня; чт, 22 окт; чт, 29 окт; чт, 5 ноя');
-    await user.click(chip('Периодичность', 'День'));
+    await pick('Периодичность', 'Периодичность', 'День');
     expect(preview()).toBe('Ближайшие даты: Сегодня; Завтра; сб, 17 окт; вс, 18 окт');
     // «каждые 2 дня»
     const interval = screen.getByRole('textbox', { name: 'Каждые сколько дней' });
@@ -181,7 +187,7 @@ describe('перевод и платёж по долгу', () => {
     const td = await openPage();
     await openNew();
     await user.click(screen.getByRole('radio', { name: 'Перевод' }));
-    await user.click(chip('Куда', 'Доллары · USD'));
+    await pick('Куда', 'Куда', 'Доллары · USD');
     await user.type(screen.getByRole('textbox', { name: /^Сумма списания/ }), '1090');
     // курс есть (10,9), поэтому «Получено» предложено само: 1090 / 10,9 = 100 $
     await waitFor(() => expect((screen.getByRole('textbox', { name: /^Получено/ }) as HTMLInputElement).value.replace(/\s/g, '')).toBe('100'));
@@ -194,6 +200,7 @@ describe('перевод и платёж по долгу', () => {
     await openPage();
     await openNew();
     await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+    await user.click(screen.getByRole('button', { name: /^Куда:/ }));
     const to = screen.getByRole('group', { name: 'Куда' });
     expect(to.textContent).not.toContain('Наличные'); // «Куда» не предлагает кошелёк «Откуда»
   });
@@ -206,6 +213,7 @@ describe('перевод и платёж по долгу', () => {
       await s.db.debts.update(closed.id, { closedAt: '2026-09-30T00:00:00.000Z' });
     });
     await openNew();
+    await user.click(screen.getByRole('button', { name: /^Платёж по долгу:/ }));
     const group = screen.getByRole('group', { name: 'Платёж по долгу' });
     expect(group.textContent).toContain('Банк · TJS');
     expect(group.textContent).toContain('Иван · USD');
@@ -215,7 +223,7 @@ describe('перевод и платёж по долгу', () => {
     await save();
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Валюта кошелька «Наличные» \(TJS\) не совпадает с валютой долга «Иван» \(USD\)/));
     expect(await rules(td)).toHaveLength(0);
-    await user.click(chip('Платёж по долгу', 'Банк · TJS'));
+    await pick('Платёж по долгу', 'Платёж по долгу', 'Банк · TJS');
     await save();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     const debts = await storeOf(td).db.debts.toArray();
@@ -290,7 +298,7 @@ describe('правка и архив', () => {
     await user.click(screen.getByRole('button', { name: /^Аренда/ }));
     await findByRole('dialog', { name: 'Правка платежа' });
     await user.click(screen.getByRole('radio', { name: 'Перевод' }));
-    await user.click(chip('Куда', 'Карта · TJS'));
+    await pick('Куда', 'Куда', 'Карта · TJS');
     await save();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     const [r] = await rules(td);
@@ -305,6 +313,8 @@ describe('правка и архив', () => {
     });
     await user.click(screen.getByRole('button', { name: /^Аренда/ }));
     await findByRole('dialog', { name: 'Правка платежа' });
+    // кошелёк виден на пилюле, а в раскрытом списке отмечен выбранным
+    await user.click(screen.getByRole('button', { name: 'Кошелёк: Карта · TJS' }));
     expect(chip('Кошелёк', 'Карта · TJS').getAttribute('aria-pressed')).toBe('true');
   });
 

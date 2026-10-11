@@ -18,6 +18,7 @@ import { todayLocal } from '@/lib/dates';
 import { savePayment } from './debtActions';
 import { overpayOf, validatePayment, type PaymentFormErrors } from './debtForm';
 import { DayField } from './DebtDates';
+import { rankWallets, usePopularity } from '@/features/transactions/popularity';
 import { useWalletFx } from './useWalletFx';
 
 export interface PaymentSheetProps {
@@ -48,6 +49,7 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
   const busy = useRef(false);
   const txId = useRef(newId());
 
+  const pop = usePopularity();
   const candidates = (wallets ?? []).filter((w) => w.currency === debt.currency);
   const defaultWalletId = settings?.defaultWalletId ?? null;
   const walletId =
@@ -56,9 +58,10 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
     candidates[0]?.id ??
     null;
   const wallet = candidates.find((w) => w.id === walletId);
+  const walletChips = pop ? rankWallets(candidates, pop) : candidates;
   const fx = useWalletFx(wallet?.currency, base);
 
-  if (wallets === undefined || settings === undefined) return null;
+  if (wallets === undefined || settings === undefined || pop === undefined) return null;
 
   const over = overpayOf(amount, remaining);
   const clear = (...keys: (keyof typeof errors)[]) =>
@@ -204,7 +207,7 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
                   setWalletPick(id);
                   clear('wallet', 'form');
                 }}
-                options={candidates.map((w) => ({ value: w.id, label: w.name, icon: w.icon }))}
+                options={walletChips.map((w) => ({ value: w.id, label: w.name, icon: w.icon }))}
               />
             </FieldGroup>
             <FxNotice fx={fx.view} amountMinor={amount} rateText={fx.rateText} onRateText={fx.setRateText} error={errors.rate} />

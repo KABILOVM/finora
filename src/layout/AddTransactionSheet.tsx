@@ -8,7 +8,8 @@ import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
-import { emptyForm, GENERIC_SAVE_ERROR, pickDefaultWallet, rankByCount } from '@/features/transactions/txForm';
+import { emptyForm, GENERIC_SAVE_ERROR, pickDefaultWallet } from '@/features/transactions/txForm';
+import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
 import { useCloseDuplicateEntry } from '@/features/transactions/useCloseDuplicateEntry';
 import { useScrollToError } from '@/features/transactions/useScrollToError';
@@ -32,9 +33,11 @@ export default function AddTransactionSheet({ onClose }: AddTransactionSheetProp
   const categories = useCategories();
   const settings = useSettings();
   const stats = useRecentStats(statsVersion);
+  // Порядок чипов считается один раз при открытии и не меняется, пока форма открыта
+  const pop = usePopularity();
 
   // Пока данные читаются (миллисекунды) шит не рисуем — иначе он «выезжал» бы дважды.
-  if (!wallets || !allWallets || !categories || settings === undefined || !stats) return null;
+  if (!wallets || !allWallets || !categories || settings === undefined || !stats || !pop) return null;
 
   if (settings === null) {
     return (
@@ -56,6 +59,7 @@ export default function AddTransactionSheet({ onClose }: AddTransactionSheetProp
       categories={categories}
       settings={settings}
       stats={stats}
+      pop={pop}
       onSaved={() => setStatsVersion((v) => v + 1)}
     />
   );
@@ -89,10 +93,11 @@ interface AddFormProps {
   categories: readonly LocalRow<Category>[];
   settings: LocalRow<Settings>;
   stats: RecentStats;
+  pop: Popularity;
   onSaved: () => void;
 }
 
-function AddForm({ onClose, wallets, categories, settings, stats, onSaved }: AddFormProps) {
+function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }: AddFormProps) {
   const store = useStore();
   const toast = useToast();
   const formRef = useRef<HTMLDivElement>(null);
@@ -118,12 +123,9 @@ function AddForm({ onClose, wallets, categories, settings, stats, onSaved }: Add
   const kind = c.form.kind;
   const categoryOptions = useMemo(() => {
     if (kind === 'transfer') return [];
-    const ranked = rankByCount(
-      categories.filter((x) => x.kind === kind),
-      stats.counts[kind],
-    );
-    return ranked.map((x) => ({ value: x.id, label: x.name, icon: x.icon, color: x.color }));
-  }, [categories, kind, stats]);
+    return rankCategories(categories, kind, pop).map((x) => ({ value: x.id, label: x.name, icon: x.icon, color: x.color }));
+  }, [categories, kind, pop]);
+  const walletsRanked = useMemo(() => rankWallets(wallets, pop), [wallets, pop]);
 
   useScrollToError(formRef, c.errors);
 
@@ -191,7 +193,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, onSaved }: Add
       }
     >
       <div ref={formRef}>
-        <TxFormFields c={c} wallets={wallets} categories={categoryOptions} />
+        <TxFormFields c={c} wallets={walletsRanked} categories={categoryOptions} />
       </div>
     </Sheet>
   );
