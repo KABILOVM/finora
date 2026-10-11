@@ -430,3 +430,14 @@ h2{font-size:16px;letter-spacing:-.2px;margin:0;font-weight:720}
 .auth.loading .auth-logo{animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{transform:scale(1.12)}}
 .settings-row .email-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60vw}
+
+/* ───── Редактирование ───── */
+[data-edit]{cursor:pointer;transition:transform .2s var(--ease)}
+[data-edit]:active{transform:scale(.99)}
+@media(hover:hover){.transaction[data-edit]:hover .tx-title{color:var(--accent)}}
+.icon-btn.danger{color:var(--red)}
+.icon-btn[hidden]{display:none}
+.ring-card{position:relative}
+.ring-card.editable{cursor:pointer;padding-right:44px;transition:transform .25s var(--spring)}
+.ring-card.editable:active{transform:scale(.98)}
+.ring-card .row-del{position:absolute;right:0;top:50%;margin-top:-17px}

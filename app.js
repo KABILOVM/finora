@@ -40,7 +40,7 @@ let state;
 try { state = JSON.parse(localStorage.getItem("finora-state")) || structuredClone(seed); } catch { state = structuredClone(seed); }
 if (!localStorage.getItem("finora-clean-start-v1")) { const isDemo = state.transactions?.some(t => ["t1","t2","t3","t4","t5"].includes(t.id)) || state.wallets?.some(w => ["cash","bank","usd"].includes(w.id)); if (isDemo) state = structuredClone(seed); localStorage.setItem("finora-state", JSON.stringify(state)); localStorage.setItem("finora-clean-start-v1","1"); }
 let currentView = "dashboard", lastAddedId = null, shownTheme = null;
-const form = {type:"expense",walletId:"",toWalletId:"",category:"",recurring:false};
+const form = {type:"expense",walletId:"",toWalletId:"",category:"",recurring:false,editId:null};
 const counterMem = {};
 function save(){localStorage.setItem("finora-state",JSON.stringify(state)); if(window.FinoraCloud) window.FinoraCloud.queueSave(state);}
 function wallet(id){return state.wallets.find(w=>w.id===id)||state.wallets[0]||{name:"Удалённый кошелёк",currency:"TJS"};}
@@ -68,17 +68,29 @@ function catSpend(mt){return categories.expense.map(c=>({name:c,value:sumBy(mt.f
 function transactionHtml(t,deletable=false){
  const w=wallet(t.walletId),sign=t.type==="income"?"+":t.type==="expense"?"−":"↔",label=t.type==="transfer"?"Перевод":t.category;
  const del=deletable?`<button class="row-del" data-delete="${t.id}" aria-label="Удалить" title="Удалить">${ic("trash")}</button>`:"";
- const row=`<div class="transaction ${deletable?"swipe-fg":""} ${t.id===lastAddedId?"fresh":""}">${catIc(label)}<div class="tx-info"><div class="tx-title">${escapeHtml(t.note||label)}</div><div class="tx-sub">${escapeHtml(label)} · ${escapeHtml(w.name)} · ${dateLabel(t.date)}</div></div><div class="tx-amount ${t.type==="income"?"positive":t.type==="expense"?"negative":""}">${sign}${fmt(t.amount,t.currency)}</div>${del}</div>`;
+ const row=`<div class="transaction ${deletable?"swipe-fg":""} ${t.id===lastAddedId?"fresh":""}" data-edit="${t.id}">${catIc(label)}<div class="tx-info"><div class="tx-title">${escapeHtml(t.note||label)}</div><div class="tx-sub">${escapeHtml(label)} · ${escapeHtml(w.name)} · ${dateLabel(t.date)}</div></div><div class="tx-amount ${t.type==="income"?"positive":t.type==="expense"?"negative":""}">${sign}${fmt(t.amount,t.currency)}</div>${del}</div>`;
  return deletable?`<div class="swipe" data-id="${t.id}"><button class="swipe-del" data-delete="${t.id}" aria-label="Удалить">${ic("trash")}</button>${row}</div>`:row;
 }
 function totalMonthlyDays(){return new Date(today.getFullYear(),today.getMonth()+1,0).getDate();}
 function monthRemainingDays(){return Math.max(1,totalMonthlyDays()-today.getDate()+1);}
 function nextIncomeDate(){const future=state.paydays.map(p=>{let d=new Date(today.getFullYear(),today.getMonth(),Math.min(p.date,totalMonthlyDays()));if(d<new Date(today.getFullYear(),today.getMonth(),today.getDate()))d=new Date(today.getFullYear(),today.getMonth()+1,Math.min(p.date,new Date(today.getFullYear(),today.getMonth()+2,0).getDate()));return { ...p,when:d};}).sort((a,b)=>a.when-b.when);return future[0]||null;}
 
-function budgetItem(b){
+/* откат влияния операции на балансы кошельков */
+function revertTx(t){
+ const w=state.wallets.find(x=>x.id===t.walletId);if(!w)return;
+ if(t.type==="expense")w.balance+=t.amount;
+ if(t.type==="income")w.balance-=t.amount;
+ if(t.type==="transfer"){w.balance+=t.amount;const dest=state.wallets.find(x=>x.id===t.toWalletId);if(dest)dest.balance-=t.amount;}
+}
+function deleteTx(id,rowEl){
+ const t=state.transactions.find(x=>x.id===id);if(!t)return;
+ if(rowEl)rowEl.classList.add("removing");
+ setTimeout(()=>undoable("Операция удалена",()=>{revertTx(t);state.transactions=state.transactions.filter(x=>x.id!==id);}),rowEl&&!reducedMotion?230:0);
+}
+function budgetItem(b,manage=false){
  const used=sumBy(monthTx().filter(t=>t.type==="expense"&&t.category===b.category),txBase),lim=convert(b.limit,b.currency),p=used/Math.max(1,lim)*100,m=catMeta(b.category);
  const C=+(2*Math.PI*19).toFixed(2),cls=p>=100?"over":p>=80?"warn":"";
- return `<div class="ring-card"><div class="ring" style="--h:${m.h}"><svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="19"/><circle class="ring-fg ${cls}" cx="22" cy="22" r="19" style="--c:${C};stroke-dasharray:${C};stroke-dashoffset:${(C*(1-Math.min(1,p/100))).toFixed(2)}"/></svg><span class="cat-ic" style="--h:${m.h}">${ic(m.icon)}</span></div><div><div class="wallet-name">${escapeHtml(b.category)}</div><div class="wallet-sub"><b class="${p>=100?"negative":""}">${fmt(used)}</b> / ${fmt(lim)}</div></div></div>`;
+ return `<div class="ring-card ${manage?"editable":""}" ${manage?`data-budget="${escapeHtml(b.category)}"`:""}><div class="ring" style="--h:${m.h}"><svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="19"/><circle class="ring-fg ${cls}" cx="22" cy="22" r="19" style="--c:${C};stroke-dasharray:${C};stroke-dashoffset:${(C*(1-Math.min(1,p/100))).toFixed(2)}"/></svg><span class="cat-ic" style="--h:${m.h}">${ic(m.icon)}</span></div><div><div class="wallet-name">${escapeHtml(b.category)}</div><div class="wallet-sub"><b class="${p>=100?"negative":""}">${fmt(used)}</b> / ${fmt(lim)}</div></div>${manage?`<button class="row-del always" data-delete-budget="${escapeHtml(b.category)}" aria-label="Удалить лимит" title="Удалить">${ic("trash")}</button>`:""}</div>`;
 }
 
 /* ряд баланса по дням (назад от текущего) и сглаженная линия для графика в шапке */
@@ -159,7 +171,7 @@ function renderWallets(){
 }
 function renderBudgets(){
  return `<div class="grid two-col">
-  <div class="card"><div class="section-head"><h2>Лимиты</h2></div>${state.budgets.length?`<div class="ring-grid">${state.budgets.map(budgetItem).join("")}</div>`:emptyHtml("target","Лимитов нет")}</div>
+  <div class="card"><div class="section-head"><h2>Лимиты</h2></div>${state.budgets.length?`<div class="ring-grid">${state.budgets.map(b=>budgetItem(b,true)).join("")}</div>`:emptyHtml("target","Лимитов нет")}</div>
   <div class="card"><div class="section-head"><h2>Новый лимит</h2></div>
    <form id="budgetForm" class="form">
     <div class="cat-grid" data-pick="category" style="margin:0">${categories.expense.map((c,i)=>{const m=catMeta(c);return `<button type="button" class="cat-tile ${i?"":"selected"}" data-v="${escapeHtml(c)}" style="--h:${m.h}"><span class="cat-ic sm" style="--h:${m.h}">${ic(m.icon)}</span><span>${escapeHtml(c)}</span></button>`;}).join("")}</div>
@@ -249,12 +261,14 @@ function undoable(msg,fn){
 
 /* ───── добавление операции (нижняя панель) ───── */
 let closing=false;
-function openModal(type="expense"){
+function openModal(type="expense",tx=null){
  if(!state.wallets.length){warn("Сначала создай кошелёк");if(currentView!=="wallets")goto("wallets");return;}
  const last=localStorage.getItem("finora-last-wallet"),w=state.wallets.find(x=>x.id===last)||state.wallets[0];
- Object.assign(form,{walletId:w.id,toWalletId:"",recurring:false});
- $("#date").value=iso(new Date());$("#amount").value="";$("#note").value="";
- $("#recurring").setAttribute("aria-pressed","false");
+ const editing=tx&&state.transactions.some(x=>x.id===tx.id)?tx:null;
+ Object.assign(form,{editId:editing?.id||null,walletId:editing&&state.wallets.some(x=>x.id===editing.walletId)?editing.walletId:w.id,toWalletId:editing?.toWalletId||"",recurring:!!editing?.recurring,category:editing?.category||""});
+ $("#date").value=editing?.date||iso(new Date());$("#amount").value=editing?editing.amount:"";$("#note").value=editing?.note||"";
+ $("#recurring").setAttribute("aria-pressed",String(form.recurring));
+ $("#sheetDelete").hidden=!editing;
  setType(type);
  const bd=$("#modalBackdrop");closing=false;bd.classList.remove("closing");$("#transactionForm").style.transform="";bd.hidden=false;
  setTimeout(()=>$("#amount").focus({preventScroll:true}),isMobile()?420:120);
@@ -303,9 +317,21 @@ function bindView(){
  $$("[data-add]").forEach(b=>b.onclick=()=>openModal(b.dataset.add));
  const eye=$("#heroEye");if(eye)eye.onclick=()=>{localStorage.setItem("finora-hide",localStorage.getItem("finora-hide")==="1"?"0":"1");render();};
  bindPicks();
- $$("[data-delete]").forEach(b=>b.onclick=e=>{e.stopPropagation();const t=state.transactions.find(x=>x.id===b.dataset.delete);if(!t)return;
-  const row=b.closest(".swipe");if(row)row.classList.add("removing");
-  setTimeout(()=>undoable("Операция удалена",()=>{const w=state.wallets.find(x=>x.id===t.walletId);if(w&&t.type==="expense")w.balance+=t.amount;if(w&&t.type==="income")w.balance-=t.amount;if(w&&t.type==="transfer"){w.balance+=t.amount;const dest=state.wallets.find(x=>x.id===t.toWalletId);if(dest)dest.balance-=t.amount;}state.transactions=state.transactions.filter(x=>x.id!==t.id);}),reducedMotion?0:230);});
+ $$("[data-delete]").forEach(b=>b.onclick=e=>{e.stopPropagation();deleteTx(b.dataset.delete,b.closest(".swipe"));});
+ $$("[data-edit]").forEach(el=>el.onclick=e=>{
+  if(e.target.closest("[data-delete]"))return;
+  const row=el.closest(".swipe");if(row&&row.classList.contains("open")){closeRow();return;}
+  const t=state.transactions.find(x=>x.id===el.dataset.edit);if(t)openModal(t.type,t);
+ });
+ $$("[data-delete-budget]").forEach(b=>b.onclick=e=>{e.stopPropagation();const c=b.dataset.deleteBudget;undoable("Лимит удалён",()=>{state.budgets=state.budgets.filter(x=>x.category!==c);});});
+ $$("[data-budget]").forEach(el=>el.onclick=e=>{
+  if(e.target.closest("[data-delete-budget]"))return;
+  const bg=state.budgets.find(x=>x.category===el.dataset.budget),f=$("#budgetForm");if(!bg||!f)return;
+  f.elements.category.value=bg.category;f.elements.currency.value=bg.currency;f.elements.limit.value=bg.limit;
+  f.querySelectorAll('[data-pick="category"] [data-v]').forEach(x=>x.classList.toggle("selected",x.dataset.v===bg.category));
+  f.querySelectorAll('[data-pick="currency"] [data-v]').forEach(x=>x.classList.toggle("selected",x.dataset.v===bg.currency));
+  f.scrollIntoView({behavior:reducedMotion?"auto":"smooth",block:"center"});f.elements.limit.focus({preventScroll:true});
+ });
  $$("[data-delete-wallet]").forEach(b=>b.onclick=()=>{const id=b.dataset.deleteWallet;if(state.transactions.some(t=>t.walletId===id||t.toWalletId===id))return warn("В кошельке есть операции");undoable("Кошелёк удалён",()=>{state.wallets=state.wallets.filter(w=>w.id!==id);});});
  const bp=$("#bankPick");if(bp)bp.addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(!b)return;const f=bp.closest("form"),on=b.classList.contains("selected");
   /* повторный клик снимает выбор; иначе ставим название и тип «Карта» */
@@ -338,25 +364,32 @@ $("#sheetBody").addEventListener("click",e=>{
  else if(w){form.walletId=w.dataset.wallet;renderSheet();}
  else if(to){form.toWalletId=to.dataset.towallet;$$("#sheetBody [data-towallet]").forEach(x=>x.classList.toggle("selected",x===to));}
 });
+$("#sheetDelete").onclick=()=>{const id=form.editId;closeModal();if(id)setTimeout(()=>deleteTx(id),reducedMotion?0:230);};
 $("#transactionForm").onsubmit=e=>{
  e.preventDefault();
  const amount=Number($("#amount").value),date=$("#date").value,note=$("#note").value.trim(),walletId=form.walletId,recurring=form.recurring,txType=form.type;
  if(!amount||amount<=0){shake($(".amount-field"));$("#amount").focus();return;}
  if(!walletId||!date){warn("Проверь кошелёк и дату");return;}
- const from=wallet(walletId),currency=from.currency;let id=crypto.randomUUID();
+ const old=form.editId?state.transactions.find(x=>x.id===form.editId):null,snap=old?structuredClone(state):null;
+ /* при правке сначала снимаем влияние старой операции; если проверка не пройдёт — возвращаем всё как было */
+ const fail=msg=>{if(snap)state=snap;warn(msg);};
+ if(old)revertTx(old);
+ const from=wallet(walletId),currency=from.currency,id=old?old.id:crypto.randomUUID();let tx;
  if(txType==="transfer"){
-  const toId=form.toWalletId;if(!toId||toId===walletId)return warn("Выбери кошелёк назначения");
-  const to=wallet(toId);if(from.currency!==to.currency)return warn("Нужны кошельки в одной валюте");
-  if(from.balance<amount)return warn("Недостаточно средств");
+  const toId=form.toWalletId;if(!toId||toId===walletId)return fail("Выбери кошелёк назначения");
+  const to=wallet(toId);if(from.currency!==to.currency)return fail("Нужны кошельки в одной валюте");
+  if(from.balance<amount)return fail("Недостаточно средств");
   from.balance-=amount;to.balance+=amount;
-  state.transactions.push({id,type:"transfer",amount,currency:from.currency,category:"Перевод",walletId,date,note:note||`В ${to.name}`,recurring:false,toWalletId:toId});
+  tx={id,type:"transfer",amount,currency:from.currency,category:"Перевод",walletId,date,note:note||`В ${to.name}`,recurring:false,toWalletId:toId};
  }else{
   if(txType==="expense")from.balance-=amount;else from.balance+=amount;
-  state.transactions.push({id,type:txType,amount,currency,category:form.category,walletId,date,note,recurring});
+  tx={id,type:txType,amount,currency,category:form.category,walletId,date,note,recurring};
  }
+ if(old)state.transactions[state.transactions.findIndex(x=>x.id===old.id)]=tx;else state.transactions.push(tx);
  localStorage.setItem("finora-last-wallet",walletId);lastAddedId=id;
  save();closeModal();render();
- toast(txType==="income"?"Доход сохранён":txType==="transfer"?"Перевод выполнен":"Расход сохранён");
+ if(old)toast("Изменения сохранены",{action:"Отменить",onAction:()=>{state=snap;save();render();}});
+ else toast(txType==="income"?"Доход сохранён":txType==="transfer"?"Перевод выполнен":"Расход сохранён");
 };
 
 /* ───── жесты: свайп строки влево — удалить; потянуть панель вниз — закрыть ───── */
