@@ -27,7 +27,7 @@ test.describe('4. Перевод между кошельками', () => {
 
     // б) с комиссией: из «Карта» уходит 50, на «Наличные» приходит 48 (комиссия 2 с.)
     const fee = await fillTx(page, { kind: 'transfer', amount: '50', wallet: 'Карта', toWallet: 'Наличные', received: '48' });
-    await expect(fee.getByText(money('Комиссия: 2 с.'))).toBeVisible();
+    await expect(fee.getByText(money('Получит: 48 с.'))).toBeVisible();
     await shot(page, '04-transfer-fee', testInfo);
     await fee.getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(fee).toBeHidden();

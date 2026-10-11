@@ -158,6 +158,7 @@ describe('атака 9: переезд между поясами не сдвиг
     const d = opsDeps();
     const { onClose } = await openAddSheet(d);
     await tapAmount('15');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'ночная');
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());

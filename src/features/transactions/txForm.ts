@@ -35,14 +35,25 @@ export interface TxFormState {
    * (по курсу или равна списанию). null — стёр поле.
    */
   toAmountOverride: Minor | null | undefined;
-  /** Перевод в той же валюте: показано ли поле «Получено» (для комиссии). */
+  /** Расход или перевод в той же валюте: открыта ли «Комиссия». */
   feeOpen: boolean;
+  /** Как задана комиссия: суммой или процентом от суммы операции. */
+  feeMode: FeeMode;
+  /** Комиссия суммой (feeMode 'amount'). */
+  feeAmount: Minor | null;
+  /** Комиссия в процентах, как набрал человек: '1,5' (feeMode 'percent'). */
+  feePct: string;
   categoryId: string | null;
   date: DateChoice;
   note: string;
   /** Ручной курс, как набрал человек (когда курса нет совсем). */
   rateText: string;
 }
+
+export type FeeMode = 'amount' | 'percent';
+
+/** Комиссия не указана: так форма выглядит по умолчанию и после смены вида или кошелька. */
+export const NO_FEE = { feeOpen: false, feeMode: 'amount' as FeeMode, feeAmount: null as Minor | null, feePct: '' };
 
 export function emptyForm(walletId: string | null, kind: TxKind = 'expense'): TxFormState {
   return {
@@ -51,7 +62,7 @@ export function emptyForm(walletId: string | null, kind: TxKind = 'expense'): Tx
     walletId,
     toWalletId: null,
     toAmountOverride: undefined,
-    feeOpen: false,
+    ...NO_FEE,
     categoryId: null,
     date: { mode: 'today' },
     note: '',
@@ -70,8 +81,11 @@ export function formFromTx(tx: Transaction, currencyOf: (walletId: string) => Cu
     amountMinor: tx.amountMinor,
     walletId: tx.walletId,
     toWalletId: tx.toWalletId,
-    toAmountOverride: isTransfer ? tx.toAmountMinor : undefined,
-    feeOpen: isTransfer && sameCurrency && tx.toAmountMinor !== null && tx.toAmountMinor !== tx.amountMinor,
+    // в одной валюте разница списано/получено — это комиссия, и редактируется она как комиссия
+    toAmountOverride: isTransfer && !sameCurrency ? tx.toAmountMinor : undefined,
+    ...(isTransfer && sameCurrency && tx.toAmountMinor !== null && tx.toAmountMinor < tx.amountMinor
+      ? { feeOpen: true, feeMode: 'amount' as FeeMode, feeAmount: tx.amountMinor - tx.toAmountMinor, feePct: '' }
+      : NO_FEE),
     categoryId: tx.categoryId,
     date: { mode: 'date', value: tx.occurredOn },
     note: tx.note,
@@ -102,6 +116,26 @@ export function changedFields(input: TransactionInput, orig: Transaction): Trans
   // курс нужен, только если сумма, кошелёк или вид меняются (иначе контроллер его не даёт)
   if (input.fx !== undefined) patch.fx = input.fx;
   return patch;
+}
+
+// ───────────────────────── комиссия ─────────────────────────
+
+/** Проценты: '1,5' / '1.5' / '2' → число; пусто, ноль, больше 100 или не число → null. */
+export function parsePercent(input: string): number | null {
+  const s = input.replace(/[\s  ]/g, '').replace(',', '.');
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(s)) return null;
+  if ((s.split('.')[1] ?? '').length > 4) return null;
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 && n < 100 ? n : null;
+}
+
+/** Комиссия в минорных единицах для суммы base (округляется до копейки). null — поле заполнено неверно; 0 — пусто. */
+export function computeFee(form: Pick<TxFormState, 'feeMode' | 'feeAmount' | 'feePct'>, base: Minor | null): Minor | null {
+  if (form.feeMode === 'amount') return form.feeAmount ?? 0;
+  if (form.feePct.trim() === '') return 0;
+  const pct = parsePercent(form.feePct);
+  if (pct === null) return null;
+  return base === null ? 0 : Math.round((base * pct) / 100);
 }
 
 // ───────────────────────── даты ─────────────────────────
@@ -196,6 +230,7 @@ export function rankByCount<T extends { id: string }>(items: readonly T[], count
 
 export interface FormErrors {
   amount?: string;
+  fee?: string;
   wallet?: string;
   toWallet?: string;
   toAmount?: string;

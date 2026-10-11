@@ -97,6 +97,7 @@ describe('атака 8: курсы, снимки и основная валют�
     await findByRole('dialog', { name: 'Правка операции' });
     expect(document.querySelector('[data-testid="fx-notice"]')?.textContent).toMatch(/10,9/);
     expect(document.querySelector('[data-testid="fx-notice"]')?.textContent).not.toMatch(/11,5/);
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), '!');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await eventually(async () => expect((await store.db.transactions.get(txId))?.note).toBe('кофе-в-долларах!'));

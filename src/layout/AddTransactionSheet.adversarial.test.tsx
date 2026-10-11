@@ -84,6 +84,7 @@ describe('шит «Новая операция»: двойное нажатие'
 
 describe('шит «Новая операция»: мусор в заметке', () => {
   async function typeNote(text: string) {
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     const note = screen.getByRole('textbox', { name: /^Заметка/ }) as HTMLInputElement;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(note, text);
     const { fire } = await import('@/components/testUtils');

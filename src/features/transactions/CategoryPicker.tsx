@@ -81,7 +81,27 @@ export function CategoryPicker({ options, value, onChange, error, kind }: Catego
   };
 
   const chips = (
-    <div role="group" aria-label="Категория" className="flex flex-wrap gap-2">
+    <div
+      role="group"
+      aria-label="Категория"
+      // Свёрнуто — одна строка с прокруткой вбок (всё окно без прокрутки вниз); раскрыто — строки с переносом
+      className={cn(
+        'flex gap-2',
+        expanded || adding ? 'flex-wrap' : '-mx-5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] md:-mx-0 md:px-0',
+      )}
+    >
+      {!adding && (
+        <button
+          type="button"
+          aria-label="Новая категория"
+          title="Новая категория"
+          onClick={() => setAdding(true)}
+          className={cn(chipClass(false), 'border-dashed px-3 text-brand')}
+        >
+          <Icon name="plus" size={20} />
+          <span className="sr-only">Новая</span>
+        </button>
+      )}
       {shown.map((opt) => {
         const selected = opt.value === value;
         return (
@@ -97,17 +117,11 @@ export function CategoryPicker({ options, value, onChange, error, kind }: Catego
           <Icon name="chevron" size={16} className="rotate-90 text-muted" />
         </button>
       )}
-      {!adding && (
-        <button type="button" aria-label="Новая категория" onClick={() => setAdding(true)} className={cn(chipClass(false), 'border-dashed text-brand')}>
-          <Icon name="plus" size={18} />
-          <span>Новая</span>
-        </button>
-      )}
     </div>
   );
 
   return (
-    <FieldGroup label="Категория" hint="можно не выбирать" error={error}>
+    <FieldGroup label="Категория" error={error} className="[&>div:first-child]:sr-only">
       {chips}
       {adding && (
         <form

@@ -53,6 +53,7 @@ describe('весь путь: ввод → отмена → правка → уд
     await user.click(addLink());
     await findByRole('dialog', { name: 'Новая операция' });
     await tapAmount('12,5');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'хлеб');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());

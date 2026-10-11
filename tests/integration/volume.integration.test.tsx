@@ -130,6 +130,7 @@ describe('атака 10: 5 000 операций', () => {
     await user.click(screen.getAllByRole('link', { name: /Добавить операцию/ })[0] as HTMLElement);
     await waitFor(() => screen.getByRole('dialog', { name: 'Новая операция' }), 10_000);
     await tapAmount('77');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'новая-среди-пяти-тысяч');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(text()).toMatch(/новая-среди-пяти-тысяч/), 30_000);

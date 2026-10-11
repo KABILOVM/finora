@@ -12,6 +12,16 @@ import { CurrencySection } from './CurrencySection';
 import { RatesSection } from './RatesSection';
 import { SyncSection } from './SyncSection';
 
+function NavRow({ to, icon, color, title }: { to: string; icon: string; color: string; title: string }) {
+  return (
+    <Link to={to} className="flex min-h-[56px] items-center gap-3 rounded-2xl px-4 py-2 transition-colors hover:bg-surface-2 active:bg-border/60">
+      <Glyph value={icon} color={color} size={40} />
+      <span className="min-w-0 flex-1 text-base font-medium">{title}</span>
+      <Icon name="chevron" size={18} className="shrink-0 text-muted" />
+    </Link>
+  );
+}
+
 /** Сообщает о синхронизации только когда с ней что-то не так; в обычной жизни она идёт сама и статус виден в шапке. */
 function SyncProblems() {
   const enabled = useSyncEnabled();
@@ -27,14 +37,14 @@ export default function SettingsPage() {
       <PageHeader title="Настройки" />
 
       <Card padding="none" className="mb-6">
-        <Link
-          to="/settings/categories"
-          className="flex min-h-[56px] items-center gap-3 rounded-2xl px-4 py-2 transition-colors hover:bg-surface-2 active:bg-border/60"
-        >
-          <Glyph value="i:tag" color="#4f46e5" size={40} />
-          <span className="min-w-0 flex-1 text-base font-medium">Категории</span>
-          <Icon name="chevron" size={18} className="shrink-0 text-muted" />
-        </Link>
+        <ul className="divide-y divide-border">
+          <li>
+            <NavRow to="/settings/categories" icon="i:tag" color="#4f46e5" title="Категории" />
+          </li>
+          <li>
+            <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Zenmoney" />
+          </li>
+        </ul>
       </Card>
 
       <SyncProblems />

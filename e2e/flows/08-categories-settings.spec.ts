@@ -1,9 +1,9 @@
-import { addTx, createWallet, dismissToasts, expect, fillTx, goSection, openApp, openFromMore, shot, sheet, test } from '../helpers';
+import { addTx, openCategories, createWallet, dismissToasts, expect, fillTx, goSection, openApp, shot, sheet, test } from '../helpers';
 
 test.describe('8. Категории и настройки', () => {
   test('добавить категорию, она доступна при внесении; архивировать — пропадает из выбора, возвращается из архива', async ({ page }, testInfo) => {
     await openApp(page);
-    await openFromMore(page, 'Категории'); // новый путь: «Ещё» → «Категории»
+    await openCategories(page);
     await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
 
     // Добавить «Кафе»
@@ -33,7 +33,7 @@ test.describe('8. Категории и настройки', () => {
     await dismissToasts(page);
 
     // Архивировать
-    await openFromMore(page, 'Категории'); // новый путь: «Ещё» → «Категории»
+    await openCategories(page);
     await page.getByRole('button', { name: /^Кафе/ }).click();
     dlg = sheet(page, 'Правка категории');
     await dlg.getByRole('button', { name: 'Убрать в архив' }).click();

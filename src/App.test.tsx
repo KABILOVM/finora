@@ -70,13 +70,13 @@ describe('навигация', () => {
     expect(labels).toEqual(['Главная', 'Операции', 'Добавить операцию', 'Кошельки', 'Ещё']);
   });
 
-  it('боковая панель ПК: основные пункты, внизу «Ещё» и «Настройки», и кнопка «Добавить операцию»', async () => {
+  it('боковая панель ПК: основные пункты, внизу «Настройки» (без «Ещё»), и кнопка «Добавить операцию»', async () => {
     renderAt('/');
     await findByRole('heading', { name: 'Главная', level: 1 });
     const side = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.closest('aside'));
     expect(side).toBeDefined();
     const labels = Array.from((side as HTMLElement).querySelectorAll('a')).map((a) => a.textContent);
-    expect(labels).toEqual(['Главная', 'Операции', 'Кошельки', 'Бюджеты', 'Платежи', 'Долги', 'Ещё', 'Настройки']);
+    expect(labels).toEqual(['Главная', 'Операции', 'Кошельки', 'Бюджеты', 'Платежи', 'Долги', 'Настройки']);
     const aside = (side as HTMLElement).closest('aside') as HTMLElement;
     expect(aside.querySelector('a[href="#/add"], a[href="/add"]')?.textContent).toContain('Добавить операцию');
   });
@@ -89,12 +89,12 @@ describe('навигация', () => {
     expect(current.length).toBeGreaterThan(0);
   });
 
-  it('на странице категорий пункт «Ещё» остаётся активным', async () => {
+  it('на странице категорий подсвечены «Ещё» (телефон) и «Настройки» (ПК)', async () => {
     renderAt('/settings/categories');
     await findByRole('heading', { name: 'Категории', level: 1 });
     const current = Array.from(document.querySelectorAll('[aria-current="page"]')).map((a) => a.textContent);
-    // телефон: «Ещё»; ПК: тоже «Ещё» (отдельный пункт «Настройки» там не подсвечен)
-    expect(current).toEqual(['Ещё', 'Ещё']);
+    // телефон: «Ещё»; ПК: «Настройки» (категории — их часть)
+    expect(current.sort()).toEqual(['Ещё', 'Настройки']);
   });
 
   it('переход по пункту меню меняет страницу', async () => {
