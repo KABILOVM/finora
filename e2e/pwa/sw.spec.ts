@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { skipOnboardingInAdvance } from '../helpers';
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIST, TMP, addExpense, cacheDump, launchProfile, listFiles, precacheUrls, startStatic, waitForSw, type StaticServer } from './helpers';
@@ -52,6 +53,7 @@ test('sw.js: runtimeCaching пуст — единственный маршрут
 test('Cache Storage = ровно precache; Supabase и внешние хосты не кэшируются', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   // Внешние хосты «отвечают» успешно и разрешают CORS: если воркер что-то кэширует, оно обязательно попадёт в кэш.
   const external: string[] = [];
   await ctx.route((u) => u.origin !== srv.origin, async (route) => {
@@ -94,6 +96,7 @@ test('ХОЛОДНЫЙ ОФЛАЙН-СТАРТ: после полного пер
   // 1) онлайн: заходим, вносим расход, ждём воркер, закрываем браузер целиком
   let ctx = await launchProfile(dir);
   let page = ctx.pages()[0] ?? (await ctx.newPage());
+  await skipOnboardingInAdvance(page);
   await page.goto(srv.url);
   await ready(page);
   await addExpense(page, '777');
@@ -106,6 +109,7 @@ test('ХОЛОДНЫЙ ОФЛАЙН-СТАРТ: после полного пер
   const offlineSrv = srv; // тот же адрес, но сеть отключена на уровне браузера
   ctx = await launchProfile(dir, { offline: true });
   page = ctx.pages()[0] ?? (await ctx.newPage());
+  await skipOnboardingInAdvance(page);
   const before = offlineSrv.log.length;
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -136,6 +140,7 @@ test('ХОЛОДНЫЙ ОФЛАЙН-СТАРТ: после полного пер
 test('Сеть пропала ПОСЛЕ загрузки страницы: все ленивые страницы открываются из precache', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   await page.goto(srv.url);
   await ready(page);
   await waitForSw(page);
@@ -166,6 +171,7 @@ test('Сеть пропала ПОСЛЕ загрузки страницы: вс
 test('Первый заход: чанк страницы не загрузился — не белый экран, а понятное сообщение, и «Перезагрузить» лечит', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 }, serviceWorkers: 'block' });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   let blocked = true;
   await ctx.route(/assets\/(TransactionsPage|WalletsPage)-.*\.js/, (route) => (blocked ? route.abort('internetdisconnected') : route.continue()));
   await page.goto(srv.url);
@@ -186,6 +192,7 @@ test('Первый заход: чанк страницы не загрузилс
 test('Первый заход: ленивый чанк «завис» (медленная сеть) — не белый экран', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 }, serviceWorkers: 'block' });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   await ctx.route(/assets\/WalletsPage-.*\.js/, async (route) => {
     await new Promise((r) => setTimeout(r, 3000));
     await route.continue();
@@ -203,6 +210,7 @@ test('Первый заход: ленивый чанк «завис» (медл�
 test('Внешние хосты при старте и обходе всех страниц: только курсы валют, никаких шрифтов/CDN/аналитики', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   const hosts = new Map<string, number>();
   ctx.on('request', (r) => {
     const u = new URL(r.url());
@@ -232,6 +240,7 @@ test('Раздача из ПОДПАПКИ домена: воркер встаё
   const dir = mkdtempSync(join(TMP, 'sub-'));
   let ctx = await launchProfile(dir);
   let page = ctx.pages()[0] ?? (await ctx.newPage());
+  await skipOnboardingInAdvance(page);
   await page.goto(sub.url);
   await ready(page);
   await addExpense(page, '42');
@@ -244,6 +253,7 @@ test('Раздача из ПОДПАПКИ домена: воркер встаё
 
   ctx = await launchProfile(dir, { offline: true });
   page = ctx.pages()[0] ?? (await ctx.newPage());
+  await skipOnboardingInAdvance(page);
   await page.goto(`${sub.url}#/transactions`);
   await ready(page);
   await expect(page.getByText('−42 с.').first()).toBeVisible();

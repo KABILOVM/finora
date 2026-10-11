@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { skipOnboardingInAdvance } from '../helpers';
 import { join } from 'node:path';
 import { addExpense, buildCopy, cacheDump, listFiles, makeWorkCopy, patchFile, precacheUrls, startStatic, waitForSw, type StaticServer } from './helpers';
 
@@ -57,6 +58,7 @@ const navLabel = (page: Page) => page.getByRole('navigation').first().getByRole(
 
 async function openA(ctx: BrowserContext): Promise<Page> {
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   await page.goto(srv.url);
   await navLabel(page).waitFor();
   await waitForSw(page);
@@ -164,6 +166,7 @@ test('Закрыли ВСЕ вкладки и открыли заново: ср�
   await expect(prompt(page)).toBeVisible({ timeout: 15_000 });
   await page.close();
   const p2 = await ctx.newPage();
+  await skipOnboardingInAdvance(p2);
   const errors: string[] = [];
   p2.on('pageerror', (e) => errors.push(e.message));
   await p2.goto(srv.url);
@@ -237,6 +240,7 @@ test('Вторая вкладка с вводом: как только ввод 
 test('Приложение само находит новую версию в долго открытой вкладке (вернулись в приложение / прошли сутки)', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   await page.clock.install();
   await page.goto(srv.url);
   await navLabel(page).waitFor();
@@ -269,6 +273,7 @@ test('Каждый файл, нужный версии B, отдаётся; кэ
 async function crashScenario(browser: import('@playwright/test').Browser) {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   srv.setRoot(dirCrash);
   await page.goto(srv.url);
   await navLabel(page).waitFor();
@@ -311,6 +316,7 @@ test('Выпущенная версия «падает» при отрисовк
 test('«Позже» нажали до поломки: исправление всё равно ставится, когда приложение упало', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
+  await skipOnboardingInAdvance(page);
   srv.setRoot(dirCrash);
   await page.goto(srv.url);
   await navLabel(page).waitFor();
