@@ -91,8 +91,8 @@ describe('Проверка облака: облако подключено', () 
     expect(screen.getByText('Все проверки пройдены')).toBeInTheDocument();
     for (const li of items()) expect(li.textContent).toContain('✔');
     expect(itemFor('Запись данных').textContent).toContain('защита данных работает');
-    // по одной заведомо неверной строке в каждую из четырёх таблиц (синхронизация пишет во все)
-    expect(cloud.calls.upserts.map((u) => u.table).sort()).toEqual(['categories', 'settings', 'transactions', 'wallets']);
+    // по одной заведомо неверной строке в каждую из семи таблиц (синхронизация пишет во все)
+    expect(cloud.calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'transactions', 'wallets']);
   });
 
   it('данные берутся из провайдеров: сессия ОТ этого пользователя, в «Данных на устройстве» видны неотправленные записи', async () => {

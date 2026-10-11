@@ -13,11 +13,17 @@ export { newId, uuidV5, defaultId, isUuid } from './ids';
 export type { WalletsRepo, WalletInput, WalletPatch } from './walletsRepo';
 export type { CategoriesRepo, CategoryInput, CategoryPatch } from './categoriesRepo';
 export type { TransactionsRepo, TransactionInput, TransactionPatch, TransactionCreateOptions } from './transactionsRepo';
+export type { BudgetsRepo, BudgetInput } from './budgetsRepo';
+export type { DebtsRepo, DebtInput, DebtPatch } from './debtsRepo';
+export type { RecurringRepo, RecurringInput, RecurringPatch } from './recurringRepo';
 export type { SettingsRepo, SettingsPatch } from './settingsRepo';
+export type { FromRuleOptions } from './transactionsRepo';
+export * from './validatePlans';
 
 export {
   filterTransactions,
   summarizeMonth,
+  summarizeDay,
   groupByDay,
   type TxFilter,
   type MonthSummary,
@@ -32,8 +38,17 @@ export {
   useBalancesState,
   useSettings,
   useMonthSummary,
+  useBudgets,
+  useDebts,
+  useRecurringRules,
+  useDebtState,
+  useDebtView,
+  useUpcoming,
   BALANCES_OVERFLOW_MESSAGE,
+  DEBT_OVERFLOW_MESSAGE,
   type BalancesState,
+  type DebtView,
+  type UpcomingItem,
 } from './hooks';
 
 export { ensureSeeded } from './seed';

@@ -111,6 +111,7 @@ describe('Проверка облака на настоящей схеме', () 
     expect(await count(pg, 'wallets')).toBe(0);
     expect((await pg.adminRows('settings')).length).toBe(0);
     expect((await pg.adminRows('transactions')).length).toBe(0);
+    for (const t of ['debts', 'budgets', 'recurring_rules'] as const) expect((await pg.adminRows(t)).length, t).toBe(0);
   });
 
   it('есть курсы на сервере: шаг «ok» с датой', async () => {
@@ -159,11 +160,11 @@ describe('Проверка облака на настоящей схеме', () 
   });
 
   it('отобрали право обновления (вставка есть): настоящий upsert из supabase-js отвергнут, проверка называет все таблицы', async () => {
-    await pg.db.exec('revoke update on public.settings, public.wallets, public.categories, public.transactions from authenticated');
+    await pg.db.exec('revoke update on public.settings, public.wallets, public.categories, public.debts, public.budgets, public.recurring_rules, public.transactions from authenticated');
     const { by } = await run();
     expect(by.write.status).toBe('fail');
     expect(by.write.message).toContain('Нет прав записи');
-    for (const t of ['settings', 'wallets', 'categories', 'transactions']) expect(by.write.message).toContain(t);
+    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions']) expect(by.write.message).toContain(t);
   });
 
   it('у роли authenticated отобрали право чтения transactions: «Нет прав на чтение»', async () => {
@@ -205,12 +206,12 @@ describe('Проверка облака на настоящей схеме', () 
   it('схема не применена вовсе (пустой проект): «Выполните файл supabase/schema.sql…», запись не пробуем', async () => {
     const empty = await createPgliteServer();
     try {
-      for (const t of ['transactions', 'categories', 'wallets', 'settings', 'exchange_rates']) await empty.db.exec(`drop table public.${t} cascade`);
+      for (const t of ['transactions', 'recurring_rules', 'budgets', 'debts', 'categories', 'wallets', 'settings', 'exchange_rates']) await empty.db.exec(`drop table public.${t} cascade`);
       const { by, steps } = await run({ server: empty, emulator: createPostgrestEmulator(empty) });
       expect(by.server.status).toBe('ok');
       expect(by.schema.status).toBe('fail');
       expect(by.schema.message).toContain('Выполните файл supabase/schema.sql в SQL Editor вашего проекта Finora');
-      expect(by.schema.message).toContain('settings, wallets, categories, transactions, exchange_rates');
+      expect(by.schema.message).toContain('settings, wallets, categories, debts, budgets, recurring_rules, transactions, exchange_rates');
       expect(['read', 'write', 'rates'].map((id) => by[id as CheckStepId].status)).toEqual(['skip', 'skip', 'skip']);
       expect(steps).toHaveLength(7);
     } finally {

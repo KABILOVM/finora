@@ -32,9 +32,11 @@ export const NON_MERGED_FIELDS: readonly string[] = ['id', 'createdAt', 'clientU
 
 export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupName, readonly string[]>>>> = {
   transactions: {
-    money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
+    money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
     date: ['occurredOn'],
     note: ['note'],
+    /** Происхождение (регулярный платёж, по которому создана операция); задаётся при создании и не правится. */
+    origin: ['recurringRuleId'],
     deleted: ['deletedAt'],
   },
   wallets: {
@@ -48,6 +50,29 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     name: ['name'],
     kind: ['kind', 'parentId'],
     look: ['color', 'icon', 'sortOrder'],
+    archived: ['archivedAt'],
+    deleted: ['deletedAt'],
+  },
+  budgets: {
+    limit: ['amountMinor', 'currency', 'period'],
+    target: ['categoryId'],
+    archived: ['archivedAt'],
+    deleted: ['deletedAt'],
+  },
+  debts: {
+    party: ['direction', 'counterparty'],
+    amount: ['principalMinor', 'currency'],
+    dates: ['openedOn', 'dueOn'],
+    note: ['note'],
+    closed: ['closedAt'],
+    archived: ['archivedAt'],
+    deleted: ['deletedAt'],
+  },
+  recurring_rules: {
+    money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId'],
+    schedule: ['frequency', 'intervalN', 'startOn', 'endOn'],
+    mode: ['autoPost'],
+    note: ['note'],
     archived: ['archivedAt'],
     deleted: ['deletedAt'],
   },

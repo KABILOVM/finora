@@ -135,15 +135,53 @@ export async function activateServiceWorker(page: Page): Promise<void> {
 
 /* ------------------------------ навигация ------------------------------ */
 
-type Section = 'Главная' | 'Операции' | 'Кошельки' | 'Настройки';
+export type Section = 'Главная' | 'Операции' | 'Кошельки' | 'Бюджеты' | 'Платежи' | 'Долги' | 'Ещё' | 'Настройки';
 
-/** Перейти в раздел через меню: на телефоне нижняя панель («Ещё»), на ПК боковая («Настройки»). */
+/** Заголовок страницы (h1) для пункта меню. */
+const SECTION_TITLE: Record<Section, string> = {
+  Главная: 'Главная',
+  Операции: 'Операции',
+  Кошельки: 'Кошельки',
+  Бюджеты: 'Бюджеты',
+  Платежи: 'Регулярные платежи',
+  Долги: 'Долги и кредиты',
+  Ещё: 'Ещё',
+  Настройки: 'Настройки',
+};
+
+/** Пункты, которые есть в нижней панели телефона; остальное на телефоне открывается через «Ещё». */
+const PHONE_NAV: readonly Section[] = ['Главная', 'Операции', 'Кошельки', 'Ещё'];
+
+/** Название пункта на странице «Ещё» (там названия полные). */
+const MORE_TITLE: Partial<Record<Section, string>> = {
+  Бюджеты: 'Бюджеты',
+  Платежи: 'Регулярные платежи',
+  Долги: 'Долги и кредиты',
+  Настройки: 'Настройки',
+};
+
+/** Основная навигация (на ПК — боковая панель, на телефоне — нижняя). */
+export const mainNav = (page: Page): Locator => page.getByRole('navigation', { name: 'Основная навигация' });
+
+/**
+ * Перейти в раздел через меню. ПК: пункт боковой панели. Телефон: пункт нижней панели, а Бюджеты, Платежи, Долги и
+ * Настройки открываются в два шага: «Ещё», затем строка списка.
+ */
 export async function goSection(page: Page, section: Section): Promise<void> {
-  const label = isPhone(page) && section === 'Настройки' ? 'Ещё' : section;
-  await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: label, exact: true }).click();
-  const heading = section;
-  await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+  if (isPhone(page) && !PHONE_NAV.includes(section)) {
+    await goSection(page, 'Ещё');
+    await page.getByRole('main').getByRole('link', { name: MORE_TITLE[section], exact: true }).click();
+  } else {
+    await mainNav(page).getByRole('link', { name: section, exact: true }).click();
+  }
+  await expect(page.getByRole('heading', { level: 1, name: SECTION_TITLE[section] })).toBeVisible();
   await expect(page.getByText('Загрузка…')).toHaveCount(0);
+}
+
+/** Перейти на страницу «Ещё» и открыть её пункт по названию на странице (Бюджеты, Категории, Импорт из Zenmoney, Настройки…). */
+export async function openFromMore(page: Page, title: string): Promise<void> {
+  await goSection(page, 'Ещё');
+  await page.getByRole('main').getByRole('link', { name: title, exact: true }).click();
 }
 
 /** Кнопка «+»: на телефоне — кругляш в нижней панели, на ПК — «Добавить операцию» в боковой панели. */

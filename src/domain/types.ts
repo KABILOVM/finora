@@ -95,7 +95,9 @@ export interface Transaction extends SyncFields {
   note: string;
   /**
    * Снимок для отчётов: сумма в базовой валюте пользователя на МОМЕНТ внесения (курс не пересчитывается задним числом).
-   * Для перевода = 0 (переводы не участвуют в аналитике доходов/расходов).
+   * Для перевода = КОМИССИЯ в базовой валюте: (amountMinor − toAmountMinor), переведённая в базовую валюту, если у обоих
+   * кошельков одна валюта; для перевода между разными валютами (обмен) и без комиссии = 0. Комиссия считается РАСХОДОМ
+   * месяца (см. db/queries.ts); сам перевод в доходы/расходы не входит.
    */
   baseCurrency: CurrencyCode;
   baseAmountMinor: Minor;
@@ -103,6 +105,68 @@ export interface Transaction extends SyncFields {
   fxRate: number | null;
   /** 'same' | 'nbt' | 'server' | 'api' | 'manual' | 'cached' — откуда взят курс. null для перевода. */
   fxSource: string | null;
+  /**
+   * Долг, к которому относится движение денег (выдача/получение долга или платёж по нему). Только для расхода/дохода.
+   * Такие операции НЕ входят в «Доходы/Расходы» месяца и в бюджеты (это не траты), но меняют остаток кошелька.
+   */
+  debtId: UUID | null;
+  /** Регулярный платёж, по которому операция создана (id операции тогда детерминирован: v5(ruleId, дата)). */
+  recurringRuleId: UUID | null;
+}
+
+export type Frequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/**
+ * Бюджет: лимит расходов на календарный месяц в БАЗОВОЙ валюте. categoryId === null — общий лимит на все расходы.
+ * id детерминирован (v5(userId, 'budget:' + (categoryId ?? 'total'))) — два устройства не заведут два бюджета на одно и то же.
+ */
+export interface Budget extends SyncFields {
+  categoryId: UUID | null;
+  amountMinor: Minor;
+  currency: CurrencyCode;
+  period: 'month';
+  archivedAt: IsoDateTime | null;
+}
+
+export type DebtDirection = 'lent' | 'borrowed';
+
+/**
+ * Долг. lent — мне должны (я дал), borrowed — я должен (мне дали). Остаток считается из операций с debtId (см. domain/debts.ts),
+ * нигде не хранится. Валюта долга = валюта кошельков его операций.
+ */
+export interface Debt extends SyncFields {
+  direction: DebtDirection;
+  counterparty: string;
+  principalMinor: Minor;
+  currency: CurrencyCode;
+  openedOn: IsoDate;
+  dueOn: IsoDate | null;
+  note: string;
+  closedAt: IsoDateTime | null;
+  archivedAt: IsoDateTime | null;
+}
+
+/**
+ * Регулярный платёж/доход/перевод. Операции по расписанию создаются с ДЕТЕРМИНИРОВАННЫМ id v5(ruleId, 'YYYY-MM-DD'),
+ * поэтому два устройства не создадут одну и ту же операцию дважды. «Пропустить» = создать операцию с этим id сразу удалённой.
+ * autoPost: 1 — проводить само в день платежа, 0 — показать в «Предстоящих» и ждать подтверждения.
+ */
+export interface RecurringRule extends SyncFields {
+  kind: TxKind;
+  walletId: UUID;
+  toWalletId: UUID | null;
+  amountMinor: Minor;
+  toAmountMinor: Minor | null;
+  categoryId: UUID | null;
+  debtId: UUID | null;
+  note: string;
+  frequency: Frequency;
+  /** Каждые N периодов, N ≥ 1 */
+  intervalN: number;
+  startOn: IsoDate;
+  endOn: IsoDate | null;
+  autoPost: 0 | 1;
+  archivedAt: IsoDateTime | null;
 }
 
 /** Настройки пользователя. ОДНА строка на пользователя, id = id пользователя (чтобы устройства не плодили дубли). */
@@ -116,7 +180,7 @@ export interface Settings extends SyncFields {
 
 export type LocalRow<T> = T & LocalFields;
 
-export type Entity = Wallet | Category | Transaction | Settings;
+export type Entity = Wallet | Category | Transaction | Settings | Budget | Debt | RecurringRule;
 
 /**
  * Таблица курсов относительно «опорной» валюты (pivot): 1 единица X стоит perUnit[X] единиц pivot.

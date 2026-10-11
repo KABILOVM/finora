@@ -83,7 +83,7 @@ describe('CloudCheckSection: отчёт и быстрые нажатия', () =>
       btn.click();
     });
     await finish();
-    expect(cloud.calls.upserts).toHaveLength(4);
+    expect(cloud.calls.upserts).toHaveLength(7);
     expect(cloud.calls.selects.filter((s) => s.table === 'settings')).toHaveLength(1);
   });
 });

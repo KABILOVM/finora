@@ -1,6 +1,23 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { computeBalances } from '@/domain/balances';
-import type { Category, CategoryKind, LocalRow, Minor, Settings, Transaction, UUID, Wallet } from '@/domain/types';
+import { computeDebtState, type DebtState } from '@/domain/debts';
+import { upcomingOccurrences, type UpcomingStatus } from '@/domain/schedule';
+import type {
+  Budget,
+  Category,
+  CategoryKind,
+  Debt,
+  IsoDate,
+  LocalRow,
+  Minor,
+  RecurringRule,
+  Settings,
+  Transaction,
+  UUID,
+  Wallet,
+} from '@/domain/types';
+import { todayLocal } from '@/lib/dates';
+import { uuidV5 } from './ids';
 import { filterTransactions, summarizeMonth, type MonthSummary, type TxFilter } from './queries';
 import { sortByOrderThenName } from './sort';
 import { useStore } from './storeContext';
@@ -50,7 +67,7 @@ export function useTransactions(
   // null («без категории») и undefined («любая») — разные фильтры, поэтому undefined в ключе заменён меткой
   const part = (v: unknown) => (v === undefined ? '\u2205' : v);
   const key = JSON.stringify(
-    [filter.from, filter.to, filter.walletId, filter.categoryId, filter.kind, filter.search, limit].map(part),
+    [filter.from, filter.to, filter.walletId, filter.categoryId, filter.kind, filter.search, filter.debtId, limit].map(part),
   );
   return useLiveQuery(async () => {
     // период берём по индексу даты, остальное — чистым фильтром
@@ -125,4 +142,138 @@ export function useMonthSummary(month: string): MonthSummary | null | undefined 
     const rows = await store.db.transactions.where('occurredOn').between(`${month}-01`, `${month}-31`, true, true).toArray();
     return summarizeMonth(rows, month, settings.baseCurrency);
   }, [store, month]);
+}
+
+// ───────────────────────── бюджеты, долги, регулярные платежи ─────────────────────────
+
+/** Бюджеты: общий лимит первым, затем по времени создания. Архивные — только с includeArchived. Удалённые не показываются. */
+export function useBudgets(opts: { includeArchived?: boolean } = {}): LocalRow<Budget>[] | undefined {
+  const store = useStore();
+  const includeArchived = opts.includeArchived === true;
+  return useLiveQuery(async () => {
+    const rows = await store.db.budgets.toArray();
+    return rows
+      .filter((b) => b.deletedAt === null && (includeArchived || b.archivedAt === null))
+      .sort((a, b) => {
+        if ((a.categoryId === null) !== (b.categoryId === null)) return a.categoryId === null ? -1 : 1;
+        if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+  }, [store, includeArchived]);
+}
+
+/**
+ * Долги: незакрытые первыми, затем по сроку возврата (без срока — в конце), затем новые сверху.
+ * Архивные скрыты (includeArchived), закрытые показываются (includeClosed: false их скрывает). Удалённые не показываются.
+ */
+export function useDebts(opts: { includeArchived?: boolean; includeClosed?: boolean } = {}): LocalRow<Debt>[] | undefined {
+  const store = useStore();
+  const includeArchived = opts.includeArchived === true;
+  const includeClosed = opts.includeClosed !== false;
+  return useLiveQuery(async () => {
+    const rows = await store.db.debts.toArray();
+    return rows
+      .filter((d) => d.deletedAt === null && (includeArchived || d.archivedAt === null) && (includeClosed || d.closedAt === null))
+      .sort((a, b) => {
+        if ((a.closedAt === null) !== (b.closedAt === null)) return a.closedAt === null ? -1 : 1;
+        if (a.dueOn !== b.dueOn) return a.dueOn === null ? 1 : b.dueOn === null ? -1 : a.dueOn < b.dueOn ? -1 : 1;
+        if (a.openedOn !== b.openedOn) return a.openedOn < b.openedOn ? 1 : -1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+  }, [store, includeArchived, includeClosed]);
+}
+
+/** Регулярные платежи по порядку начала расписания. Архивные — только с includeArchived. Удалённые не показываются. */
+export function useRecurringRules(opts: { includeArchived?: boolean } = {}): LocalRow<RecurringRule>[] | undefined {
+  const store = useStore();
+  const includeArchived = opts.includeArchived === true;
+  return useLiveQuery(async () => {
+    const rows = await store.db.recurring_rules.toArray();
+    return rows
+      .filter((r) => r.deletedAt === null && (includeArchived || r.archivedAt === null))
+      .sort((a, b) => {
+        if (a.startOn !== b.startOn) return a.startOn < b.startOn ? -1 : 1;
+        if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+  }, [store, includeArchived]);
+}
+
+export const DEBT_OVERFLOW_MESSAGE = 'Суммы по долгу слишком большие, проверьте данные';
+
+/** Состояние долга для экрана: либо долг с остатком и платежами, либо понятная причина, почему показать нечего. */
+export type DebtView =
+  | { ok: true; debt: LocalRow<Debt>; state: DebtState }
+  | { ok: false; error: 'not-found'; message: string }
+  | { ok: false; error: 'overflow'; message: typeof DEBT_OVERFLOW_MESSAGE };
+
+/**
+ * Остаток и платежи долга (считаются из операций с debtId, см. domain/debts.ts). undefined — ещё считается.
+ * Не бросает: переполнение сумм становится значением (error: 'overflow'), как у useBalancesState.
+ */
+export function useDebtView(debtId: UUID): DebtView | undefined {
+  const store = useStore();
+  return useLiveQuery(async (): Promise<DebtView> => {
+    const debt = await store.db.debts.get(debtId);
+    if (!debt || debt.deletedAt !== null) return { ok: false, error: 'not-found', message: 'Долг не найден' };
+    const [txs, wallets] = await Promise.all([
+      store.db.transactions.where('debtId').equals(debtId).toArray(),
+      store.db.wallets.toArray(),
+    ]);
+    try {
+      return { ok: true, debt, state: computeDebtState(debt, txs, new Map(wallets.map((w) => [w.id, w]))) };
+    } catch (e) {
+      if (e instanceof RangeError) return { ok: false, error: 'overflow', message: DEBT_OVERFLOW_MESSAGE };
+      throw e; // любая другая ошибка — настоящий сбой, его скрывать нельзя
+    }
+  }, [store, debtId]);
+}
+
+/** Остаток и платежи долга; null — долга нет (или суммы не помещаются в расчёт: причину даёт useDebtView). undefined — считается. */
+export function useDebtState(debtId: UUID): { debt: LocalRow<Debt>; state: DebtState } | null | undefined {
+  const view = useDebtView(debtId);
+  if (view === undefined) return undefined;
+  return view.ok ? { debt: view.debt, state: view.state } : null;
+}
+
+export interface UpcomingItem {
+  rule: LocalRow<RecurringRule>;
+  date: IsoDate;
+  /** due — сегодня, overdue — раньше сегодняшнего дня, upcoming — позже. */
+  status: UpcomingStatus;
+  /** За эту дату уже есть операция: проведённая или «пропущенная» (удалённая) — второй раз её создавать не надо. */
+  alreadyExists: boolean;
+}
+
+/**
+ * Предстоящие и просроченные платежи по живым (не архивным) правилам: сегодня, ближайшие daysAhead дней и просроченные за
+ * последние lookbackDays (по умолчанию 366) дней. Проведённые и пропущенные тоже в списке — с alreadyExists: true; экран решает,
+ * показывать ли их. Наличие определяется по детерминированному id операции v5(правило, дата), поэтому правка даты проведённой
+ * операции не создаёт «призрачный» долг. today — для тестов; по умолчанию сегодняшняя дата устройства. undefined — считается.
+ */
+export function useUpcoming(
+  daysAhead: number,
+  opts: { today?: IsoDate; lookbackDays?: number } = {},
+): UpcomingItem[] | undefined {
+  const store = useStore();
+  const today = opts.today ?? todayLocal();
+  const lookbackDays = opts.lookbackDays;
+  return useLiveQuery(async () => {
+    const rules = (await store.db.recurring_rules.toArray()).filter((r) => r.deletedAt === null && r.archivedAt === null);
+    if (rules.length === 0) return [];
+    const have = new Set<string>();
+    for (const r of rules) {
+      for (const k of await store.db.transactions.where('recurringRuleId').equals(r.id).primaryKeys()) have.add(k);
+    }
+    // после этой строки обращений к базе нет: ожидание crypto вне транзакции Dexie безопасно
+    const entries = upcomingOccurrences(rules, today, daysAhead, lookbackDays);
+    return Promise.all(
+      entries.map(async (e): Promise<UpcomingItem> => ({
+        rule: e.rule,
+        date: e.date,
+        status: e.status,
+        alreadyExists: have.has(await uuidV5(e.rule.id, e.date)),
+      })),
+    );
+  }, [store, daysAhead, today, lookbackDays]);
 }

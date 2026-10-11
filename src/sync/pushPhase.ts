@@ -1,5 +1,5 @@
 import type { Store } from '@/db';
-import type { LocalRow, Transaction } from '@/domain/types';
+import type { LocalRow } from '@/domain/types';
 import { SYNC_TABLES, toWire, type SyncTableName } from './tables';
 import { TransportError, type SyncTransport } from './transport';
 
@@ -60,7 +60,7 @@ export function describeRejection(err: TransportError): string {
   const code = err.code ?? '';
   const why =
     code === '23503'
-      ? 'запись связана с кошельком или категорией, которых нет на сервере'
+      ? 'запись связана с кошельком, категорией, долгом или регулярным платежом, которых нет на сервере'
       : code === '23514'
         ? 'значение вне допустимых границ'
         : code === '23502'
@@ -143,73 +143,140 @@ interface Split {
   blocked: Array<{ row: Row; message: string }>;
 }
 
+/** Ссылка строки на родителя: поле строки (camelCase) → таблица родителя. Порядок отправки (SYNC_TABLES) ставит родителей раньше детей. */
+interface ParentRef {
+  field: string;
+  parent: SyncTableName;
+}
+
 /**
- * Операция ссылается на кошельки и категорию. Если такой родитель в карантине — операцию не отправляем (сервер всё равно
- * ответит отказом по внешнему ключу), а помечаем понятным сообщением. Если родитель ещё ждёт отправки (его создали или
- * исправили уже после прохода по кошелькам) — откладываем до следующего прохода, а не отправляем и не ловим ложный отказ.
+ * Кто от кого зависит (составные внешние ключи в supabase/schema.sql):
+ * операции — от кошельков, категорий, долгов и регулярных платежей; регулярные платежи — от кошельков, категорий и долгов;
+ * бюджеты — от категорий; долги, кошельки, категории и настройки ни от кого.
+ */
+const PARENTS: Partial<Record<SyncTableName, readonly ParentRef[]>> = {
+  transactions: [
+    { field: 'walletId', parent: 'wallets' },
+    { field: 'toWalletId', parent: 'wallets' },
+    { field: 'categoryId', parent: 'categories' },
+    { field: 'debtId', parent: 'debts' },
+    { field: 'recurringRuleId', parent: 'recurring_rules' },
+  ],
+  recurring_rules: [
+    { field: 'walletId', parent: 'wallets' },
+    { field: 'toWalletId', parent: 'wallets' },
+    { field: 'categoryId', parent: 'categories' },
+    { field: 'debtId', parent: 'debts' },
+  ],
+  budgets: [{ field: 'categoryId', parent: 'categories' }],
+};
+
+/** Как назвать родителя человеку в сообщении «Не отправлена: …». */
+function labelOf(parent: SyncTableName, row: Record<string, unknown>): string {
+  const str = (k: string): string => (typeof row[k] === 'string' ? (row[k] as string) : '');
+  switch (parent) {
+    case 'wallets':
+      return `кошелёк «${str('name')}»`;
+    case 'categories':
+      return `категория «${str('name')}»`;
+    case 'debts':
+      return `долг «${str('counterparty')}»`;
+    case 'recurring_rules':
+      return str('note') === '' ? 'регулярный платёж' : `регулярный платёж «${str('note')}»`;
+    default:
+      return 'связанная запись';
+  }
+}
+
+const keyOf = (parent: SyncTableName, id: string): string => `${parent}:${id}`;
+
+/** Ссылки строки на родителей (только заполненные): [таблица родителя, id]. */
+function refsOf(table: SyncTableName, row: Row): Array<[SyncTableName, string]> {
+  const out: Array<[SyncTableName, string]> = [];
+  for (const { field, parent } of PARENTS[table] ?? []) {
+    const id = row[field];
+    if (typeof id === 'string') out.push([parent, id]);
+  }
+  return out;
+}
+
+/** id родителей по таблицам (только те таблицы, на которые строки реально ссылаются). */
+function idsByParent(table: SyncTableName, rows: readonly Row[]): Map<SyncTableName, Set<string>> {
+  const ids = new Map<SyncTableName, Set<string>>();
+  for (const row of rows) {
+    for (const [parent, id] of refsOf(table, row)) {
+      const set = ids.get(parent) ?? new Set<string>();
+      set.add(id);
+      ids.set(parent, set);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Строка ссылается на кошельки, категории, долги, регулярные платежи (см. PARENTS). Если такой родитель в карантине — строку
+ * не отправляем (сервер всё равно ответит отказом по внешнему ключу), а помечаем понятным сообщением. Если родитель ещё ждёт
+ * отправки (его создали или исправили уже после прохода по его таблице) — откладываем до следующего прохода, а не отправляем
+ * и не ловим ложный отказ.
  */
 async function splitByParents(ctx: PhaseCtx, table: SyncTableName, rows: Row[]): Promise<Split> {
-  if (table !== 'transactions') return { ready: rows, deferred: [], blocked: [] };
-  const txs = rows as unknown as LocalRow<Transaction>[];
-  const walletIds = new Set<string>();
-  const categoryIds = new Set<string>();
-  for (const t of txs) {
-    walletIds.add(t.walletId);
-    if (t.toWalletId) walletIds.add(t.toWalletId);
-    if (t.categoryId) categoryIds.add(t.categoryId);
-  }
+  if (!PARENTS[table]) return { ready: rows, deferred: [], blocked: [] };
   const { db } = ctx.store;
-  const [wallets, categories] = await Promise.all([db.wallets.bulkGet([...walletIds]), db.categories.bulkGet([...categoryIds])]);
   const state = new Map<string, { quarantined: boolean; label: string }>();
-  for (const w of wallets) if (w && w.dirty === 1) state.set(`w:${w.id}`, { quarantined: w.syncError !== null, label: `кошелёк «${w.name}»` });
-  for (const c of categories) if (c && c.dirty === 1) state.set(`c:${c.id}`, { quarantined: c.syncError !== null, label: `категория «${c.name}»` });
+  for (const [parent, ids] of idsByParent(table, rows)) {
+    const found = await db.syncTable(parent).bulkGet([...ids]);
+    for (const p of found) {
+      if (p && p.dirty === 1) state.set(keyOf(parent, p.id), { quarantined: p.syncError !== null, label: labelOf(parent, p as unknown as Record<string, unknown>) });
+    }
+  }
 
   const out: Split = { ready: [], deferred: [], blocked: [] };
-  rows.forEach((row, i) => {
-    const t = txs[i] as LocalRow<Transaction>;
-    const parents = [`w:${t.walletId}`, t.toWalletId ? `w:${t.toWalletId}` : null, t.categoryId ? `c:${t.categoryId}` : null];
-    const dirty = parents.flatMap((k) => {
-      const s = k === null ? undefined : state.get(k);
+  for (const row of rows) {
+    const dirty = refsOf(table, row).flatMap(([parent, id]) => {
+      const s = state.get(keyOf(parent, id));
       return s ? [s] : [];
     });
     const stuck = dirty.find((s) => s.quarantined);
     if (stuck) out.blocked.push({ row, message: `${BLOCKED_PREFIX}${stuck.label} не принят(а) сервером` });
     else if (dirty.length > 0) out.deferred.push(row);
     else out.ready.push(row);
-  });
+  }
   return out;
 }
 
 /**
- * Операции, застрявшие в карантине только из-за родителя, возвращаются в очередь, как только родитель перестал быть отвергнутым
- * (человек исправил кошелёк или категорию и сервер их принял, либо пришла серверная версия). Собственные отказы операций не трогаем.
+ * Строки, застрявшие в карантине только из-за родителя, возвращаются в очередь, как только родитель перестал быть отвергнутым
+ * (человек исправил родителя и сервер его принял, либо пришла серверная версия). Собственные отказы строк не трогаем.
  */
-async function releaseBlocked(ctx: PhaseCtx): Promise<void> {
+async function releaseBlocked(ctx: PhaseCtx, table: SyncTableName): Promise<void> {
+  if (!PARENTS[table]) return;
   const { db } = ctx.store;
-  await db.transaction('rw', [db.transactions, db.wallets, db.categories], async () => {
-    const stuck = await db.transactions
+  const own = db.syncTable(table);
+  const findStuck = () =>
+    own
       .where('dirty')
       .equals(1)
       .filter((t) => t.syncError !== null && t.syncError.startsWith(BLOCKED_PREFIX))
-      .toArray();
+      .toArray() as unknown as Promise<Row[]>;
+  const first = await findStuck();
+  if (first.length === 0) return; // обычный случай: ждать нечего, транзакцию не открываем
+  const parentTables = [...idsByParent(table, first).keys()];
+  await db.transaction('rw', [own, ...parentTables.map((p) => db.syncTable(p))], async () => {
+    const stuck = await findStuck();
     if (stuck.length === 0) return;
-    const walletIds = new Set<string>();
-    const categoryIds = new Set<string>();
-    for (const t of stuck) {
-      walletIds.add(t.walletId);
-      if (t.toWalletId) walletIds.add(t.toWalletId);
-      if (t.categoryId) categoryIds.add(t.categoryId);
-    }
     const rejected = new Set<string>();
-    for (const w of await db.wallets.bulkGet([...walletIds])) if (w && w.dirty === 1 && w.syncError !== null) rejected.add(w.id);
-    for (const c of await db.categories.bulkGet([...categoryIds])) if (c && c.dirty === 1 && c.syncError !== null) rejected.add(c.id);
-    const free = stuck.filter((t) => ![t.walletId, t.toWalletId, t.categoryId].some((id) => id !== null && rejected.has(id)));
-    if (free.length > 0) await db.transactions.bulkPut(free.map((t) => ({ ...t, syncError: null })));
+    for (const [parent, ids] of idsByParent(table, stuck)) {
+      for (const p of await db.syncTable(parent).bulkGet([...ids])) {
+        if (p && p.dirty === 1 && p.syncError !== null) rejected.add(keyOf(parent, p.id));
+      }
+    }
+    const free = stuck.filter((t) => !refsOf(table, t).some(([parent, id]) => rejected.has(keyOf(parent, id))));
+    if (free.length > 0) await own.bulkPut(free.map((t) => ({ ...t, syncError: null })) as never);
   });
 }
 
 async function pushTable(ctx: PushCtx, table: SyncTableName, stats: PushStats): Promise<number> {
-  if (table === 'transactions') await releaseBlocked(ctx);
+  await releaseBlocked(ctx, table);
   const skip = new Set<string>();
   for (let guard = 0; guard < MAX_BATCHES_PER_TABLE; guard++) {
     ctx.check();

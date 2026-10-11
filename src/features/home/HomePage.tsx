@@ -8,6 +8,9 @@ import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { useBalances, useSettings, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
+import BudgetsWidget from '@/features/budgets/BudgetsWidget';
+import DebtsWidget from '@/features/debts/DebtsWidget';
+import UpcomingWidget from '@/features/recurring/UpcomingWidget';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { ruDate } from '@/features/transactions/txForm';
@@ -156,6 +159,10 @@ export default function HomePage() {
             })}
           </ul>
         </section>
+
+        <BudgetsWidget />
+        <UpcomingWidget />
+        <DebtsWidget />
 
         <MonthCard month={month} currentMonth={currentMonth} onMonth={setMonth} categories={categoryIndex} />
 

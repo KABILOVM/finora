@@ -1,0 +1,122 @@
+import type { CurrencyCode, DebtDirection, Frequency, IsoDate, IsoDateTime, Minor, TxKind, UUID } from '@/domain/types';
+import { fail } from './errors';
+import {
+  LIMITS,
+  optId,
+  optStamp,
+  parseTxFields,
+  reqCurrency,
+  reqDate,
+  reqEnum,
+  reqPositiveMinor,
+  reqSafeInt,
+  reqText,
+} from './validate';
+
+/**
+ * Проверки полей бюджетов, долгов и регулярных платежей — те же границы, что у сервера (см. supabase/schema.sql и TABLE_SPECS):
+ * суммы 1…1e15, названия 1…80 символов, заметки ≤ 500, даты 2000-01-01…2100-01-01, interval_n 1…1000, auto_post 0/1.
+ * Те же проверки работают для репозиториев (ввод) и для импорта резервной копии (чужой файл).
+ */
+
+export const DEBT_DIRECTIONS: readonly DebtDirection[] = ['lent', 'borrowed'];
+export const FREQUENCIES: readonly Frequency[] = ['daily', 'weekly', 'monthly', 'yearly'];
+/** budgets.period: пока только календарный месяц. */
+export const BUDGET_PERIODS: readonly 'month'[] = ['month'];
+/** debts.counterparty: от 1 до 80 символов (как wallets.name на сервере). */
+export const COUNTERPARTY_MAX = 80;
+/** recurring_rules.interval_n: от 1 до 1000. */
+export const INTERVAL_N_MIN = 1;
+export const INTERVAL_N_MAX = 1000;
+
+export interface BudgetData {
+  categoryId: UUID | null;
+  amountMinor: Minor;
+  currency: CurrencyCode;
+  period: 'month';
+  archivedAt: IsoDateTime | null;
+}
+
+export function parseBudgetData(raw: Record<string, unknown>): BudgetData {
+  return {
+    categoryId: optId(raw['categoryId'], 'Категория бюджета'),
+    amountMinor: reqPositiveMinor(raw['amountMinor'], 'Лимит бюджета'),
+    currency: reqCurrency(raw['currency'], 'Валюта бюджета'),
+    period: reqEnum(raw['period'], 'Период бюджета', BUDGET_PERIODS),
+    archivedAt: optStamp(raw['archivedAt'], 'Дата архивации бюджета'),
+  };
+}
+
+export interface DebtData {
+  direction: DebtDirection;
+  counterparty: string;
+  principalMinor: Minor;
+  currency: CurrencyCode;
+  openedOn: IsoDate;
+  dueOn: IsoDate | null;
+  note: string;
+  closedAt: IsoDateTime | null;
+  archivedAt: IsoDateTime | null;
+}
+
+export function parseDebtData(raw: Record<string, unknown>): DebtData {
+  const noteRaw = raw['note'];
+  const dueRaw = raw['dueOn'];
+  return {
+    direction: reqEnum(raw['direction'], 'Направление долга', DEBT_DIRECTIONS),
+    counterparty: reqText(raw['counterparty'], 'Кто должен / кому должны', COUNTERPARTY_MAX),
+    principalMinor: reqPositiveMinor(raw['principalMinor'], 'Сумма долга'),
+    currency: reqCurrency(raw['currency'], 'Валюта долга'),
+    openedOn: reqDate(raw['openedOn'], 'Дата долга'),
+    dueOn: dueRaw === null || dueRaw === undefined ? null : reqDate(dueRaw, 'Срок возврата'),
+    note: noteRaw === undefined || noteRaw === null ? '' : reqText(noteRaw, 'Заметка', LIMITS.note, 0),
+    closedAt: optStamp(raw['closedAt'], 'Дата закрытия долга'),
+    archivedAt: optStamp(raw['archivedAt'], 'Дата архивации долга'),
+  };
+}
+
+export interface RuleData {
+  kind: TxKind;
+  walletId: UUID;
+  toWalletId: UUID | null;
+  amountMinor: Minor;
+  toAmountMinor: Minor | null;
+  categoryId: UUID | null;
+  debtId: UUID | null;
+  note: string;
+  frequency: Frequency;
+  intervalN: number;
+  startOn: IsoDate;
+  endOn: IsoDate | null;
+  autoPost: 0 | 1;
+  archivedAt: IsoDateTime | null;
+}
+
+/**
+ * Проверка регулярного платежа без базы. Форма платежа — как у операции (вид, кошельки, суммы, категория, долг); расписание:
+ * шаг 1…1000, начало и конец в границах дат сервера, конец не раньше начала, autoPost 0 или 1.
+ * requireToAmount — для готовых строк (импорт): у перевода обязана быть сумма зачисления.
+ */
+export function parseRuleData(raw: Record<string, unknown>, opts: { requireToAmount?: boolean } = {}): RuleData {
+  const startOn = reqDate(raw['startOn'], 'Начало расписания');
+  const f = parseTxFields({ ...raw, occurredOn: startOn }, opts);
+  const endRaw = raw['endOn'];
+  const endOn = endRaw === null || endRaw === undefined ? null : reqDate(endRaw, 'Конец расписания');
+  if (endOn !== null && endOn < startOn) fail('Конец расписания не может быть раньше начала');
+  return {
+    kind: f.kind,
+    walletId: f.walletId,
+    toWalletId: f.toWalletId,
+    amountMinor: f.amountMinor,
+    toAmountMinor: f.toAmountMinor,
+    categoryId: f.categoryId,
+    debtId: f.debtId,
+    note: f.note,
+    frequency: reqEnum(raw['frequency'], 'Частота', FREQUENCIES),
+    intervalN: reqSafeInt(raw['intervalN'], 'Шаг повторения', INTERVAL_N_MIN, INTERVAL_N_MAX),
+    startOn,
+    endOn,
+    autoPost: reqSafeInt(raw['autoPost'], 'Автопроведение', 0, 1) === 1 ? 1 : 0,
+    archivedAt: optStamp(raw['archivedAt'], 'Дата архивации регулярного платежа'),
+  };
+}

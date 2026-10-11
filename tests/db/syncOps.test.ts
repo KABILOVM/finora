@@ -286,6 +286,7 @@ describe('applyRemotePage — ветки слияния', () => {
     const t: Transaction = {
       ...base, id: 't-1', kind: 'expense', walletId: 'w-1', toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: 'c-1',
       occurredOn: '2026-10-01', note: '', baseCurrency: 'USD', baseAmountMinor: 100, fxRate: 1, fxSource: 'same',
+      debtId: null, recurringRuleId: null,
     };
     await store.sync.applyRemotePage('settings', [{ entity: settings, serverSeq: 1 }], 1);
     await store.sync.applyRemotePage('wallets', [w('w-1', 2)], 2);
