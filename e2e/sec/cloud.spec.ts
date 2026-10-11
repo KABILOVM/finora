@@ -175,7 +175,8 @@ test.describe('Облачный режим: CSP и Supabase', () => {
     test.info().annotations.push({ type: 'indexedDB', description: String(idb) });
 
     // Проверка облака
-    await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: /Настройки|Ещё/ }).first().click();
+    await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: 'Ещё', exact: true }).first().click();
+    await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
     await page.getByRole('button', { name: 'Проверить', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Скопировать отчёт' })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('button', { name: 'Скопировать отчёт' }).click();

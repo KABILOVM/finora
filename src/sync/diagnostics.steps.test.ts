@@ -31,9 +31,9 @@ describe('Шаг «Запись данных»: проверка без запи
     expect(by.write.message).toContain('returned-id-9');
   });
 
-  it('пробная строка уходит по одной в каждую из четырёх таблиц (как пишет синхронизация), а лишние строки не удаляются', async () => {
+  it('пробная строка уходит по одной в каждую из семи таблиц (как пишет синхронизация), а лишние строки не удаляются', async () => {
     const { calls } = await check({ upsert: { data: null, error: null, status: 201 } });
-    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['categories', 'settings', 'transactions', 'wallets']);
+    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'transactions', 'wallets']);
     expect(calls.upserts.every((u) => u.options?.onConflict === 'id')).toBe(true); // upsert по id, как у синхронизации
   });
 

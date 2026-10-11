@@ -65,6 +65,33 @@ const ICONS = {
       <path d="M12 11v5M12 8h.01" />
     </>
   ),
+  pie: (
+    <>
+      <path d="M20.5 15.5A9 9 0 1 1 8.5 3.5" />
+      <path d="M21 12a9 9 0 0 0-9-9v9z" />
+    </>
+  ),
+  repeat: <path d="m17 3 4 4-4 4M3 11V10a3 3 0 0 1 3-3h15M7 21l-4-4 4-4M21 13v1a3 3 0 0 1-3 3H3" />,
+  banknote: (
+    <>
+      <rect x="2.5" y="6" width="19" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 12h.01M18 12h.01" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M3 12.5V4.5a1.5 1.5 0 0 1 1.5-1.5h8L21 11.5a1.5 1.5 0 0 1 0 2.1l-6.9 6.9a1.5 1.5 0 0 1-2.1 0z" />
+      <path d="M7.5 7.5h.01" />
+    </>
+  ),
+  sliders: (
+    <>
+      <path d="M4 7h9M19 7h1M4 17h1M11 17h9" />
+      <circle cx="16" cy="7" r="2.5" />
+      <circle cx="8" cy="17" r="2.5" />
+    </>
+  ),
   backspace: <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7zM12 9.5l5 5M17 9.5l-5 5" />,
 } satisfies Record<string, ReactNode>;
 

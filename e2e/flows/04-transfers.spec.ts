@@ -3,7 +3,7 @@ import {
 } from '../helpers';
 
 test.describe('4. Перевод между кошельками', () => {
-  test('одна валюта, с комиссией и между валютами: остатки верны, переводы не попадают в «Расходы» месяца', async ({ page }, testInfo) => {
+  test('одна валюта, с комиссией и между валютами: остатки верны, только комиссия перевода попадает в «Расходы» месяца', async ({ page }, testInfo) => {
     await openApp(page);
     await createWallet(page, { name: 'Карта', opening: '500' });
     await createWallet(page, { name: 'Доллары', currency: 'USD' });
@@ -47,11 +47,11 @@ test.describe('4. Перевод между кошельками', () => {
     expect(await bal('Доллары')).toMatch(money('10 $'));
     expect(await bal('Карта')).toMatch(money('550 с.'));
 
-    // Переводы не попали в «Расходы» и «Доходы» месяца: только настоящие 200 и 5
+    // Сами переводы не попали в «Расходы» и «Доходы» месяца: доход 200, расход 5. Комиссия перевода (2 с.) — расход месяца: 5 + 2 = 7
     await goSection(page, 'Главная');
-    expect(await monthRow(page, 'Расходы')).toMatch(moneyExact('−5 с.'));
+    expect(await monthRow(page, 'Расходы')).toMatch(moneyExact('−7 с.'));
     expect(await monthRow(page, 'Доходы')).toMatch(/^\+?200 с\.$/);
-    expect(await monthRow(page, 'Разница')).toMatch(/^\+?195 с\.$/);
+    expect(await monthRow(page, 'Разница')).toMatch(/^\+?193 с\.$/);
 
     // В списке переводы видны как «откуда → куда», а не как расход
     await goSection(page, 'Операции');

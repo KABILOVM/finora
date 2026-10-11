@@ -3,7 +3,7 @@ import { ensureSeeded } from '@/db';
 import { META_INITIAL_PULL } from '@/sync/engine';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
 import { UNREADABLE_MESSAGE } from '@/sync/pullPhase';
-import type { PulledRow } from '@/sync/tables';
+import { SYNC_TABLES, type PulledRow } from '@/sync/tables';
 import { makeWallet } from './factories';
 import { USER, openDevice, snapshotOf, spy, type Device, type Spy } from './engineHarness';
 
@@ -36,7 +36,7 @@ describe('первая загрузка и затравка', () => {
     await d.engine.syncNow();
     const seed = timeline.indexOf('seed');
     expect(seed).toBeGreaterThan(0);
-    expect(timeline.slice(0, seed)).toEqual(['pull:settings', 'pull:wallets', 'pull:categories', 'pull:transactions']); // всё получено до затравки
+    expect(timeline.slice(0, seed)).toEqual(SYNC_TABLES.map((t) => `pull:${t}`)); // всё получено до затравки
     expect(timeline.slice(seed + 1)[0]).toBe('push:settings'); // отправка — только после неё
     expect(timeline.filter((x) => x === 'seed')).toHaveLength(1);
     expect(await d.store.sync.getMeta(META_INITIAL_PULL)).toBe(true);

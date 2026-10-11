@@ -1,70 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Category, Entity, Settings, Transaction, TxKind, Wallet } from '@/domain/types';
-import { SYNC_TABLES, fromWire, toWire, type PulledRow, type SyncTableName, type WireRow } from '@/sync/tables';
+import { SYNC_TABLES, fromWire, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
 import { TransportError, type SyncTransport } from '@/sync/transport';
-import { makeCategory, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { HOUR, MIN, expectRejected, failure, find, iso, markerUuid, must, newId, pullAll, type ServerHarness, type Stamp } from './conformanceKit';
+import { runStage2Conformance } from './conformanceStage2';
 
-/**
- * Общий набор сценариев для ВСЕХ реализаций сервера синхронизации (PGlite, позже MemoryTransport).
- * Сценарии написаны против интерфейса SyncTransport; время берётся у сервера (harness.now()), а не из фабрик.
- */
-export interface ServerHarness {
-  /** Клиент от имени пользователя (пользователь заводится сам). */
-  transportFor(userId: string): SyncTransport;
-  /** Текущее время сервера. */
-  now(): Date;
-  /** Все строки таблицы в обход проверок доступа (если реализация это умеет). */
-  adminRows?(table: SyncTableName): Promise<Record<string, unknown>[]>;
-  /** Клиент без входа. Если не задан, сценарий 10 пропускается (и это видно в отчёте vitest). */
-  signedOutTransport?(): SyncTransport;
-}
-
-const MIN = 60_000;
-const HOUR = 60 * MIN;
-const iso = (ms: number): string => new Date(ms).toISOString();
-const must = <T>(v: T | null | undefined, what: string): T => {
-  if (v === null || v === undefined) throw new Error(`нет значения: ${what}`);
-  return v;
-};
-const newId = (): string => makeWallet().id;
-const markerUuid = (n: number): string => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
-
-/** Забрать таблицу целиком постранично. */
-async function pullAll(t: SyncTransport, table: SyncTableName, afterSeq = 0, page = 500): Promise<PulledRow[]> {
-  const out: PulledRow[] = [];
-  let cur = afterSeq;
-  for (;;) {
-    const rows = await t.pull(table, cur, page);
-    out.push(...rows);
-    if (rows.length < page) return out;
-    cur = must(rows[rows.length - 1], 'последняя строка страницы').server_seq;
-  }
-}
-
-const find = async (t: SyncTransport, table: SyncTableName, id: string): Promise<PulledRow | undefined> =>
-  (await pullAll(t, table)).find((r) => r.id === id);
-
-async function failure(p: Promise<unknown>): Promise<TransportError> {
-  const err = await p.then(
-    () => null,
-    (e: unknown) => e,
-  );
-  expect(err, 'ожидалась ошибка TransportError').toBeInstanceOf(TransportError);
-  return err as TransportError;
-}
-
-async function expectRejected(p: Promise<unknown>): Promise<void> {
-  const err = await failure(p);
-  expect(err.kind, err.message).toBe('rejected');
-  expect(err.retryable).toBe(false);
-}
-
-interface Stamp {
-  clientUpdatedAt: string;
-  deviceId: string;
-  deletedAt?: string | null;
-  createdAt?: string;
-}
+export type { ServerHarness } from './conformanceKit';
 
 /** «Предмет» сценария: одна сущность нужной таблицы; n — видимый маркер содержимого (по нему видно, чья версия сохранилась). */
 interface Subject {
@@ -88,21 +30,38 @@ function makeSubject(table: SyncTableName, userId: string, t: SyncTransport, t0:
         return makeCategory({ ...sync, id, name: `m${n}` });
       case 'transactions':
         return makeTransaction({ ...sync, id, walletId: parent.id, note: `m${n}` });
+      case 'debts':
+        return makeDebt({ ...sync, id, counterparty: `m${n}` });
+      case 'budgets':
+        return makeBudget({ ...sync, id, amountMinor: n }); // маркер — лимит (от 1)
+      case 'recurring_rules':
+        return makeRecurringRule({ ...sync, id, walletId: parent.id, note: `m${n}` });
     }
   };
   return {
     id,
     prepare: async () => {
-      if (table === 'transactions') await t.push('wallets', [toWire('wallets', parent)]);
+      if (table === 'transactions' || table === 'recurring_rules') await t.push('wallets', [toWire('wallets', parent)]);
     },
     row: (n, s) => toWire(table, build(n, s)),
   };
 }
 
-const markerOf = (table: SyncTableName, r: Record<string, unknown>): number =>
-  table === 'settings'
-    ? parseInt(String(r['default_wallet_id']).slice(-12), 16)
-    : Number(String(r[table === 'transactions' ? 'note' : 'name']).slice(1));
+const markerOf = (table: SyncTableName, r: Record<string, unknown>): number => {
+  switch (table) {
+    case 'settings':
+      return parseInt(String(r['default_wallet_id']).slice(-12), 16);
+    case 'budgets':
+      return Number(r['amount_minor']);
+    case 'debts':
+      return Number(String(r['counterparty']).slice(1));
+    case 'transactions':
+    case 'recurring_rules':
+      return Number(String(r['note']).slice(1));
+    default:
+      return Number(String(r['name']).slice(1));
+  }
+};
 
 export function runConformance(label: string, make: () => Promise<ServerHarness>): void {
   describe(`сервер синхронизации: ${label}`, () => {
@@ -138,7 +97,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       };
     };
 
-    it('1. круговой обмен: push → pull возвращает ту же сущность (все 4 таблицы)', async () => {
+    it('1. круговой обмен: push → pull возвращает ту же сущность (все 7 таблиц)', async () => {
       const { userId, t } = fresh();
       const t0 = h.now().getTime();
       const sync = (k: number) => ({ createdAt: iso(t0 - HOUR + k * 1000), clientUpdatedAt: iso(t0 - HOUR + k * 1000 + 500), deviceId: 'device-a' });
@@ -151,11 +110,25 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       const usd = makeTransaction({ ...sync(6), walletId: w2.id, amountMinor: 1_000, baseAmountMinor: 10_900, fxRate: 10.9, fxSource: 'nbt', occurredOn: '2026-02-28' });
       const income = makeTransaction({ ...sync(7), kind: 'income', walletId: w1.id, categoryId: cat.id, amountMinor: 500_000, baseAmountMinor: 500_000 });
       const transfer = makeTransaction({ ...sync(8), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, amountMinor: 109_00, toAmountMinor: 1_000 });
+      // этап 2: долг, бюджеты (общий и по категории), регулярные платежи всех видов, операции со ссылками на долг и правило
+      const debt = makeDebt({ ...sync(9), direction: 'borrowed', counterparty: 'Рустам «друг»', principalMinor: 2_500_000, dueOn: '2026-12-31', note: 'до зарплаты', closedAt: iso(t0 - 5 * MIN), archivedAt: iso(t0 - 4 * MIN) });
+      const debtOpen = makeDebt({ ...sync(10), currency: 'USD', openedOn: '2000-01-01' });
+      const budgetTotal = makeBudget({ ...sync(11), amountMinor: 1_000_000_000_000_000 });
+      const budgetCat = makeBudget({ ...sync(12), categoryId: sub.id, amountMinor: 120_000, archivedAt: iso(t0 - 3 * MIN) });
+      const ruleExpense = makeRecurringRule({ ...sync(13), walletId: w1.id, categoryId: sub.id, amountMinor: 45_000, note: 'Аренда', frequency: 'monthly', startOn: '2026-10-01', endOn: '2027-10-01', autoPost: 1 });
+      const ruleTransfer = makeRecurringRule({ ...sync(14), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, amountMinor: 109_00, toAmountMinor: 1_000, frequency: 'weekly', intervalN: 2 });
+      const ruleDebt = makeRecurringRule({ ...sync(15), kind: 'income', walletId: w1.id, debtId: debt.id, frequency: 'yearly', intervalN: 1000, deletedAt: iso(t0 - 2 * MIN) });
+      const repay = makeTransaction({ ...sync(16), kind: 'income', walletId: w1.id, debtId: debt.id, amountMinor: 700_00, baseAmountMinor: 700_00 });
+      const scheduled = makeTransaction({ ...sync(17), walletId: w1.id, categoryId: sub.id, recurringRuleId: ruleExpense.id, occurredOn: '2026-10-01' });
+      const fee = makeTransaction({ ...sync(18), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, amountMinor: 110_00, toAmountMinor: 1_000, baseAmountMinor: 1_00, recurringRuleId: ruleTransfer.id });
       const sent: Record<SyncTableName, Entity[]> = {
         settings: [settings],
         wallets: [w1, w2],
         categories: [cat, sub],
-        transactions: [expense, usd, income, transfer],
+        debts: [debt, debtOpen],
+        budgets: [budgetTotal, budgetCat],
+        recurring_rules: [ruleExpense, ruleTransfer, ruleDebt],
+        transactions: [expense, usd, income, transfer, repay, scheduled, fee],
       };
       for (const table of SYNC_TABLES) await t.push(table, sent[table].map((e) => toWire(table, e))); // порядок: родители раньше детей
       for (const table of SYNC_TABLES) {
@@ -266,7 +239,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
         }
       });
 
-      for (const table of ['wallets', 'categories', 'transactions'] as const) {
+      for (const table of ['wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions'] as const) {
         it(`push с id чужой строки (${table}) не меняет её`, async () => {
           const A = await setup(table);
           await A.put(1, 0, 'dev-a');
@@ -554,6 +527,8 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
         expect(await A.get()).toEqual(snap);
       });
     });
+
+    runStage2Conformance(() => h);
 
     // Раздел 7 supabase/schema.sql: без этих ограничений вошедший пользователь мог положить в поле мегабайты текста.
     const LENGTH_CASES: Array<[string, SyncTableName, string, number]> = [

@@ -35,6 +35,8 @@ const tx = (i: number, over: Partial<Transaction> = {}): Transaction => ({
   baseAmountMinor: 1000 + i,
   fxRate: 1,
   fxSource: 'same',
+  debtId: null,
+  recurringRuleId: null,
   ...over,
 });
 

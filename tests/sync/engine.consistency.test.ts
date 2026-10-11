@@ -184,6 +184,8 @@ describe('валюта кошелька и операция с другого т
       baseAmountMinor: 100,
       fxRate: 1,
       fxSource: 'same',
+      debtId: null,
+      recurringRuleId: null,
       createdAt: stamp,
       clientUpdatedAt: stamp,
       deviceId: 'dev-x',

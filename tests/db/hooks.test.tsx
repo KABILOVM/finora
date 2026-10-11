@@ -198,6 +198,10 @@ describe('useSettings / useMonthSummary', () => {
       incomeMinor: 50_000,
       expenseMinor: 13_000,
       byCategory: [{ categoryId: food.id, totalMinor: 13_000 }],
+      feeMinor: 0,
+      debtInMinor: 0,
+      debtOutMinor: 0,
+      debtFlowMinor: 0,
       excludedCount: 0,
     }));
 

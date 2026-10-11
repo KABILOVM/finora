@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMemoryServer } from '@/sync/memoryServer';
 import { fromWire, toWire } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
-import { makeCategory, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
 
 /** Что сервер в памяти умеет сверх общего набора сценариев: сбои, задержки, журнал меток, формат выдачи. */
 
@@ -198,6 +198,74 @@ describe('MemoryServer: отказы пачки и формат ответа', (
     expect((await errorOf(t.push('transactions', [toWire('transactions', makeTransaction({ ...stamp, walletId: makeWallet().id }))]))).code).toBe('23503');
     await t.push('settings', [toWire('settings', makeSettings(uid, stamp))]);
     expect((await errorOf(t.push('settings', [toWire('settings', makeSettings(makeUserId(), stamp))]))).code).toBe('23514');
+  });
+});
+
+describe('MemoryServer: таблицы этапа 2', () => {
+  const stamp = { createdAt: iso(T0 - MIN), clientUpdatedAt: iso(T0 - MIN) };
+
+  it('родители долгов, бюджетов, платежей и операций проверяются у того же пользователя; пустая ссылка не проверяется; мягко удалённый родитель годится', async () => {
+    const s = serverAt();
+    const myId = makeUserId();
+    const otherId = makeUserId();
+    const mine = s.server.transportFor(myId);
+    const other = s.server.transportFor(otherId);
+    const w = makeWallet(stamp);
+    const gone = makeDebt({ ...stamp, deletedAt: iso(T0 - MIN) });
+    await mine.push('wallets', [toWire('wallets', w)]);
+    await mine.push('debts', [toWire('debts', gone)]);
+    await other.push('debts', [toWire('debts', makeDebt(stamp))]);
+    expect(s.server.dump(myId, 'debts').map((r) => r['id'])).toEqual([gone.id]); // чужой долг мне не виден
+    expect(s.server.dump(otherId, 'debts')).toHaveLength(1);
+
+    const rule = makeRecurringRule({ ...stamp, walletId: w.id, debtId: gone.id });
+    await mine.push('recurring_rules', [toWire('recurring_rules', rule)]); // удалённый долг — всё ещё родитель
+    await mine.push('budgets', [toWire('budgets', makeBudget(stamp))]); // общий бюджет: категории нет
+    await mine.push('transactions', [toWire('transactions', makeTransaction({ ...stamp, walletId: w.id, debtId: gone.id, recurringRuleId: rule.id }))]);
+
+    const code = async (table: 'transactions' | 'recurring_rules' | 'budgets', row: Record<string, unknown>) => (await errorOf(mine.push(table, [row as never]))).code;
+    expect(await code('transactions', toWire('transactions', makeTransaction({ ...stamp, walletId: w.id, debtId: makeDebt().id })))).toBe('23503');
+    expect(await code('transactions', toWire('transactions', makeTransaction({ ...stamp, walletId: w.id, recurringRuleId: makeRecurringRule().id })))).toBe('23503');
+    expect(await code('recurring_rules', toWire('recurring_rules', makeRecurringRule({ ...stamp, walletId: w.id, debtId: makeDebt().id })))).toBe('23503');
+    expect(await code('recurring_rules', toWire('recurring_rules', makeRecurringRule({ ...stamp, walletId: makeWallet().id })))).toBe('23503');
+    expect(await code('budgets', toWire('budgets', makeBudget({ ...stamp, categoryId: makeCategory().id })))).toBe('23503');
+  });
+
+  it('чужой долг как родитель: отказ 23503; правка с подменой ссылки на чужое отвергается, строка цела; перевод с долгом — 23514', async () => {
+    const s = serverAt();
+    const aId = makeUserId();
+    const bId = makeUserId();
+    const a = s.server.transportFor(aId);
+    const b = s.server.transportFor(bId);
+    const debtA = makeDebt(stamp);
+    await a.push('debts', [toWire('debts', debtA)]);
+    const w1 = makeWallet(stamp);
+    const w2 = makeWallet(stamp);
+    await b.push('wallets', [toWire('wallets', w1), toWire('wallets', w2)]);
+    const tx = makeTransaction({ ...stamp, walletId: w1.id });
+    await b.push('transactions', [toWire('transactions', tx)]);
+    const before = s.server.dump(bId, 'transactions');
+    const stolen = toWire('transactions', { ...tx, debtId: debtA.id, clientUpdatedAt: iso(T0) });
+    expect((await errorOf(b.push('transactions', [stolen]))).code).toBe('23503');
+    expect(s.server.dump(bId, 'transactions')).toEqual(before);
+
+    const transfer = makeTransaction({ ...stamp, kind: 'transfer', walletId: w1.id, toWalletId: w2.id, baseAmountMinor: 150 });
+    await b.push('transactions', [toWire('transactions', transfer)]); // комиссия перевода принимается
+    const ownDebt = makeDebt(stamp);
+    await b.push('debts', [toWire('debts', ownDebt)]);
+    expect((await errorOf(b.push('transactions', [toWire('transactions', { ...transfer, debtId: ownDebt.id, clientUpdatedAt: iso(T0) })]))).code).toBe('23514');
+  });
+
+  it('границы платежа: интервал 1..1000, конец не раньше начала, «проводить само» 0 или 1; границы принимаются, соседние значения — нет', async () => {
+    const s = serverAt();
+    const t = s.server.transportFor(makeUserId());
+    const w = makeWallet(stamp);
+    await t.push('wallets', [toWire('wallets', w)]);
+    const rule = (o: Partial<ReturnType<typeof makeRecurringRule>>) => toWire('recurring_rules', makeRecurringRule({ ...stamp, walletId: w.id, ...o }));
+    await t.push('recurring_rules', [rule({ intervalN: 1 }), rule({ intervalN: 1000 }), rule({ startOn: '2026-10-01', endOn: '2026-10-01' }), rule({ autoPost: 1 })]);
+    for (const bad of [{ intervalN: 0 }, { intervalN: 1001 }, { startOn: '2026-10-02', endOn: '2026-10-01' }, { autoPost: 2 as 0 }, { endOn: '2100-01-02' }]) {
+      expect((await errorOf(t.push('recurring_rules', [rule(bad)]))).code, JSON.stringify(bad)).toBe('23514');
+    }
   });
 });
 

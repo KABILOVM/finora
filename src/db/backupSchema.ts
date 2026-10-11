@@ -1,4 +1,4 @@
-import type { Category, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
 import { MAX_FUTURE_SKEW_MS, MAX_OBSERVE_AHEAD_MS, MAX_STAMP, MAX_STAMP_MS, MIN_STAMP, MIN_STAMP_MS } from './clock';
 import { fail, ValidationError } from './errors';
 import { isUuid } from './ids';
@@ -16,6 +16,7 @@ import {
   SORT_ORDER_MIN,
   type SyncData,
 } from './validate';
+import { parseBudgetData, parseDebtData, parseRuleData } from './validatePlans';
 
 /**
  * Строгая проверка файла резервной копии. Выполняется ЦЕЛИКОМ до первой записи в базу:
@@ -23,10 +24,21 @@ import {
  */
 
 export const BACKUP_FORMAT = 'finora-backup';
-export const BACKUP_VERSION = 1;
+/**
+ * Версия 2 добавила бюджеты, долги и регулярные платежи (и debtId / recurringRuleId у операций).
+ * Версию 1 читаем без них (новые списки пусты, у операций debtId и recurringRuleId = null).
+ */
+export const BACKUP_VERSION = 2;
 
 /** Предельные размеры: защита от файла-«бомбы». Личному учёту хватает с огромным запасом. */
-export const BACKUP_LIMITS = { wallets: 1_000, categories: 5_000, transactions: 500_000 } as const;
+export const BACKUP_LIMITS = {
+  wallets: 1_000,
+  categories: 5_000,
+  transactions: 500_000,
+  budgets: 6_000,
+  debts: 10_000,
+  recurringRules: 10_000,
+} as const;
 
 export interface BackupFile {
   format: typeof BACKUP_FORMAT;
@@ -37,6 +49,9 @@ export interface BackupFile {
   categories: Category[];
   /** Включая удалённые: без них удаление не доехало бы до других устройств. */
   transactions: Transaction[];
+  budgets: Budget[];
+  debts: Debt[];
+  recurringRules: RecurringRule[];
 }
 
 export interface ParseBackupOptions {
@@ -142,22 +157,27 @@ function limitStamps(sync: SyncData, o: StampLimits): SyncData {
 }
 
 /**
- * archivedAt (кошелёк, категория) — тоже метка с CHECK сервера 2000–2100: подрезается до границы, а не отвергает копию.
- * «Сейчас + 5 минут» к ней не применяется (сервер её не зажимает). Не метка вообще (мусор) остаётся как есть:
- * её отвергнет обычная проверка.
+ * archivedAt (кошелёк, категория, бюджет, долг, регулярный платёж) и closedAt (долг) — тоже метки с CHECK сервера 2000–2100:
+ * подрезаются до границы, а не отвергают копию. «Сейчас + 5 минут» к ним не применяется (сервер их не зажимает).
+ * Не метка вообще (мусор) остаётся как есть: её отвергнет обычная проверка.
  */
-function withClampedArchivedAt(raw: Record<string, unknown>): Record<string, unknown> {
-  const v = raw['archivedAt'];
-  if (!isCanonicalStamp(v)) return raw;
-  const clamped = toServerRange(v);
-  return clamped === v ? raw : { ...raw, archivedAt: clamped };
+function withClampedStamps(raw: Record<string, unknown>, keys: readonly string[] = ['archivedAt']): Record<string, unknown> {
+  let out = raw;
+  for (const key of keys) {
+    const v = raw[key];
+    if (!isCanonicalStamp(v)) continue;
+    const clamped = toServerRange(v);
+    if (clamped !== v) out = { ...out, [key]: clamped };
+  }
+  return out;
 }
+const withClampedArchivedAt = (raw: Record<string, unknown>): Record<string, unknown> => withClampedStamps(raw);
 
 export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile {
   if (!isPlainObject(data)) fail('Это не файл резервной копии Finora');
   if (data['format'] !== BACKUP_FORMAT) fail('Это не файл резервной копии Finora');
   const version = data['version'];
-  if (version !== BACKUP_VERSION) {
+  if (version !== 1 && version !== BACKUP_VERSION) {
     fail(
       typeof version === 'number' && version > BACKUP_VERSION
         ? 'Файл создан более новой версией Finora: обновите приложение'
@@ -171,6 +191,10 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const walletsRaw = rows(data, 'wallets', 'кошельки', BACKUP_LIMITS.wallets);
   const categoriesRaw = rows(data, 'categories', 'категории', BACKUP_LIMITS.categories);
   const txRaw = rows(data, 'transactions', 'операции', BACKUP_LIMITS.transactions);
+  // Версия 1 новых списков не знает: даже если они в файле есть, это не её данные — читаем как пустые.
+  const budgetsRaw = version === 1 ? [] : rows(data, 'budgets', 'бюджеты', BACKUP_LIMITS.budgets);
+  const debtsRaw = version === 1 ? [] : rows(data, 'debts', 'долги', BACKUP_LIMITS.debts);
+  const rulesRaw = version === 1 ? [] : rows(data, 'recurringRules', 'регулярные платежи', BACKUP_LIMITS.recurringRules);
 
   const seen = (set: Set<string>, id: string) => {
     if (set.has(id)) fail(`повторяющийся идентификатор ${id}`);
@@ -220,17 +244,64 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   const txIds = new Set<string>();
   const transactions = txRaw.map((r, i) =>
     atRow('операция', i, () => {
-      const raw = withUuids(reqObject(r, 'Операция'), {
+      // в версии 1 нет ни долгов, ни регулярных платежей: этих полей у её операций быть не может (если есть — это не её данные)
+      const src = version === 1 ? { ...reqObject(r, 'Операция'), debtId: null, recurringRuleId: null } : r;
+      const raw = withUuids(reqObject(src, 'Операция'), {
         id: 'Идентификатор записи',
         walletId: 'Кошелёк',
         toWalletId: 'Кошелёк зачисления',
         categoryId: 'Категория',
+        debtId: 'Долг',
+        recurringRuleId: 'Регулярный платёж',
       });
       const sync = limitStamps(parseSyncData(raw), limits);
       seen(txIds, sync.id);
       const fields = parseTxFields(raw, { requireToAmount: true });
       const snap = parseTxSnapshot(fields.kind, fields.amountMinor, raw);
       return { ...sync, ...fields, ...snap } satisfies Transaction;
+    }),
+  );
+
+  const budgetIds = new Set<string>();
+  const budgetTargets = new Set<string | null>();
+  const budgets = budgetsRaw.map((r, i) =>
+    atRow('бюджет', i, () => {
+      const raw = withClampedArchivedAt(withUuids(reqObject(r, 'Бюджет'), { id: 'Идентификатор записи', categoryId: 'Категория бюджета' }));
+      const sync = limitStamps(parseSyncData(raw), limits);
+      seen(budgetIds, sync.id);
+      const data = parseBudgetData(raw);
+      // id бюджета выводится из категории (один бюджет на категорию): два бюджета на одну и ту же — это порча файла
+      if (budgetTargets.has(data.categoryId)) fail('два бюджета на одну и ту же категорию');
+      budgetTargets.add(data.categoryId);
+      return { ...sync, ...data } satisfies Budget;
+    }),
+  );
+
+  const debtIds = new Set<string>();
+  const debts = debtsRaw.map((r, i) =>
+    atRow('долг', i, () => {
+      const raw = withClampedStamps(withUuids(reqObject(r, 'Долг'), { id: 'Идентификатор записи' }), ['archivedAt', 'closedAt']);
+      const sync = limitStamps(parseSyncData(raw), limits);
+      seen(debtIds, sync.id);
+      return { ...sync, ...parseDebtData(raw) } satisfies Debt;
+    }),
+  );
+
+  const ruleIds = new Set<string>();
+  const recurringRules = rulesRaw.map((r, i) =>
+    atRow('регулярный платёж', i, () => {
+      const raw = withClampedArchivedAt(
+        withUuids(reqObject(r, 'Регулярный платёж'), {
+          id: 'Идентификатор записи',
+          walletId: 'Кошелёк',
+          toWalletId: 'Кошелёк зачисления',
+          categoryId: 'Категория',
+          debtId: 'Долг',
+        }),
+      );
+      const sync = limitStamps(parseSyncData(raw), limits);
+      seen(ruleIds, sync.id);
+      return { ...sync, ...parseRuleData(raw, { requireToAmount: true }) } satisfies RecurringRule;
     }),
   );
 
@@ -242,5 +313,8 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
     wallets,
     categories,
     transactions,
+    budgets,
+    debts,
+    recurringRules,
   };
 }

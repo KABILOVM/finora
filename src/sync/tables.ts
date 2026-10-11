@@ -1,4 +1,4 @@
-import type { Category, Entity, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, Entity, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
 
 /**
  * ДОГОВОР между клиентом и базой: какие таблицы синхронизируются и как поля сущностей
@@ -7,7 +7,15 @@ import type { Category, Entity, Settings, Transaction, Wallet } from '@/domain/t
  */
 
 /** Порядок = порядок отправки (родители раньше детей). */
-export const SYNC_TABLES = ['settings', 'wallets', 'categories', 'transactions'] as const;
+export const SYNC_TABLES = [
+  'settings',
+  'wallets',
+  'categories',
+  'debts',
+  'budgets',
+  'recurring_rules',
+  'transactions',
+] as const;
 export type SyncTableName = (typeof SYNC_TABLES)[number];
 
 export type WireValue = string | number | boolean | null;
@@ -99,6 +107,54 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'baseAmountMinor', column: 'base_amount_minor', type: 'int' },
       { field: 'fxRate', column: 'fx_rate', type: 'num', nullable: true },
       { field: 'fxSource', column: 'fx_source', type: 'text', nullable: true },
+      { field: 'debtId', column: 'debt_id', type: 'uuid', nullable: true },
+      { field: 'recurringRuleId', column: 'recurring_rule_id', type: 'uuid', nullable: true },
+    ],
+  },
+  debts: {
+    remote: 'debts',
+    columns: [
+      ...COMMON,
+      { field: 'direction', column: 'direction', type: 'text' },
+      { field: 'counterparty', column: 'counterparty', type: 'text' },
+      { field: 'principalMinor', column: 'principal_minor', type: 'int' },
+      { field: 'currency', column: 'currency', type: 'text' },
+      { field: 'openedOn', column: 'opened_on', type: 'date' },
+      { field: 'dueOn', column: 'due_on', type: 'date', nullable: true },
+      { field: 'note', column: 'note', type: 'text' },
+      { field: 'closedAt', column: 'closed_at', type: 'ts', nullable: true },
+      { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
+    ],
+  },
+  budgets: {
+    remote: 'budgets',
+    columns: [
+      ...COMMON,
+      { field: 'categoryId', column: 'category_id', type: 'uuid', nullable: true },
+      { field: 'amountMinor', column: 'amount_minor', type: 'int' },
+      { field: 'currency', column: 'currency', type: 'text' },
+      { field: 'period', column: 'period', type: 'text' },
+      { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
+    ],
+  },
+  recurring_rules: {
+    remote: 'recurring_rules',
+    columns: [
+      ...COMMON,
+      { field: 'kind', column: 'kind', type: 'text' },
+      { field: 'walletId', column: 'wallet_id', type: 'uuid' },
+      { field: 'toWalletId', column: 'to_wallet_id', type: 'uuid', nullable: true },
+      { field: 'amountMinor', column: 'amount_minor', type: 'int' },
+      { field: 'toAmountMinor', column: 'to_amount_minor', type: 'int', nullable: true },
+      { field: 'categoryId', column: 'category_id', type: 'uuid', nullable: true },
+      { field: 'debtId', column: 'debt_id', type: 'uuid', nullable: true },
+      { field: 'note', column: 'note', type: 'text' },
+      { field: 'frequency', column: 'frequency', type: 'text' },
+      { field: 'intervalN', column: 'interval_n', type: 'int' },
+      { field: 'startOn', column: 'start_on', type: 'date' },
+      { field: 'endOn', column: 'end_on', type: 'date', nullable: true },
+      { field: 'autoPost', column: 'auto_post', type: 'int' },
+      { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
     ],
   },
 };
@@ -109,7 +165,13 @@ export type EntityOf<T extends SyncTableName> = T extends 'settings'
     ? Wallet
     : T extends 'categories'
       ? Category
-      : Transaction;
+      : T extends 'debts'
+        ? Debt
+        : T extends 'budgets'
+          ? Budget
+          : T extends 'recurring_rules'
+            ? RecurringRule
+            : Transaction;
 
 export class WireError extends Error {
   constructor(message: string) {

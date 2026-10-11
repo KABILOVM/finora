@@ -1,0 +1,119 @@
+import { describe, expect, it } from 'vitest';
+import { computeDebtState, issueKind, paymentKind, type DebtTx } from '@/domain/debts';
+
+const wallets = new Map([
+  ['tjs', { currency: 'TJS' }],
+  ['usd', { currency: 'USD' }],
+]);
+const debt = (over: Partial<Parameters<typeof computeDebtState>[0]> = {}) => ({
+  id: 'd1',
+  direction: 'lent' as const,
+  principalMinor: 100_000,
+  currency: 'TJS',
+  ...over,
+});
+let n = 0;
+const op = (over: Partial<DebtTx> = {}): DebtTx => ({
+  id: `t${++n}`,
+  kind: 'income',
+  walletId: 'tjs',
+  amountMinor: 10_000,
+  occurredOn: '2026-10-05',
+  createdAt: `2026-10-05T10:00:00.${String(n % 1000).padStart(3, '0')}Z`,
+  deletedAt: null,
+  debtId: 'd1',
+  ...over,
+});
+
+describe('computeDebtState', () => {
+  it('lent: выдача — расход, платежи — доходы; остаток = долг − платежи', () => {
+    const s = computeDebtState(debt(), [op({ kind: 'expense', amountMinor: 100_000 }), op({ amountMinor: 30_000 }), op({ amountMinor: 20_000 })], wallets);
+    expect(s).toMatchObject({ principalMinor: 100_000, paidMinor: 50_000, remainingMinor: 50_000, overpaidMinor: 0, issuedMinor: 100_000, settled: false });
+    expect(s.payments.map((p) => p.amountMinor)).toEqual([30_000, 20_000]);
+    expect(s.issues).toEqual([]);
+  });
+
+  it('borrowed: наоборот — получение это доход, платежи — расходы', () => {
+    const d = debt({ direction: 'borrowed' });
+    const s = computeDebtState(d, [op({ kind: 'income', amountMinor: 100_000 }), op({ kind: 'expense', amountMinor: 40_000 })], wallets);
+    expect(s).toMatchObject({ paidMinor: 40_000, remainingMinor: 60_000, issuedMinor: 100_000 });
+    expect(paymentKind('borrowed')).toBe('expense');
+    expect(paymentKind('lent')).toBe('income');
+    expect(issueKind('borrowed')).toBe('income');
+    expect(issueKind('lent')).toBe('expense');
+  });
+
+  it('платёж «не в ту сторону» не уменьшает остаток', () => {
+    const s = computeDebtState(debt(), [op({ kind: 'expense', amountMinor: 5_000 })], wallets);
+    expect(s).toMatchObject({ paidMinor: 0, remainingMinor: 100_000, issuedMinor: 5_000 });
+  });
+
+  it('точное погашение: остаток 0, переплаты нет', () => {
+    const s = computeDebtState(debt(), [op({ amountMinor: 100_000 })], wallets);
+    expect(s).toMatchObject({ remainingMinor: 0, overpaidMinor: 0, settled: true });
+  });
+
+  it('переплата считается отдельно, остаток не уходит в минус', () => {
+    const s = computeDebtState(debt(), [op({ amountMinor: 70_000 }), op({ amountMinor: 45_000 })], wallets);
+    expect(s).toMatchObject({ paidMinor: 115_000, remainingMinor: 0, overpaidMinor: 15_000, settled: true });
+  });
+
+  it('операции другой валюты не считаются и попадают в диагностику', () => {
+    const s = computeDebtState(debt(), [op({ walletId: 'usd', amountMinor: 999 }), op({ amountMinor: 10_000 })], wallets);
+    expect(s.paidMinor).toBe(10_000);
+    expect(s.issues).toHaveLength(1);
+    expect(s.issues[0]).toMatchObject({ reason: 'foreign-currency', currency: 'USD' });
+  });
+
+  it('неизвестный кошелёк, перевод и битая сумма — в диагностику, остаток не страдает', () => {
+    const s = computeDebtState(
+      debt(),
+      [
+        op({ walletId: 'нет такого' }),
+        op({ kind: 'transfer' }),
+        op({ amountMinor: 0 }),
+        op({ amountMinor: 1.5 }),
+        op({ amountMinor: 25_000 }),
+      ],
+      wallets,
+    );
+    expect(s.paidMinor).toBe(25_000);
+    expect(s.issues.map((i) => i.reason).sort()).toEqual(['bad-amount', 'bad-amount', 'transfer', 'unknown-wallet']);
+  });
+
+  it('удалённые операции и операции других долгов пропускаются', () => {
+    const s = computeDebtState(
+      debt(),
+      [op({ deletedAt: '2026-10-06T00:00:00.000Z' }), op({ debtId: 'другой' }), op({ debtId: null }), op({ amountMinor: 1_000 })],
+      wallets,
+    );
+    expect(s.paidMinor).toBe(1_000);
+    expect(s.issues).toEqual([]);
+  });
+
+  it('платежи идут по порядку: дата, время создания, id', () => {
+    const s = computeDebtState(
+      debt(),
+      [op({ id: 'b', occurredOn: '2026-10-07' }), op({ id: 'a', occurredOn: '2026-10-03' }), op({ id: 'c', occurredOn: '2026-10-07', createdAt: '2026-10-01T00:00:00.000Z' })],
+      wallets,
+    );
+    expect(s.payments.map((p) => p.txId)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('кошельки можно передать и списком', () => {
+    const s = computeDebtState(debt(), [op({ amountMinor: 7 })], [
+      { id: 'tjs', currency: 'TJS' },
+      { id: 'usd', currency: 'USD' },
+    ]);
+    expect(s.paidMinor).toBe(7);
+  });
+
+  it('переполнение суммы платежей — явная ошибка, а не тихая потеря точности', () => {
+    const big = Number.MAX_SAFE_INTEGER - 1;
+    expect(() => computeDebtState(debt(), [op({ amountMinor: big }), op({ amountMinor: big })], wallets)).toThrow(RangeError);
+  });
+
+  it('нет операций: остаток равен сумме долга', () => {
+    expect(computeDebtState(debt(), [], wallets)).toMatchObject({ remainingMinor: 100_000, paidMinor: 0, issuedMinor: 0, settled: false, payments: [] });
+  });
+});

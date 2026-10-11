@@ -19,6 +19,9 @@ export const PROBE_RULE: Record<string, string> = {
   settings: 'settings_id_is_user',
   wallets: 'wallets_name_len',
   categories: 'categories_name_len',
+  debts: 'debts_counterparty_len',
+  budgets: 'budgets_amount',
+  recurring_rules: 'recurring_rules_amount',
   transactions: 'transactions_amount',
 };
 /** Так Postgres отклоняет пробную строку таблицы. */
@@ -82,6 +85,9 @@ export const HEALTHY: Record<string, Reply> = {
   settings: rows([{ id: U, user_id: U }]),
   wallets: rows([{ id: 'w1', user_id: U }]),
   categories: rows([{ id: 'c1', user_id: U }]),
+  debts: rows([]),
+  budgets: rows([]),
+  recurring_rules: rows([]),
   transactions: rows([]),
   exchange_rates: rows([
     { as_of: '2026-10-09', source: 'nbt', fetched_at: '2026-10-09T05:30:00Z' },

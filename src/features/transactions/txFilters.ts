@@ -95,7 +95,10 @@ export function toTxFilter(f: ListFilters, search: string, today: IsoDate): TxFi
 }
 
 export interface DayTotal {
-  /** Доходы минус расходы за день в базовой валюте (по снимкам на момент внесения). Переводы не считаются. */
+  /**
+   * Доходы минус расходы за день в базовой валюте (по снимкам на момент внесения) — те же правила, что в summarizeDay:
+   * комиссия перевода — расход, сам перевод не считается, операции по долгам (debtId) не входят.
+   */
   netMinor: Minor;
   /** Сколько операций дня не вошло в итог: их снимок сделан в другой (прежней) базовой валюте. */
   excluded: number;
@@ -103,18 +106,24 @@ export interface DayTotal {
 
 /** null — сумма не помещается в безопасное целое (экран должен показать прочерк, а не упасть). */
 export function dayTotal(
-  items: readonly Pick<Transaction, 'kind' | 'baseCurrency' | 'baseAmountMinor'>[],
+  items: readonly (Pick<Transaction, 'kind' | 'baseCurrency' | 'baseAmountMinor'> & { debtId?: Transaction['debtId'] | undefined })[],
   base: CurrencyCode,
 ): DayTotal | null {
   let net: Minor = 0;
   let excluded = 0;
   try {
     for (const t of items) {
-      if (t.kind === 'transfer') continue;
+      // у перевода baseAmountMinor — комиссия (расход дня); 0 — комиссии нет, считать нечего
+      if (t.kind === 'transfer' && t.baseAmountMinor === 0) continue;
       if (t.baseCurrency !== base) {
         excluded++;
         continue;
       }
+      if (t.kind === 'transfer') {
+        net = addMinor(net, -t.baseAmountMinor);
+        continue;
+      }
+      if (t.debtId != null) continue; // выдача/получение долга и платежи — не доход и не расход
       net = addMinor(net, t.kind === 'income' ? t.baseAmountMinor : -t.baseAmountMinor);
     }
   } catch (e) {
