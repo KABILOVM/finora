@@ -9,6 +9,7 @@ import { useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from './txActions';
+import { endSentence } from './txDisplay';
 import { changedFields, formFromTx, GENERIC_SAVE_ERROR } from './txForm';
 import { TxFormFields } from './TxFormFields';
 import { useCloseDuplicateEntry } from './useCloseDuplicateEntry';
@@ -143,6 +144,7 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
       // Только изменённое против того, что человек видел при открытии. Ничего не менял — в базу не пишем.
       const patch = changedFields(prepared.input, orig);
       if (Object.keys(patch).length > 0) await store.transactions.update(tx.id, patch);
+      prepared.rememberRate(); // курс, набранный руками, запоминаем только после успешного сохранения
       toast.success('Сохранено');
       onClose();
     } catch (e) {
@@ -223,7 +225,7 @@ function EditForm({ tx, wallets, categories, settings, onClose, closing }: EditF
         open={confirmOpen}
         danger
         title="Удалить операцию?"
-        message={`${summary}. Она пропадёт из списка, остатки пересчитаются. Сразу после удаления её можно вернуть кнопкой «Отменить».`}
+        message={`${endSentence(summary)} Она пропадёт из списка, остатки пересчитаются. Сразу после удаления её можно вернуть кнопкой «Отменить».`}
         confirmLabel="Удалить"
         loading={deleting}
         onConfirm={() => void remove()}

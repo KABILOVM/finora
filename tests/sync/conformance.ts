@@ -453,5 +453,44 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       }
       expect(A.userId).not.toBe(B.userId);
     });
+
+    // Раздел 7 supabase/schema.sql: без этих ограничений вошедший пользователь мог положить в поле мегабайты текста.
+    const LENGTH_CASES: Array<[string, SyncTableName, string, number]> = [
+      ['wallets.color', 'wallets', 'color', 32],
+      ['wallets.icon', 'wallets', 'icon', 32],
+      ['categories.color', 'categories', 'color', 32],
+      ['categories.icon', 'categories', 'icon', 32],
+      ['transactions.fx_source', 'transactions', 'fx_source', 16],
+    ];
+    it.each(LENGTH_CASES)('12. длина %s: ровно предел принимается (символы, не байты), на один больше — отвергается целиком', async (_label, table, column, limit) => {
+      const { t } = fresh();
+      const t0 = h.now().getTime();
+      const sync = { createdAt: iso(t0 - HOUR), clientUpdatedAt: iso(t0 - HOUR), deviceId: 'device-a' };
+      const parent = makeWallet(sync); // кошелёк для операции
+      await t.push('wallets', [toWire('wallets', parent)]);
+      const base = (): WireRow =>
+        table === 'wallets' ? toWire('wallets', makeWallet(sync))
+        : table === 'categories' ? toWire('categories', makeCategory(sync))
+        : toWire('transactions', makeTransaction({ ...sync, walletId: parent.id, fxRate: 1, fxSource: 'same' }));
+      const withValue = (value: string, extra: WireRow = {}): WireRow => ({ ...base(), [column]: value, ...extra });
+      // эмодзи — 2 единицы UTF-16 и 4 байта, но один символ: предел считается в символах
+      const ok = [withValue('a'.repeat(limit)), withValue('😀'.repeat(limit))];
+      await t.push(table, ok);
+      const stored = await pullAll(t, table);
+      for (const row of ok) expect(must(stored.find((r) => r['id'] === row['id']), String(row['id']))[column]).toBe(row[column]);
+
+      const neighbour = base();
+      for (const tooLong of ['a'.repeat(limit + 1), '😀'.repeat(limit + 1), 'я'.repeat(limit * 1000)]) {
+        const bad = withValue(tooLong);
+        await expectRejected(t.push(table, [neighbour, bad]));
+        const ids = (await pullAll(t, table)).map((r) => r['id']);
+        expect(ids, 'хорошая строка из той же пачки не должна сохраниться').not.toContain(neighbour['id']);
+        expect(ids).not.toContain(bad['id']);
+      }
+      // правка сохранённой строки слишком длинным значением не проходит и ничего в ней не портит
+      const before = await pullAll(t, table);
+      await expectRejected(t.push(table, [withValue('z'.repeat(limit + 1), { id: ok[0]!['id'] as string, client_updated_at: iso(t0) })]));
+      expect(await pullAll(t, table)).toEqual(before);
+    });
   });
 }

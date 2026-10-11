@@ -83,8 +83,8 @@ describe('двойное касание «+» (шит ещё не успел н�
     await tapAmount('25');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(async () => expect(await liveTxs(td)).toHaveLength(1));
-    await new Promise((r) => setTimeout(r, 200));
-    expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull();
+    // шит закрывается не мгновенно, а на загруженной машине тем более: ждём самого закрытия, а не фиксированные 200 мс
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
   });
 
   it('если шит всё же остался открытым, повторное «Сохранить» не должно молча вернуть старую операцию: либо шит закрыт и операция одна, либо сохранено то, что на экране', async () => {
@@ -98,15 +98,16 @@ describe('двойное касание «+» (шит ещё не успел н�
     await tapAmount('25');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(async () => expect(await liveTxs(td)).toHaveLength(1));
-    await new Promise((r) => setTimeout(r, 200));
+    // Шит должен закрыться сам — даём ему на это щедрый срок (а не фиксированные 200 мс, которых на загруженной машине не хватает).
+    // Остался открытым — идём по второму пути проверки.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull(), 3000).catch(() => undefined);
     if (screen.queryByRole('dialog', { name: 'Новая операция' })) {
       // человек видит открытый шит, дописывает «5» и нажимает «Сохранить» ещё раз
       await tapAmount('5');
       const shown = (screen.getByRole('textbox', { name: /^Сумма/ }) as HTMLInputElement).value;
       await user.click(screen.getByRole('button', { name: 'Сохранить' }));
-      await new Promise((r) => setTimeout(r, 200));
       const minor = Math.round(Number(shown.replace(/\s/g, '').replace(',', '.')) * 100);
-      expect((await liveTxs(td)).map((t) => t.amountMinor)).toContain(minor);
+      await waitFor(async () => expect((await liveTxs(td)).map((t) => t.amountMinor)).toContain(minor));
     } else {
       expect((await liveTxs(td)).map((t) => t.amountMinor)).toEqual([2500]);
     }

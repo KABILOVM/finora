@@ -203,7 +203,13 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
     await dlg.getByLabel('Дата операции').fill(tx.date);
   }
   if (tx.category) await dlg.getByRole('group', { name: 'Категория' }).getByRole('button', { name: tx.category, exact: true }).click();
-  if (tx.rate) await dlg.getByRole('textbox', { name: /^Курс:/ }).fill(tx.rate);
+  if (tx.rate) {
+    // Курса не было — поле на месте. Курс уже вводили раньше — он подставлен сам, а поле прячется за «Изменить».
+    const field = dlg.getByRole('textbox', { name: /^Курс:/ });
+    const change = dlg.getByRole('button', { name: 'Изменить курс' });
+    if ((await field.count()) === 0 && (await change.count()) > 0) await change.click();
+    await field.fill(tx.rate);
+  }
   await tapAmount(page, tx.amount);
   if (tx.received) {
     // Одна валюта: поле «Получено» (комиссия) спрятано за кнопкой «Указать комиссию»

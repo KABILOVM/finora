@@ -63,7 +63,21 @@ describe('жизненный цикл приложения', () => {
 
       hold = new Promise<void>((r) => (release = r));
       await act(async () => void (await store.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 321, occurredOn: '2026-10-05', note: 'в-пути' })));
-      await act(async () => void (await Promise.race([inFlight, new Promise((r) => setTimeout(r, 4000))])));
+      // Ждём САМОГО события — запись дошла до сервера и застряла там. Раньше после 4 с тест шёл дальше и без этого: на загруженной
+      // машине выходило, что «запись в пути» не проверялась вовсе. Теперь не дождались — тест честно падает.
+      let giveUp: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await act(async () => {
+          await Promise.race([
+            inFlight,
+            new Promise<never>((_, reject) => {
+              giveUp = setTimeout(() => reject(new Error('запись так и не оказалась «в пути» за 30 с')), 30_000);
+            }),
+          ]);
+        });
+      } finally {
+        clearTimeout(giveUp);
+      }
       // отправка зависла на сервере; человек нажимает «Выйти» (очередь не пуста → подтверждение)
       // страница настроек грузится отдельным куском кода: на медленном устройстве кнопка появляется позже бейджа в шапке
       await user.click(await findByRole('button', { name: 'Выйти' }));

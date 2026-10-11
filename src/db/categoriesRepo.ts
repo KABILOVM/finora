@@ -7,6 +7,7 @@ import {
   nextSortOrder,
   sameFields,
   touch,
+  withDirtyGroups,
   writeTx,
   type RepoContext,
 } from './repoContext';
@@ -97,7 +98,7 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
       }
       // родителя проверяем, только если его меняют: переименовать/архивировать можно и категорию, чей родитель потом удалён
       if (next.parentId !== cur.parentId || next.kind !== cur.kind) await checkParent(id, next);
-      const row: LocalRow<Category> = { ...cur, ...next, ...touch(ctx).fields };
+      const row = withDirtyGroups<LocalRow<Category>>('categories', cur, { ...cur, ...next, ...touch(ctx).fields });
       await db.categories.put(row);
       return row;
     });
@@ -128,6 +129,7 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
           ...data,
           ...fields,
           serverSeq: null,
+          dirtyGroups: [], // создана здесь: правки до первой отправки считаются от созданного (см. mergeGroups.ts)
         };
         await db.categories.add(row);
         return row;

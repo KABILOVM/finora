@@ -3,8 +3,10 @@ import { Button } from '@/components/Button';
 import { currencyInfo } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
 import type { Minor } from '@/domain/types';
+import { enteredLabel } from '@/rates/enteredText';
 import type { ReceivedView } from './useTxFormController';
 import { FieldGroup } from './FieldGroup';
+import { endSentence } from './txDisplay';
 import { formatRate } from './txForm';
 
 export interface ReceivedFieldProps {
@@ -57,8 +59,12 @@ export function ReceivedField({ view, amountMinor, onChange, onUseSuggested, onF
       />
       {view.mode === 'cross' && view.lookup && (
         <p className="text-sm text-muted">
-          По курсу 1&nbsp;{currencyInfo(view.from).symbol} = {formatRate(view.lookup.rate)}&nbsp;{toSymbol}
-          {view.suggested !== null && <> получится ≈ {formatMinor(view.suggested, view.to)}</>}. Сумму можно изменить.
+          {endSentence(
+            `По курсу 1\u00a0${currencyInfo(view.from).symbol} = ${formatRate(view.lookup.rate)}\u00a0${toSymbol}` +
+              (view.lookup.entered ? ` (${enteredLabel(view.lookup.asOf)})` : '') +
+              (view.suggested !== null ? ` получится ≈ ${formatMinor(view.suggested, view.to)}` : ''),
+          )}{' '}
+          Сумму можно изменить.
         </p>
       )}
       {view.mode === 'cross' && !view.lookup && (

@@ -15,6 +15,10 @@ export interface HomeTotal {
   missing: { currency: CurrencyCode; balanceMinor: Minor }[];
   /** Курсы старше 3 суток. */
   stale: { currency: CurrencyCode; asOf: IsoDate }[];
+  /** Валюты, пересчитанные по курсу, который человек сам ввёл в операции (с днём ввода). Интерфейс обязан сказать об этом. */
+  entered: { currency: CurrencyCode; asOf: IsoDate }[];
+  /** true, если хотя бы одна валюта пересчитана по обычному курсу (сеть или «Свой курс»), а не по введённому в операции. */
+  viaOtherRates: boolean;
 }
 
 /**
@@ -43,10 +47,14 @@ export function computeHomeTotal(
     });
 
     let approximate = false;
+    let viaOtherRates = false;
     const stale: HomeTotal['stale'] = [];
+    const entered: HomeTotal['entered'] = [];
     for (const [currency, hit] of used) {
       if (!hit || missing.includes(currency)) continue;
       approximate = true;
+      if (hit.entered) entered.push({ currency, asOf: hit.asOf });
+      else viaOtherRates = true;
       if (hit.stale) stale.push({ currency, asOf: hit.asOf });
     }
     return {
@@ -54,6 +62,8 @@ export function computeHomeTotal(
       approximate,
       missing: missing.map((currency) => ({ currency, balanceMinor: sums.get(currency) ?? 0 })),
       stale: stale.sort((a, b) => a.currency.localeCompare(b.currency)),
+      entered: entered.sort((a, b) => a.currency.localeCompare(b.currency)),
+      viaOtherRates,
     };
   } catch (e) {
     if (e instanceof RangeError) return null;

@@ -18,6 +18,7 @@ import {
   getLiveWallet,
   requireSettings,
   touch,
+  withDirtyGroups,
   writeTx,
   type RepoContext,
 } from './repoContext';
@@ -229,7 +230,8 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     // последний рубеж: то, что уходит в базу, обязано пройти те же проверки, что и чужой файл
     parseTxFields(row as unknown as Record<string, unknown>, { requireToAmount: true });
     parseTxSnapshot(row.kind, row.amountMinor, row as unknown as Record<string, unknown>);
-    return row;
+    // новая операция: dirtyGroups: [] — создана здесь, правки до первой отправки считаются от созданного (см. mergeGroups.ts)
+    return base ? withDirtyGroups<LocalRow<Transaction>>('transactions', base as LocalRow<Transaction>, row) : { ...row, dirtyGroups: [] };
   }
 
   async function mustGet(id: UUID): Promise<LocalRow<Transaction>> {
@@ -326,7 +328,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         const cur = await mustGet(id);
         if (cur.deletedAt !== null) return cur;
         const { stamp, fields } = touch(ctx);
-        const row: LocalRow<Transaction> = { ...cur, deletedAt: stamp, ...fields };
+        const row = withDirtyGroups<LocalRow<Transaction>>('transactions', cur, { ...cur, deletedAt: stamp, ...fields });
         await db.transactions.put(row);
         return row;
       });
@@ -346,7 +348,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
           }
         }
         if (cur.categoryId !== null) checkCategoryKind(await getLiveCategory(ctx, cur.categoryId), cur.kind);
-        const row: LocalRow<Transaction> = { ...cur, deletedAt: null, ...touch(ctx).fields };
+        const row = withDirtyGroups<LocalRow<Transaction>>('transactions', cur, { ...cur, deletedAt: null, ...touch(ctx).fields });
         await db.transactions.put(row);
         return row;
       });

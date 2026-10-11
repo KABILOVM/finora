@@ -154,11 +154,21 @@ describe('quarantine / retryQuarantined / counts', () => {
   });
 });
 
+/**
+ * Грязный кошелёк БЕЗ групп полей — как строка из импорта или записанная до обновления приложения: для неё действует правило
+ * «целиком побеждает большая пара (метка, устройство)». Созданные здесь строки ведут себя иначе (см. syncMerge.test.ts).
+ */
+async function wholeRow(store: Awaited<ReturnType<typeof makeStore>>, id: string, name: string) {
+  await store.wallets.create({ name, currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id });
+  await store.db.wallets.update(id, { dirtyGroups: undefined });
+  return (await store.db.wallets.get(id))!;
+}
+
 describe('applyRemotePage — ветки слияния', () => {
   it('строки нет → вставляется чистой, serverSeq запоминается', async () => {
     const store = await makeStore();
     const r = await store.sync.applyRemotePage('wallets', [w('w-1', 7)], 7);
-    expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 0 });
+    expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 0, merged: 0 });
     expect(await store.db.wallets.get('w-1')).toMatchObject({ dirty: 0, serverSeq: 7, syncError: null, name: 'С сервера' });
   });
 
@@ -166,7 +176,7 @@ describe('applyRemotePage — ветки слияния', () => {
     const store = await makeStore();
     await store.sync.applyRemotePage('wallets', [w('w-1', 3, { name: 'v3' })], 3);
     const r = await store.sync.applyRemotePage('wallets', [w('w-1', 9, { name: 'v9', clientUpdatedAt: '2026-10-02T00:00:00.000Z' })], 9);
-    expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 0 });
+    expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 0, merged: 0 });
     expect(await store.db.wallets.get('w-1')).toMatchObject({ name: 'v9', serverSeq: 9, dirty: 0 });
   });
 
@@ -174,7 +184,7 @@ describe('applyRemotePage — ветки слияния', () => {
     const store = await makeStore();
     await store.sync.applyRemotePage('wallets', [w('w-1', 9, { name: 'v9' })], 9);
     const r = await store.sync.applyRemotePage('wallets', [w('w-1', 4, { name: 'старая v4' })], 9);
-    expect(r).toEqual({ applied: 0, keptLocal: 0, lostLocal: 0 });
+    expect(r).toEqual({ applied: 0, keptLocal: 0, lostLocal: 0, merged: 0 });
     expect(await store.db.wallets.get('w-1')).toMatchObject({ name: 'v9', serverSeq: 9 });
   });
 
@@ -185,25 +195,25 @@ describe('applyRemotePage — ветки слияния', () => {
     const edited = await store.wallets.update('w-1', { name: 'моя правка' });
     await store.sync.markPushed('wallets', [{ id: 'w-1', clientUpdatedAt: edited.clientUpdatedAt, deviceId: edited.deviceId }]); // сервер принял
     const r = await store.sync.applyRemotePage('wallets', page, 1); // ответ потерялся, страницу получили ещё раз
-    expect(r).toEqual({ applied: 0, keptLocal: 0, lostLocal: 0 });
+    expect(r).toEqual({ applied: 0, keptLocal: 0, lostLocal: 0, merged: 0 });
     expect(await store.db.wallets.get('w-1')).toMatchObject({ name: 'моя правка', dirty: 0 });
   });
 
   it('локальная dirty, серверная новее → заменяет, правка проиграла (lostLocal), dirty=0, карантин снят', async () => {
     const store = await makeStore({ now: () => T0 });
-    const local = await store.wallets.create({ name: 'моя правка', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-1' });
+    const local = await wholeRow(store, 'w-1', 'моя правка');
     await store.sync.quarantine('wallets', ['w-1'], 'ошибка');
     const r = await store.sync.applyRemotePage('wallets', [w('w-1', 5, { name: 'сервер новее', clientUpdatedAt: stamp(T0 + 5000) })], 5);
-    expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 1 });
+    expect(r).toEqual({ applied: 1, keptLocal: 0, lostLocal: 1, merged: 0 });
     expect(local.clientUpdatedAt < stamp(T0 + 5000)).toBe(true);
     expect(await store.db.wallets.get('w-1')).toMatchObject({ name: 'сервер новее', dirty: 0, syncError: null, serverSeq: 5 });
   });
 
   it('локальная dirty новее → остаётся (dirty, текст), serverSeq поднимается до максимума', async () => {
     const store = await makeStore({ now: () => T0 });
-    await store.wallets.create({ name: 'моя новая', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-1' });
+    await wholeRow(store, 'w-1', 'моя новая');
     const r = await store.sync.applyRemotePage('wallets', [w('w-1', 5, { name: 'сервер старее', clientUpdatedAt: stamp(T0 - 5000) })], 5);
-    expect(r).toEqual({ applied: 0, keptLocal: 1, lostLocal: 0 });
+    expect(r).toEqual({ applied: 0, keptLocal: 1, lostLocal: 0, merged: 0 });
     expect(await store.db.wallets.get('w-1')).toMatchObject({ name: 'моя новая', dirty: 1, serverSeq: 5 });
     // последующая более старая по serverSeq страница serverSeq не понижает
     await store.sync.applyRemotePage('wallets', [w('w-1', 2, { name: 'ещё старее', clientUpdatedAt: stamp(T0 - 9000) })], 5);
@@ -212,17 +222,17 @@ describe('applyRemotePage — ветки слияния', () => {
 
   it('одинаковая версия → остаётся локальная dirty (уйдёт повторно, сервер проигнорирует — безопасно)', async () => {
     const store = await makeStore({ now: () => T0, deviceId: 'device-same-0001' });
-    const local = await store.wallets.create({ name: 'моя', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-1' });
+    const local = await wholeRow(store, 'w-1', 'моя');
     const echo = { ...remoteWallet({ id: 'w-1', name: 'моя' }), clientUpdatedAt: local.clientUpdatedAt, deviceId: local.deviceId, createdAt: local.createdAt, sortOrder: local.sortOrder };
     const r = await store.sync.applyRemotePage('wallets', [{ entity: echo, serverSeq: 4 }], 4);
-    expect(r).toEqual({ applied: 0, keptLocal: 1, lostLocal: 0 });
+    expect(r).toEqual({ applied: 0, keptLocal: 1, lostLocal: 0, merged: 0 });
     expect(await store.db.wallets.get('w-1')).toMatchObject({ dirty: 1, serverSeq: 4 });
   });
 
   it('равные метки: решает deviceId (большее побеждает) — одинаково на всех устройствах', async () => {
     const store = await makeStore({ now: () => T0, deviceId: 'device-m-5555' });
-    await store.wallets.create({ name: 'локальная', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-1' });
-    await store.wallets.create({ name: 'локальная2', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-2' });
+    await wholeRow(store, 'w-1', 'локальная');
+    await wholeRow(store, 'w-2', 'локальная2');
     const t1 = (await store.db.wallets.get('w-1'))!.clientUpdatedAt;
     const t2 = (await store.db.wallets.get('w-2'))!.clientUpdatedAt;
     const r = await store.sync.applyRemotePage(
@@ -230,14 +240,14 @@ describe('applyRemotePage — ветки слияния', () => {
       [w('w-1', 1, { name: 'z-побеждает', clientUpdatedAt: t1, deviceId: 'device-z-9999' }), w('w-2', 2, { name: 'a-проигрывает', clientUpdatedAt: t2, deviceId: 'device-a-0001' })],
       2,
     );
-    expect(r).toEqual({ applied: 1, keptLocal: 1, lostLocal: 1 });
+    expect(r).toEqual({ applied: 1, keptLocal: 1, lostLocal: 1, merged: 0 });
     expect((await store.db.wallets.get('w-1'))?.name).toBe('z-побеждает');
     expect((await store.db.wallets.get('w-2'))?.name).toBe('локальная2');
   });
 
   it('локальная dirty в карантине и осталась новее → карантин сохраняется', async () => {
     const store = await makeStore({ now: () => T0 });
-    await store.wallets.create({ name: 'моя', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id: 'w-1' });
+    await wholeRow(store, 'w-1', 'моя');
     await store.sync.quarantine('wallets', ['w-1'], 'ошибка');
     await store.sync.applyRemotePage('wallets', [w('w-1', 3, { clientUpdatedAt: stamp(T0 - 1000) })], 3);
     expect(await store.db.wallets.get('w-1')).toMatchObject({ dirty: 1, syncError: 'ошибка' });
@@ -263,7 +273,7 @@ describe('applyRemotePage — ветки слияния', () => {
   it('пустая страница: курс не двигается дальше прежнего, не откатывается назад', async () => {
     const store = await makeStore();
     await store.sync.applyRemotePage('wallets', [w('w-1', 5)], 5);
-    expect(await store.sync.applyRemotePage('wallets', [], 5)).toEqual({ applied: 0, keptLocal: 0, lostLocal: 0 });
+    expect(await store.sync.applyRemotePage('wallets', [], 5)).toEqual({ applied: 0, keptLocal: 0, lostLocal: 0, merged: 0 });
     await store.sync.applyRemotePage('wallets', [w('w-1', 2)], 2); // меньший курс не понижает
     expect(await store.sync.getCursor('wallets')).toBe(5);
   });

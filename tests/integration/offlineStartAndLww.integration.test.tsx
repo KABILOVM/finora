@@ -83,12 +83,17 @@ describe('запуск без сети у человека, который уж�
 });
 
 describe('правки РАЗНЫХ полей одной операции на двух устройствах офлайн', () => {
-  // ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ, не ошибка кода: по договору (supabase/schema.sql, tests/sync/convergence.test.ts, tests/db/sim.adversarial.test.ts)
-  // побеждает версия СТРОКИ ЦЕЛИКОМ с наибольшей меткой, и у сервера одна метка на строку. Чтобы сложить правки по полям, нужны метки
-  // по полям (правка договора: schema.sql и tables.ts); сложение на стороне клиента ломает договорные тесты сходимости
-  // («побеждает более поздняя версия»), проверено. Поэтому тест пропущен, а ограничение описано в README («Известные ограничения»).
-  // Если договор изменят, снимите .skip.
-  it.skip('A исправил сумму, B позже поправил заметку: исправленная сумма не должна молча вернуться к старой', async () => {
+  // Находка F6: сервер хранит запись целиком с одной меткой, поэтому раньше побеждала версия «целиком», и вторая правка молча
+  // пропадала. Теперь правки разных ГРУПП полей объединяются на клиенте (src/db/mergeGroups.ts, syncMerge.ts): сервер и схема
+  // прежние, объединённая запись получает новую метку и едет на сервер как обычная правка.
+  //
+  // Проверяем в обе стороны: кто синхронизируется первым (A с суммой или B с заметкой).
+  const orders = [
+    { name: 'A синхронизируется первым', first: 'a' },
+    { name: 'B синхронизируется первым', first: 'b' },
+  ] as const;
+
+  it.each(orders)('A исправил сумму, B позже поправил заметку ($name): обе правки на обоих устройствах и на сервере', async ({ first }) => {
     const server = createMemoryServer();
     const mk = async (id: string) => {
       const store = await openStore(ALICE.id, { deviceId: id, dexie: { indexedDB: new IDBFactory(), IDBKeyRange } });
@@ -108,16 +113,45 @@ describe('правки РАЗНЫХ полей одной операции на 
     await a.store.transactions.update(tx.id, { amountMinor: 10_00 });
     await new Promise((r) => setTimeout(r, 5));
     await b.store.transactions.update(tx.id, { note: 'такси из аэропорта' });
-    for (let i = 0; i < 2; i++) {
-      await a.engine.syncNow();
-      await b.engine.syncNow();
-    }
+    const order = first === 'a' ? [a, b] : [b, a];
+    for (let i = 0; i < 2; i++) for (const d of order) await d.engine.syncNow();
+
     const ra = (await a.store.db.transactions.get(tx.id))!;
     const rb = (await b.store.db.transactions.get(tx.id))!;
     expect([ra.amountMinor, ra.note]).toEqual([rb.amountMinor, rb.note]);
-    expect(
-      [ra.amountMinor, ra.note],
-      'правка суммы на A потеряна: заметка с B перезаписала строку целиком старой суммой',
-    ).toEqual([10_00, 'такси из аэропорта']);
+    expect([ra.amountMinor, ra.note], 'одна из правок потеряна при слиянии разных частей записи').toEqual([10_00, 'такси из аэропорта']);
+    expect(ra.baseAmountMinor).toBe(10_00); // снимок базовой валюты едет вместе с суммой
+    const onServer = server.dump(ALICE.id, 'transactions').find((r) => r['id'] === tx.id)!;
+    expect([onServer['amount_minor'], onServer['note'], onServer['base_amount_minor']]).toEqual([10_00, 'такси из аэропорта', 10_00]);
+    for (const d of [a, b]) expect(d.engine.getStatus()).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0, lastError: null });
+    for (const r of [ra, rb]) {
+      expect(r.dirty).toBe(0);
+      expect('dirtyGroups' in r).toBe(false);
+    }
+  }, 30_000);
+
+  it('сумма на A, заметка и дата на B, имя кошелька на C: всё складывается из трёх офлайн-устройств', async () => {
+    const server = createMemoryServer();
+    const mk = async (id: string) => {
+      const store = await openStore(ALICE.id, { deviceId: id, dexie: { indexedDB: new IDBFactory(), IDBKeyRange } });
+      const engine = createSyncEngine({ store, transport: server.transportFor(ALICE.id), afterFirstPull: async () => void (await ensureSeeded(store)) });
+      return { store, engine };
+    };
+    const [a, b, c] = [await mk('dev-a'), await mk('dev-b'), await mk('dev-c')] as const;
+    for (const d of [a, b, c]) await d.engine.syncNow();
+    const cash = (await a.store.db.wallets.toArray())[0]!;
+    const tx = await a.store.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 500_00, occurredOn: '2026-10-05', note: 'плов' });
+    for (const d of [a, b, c]) await d.engine.syncNow();
+
+    await a.store.transactions.update(tx.id, { amountMinor: 50_00 });
+    await b.store.transactions.update(tx.id, { note: 'плов с чаем', occurredOn: '2026-10-06' });
+    await c.store.wallets.update(cash.id, { name: 'Кошелёк C' });
+    for (let i = 0; i < 3; i++) for (const d of [c, a, b]) await d.engine.syncNow();
+
+    for (const d of [a, b, c]) {
+      expect(await d.store.db.transactions.get(tx.id), d.store.deviceId).toMatchObject({ amountMinor: 50_00, note: 'плов с чаем', occurredOn: '2026-10-06', dirty: 0 });
+      expect((await d.store.db.wallets.get(cash.id))?.name, d.store.deviceId).toBe('Кошелёк C');
+    }
+    expect(server.dump(ALICE.id, 'transactions').find((r) => r['id'] === tx.id)).toMatchObject({ amount_minor: 50_00, note: 'плов с чаем', occurred_on: '2026-10-06' });
   }, 30_000);
 });

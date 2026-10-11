@@ -289,7 +289,7 @@ describe('расчёты главной (чистые функции)', () => {
     ]);
     const r = computeHomeTotal(wallets, balances, 'TJS', (from) => (from === 'USD' ? lookup(0.5) : null));
     // 2 цента × 0,5 = 1 дирам (а не 0 + 0 из двух округлений 0,5 вниз)
-    expect(r).toEqual({ totalMinor: 1001, approximate: true, missing: [], stale: [] });
+    expect(r).toEqual({ totalMinor: 1001, approximate: true, missing: [], stale: [], entered: [], viaOtherRates: true });
   });
 
   it('валюта без курса уходит в missing вместе с остатком; нулевая — молча пропускается', () => {
@@ -300,7 +300,7 @@ describe('расчёты главной (чистые функции)', () => {
       ['d', 0],
     ]);
     const r = computeHomeTotal(wallets, balances, 'TJS', () => null);
-    expect(r).toEqual({ totalMinor: 1000, approximate: false, missing: [{ currency: 'USD', balanceMinor: 500 }], stale: [] });
+    expect(r).toEqual({ totalMinor: 1000, approximate: false, missing: [{ currency: 'USD', balanceMinor: 500 }], stale: [], entered: [], viaOtherRates: false });
   });
 
   it('устаревший курс попадает в stale с датой', () => {
@@ -332,5 +332,74 @@ describe('расчёты главной (чистые функции)', () => {
     expect(sharePercent(5, 0)).toBe(0);
     expect(sharePercent(0, 10)).toBe(0);
     expect(sharePercent(10, 10)).toBe(100);
+  });
+});
+
+describe('«Всего» по курсу, введённому в операции', () => {
+  it('курса из сети нет: доллары пересчитаны по введённому курсу, «≈» и пояснение с датой, «нет курса» нет', async () => {
+    const td = await openHome({ tables: [] });
+    expect(text(total())).toContain('Не вошло в итог — нет курса'); // пока курс не вводили
+    await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 11));
+    // 500 750 − 10 $ × 11 = 500 750 − 11 000 = 489 750
+    await waitFor(() => expect(text(total())).toContain(`≈ ${fmt(489_750)}`));
+    expect(text(total())).toContain('Остаток в USD пересчитан по введённому вами курсу от 10.10');
+    expect(text(total())).not.toContain('нет курса');
+    expect(text(total())).not.toContain('Остатки в других валютах пересчитаны по курсу'); // курс не из сети — другая фраза
+    expect(text(total())).not.toContain('устарел');
+  });
+
+  it('свежий курс Нацбанка сильнее введённого: итог по Нацбанку, пояснения про введённый курс нет', async () => {
+    const td = await openHome();
+    await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 99));
+    expect(text(total())).toContain(`≈ ${fmt(489_850)}`);
+    expect(text(total())).toContain('Остатки в других валютах пересчитаны по курсу');
+    expect(text(total())).not.toContain('введённому');
+  });
+
+  it('курс Нацбанка устарел: введённый его заменяет, и вместо «Курс устарел» сказано, откуда курс', async () => {
+    const td = await openHome({ tables: [table({ asOf: '2026-10-01' })] });
+    expect(text(total())).toContain('Курс устарел (USD на 01.10.2026)');
+    await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 11));
+    await waitFor(() => expect(text(total())).toContain('по введённому вами курсу от 10.10'));
+    expect(text(total())).toContain(`≈ ${fmt(489_750)}`);
+    expect(text(total())).not.toContain('Курс устарел');
+  });
+
+  it('«Сбросить» в Настройках (forget) возвращает «нет курса»', async () => {
+    const td = await openHome({ tables: [] });
+    await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 11));
+    await waitFor(() => expect(text(total())).toContain('введённому'));
+    await write(async () => td.rates.forgetEnteredRate('USD', 'TJS'));
+    await waitFor(() => expect(text(total())).toContain('Не вошло в итог — нет курса'));
+    expect(text(total())).not.toContain('≈');
+  });
+
+  it('основная валюта — доллар: «Не вошло в итог» не кончается двойной точкой («4 842,50 с..»)', async () => {
+    await openHome({
+      tables: [],
+      setup: async (s) => {
+        await seedHistory(s);
+        await s.settings.update({ baseCurrency: 'USD' });
+      },
+    });
+    await waitFor(() => expect(text(total())).toContain('Не вошло в итог — нет курса'));
+    expect(text(total())).not.toContain('..');
+    expect(text(total())).toMatch(/нет курса: .*с\.$/);
+  });
+});
+
+describe('расчёты главной: откуда курс', () => {
+  const lookup = (entered: boolean) => (from: string): RateLookup | null =>
+    from === 'USD'
+      ? { rate: 11, source: entered ? 'manual' : 'nbt', asOf: '2026-10-10', stale: false, manual: false, ...(entered ? { entered: true } : {}) }
+      : null;
+  const wallets = [{ id: 'a', currency: 'TJS' }, { id: 'b', currency: 'USD' }];
+  const balances = new Map([['a', 1000], ['b', 100]]);
+
+  it('введённый курс попадает в entered с датой; viaOtherRates — только если был и обычный', () => {
+    const r = computeHomeTotal(wallets, balances, 'TJS', lookup(true));
+    expect(r).toMatchObject({ totalMinor: 2100, approximate: true, entered: [{ currency: 'USD', asOf: '2026-10-10' }], viaOtherRates: false });
+    const n = computeHomeTotal(wallets, balances, 'TJS', lookup(false));
+    expect(n).toMatchObject({ entered: [], viaOtherRates: true });
   });
 });

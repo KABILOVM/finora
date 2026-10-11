@@ -291,8 +291,9 @@ describe('правка не переоценивает курс', () => {
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(await row(td, ids.tx)).toMatchObject({ walletId: ids.usd, amountMinor: 1250, baseAmountMinor: 13_500, fxRate: 10.8, fxSource: 'manual' });
-    // курс записан только в операцию: общим курсом пары он не становится
-    expect(td.rates.getRate('USD', 'TJS')).toBeNull();
+    // курс записан в операцию и запомнен как «введённый» (запасной слой): это не «Свой курс» из Настроек
+    expect(td.rates.getRate('USD', 'TJS')).toMatchObject({ rate: 10.8, entered: true, manual: false });
+    expect(td.rates.listEnteredRates()).toMatchObject([{ from: 'USD', to: 'TJS', rate: 10.8 }]);
   });
 });
 
@@ -322,6 +323,26 @@ describe('удаление', () => {
     await eventually(async () => expect((await row(td, ids.tx))?.deletedAt).toBeNull());
     expect((await balancesOf(td)).get(ids.cash)).toBe(-1250);
     expect(screen.getByText('Операция возвращена')).toBeInTheDocument();
+  });
+});
+
+describe('текст подтверждения удаления', () => {
+  it('сумма в сомони уже кончается точкой («с.») — второй точки нет: «Расход 12,50 с. Она пропадёт…»', async () => {
+    await openEdit(food12());
+    await user.click(screen.getByRole('button', { name: 'Удалить операцию' }));
+    const dialog = await findByRole('alertdialog', { name: 'Удалить операцию?' });
+    const text = (dialog.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).not.toContain('..');
+    expect(text).toContain('Расход 12,50 с. Она пропадёт из списка');
+  });
+
+  it('сумма в долларах точку не имеет — предложение заканчивается одной: «Расход 10 $. Она пропадёт…»', async () => {
+    await openEdit(usdExpense);
+    await user.click(screen.getByRole('button', { name: 'Удалить операцию' }));
+    const dialog = await findByRole('alertdialog', { name: 'Удалить операцию?' });
+    const text = (dialog.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).not.toContain('..');
+    expect(text).toContain('Расход 10 $. Она пропадёт из списка');
   });
 });
 

@@ -203,4 +203,43 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
     const r = await run({ role: 'authenticated', sub: A }, `${walletInsert('88888888-8888-4888-8888-888888888888', 'Раздутый').replace("'#fff', 'x'", "repeat('c', 1000000), 'x'")} returning length(color) as n`);
     expect('error' in r, 'сервер принял color длиной 1 000 000 символов').toBe(true);
   });
+
+  test('длина color, icon, fx_source: предел принимается (в символах, эмодзи считается за один), на символ больше — отказ 23514 именно по этому ограничению', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const cat = (id: string, color: string, icon: string) =>
+      `insert into public.categories (id, created_at, client_updated_at, device_id, name, kind, color, icon, sort_order)
+       values ('${id}', '${NOW}', '${NOW}', 'dev', 'Кат', 'expense', '${color}', '${icon}', 0)`;
+    const tx = (id: string, fxSource: string) =>
+      `insert into public.transactions (id, created_at, client_updated_at, device_id, kind, wallet_id, amount_minor, occurred_on, note, base_currency, base_amount_minor, fx_rate, fx_source)
+       values ('${id}', '${NOW}', '${NOW}', 'dev', 'expense', '${WALLET_A}', 100, '2026-10-10', '', 'TJS', 100, 1, '${fxSource}')`;
+    const wallet = (id: string, color: string, icon: string) => walletInsert(id, 'Предел').replace("'#fff', 'x'", `'${color}', '${icon}'`);
+    const id = (n: number) => `dddddddd-dddd-4ddd-8ddd-${String(n).padStart(12, '0')}`;
+    const cases: Array<[string, string, string]> = [
+      ['wallets_color_len', wallet(id(1), 'c'.repeat(33), 'x'), wallet(id(2), '😀'.repeat(33), 'x')],
+      ['wallets_icon_len', wallet(id(3), '#fff', 'i'.repeat(33)), wallet(id(4), '#fff', '😀'.repeat(33))],
+      ['categories_color_len', cat(id(5), 'c'.repeat(33), 'tag'), cat(id(6), '😀'.repeat(33), 'tag')],
+      ['categories_icon_len', cat(id(7), '#fff', 'i'.repeat(33)), cat(id(8), '#fff', '😀'.repeat(33))],
+      ['transactions_fx_source_len', tx(id(9), 'x'.repeat(17)), tx(id(10), '😀'.repeat(17))],
+    ];
+    for (const [name, ascii, emoji] of cases) {
+      for (const sql of [ascii, emoji]) {
+        const r = await run(asA, sql);
+        expect('error' in r && r.code, name).toBe('23514');
+        expect('error' in r && r.error, name).toContain(name);
+      }
+    }
+    const ok: string[] = [
+      wallet(id(11), 'c'.repeat(32), 'i'.repeat(32)),
+      wallet(id(12), '😀'.repeat(32), '😀'.repeat(32)),
+      cat(id(13), 'c'.repeat(32), 'i'.repeat(32)),
+      cat(id(14), '😀'.repeat(32), '😀'.repeat(32)),
+      tx(id(15), 'x'.repeat(16)),
+      tx(id(16), '😀'.repeat(16)),
+      tx(id(17), 'same'),
+    ];
+    for (const sql of ok) {
+      const r = await run(asA, sql);
+      expect('error' in r ? r.error : 'ok', sql.replace(/\s+/g, ' ').slice(0, 80)).toBe('ok');
+    }
+  });
 });

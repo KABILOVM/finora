@@ -15,6 +15,9 @@ export const MIN_TS_MS = Date.UTC(2000, 0, 1);
 export const MAX_TS_MS = Date.UTC(2100, 0, 1);
 const BOUND = 1_000_000_000_000_000; // 1e15, как в схеме
 const PG_BIGINT_MAX = 9.2e18;
+/** Длины, добавленные в схему отдельным блоком (раздел 7 supabase/schema.sql): color / icon — не длиннее 32, fx_source — не длиннее 16. */
+const SHORT_MAX = 32;
+const FX_SOURCE_MAX = 16;
 
 /** Колонки, которые клиент может прислать, но сервер их игнорирует и ставит сам. */
 export const SERVER_COLUMNS = ['user_id', 'server_seq', 'server_updated_at'] as const;
@@ -155,6 +158,8 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (n < 1 || n > 80) fail('name_len');
       if (!inBound(r['opening_balance_minor'] ?? null)) fail('opening_balance');
       if (!inBound(r['sort_order'] ?? null)) fail('sort_order');
+      if (charLength(String(r['color'])) > SHORT_MAX) fail('color_len');
+      if (charLength(String(r['icon'])) > SHORT_MAX) fail('icon_len');
       break;
     }
     case 'categories': {
@@ -163,6 +168,8 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       const n = charLength(String(r['name']));
       if (n < 1 || n > 80) fail('name_len');
       if (!inBound(r['sort_order'] ?? null)) fail('sort_order');
+      if (charLength(String(r['color'])) > SHORT_MAX) fail('color_len');
+      if (charLength(String(r['icon'])) > SHORT_MAX) fail('icon_len');
       break;
     }
     case 'transactions': {
@@ -173,6 +180,8 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       const day = String(r['occurred_on']);
       if (day < '2000-01-01' || day > '2100-01-01') fail('occurred_on');
       if (charLength(String(r['note'])) > 500) fail('note_len');
+      const fxSource = r['fx_source'] ?? null;
+      if (fxSource !== null && charLength(String(fxSource)) > FX_SOURCE_MAX) fail('fx_source_len');
       if (!CURRENCY_RE.test(String(r['base_currency']))) fail('base_currency_fmt');
       const fx = r['fx_rate'] ?? null;
       if (fx !== null && !(typeof fx === 'number' && fx > 0)) fail('fx_rate');

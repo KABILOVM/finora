@@ -20,6 +20,16 @@ import { RateParseError, isRateValue } from './parseUtil';
 
 const parse = (xml: string, now: Date = NOW) => parseNbtXml(xml, now);
 
+/**
+ * Процессорное время процесса (мс). Ограничение «быстро» проверяем по нему, а не по настоящим часам: на загруженной машине процесс
+ * подолгу ждёт своей очереди, и настоящие часы набегают сами. Процессорное время ждущего процесса не растёт, а зависание
+ * (квадратичный разбор) по-прежнему растёт и ловится.
+ */
+const cpuMs = (): number => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 describe('parseNbtXml: нормальные раскладки', () => {
   it('раскладка «Valute»: запятая, Nominal, дата DD.MM.YYYY из атрибута корня', () => {
     const t = parse(NBT_VALUTE_STYLE);
@@ -181,13 +191,13 @@ describe('parseNbtXml: плохие ответы', () => {
   });
 
   it('десятки тысяч элементов (мусор / атака) отвергаются быстро, не съедая память', () => {
-    const started = Date.now();
+    const started = cpuMs();
     expect(() => parse(`<a>${'<b/>'.repeat(200_000)}</a>`)).toThrow(/Слишком много элементов/);
-    expect(Date.now() - started).toBeLessThan(2000);
+    expect(cpuMs() - started).toBeLessThan(2000);
   });
 
   it('патологические входы разбираются за линейное время', () => {
-    const started = Date.now();
+    const started = cpuMs();
     for (const junk of ['<'.repeat(1_000_000), '&'.repeat(1_000_000), '<a b="'.repeat(100_000), '<!--'.repeat(100_000), '<![CDATA['.repeat(50_000), '<!DOCTYPE x ['.repeat(50_000), '</x>'.repeat(200_000)]) {
       try {
         parse(junk);
@@ -195,7 +205,7 @@ describe('parseNbtXml: плохие ответы', () => {
         expect(e).toBeInstanceOf(RateParseError);
       }
     }
-    expect(Date.now() - started).toBeLessThan(5000);
+    expect(cpuMs() - started).toBeLessThan(5000);
   });
 
   it('оборванный посередине XML: либо разобрался по тому, что есть, либо понятная ошибка — никогда не другое исключение', () => {
@@ -251,9 +261,9 @@ describe('parseNbtXml: плохие ответы', () => {
       const code = `${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + (((i / 26) | 0) % 26))}${String.fromCharCode(65 + (((i / 676) | 0) % 26))}`;
       return `<Valute><CharCode>${code}</CharCode><Nominal>1</Nominal><Value>1,5</Value></Valute>`;
     }).join('');
-    const started = Date.now();
+    const started = cpuMs();
     const t = parse(`<ValCurs Date="10.10.2026">${rows}</ValCurs>`);
-    expect(Date.now() - started).toBeLessThan(2000);
+    expect(cpuMs() - started).toBeLessThan(2000);
     expect(Object.keys(t.perUnit).length).toBeGreaterThan(1000);
   });
 });

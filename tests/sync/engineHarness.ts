@@ -69,23 +69,74 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-const nextTurn = (): Promise<void> => new Promise((r) => setImmediate(r));
+/**
+ * НАСТОЯЩИЕ часы и таймер, снятые при загрузке помощника — до того, как тест включит поддельные таймеры (fakeTimers, vi.useFakeTimers).
+ * Ожидание условий обязано ограничиваться НАСТОЯЩИМ временем, а не числом оборотов цикла событий: часть работы идёт вне цикла
+ * (см. «Незавершённые дайджесты» ниже), и на загруженной машине тысяча оборотов пролетает за 20 мс, а такая работа не успевает.
+ */
+const realNow = performance.now.bind(performance);
+const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+
+/** Сколько настоящих миллисекунд ждём условие по умолчанию (тест целиком ограничен testTimeout в vite.config.ts — 20 с). */
+const WAIT_MS = 15_000;
 
 /**
- * Ждёт условия, отдавая управление циклу событий (setImmediate, его vitest не подменяет).
- * Работает и с настоящими, и с поддельными таймерами: время не используется, только число оборотов.
+ * Незавершённые дайджесты WebCrypto. Приложение считает id затравки через crypto.subtle.digest (src/db/ids.ts), а он в Node выполняется
+ * в пуле потоков, ВНЕ цикла событий: сколько оборотов (setImmediate) пройдёт до его ответа, зависит от загрузки машины
+ * (проверено: от 1 до ~1000 оборотов на один вызов; затравка делает их несколько подряд). Поэтому счётчик оборотов не годится
+ * как «подождать, пока всё закончится»: помощник считает дайджесты в пути и ждёт их по-настоящему. Сам дайджест не подменяется.
  */
-export async function until(pred: () => boolean | Promise<boolean>, what = 'условие', turns = 4000): Promise<void> {
-  for (let i = 0; i < turns; i++) {
-    if (await pred()) return;
-    await nextTurn();
+let digestsInFlight = 0;
+{
+  const subtle = globalThis.crypto?.subtle as (SubtleCrypto & { __counted?: true }) | undefined;
+  if (subtle && typeof subtle.digest === 'function' && !subtle.__counted) {
+    const real = subtle.digest.bind(subtle);
+    const counted = ((...args: Parameters<SubtleCrypto['digest']>) => {
+      digestsInFlight++;
+      const p = real(...args);
+      const done = (): void => void digestsInFlight--;
+      p.then(done, done);
+      return p;
+    }) as SubtleCrypto['digest'];
+    subtle.digest = counted;
+    subtle.__counted = true;
   }
-  throw new Error(`не дождались: ${what}`);
 }
 
-/** Дать всему, что уже запущено, закончиться (и ещё немного, чтобы лишние запросы успели проявиться). */
-export async function settle(turns = 60): Promise<void> {
-  for (let i = 0; i < turns; i++) await nextTurn();
+const nextTurn = (): Promise<void> => new Promise((r) => setImmediate(r));
+/** Короткая НАСТОЯЩАЯ пауза: отдаёт процессор остальным потокам (пул потоков, другие тесты), чтобы ожидание не крутилось вхолостую. */
+const realPause = (): Promise<void> => new Promise((r) => realSetTimeout(r, 1));
+
+/**
+ * Ждёт условия, отдавая управление циклу событий (setImmediate, его vitest не подменяет), но не дольше timeoutMs НАСТОЯЩЕГО
+ * времени (производительность `performance.now` fakeTimers() не трогает). Работает и с настоящими, и с поддельными таймерами:
+ * поддельное время не используется.
+ */
+export async function until(pred: () => boolean | Promise<boolean>, what = 'условие', timeoutMs = WAIT_MS): Promise<void> {
+  const deadline = realNow() + timeoutMs;
+  for (let i = 0; ; i++) {
+    if (await pred()) return;
+    if (realNow() > deadline) throw new Error(`не дождались: ${what} (${timeoutMs} мс настоящего времени)`);
+    await (i % 64 === 63 ? realPause() : nextTurn());
+  }
+}
+
+/**
+ * Дать всему, что уже запущено, закончиться (и ещё немного, чтобы лишние запросы успели проявиться): проходит `turns` оборотов
+ * подряд, в которых нет дайджестов в пути. Дайджест в пути обнуляет счёт — он ещё продолжит работу (запись затравки и т. д.).
+ */
+export async function settle(turns = 60, timeoutMs = WAIT_MS): Promise<void> {
+  const deadline = realNow() + timeoutMs;
+  for (let quiet = 0; quiet < turns; ) {
+    if (digestsInFlight > 0) {
+      quiet = 0;
+      if (realNow() > deadline) throw new Error(`не дождались: окончания дайджестов (${timeoutMs} мс настоящего времени)`);
+      await realPause();
+    } else {
+      quiet++;
+      await nextTurn();
+    }
+  }
 }
 
 export interface Gate {

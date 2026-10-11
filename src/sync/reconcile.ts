@@ -1,5 +1,5 @@
 import type { Store } from '@/db';
-import { touch, writeTx } from '@/db/repoContext';
+import { touch, withDirtyGroups, writeTx } from '@/db/repoContext';
 import { internalContext } from '@/db/store';
 import type { FinoraDB } from '@/db/database';
 import type { Category, Transaction, UUID, Wallet } from '@/domain/types';
@@ -179,7 +179,7 @@ export async function reconcile(store: Store, watch: Watch): Promise<number> {
         const w = await db.wallets.get(id);
         if (target === null || !w) return false;
         const t = touch(ctx);
-        await db.wallets.put({ ...w, currency: target, ...t.fields });
+        await db.wallets.put(withDirtyGroups('wallets', w, { ...w, currency: target, ...t.fields })); // группа money
         await db.meta.put({ key: OWN_REVERT_PREFIX + id, value: t.stamp }); // см. noteIncoming: на ответ другого устройства не возражаем
         return true;
       });
@@ -197,7 +197,7 @@ export async function reconcile(store: Store, watch: Watch): Promise<number> {
         const target = await planCategory(db, id);
         const c = await db.categories.get(id);
         if (target === null || !c) return false;
-        await db.categories.put({ ...c, kind: target as Category['kind'], ...touch(ctx).fields });
+        await db.categories.put(withDirtyGroups('categories', c, { ...c, kind: target as Category['kind'], ...touch(ctx).fields })); // группа kind
         return true;
       });
       if (done) fixed++;

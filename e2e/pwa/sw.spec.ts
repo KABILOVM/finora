@@ -83,7 +83,9 @@ test('Cache Storage = ровно precache; Supabase и внешние хосты
   // Кэш содержит ровно то, что записано в precache (без «лишних» и без пропавших).
   const expected = precacheUrls().map((u) => new URL(u, srv.url).href);
   expect([...new Set(cached.map((u) => u.replace(/\?__WB_REVISION__=\w+$/, '')))].sort()).toEqual([...new Set(expected)].sort());
-  expect(external.some((u) => u.includes('supabase.co/rest/v1'))).toBe(true); // запросы реально ушли в сеть
+  // Запросы реально ушли в сеть, а не в кэш. Адреса Supabase в локальной сборке запрещены политикой безопасности
+  // (так и задумано: разрешён только свой проект), поэтому проверяем разрешённые источники курсов.
+  expect(external.some((u) => /nbt\.tj|jsdelivr\.net/.test(u))).toBe(true);
   await ctx.close();
 });
 

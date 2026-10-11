@@ -8,6 +8,16 @@ import { decodeBody, normalizeDate, parseDecimal } from './parseUtil';
 import { createMemoryRateStorage } from './storage';
 import * as edge from '../../supabase/functions/fetch-rates/index';
 
+/**
+ * Процессорное время процесса (мс). Ограничение «быстро» проверяем по нему, а не по настоящим часам: на загруженной машине процесс
+ * подолгу ждёт своей очереди, и настоящие часы набегают сами (замеряли 5,7 с вместо ~1 с). Процессорное время ждущего процесса
+ * не растёт, а зависание (квадратичный разбор) по-прежнему растёт и ловится.
+ */
+const cpuMs = (): number => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 describe('парсеры: входы-убийцы не вешают и не падают с чужими ошибками', () => {
   const nasty: [string, string][] = [
     ['5 млн «<»', '<'.repeat(5_000_000)],
@@ -21,14 +31,14 @@ describe('парсеры: входы-убийцы не вешают и не па
     ['5 млн пробелов', ' '.repeat(5_000_000) + '<a/>'],
   ];
   it.each(nasty)('NBT: %s — быстро и только RateParseError', (_n, xml) => {
-    const t0 = performance.now();
+    const t0 = cpuMs();
     let err: unknown;
     try {
       parseNbtXml(xml, NOW);
     } catch (e) {
       err = e;
     }
-    expect(performance.now() - t0).toBeLessThan(3000);
+    expect(cpuMs() - t0).toBeLessThan(3000);
     expect((err as Error)?.name).toBe('RateParseError');
   });
 

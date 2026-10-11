@@ -48,7 +48,7 @@ interface Focus {
   ids: number;
   variants: number[];
 }
-const GENERAL: Focus = { stamps: [0, 1, 2, 3, 4, 5, 6], devices: [0, 1, 2, 3, 4, 5, 6, 7], ids: 4, variants: [0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6] };
+const GENERAL: Focus = { stamps: [0, 1, 2, 3, 4, 5, 6], devices: [0, 1, 2, 3, 4, 5, 6, 7], ids: 4, variants: [0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9] };
 /** Повторы одной и той же правки с «убежавшими» часами: проверяют журнал меток из будущего. */
 const FUTURE: Focus = { stamps: [3, 4, 5, 5, 6, 6], devices: [0, 1, 2], ids: 2, variants: [0, 0, 0, 0, 0, 0, 1] };
 
@@ -119,6 +119,9 @@ async function compare(specs: Spec[]): Promise<void> {
           currency: r.variant === 3 ? 'tjs' : 'TJS',
           kind: r.variant === 4 ? ('crypto' as 'cash') : 'cash',
           openingBalanceMinor: r.variant === 5 ? 1_000_000_000_000_001 : r.kind,
+          // длина color / icon считается в символах: 32 эмодзи (64 единицы UTF-16) — можно, 33 — нельзя
+          color: r.variant === 6 ? 'c'.repeat(33) : r.variant === 8 ? '😀'.repeat(32) : r.variant === 9 ? 'c'.repeat(32) : '#0ea5e9',
+          icon: r.variant === 7 ? '😀'.repeat(33) : r.variant === 8 ? '😀'.repeat(32) : 'wallet',
         });
       case 'categories':
         return toWire('categories', {
@@ -126,6 +129,8 @@ async function compare(specs: Spec[]): Promise<void> {
           id: categoryIds[r.id] as string,
           name: r.variant === 1 ? '' : `c${r.kind}`,
           kind: r.variant === 4 ? ('transfer' as 'expense') : r.kind % 2 === 0 ? 'expense' : 'income',
+          color: r.variant === 5 ? 'c'.repeat(33) : r.variant === 8 ? '😀'.repeat(32) : '#f97316',
+          icon: r.variant === 6 ? 'i'.repeat(33) : r.variant === 7 ? '😀'.repeat(33) : r.variant === 9 ? '😀'.repeat(32) : 'tag',
         });
       case 'settings':
         return toWire('settings', {
@@ -150,7 +155,8 @@ async function compare(specs: Spec[]): Promise<void> {
           categoryId: r.variant === 3 ? (categoryIds[r.ref % 4] as string) : null,
           note: r.variant === 4 ? 'я'.repeat(501) : '',
           fxRate: kind === 'transfer' ? null : r.variant === 1 ? 0 : 1,
-          fxSource: kind === 'transfer' ? null : 'same',
+          // fx_source: 17 символов — нельзя, 16 (в том числе эмодзи, 32 единицы UTF-16) — можно
+          fxSource: kind === 'transfer' ? null : r.variant === 7 ? 'x'.repeat(17) : r.variant === 8 ? 'x'.repeat(16) : r.variant === 9 ? '😀'.repeat(16) : 'same',
         });
       }
     }

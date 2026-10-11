@@ -16,7 +16,6 @@ import { PageNotices } from '@/app/PageNotices';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
-import { UpdatePrompt } from '@/components/UpdatePrompt';
 import { AppShell } from '@/layout/AppShell';
 import { ADD_PATH } from '@/layout/nav';
 
@@ -37,6 +36,24 @@ const isSheetPath = (pathname: unknown): boolean =>
   typeof pathname === 'string' && (pathname === ADD_PATH || matchPath(EDIT_PATTERN, pathname) !== null);
 
 type BackgroundState = { background?: Location } | null;
+
+/**
+ * Перевод строки (\n, \r, U+2028, U+2029) в раскодированном адресе. react-router раскодирует адрес и ищет страницу
+ * регуляркой, где «.» такие символы не ловит: для «#/%0a» не находился даже запасной маршрут «*», Routes рисовал
+ * пустоту, и человек видел белый экран. Такой адрес мы заранее считаем непонятным и уводим на «Главную».
+ */
+const LINE_BREAK = /[\n\r\u2028\u2029]/;
+
+export function hasLineBreak(pathname: unknown): boolean {
+  if (typeof pathname !== 'string') return false;
+  let decoded = pathname;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    // битое кодирование (%E0%A4%A) router сам отдаёт запасному маршруту «*» — решать нам нечего
+  }
+  return LINE_BREAK.test(decoded);
+}
 
 /** Номер записи в истории браузера (react-router кладёт его в history.state.idx); 0 — первая запись или неизвестно. */
 function historyIndex(): number {
@@ -72,6 +89,9 @@ export function AppRoutes() {
     else navigate('/', { replace: true });
   };
 
+  // Непонятный адрес с переводом строки: сразу на «Главную» (иначе router показал бы пустой экран)
+  if (hasLineBreak(location.pathname)) return <Navigate to="/" replace />;
+
   return (
     <>
       <Routes location={pagesLocation}>
@@ -103,6 +123,8 @@ export function AppRoutes() {
 }
 
 export default function App() {
+  // Подсказка об обновлении здесь НЕ рисуется: она одна, снаружи приложения (UpdatePromptHost в main.tsx), чтобы пережить
+  // падение самого приложения.
   // Облако настраивается переменными VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY; без них — локальный режим.
   const client = useMemo(() => getDefaultClient(), []);
   return (
@@ -113,7 +135,6 @@ export default function App() {
             <AppRoutes />
           </AppRoot>
         </HashRouter>
-        <UpdatePrompt />
       </ToastProvider>
     </ErrorBoundary>
   );

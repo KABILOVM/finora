@@ -1,8 +1,20 @@
 import Dexie, { type Table } from 'dexie';
-import type { Category, IsoDateTime, LocalRow, Settings, UUID, Wallet } from '@/domain/types';
+import type { Category, IsoDateTime, LocalFields, LocalRow, Settings, SyncFields, UUID, Wallet } from '@/domain/types';
+import type { SyncTableName } from '@/sync/tables';
 import type { Clock } from './clock';
 import { META_LAST_STAMP, type FinoraDB } from './database';
 import { ValidationError } from './errors';
+import {
+  changedGroups,
+  groupMatches,
+  groupNames,
+  pickGroup,
+  readTracking,
+  withTracking,
+  type DirtyBase,
+  type GroupName,
+  type Tracking,
+} from './mergeGroups';
 import { SORT_ORDER_MAX, SORT_ORDER_MIN } from './validate';
 
 /** Всё, что нужно репозиториям: база, часы, id устройства и «сообщить подписчикам об изменении». */
@@ -50,6 +62,42 @@ export function touch(ctx: RepoContext): {
 } {
   const stamp = ctx.clock.tick();
   return { stamp, fields: { clientUpdatedAt: stamp, deviceId: ctx.deviceId, dirty: 1, syncError: null } };
+}
+
+/**
+ * Проставляет в `next` (новую версию СУЩЕСТВУЮЩЕЙ строки `prev`) группы полей, изменённые локально (dirtyGroups), и память о них
+ * (dirtyBase, см. mergeGroups.ts):
+ *  - группа, изменившаяся впервые, запоминает значения ДО правки (`b`) и время правки (`at`);
+ *  - уже запомненная группа обновляет только `at`;
+ *  - группа, вернувшаяся к исходному значению, убирается (сменил и вернул = ничего не менял) — но только пока версия не
+ *    передавалась на отправку: иначе на сервере могло оказаться отправленное значение, и возврат — настоящая правка;
+ *  - `prev` грязная без групп (импорт, строка до обновления приложения) — групп по-прежнему нет.
+ * Строка, созданная здесь (dirtyGroups: []), считается правкой существующей записи: «исходное» — то, как её создали.
+ */
+export function withDirtyGroups<R extends SyncFields & Pick<LocalFields, 'dirtyGroups'>>(
+  table: SyncTableName,
+  prev: SyncFields & LocalFields,
+  next: R,
+): R {
+  const before = readTracking(table, prev);
+  if (prev.dirty === 1 && before === undefined) return withTracking(next, undefined, false); // «вся запись»
+  const t: Tracking = before ?? { groups: [], base: {} };
+  const base: DirtyBase = { ...t.base };
+  const groups = new Set<GroupName>(t.groups);
+  for (const g of changedGroups(table, prev, next)) {
+    const known = base[g];
+    if (known) base[g] = { ...known, at: next.clientUpdatedAt };
+    else if (!groups.has(g)) base[g] = { b: pickGroup(table, g, prev), at: next.clientUpdatedAt };
+    groups.add(g);
+  }
+  for (const g of [...groups]) {
+    const known = base[g];
+    if (known && known.s !== true && groupMatches(table, g, next, known.b)) {
+      delete base[g];
+      groups.delete(g);
+    }
+  }
+  return withTracking(next, { groups: groupNames(table).filter((g) => groups.has(g)), base }, true);
 }
 
 /** Кошелёк должен существовать и не быть удалённым. */

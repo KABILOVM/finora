@@ -12,6 +12,10 @@ export interface WalletsTotal {
   approximate: boolean;
   /** Валюты, чей курс устарел (старше 3 суток). */
   stale: { currency: CurrencyCode; asOf: IsoDate }[];
+  /** Валюты, пересчитанные по курсу, который человек сам ввёл в операции (с днём ввода). */
+  entered: { currency: CurrencyCode; asOf: IsoDate }[];
+  /** true, если хотя бы одна валюта пересчитана по обычному курсу (сеть или «Свой курс»). */
+  viaOtherRates: boolean;
 }
 
 /**
@@ -34,15 +38,26 @@ export function computeWalletsTotal(
     };
     const { totalMinor, missing } = totalInBase(items, base, lookup);
     const stale: WalletsTotal['stale'] = [];
+    const entered: WalletsTotal['entered'] = [];
     let approximate = false;
+    let viaOtherRates = false;
     for (const [currency, hit] of rates) {
       if (!hit || missing.includes(currency)) continue;
       approximate = true;
+      if (hit.entered) entered.push({ currency, asOf: hit.asOf });
+      else viaOtherRates = true;
       if (hit.stale) stale.push({ currency, asOf: hit.asOf });
     }
     // защита от переполнения при дальнейшем показе: сумма должна быть безопасным целым
     addMinor(totalMinor, 0);
-    return { totalMinor, missing, approximate, stale: stale.sort((a, b) => a.currency.localeCompare(b.currency)) };
+    return {
+      totalMinor,
+      missing,
+      approximate,
+      stale: stale.sort((a, b) => a.currency.localeCompare(b.currency)),
+      entered: entered.sort((a, b) => a.currency.localeCompare(b.currency)),
+      viaOtherRates,
+    };
   } catch (e) {
     if (e instanceof RangeError) return null;
     throw e;

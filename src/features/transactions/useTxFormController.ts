@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { TransactionInput } from '@/db';
 import { convertMinor } from '@/domain/money';
 import type { CurrencyCode, LocalRow, Minor, Transaction, TxKind, Wallet } from '@/domain/types';
-import { useRates } from '@/rates/hooks';
+import { useRateService, useRates } from '@/rates/hooks';
 import type { RateLookup } from '@/rates/types';
 import {
   checkDate,
@@ -20,7 +20,7 @@ import {
  * Откуда берётся курс для операции в чужой (не базовой) валюте.
  *  - none    — курс не нужен (валюта кошелька = базовая, или перевод);
  *  - keep    — правка: прежний курс сохраняется, операцию не переоцениваем;
- *  - rate    — курс найден (свежий, устаревший или ручной — см. lookup);
+ *  - rate    — курс найден (свежий, устаревший, ручной или введённый ранее в операции — см. lookup);
  *  - missing — курса нет совсем: человек вводит его руками.
  */
 export type FxView =
@@ -46,11 +46,15 @@ export interface ReceivedView {
 }
 
 export interface Prepared {
-  /**
-   * Готово для repo.transactions.create / update. Курс, набранный руками, лежит только здесь (в самой операции):
-   * в сервис курсов он не попадает, иначе разовый курс (или опечатка) перекрыл бы курс Нацбанка для всех операций.
-   */
+  /** Готово для repo.transactions.create / update. Курс, набранный руками, лежит здесь в `fx` (source 'manual'). */
   input: TransactionInput;
+  /**
+   * Вызвать ПОСЛЕ успешного сохранения: запоминает курс, который человек набрал руками (или изменил), как «введённый»
+   * курс пользователя. Ничего не делает, если курс не набирали. Введённый курс — отдельный запасной слой сервиса курсов:
+   * он никогда не перекрывает свежий курс Нацбанка и «Свой курс», поэтому опечатка не ломает курсы навсегда.
+   * Не бросает: сбой хранилища курсов не должен выглядеть как «операция не сохранилась».
+   */
+  rememberRate: () => void;
 }
 
 export interface ControllerArgs {
@@ -162,6 +166,7 @@ function computeReceived(
 export function useTxFormController(args: ControllerArgs): TxFormController {
   const { wallets, base } = args;
   const { getRate } = useRates();
+  const rateService = useRateService();
   const [form, setForm] = useState<TxFormState>(args.initial);
   const [errors, setErrorsState] = useState<FormErrors>({});
 
@@ -264,7 +269,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
       case 'category':
         return form.kind !== 'transfer';
       case 'rate':
-        return fx.kind === 'missing';
+        return fx.kind === 'missing' || (fx.kind === 'rate' && fx.lookup.entered === true);
       default:
         return true;
     }
@@ -306,8 +311,19 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     }
 
     let fxInput: { rate: number; source: string } | null = null;
+    // Курс, который человек набрал сам (а не взяла программа): после сохранения его запоминаем
+    let typedRate: { from: CurrencyCode; to: CurrencyCode; rate: number } | null = null;
     if (fx.kind === 'rate') {
       fxInput = { rate: fx.lookup.rate, source: fxSourceOf(fx.lookup) };
+      // Ранее введённый курс можно поправить прямо здесь; пустое поле = оставить как есть
+      if (fx.lookup.entered === true && form.rateText.trim() !== '') {
+        const rate = parseRateText(form.rateText);
+        if (rate === null) e.rate = 'Курс — число больше нуля, например 10,9';
+        else if (rate !== fx.lookup.rate) {
+          fxInput = { rate, source: 'manual' };
+          typedRate = { from: fx.from, to: fx.to, rate };
+        }
+      }
     } else if (fx.kind === 'missing') {
       const rate = parseRateText(form.rateText);
       if (rate === null) {
@@ -317,8 +333,18 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
             : 'Курс — число больше нуля, например 10,9';
       } else {
         fxInput = { rate, source: 'manual' };
+        typedRate = { from: fx.from, to: fx.to, rate };
       }
     }
+
+    const rememberRate = (): void => {
+      if (!typedRate) return;
+      try {
+        rateService.rememberEnteredRate(typedRate.from, typedRate.to, typedRate.rate);
+      } catch (err) {
+        console.error('Введённый курс не запомнен (операция сохранена):', err);
+      }
+    };
 
     if (Object.keys(e).length > 0 || amount === null || !wallet) {
       setErrorsState(e);
@@ -339,9 +365,11 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
           occurredOn,
           note,
         },
+        rememberRate,
       };
     }
     return {
+      rememberRate,
       input: {
         kind: form.kind,
         walletId: wallet.id,

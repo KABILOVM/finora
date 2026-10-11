@@ -11,6 +11,7 @@ import { ValidationError, useStore } from '@/db';
 import { CURRENCIES, currencyInfo } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, LocalRow, Minor, Wallet, WalletKind } from '@/domain/types';
+import { endSentence } from '@/features/transactions/txDisplay';
 import { ColorSwatches } from './ColorSwatches';
 import { cleanName, COLOR_CHOICES, DEFAULT_ICON_BY_KIND, sameName, WALLET_KIND_LABELS, WALLET_KINDS } from './walletUi';
 
@@ -202,7 +203,7 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
           </p>
           {wallet && wallet.openingBalanceMinor < 0 && !openingTouched && (
             <p className="text-center text-sm text-warning">
-              Сейчас начальный остаток отрицательный: {formatMinor(wallet.openingBalanceMinor, wallet.currency)}. Он не изменится, пока вы
+              Сейчас начальный остаток отрицательный: {endSentence(formatMinor(wallet.openingBalanceMinor, wallet.currency))} Он не изменится, пока вы
               не введёте новое значение.
             </p>
           )}

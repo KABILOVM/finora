@@ -90,11 +90,16 @@ describe('ATTACK: signOut зависает (сеть «есть, но не ра�
     const auth = mount(fake.client, 200);
     await waitFor(() => expect(auth.api.state.status).toBe('signed-in'));
 
-    void auth.api.signOut();
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 1500));
-    });
-    expect(auth.api.state.status, 'через 1,5 с после нажатия «Выйти» состояние всё ещё не изменилось').toBe('signed-out');
+    // Время поддельное: предел ожидания выхода — настоящий таймер приложения; на загруженной машине «сон 1,5 с» мог не
+    // дождаться его (или, наоборот, уйти далеко за него). Часы продвигаем сами, ровно на 1,5 с.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      void auth.api.signOut();
+      await act(async () => void (await vi.advanceTimersByTimeAsync(1500)));
+      expect(auth.api.state.status, 'через 1,5 с после нажатия «Выйти» состояние всё ещё не изменилось').toBe('signed-out');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -13,6 +13,7 @@ import { formatMinor } from '@/domain/money';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { formatDayLabel } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
+import { enteredNote } from '@/rates/enteredText';
 import { useRates } from '@/rates/hooks';
 import { ReconcileSheet } from './ReconcileSheet';
 import { computeWalletsTotal } from './walletTotals';
@@ -127,7 +128,14 @@ export default function WalletsPage() {
                 {total.approximate && <span title="Приблизительно, по курсу">≈ </span>}
                 <MoneyText minor={total.totalMinor} currency={base} tone="none" />
               </div>
-              {total.approximate && <p className="mt-1 text-sm text-muted">Итог пересчитан по курсам и поэтому приблизительный.</p>}
+              {total.approximate && total.viaOtherRates && (
+                <p className="mt-1 text-sm text-muted">Итог пересчитан по курсам и поэтому приблизительный.</p>
+              )}
+              {total.entered.length > 0 && (
+                <p className="mt-1 text-sm text-muted" data-testid="wallets-total-entered">
+                  {enteredNote(total.entered)} Итог приблизительный.
+                </p>
+              )}
               {total.stale.length > 0 && (
                 <p role="alert" className="mt-1 text-sm text-warning">
                   Курс устарел:{' '}

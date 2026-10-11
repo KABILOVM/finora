@@ -209,14 +209,19 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
       }
       await store.sync.setMeta(META_INITIAL_PULL, true);
     }
+    // Правки существующих записей СНАЧАЛА объединяются с тем, что уже на сервере (db/syncMerge.ts: группы полей), и только
+    // потом уходят: сервер хранит запись целиком по метке, и отправленная «вслепую» запись затёрла бы чужую правку другой части.
+    // Нечитаемая строка здесь отправку не останавливает (как и раньше): о ней скажет получение после отправки.
+    if (await store.sync.hasMergeableEdits()) await pullAll(ctx);
     await pushAll(ctx);
     await refreshCounts();
     // Обязательно забираем после отправки: сервер мог оставить свою, более новую версию — принимаем её.
-    // Если пришедшее пришлось согласовать с операциями (см. reconcile.ts), исправленное сразу уходит на сервер.
+    // Если пришедшее пришлось согласовать с операциями (см. reconcile.ts) или объединить с локальной правкой
+    // (строка снова ждёт отправки), исправленное сразу уходит на сервер.
     for (let round = 0; ; round++) {
       const pulled = await pullAll(ctx);
       if (pulled.unreadable) throw new UnreadableSignal();
-      if (pulled.repaired === 0 || round >= MAX_REPAIR_ROUNDS) break;
+      if ((pulled.repaired === 0 && pulled.merged === 0) || round >= MAX_REPAIR_ROUNDS) break;
       await pushAll(ctx);
       await refreshCounts();
     }
