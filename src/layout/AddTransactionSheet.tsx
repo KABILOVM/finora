@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
@@ -97,8 +97,13 @@ function AddForm({ onClose, wallets, categories, settings, stats, onSaved }: Add
   const toast = useToast();
   const formRef = useRef<HTMLDivElement>(null);
 
+  // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
+  const presetKind = (useLocation().state as { kind?: string } | null)?.kind;
   const [initial] = useState(() =>
-    emptyForm(pickDefaultWallet(wallets, stats.lastWalletId, settings.defaultWalletId)),
+    emptyForm(
+      pickDefaultWallet(wallets, stats.lastWalletId, settings.defaultWalletId),
+      presetKind === 'income' || presetKind === 'transfer' ? presetKind : 'expense',
+    ),
   );
   const c = useTxFormController({ mode: 'add', initial, wallets, allWallets: wallets, base: settings.baseCurrency });
 

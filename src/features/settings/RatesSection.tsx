@@ -40,13 +40,13 @@ export function RatesSection() {
   const rows = base
     ? currencies.map((from) => ({ from, lookup: getRate(from, base) }))
     : [];
+  // Все кошельки в основной валюте — курсы не нужны, раздел не показываем
+  if (!base || currencies.length === 0) return null;
   const anyStale = rows.some((r) => r.lookup?.stale);
 
   return (
     <SettingsSection title="Курсы валют">
-      <p className="text-muted">
-        Последнее обновление: {lastRefreshAt ? formatDateTime(lastRefreshAt) : 'ещё не обновлялись'}
-      </p>
+      <p className="text-sm text-muted">Обновлены: {lastRefreshAt ? formatDateTime(lastRefreshAt) : 'ещё нет'}</p>
       {lastError && (
         <p className="text-sm text-warning">
           Последняя попытка не удалась: {lastError}
@@ -54,15 +54,11 @@ export function RatesSection() {
       )}
       {anyStale && (
         <p className="rounded-xl bg-warning/10 p-3 text-warning">
-          Курс устарел (старше 3 суток). Обновите курсы, когда будет интернет, или задайте свой курс.
+          Курс устарел. Обновите курсы или задайте свой.
         </p>
       )}
 
-      {base && currencies.length === 0 && (
-        <p className="text-muted">Все кошельки в {base}: курсы не нужны. Они понадобятся, когда появится кошелёк в другой валюте.</p>
-      )}
-
-      {base && rows.length > 0 && (
+      {rows.length > 0 && (
         <ul className="divide-y divide-border">
           {rows.map(({ from, lookup }) => (
             <li key={from} className="flex items-center justify-between gap-3 py-2">
@@ -75,7 +71,7 @@ export function RatesSection() {
                     ? lookup.entered
                       ? `${enteredLabel(lookup.asOf)} · в операции`
                       : `${rateSourceLabel(lookup.source)} · на ${formatDayLabel(lookup.asOf)}${lookup.stale ? ' · устарел' : ''}`
-                    : 'Обновите курсы или задайте свой — иначе кошелёк не войдёт в «Всего».'}
+                    : 'Обновите или задайте свой — иначе кошелёк не войдёт в «Всего»'}
                 </div>
               </div>
               <Button variant="secondary" aria-label={`Свой курс ${from}`} onClick={() => setEditing(from)}>

@@ -119,20 +119,20 @@ describe('Настройки: аккаунт', () => {
     const { engine } = await openCloudSettings();
     act(() => engine().set({ pending: 3 }));
     const wipe = await waitFor(() => {
-      const b = screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' });
+      const b = screen.getByRole('button', { name: 'Выйти и стереть данные устройства' });
       expect(b).toBeDisabled();
       return b;
     });
     expect(wipe).toBeDisabled();
-    expect(screen.getByText(/Недоступно, пока не всё отправлено в облако/)).toBeInTheDocument();
+    expect(screen.getByText(/Недоступно: не всё ещё отправлено/)).toBeInTheDocument();
   });
 
   it('«Выйти и удалить»: в базе есть неотправленное, а движок об этом не знает (запись соседней вкладки) → кнопка недоступна, ничего не удалено', async () => {
     const { td, store, fake } = await openCloudSettings();
     await eventually(async () => expect((await store().sync.counts()).pending).toBeGreaterThan(0));
     // статус берётся и из самой базы: кнопка не ждёт, пока движок пересчитает очередь
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' })).toBeDisabled());
-    expect(screen.getByText(/Недоступно, пока не всё отправлено в облако/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и стереть данные устройства' })).toBeDisabled());
+    expect(screen.getByText(/Недоступно: не всё ещё отправлено/)).toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(td.deleted).toEqual([]);
     expect(fake.calls.signOut).toBe(0);
@@ -148,8 +148,8 @@ describe('Настройки: аккаунт', () => {
     const { store, fake } = await openCloudSettings({ td });
     await eventually(async () => expect(await store().sync.getMeta('initialPullDone')).toBe(true));
     await markAllPushed(store());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' })).toBeEnabled());
-    await user.click(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и стереть данные устройства' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Выйти и стереть данные устройства' }));
     const dialog = await findByRole('alertdialog');
     expect(dialog).toHaveTextContent('Удалить данные с этого устройства?');
     expect(dialog).toHaveTextContent('В облаке они сохранятся');
@@ -172,8 +172,8 @@ describe('Настройки: аккаунт', () => {
     const { td, store, fake } = await openCloudSettings();
     await eventually(async () => expect(await store().sync.getMeta('initialPullDone')).toBe(true));
     await markAllPushed(store());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' })).toBeEnabled());
-    await user.click(screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Выйти и стереть данные устройства' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Выйти и стереть данные устройства' }));
     await findByRole('alertdialog');
     await write(() =>
       store().wallets.create({ name: 'Только что', currency: 'TJS', kind: 'cash', openingBalanceMinor: 1, color: '#000000', icon: '💰' }),
@@ -250,23 +250,13 @@ describe('Настройки: смена пароля', () => {
 });
 
 describe('Настройки: синхронизация (облако)', () => {
-  it('статус человеческим языком: всё отправлено / не было / ждёт / нет сети / ошибка / нужен вход', async () => {
+  it('пока всё в порядке, раздела синхронизации нет; при ошибке или потере входа он появляется', async () => {
     const { engine } = await openCloudSettings();
     await eventually(() => expect(engine().getStatus().lastSyncedAt).not.toBeNull());
-    act(() => engine().set({ phase: 'idle', pending: 0, quarantined: 0 }));
-    await waitFor(() => expect(screen.getByText('Всё отправлено в облако')).toBeInTheDocument());
-    expect(screen.getByText(/Последняя успешная синхронизация: Сегодня, \d{2}:\d{2}/)).toBeInTheDocument();
-
-    act(() => engine().set({ lastSyncedAt: null }));
-    await waitFor(() => expect(screen.getByText('Ещё не синхронизировалось')).toBeInTheDocument());
-    expect(screen.queryByText('Всё отправлено в облако')).toBeNull();
-    expect(screen.getByText(/ещё не было/)).toBeInTheDocument();
-
-    act(() => engine().set({ pending: 2 }));
-    await waitFor(() => expect(screen.getByText('Ждут отправки: 2 записи')).toBeInTheDocument());
-
-    act(() => engine().set({ phase: 'offline' }));
-    await waitFor(() => expect(screen.getByText('Нет связи с облаком')).toBeInTheDocument());
+    for (const state of [{ phase: 'idle' as const, pending: 0 }, { pending: 2 }, { phase: 'offline' as const }]) {
+      act(() => engine().set({ quarantined: 0, ...state }));
+      await waitFor(() => expect(screen.queryByRole('heading', { name: 'Синхронизация', level: 2 })).toBeNull());
+    }
 
     act(() => engine().set({ phase: 'error', lastError: 'сервер перегружен' }));
     await waitFor(() => expect(screen.getByText('Не удалось синхронизировать')).toBeInTheDocument());
@@ -288,7 +278,8 @@ describe('Настройки: синхронизация (облако)', () => 
 
   it('«Синхронизировать сейчас» запускает синхронизацию вручную', async () => {
     const { engine } = await openCloudSettings();
-    await user.click(screen.getByRole('button', { name: 'Синхронизировать сейчас' }));
+    act(() => engine().set({ phase: 'error', lastError: 'сбой' }));
+    await user.click(await findByRole('button', { name: 'Синхронизировать сейчас' }));
     await eventually(() => expect(engine().calls.syncNow).toContain('manual'));
   });
 

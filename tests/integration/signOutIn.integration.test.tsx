@@ -98,8 +98,8 @@ describe('атака 2: выход и вход', () => {
     s.net.online = false;
     await addNote(liveStore(s), 'секрет-Алисы');
     await eventually(async () => expect((await liveStore(s).sync.counts()).pending).toBe(1));
-    await waitFor(() => expect(text()).toMatch(/Выйти и удалить данные/));
-    await waitFor(() => expect(screen.getByRole('button', { name: /Выйти и удалить данные/ })).toBeDisabled());
+    await waitFor(() => expect(text()).toMatch(/Выйти и стереть данные/));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Выйти и стереть данные/ })).toBeDisabled());
 
     // «Выйти» → предупреждение; «Отмена» оставляет в аккаунте
     await user.click(screen.getByRole('button', { name: 'Выйти' }));
@@ -109,7 +109,7 @@ describe('атака 2: выход и вход', () => {
     expect(s.auth.current?.id).toBe(ALICE.id);
 
     // «Выйти и удалить» заблокирована, а прямое нажатие ничего не удаляет
-    await user.click(screen.getByRole('button', { name: /Выйти и удалить данные/ }));
+    await user.click(screen.getByRole('button', { name: /Выйти и стереть данные/ }));
     expect(s.td.deleted).toEqual([]);
 
     // Всё равно выйти
@@ -154,8 +154,8 @@ describe('атака 2: выход и вход', () => {
     const walletsBefore = server.dump(ALICE.id, 'wallets').length;
     const catsBefore = server.dump(ALICE.id, 'categories').length;
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Выйти и удалить данные/ })).not.toBeDisabled());
-    await user.click(screen.getByRole('button', { name: /Выйти и удалить данные/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Выйти и стереть данные/ })).not.toBeDisabled());
+    await user.click(screen.getByRole('button', { name: /Выйти и стереть данные/ }));
     await findByRole('alertdialog', { name: 'Удалить данные с этого устройства?' });
     await user.click(screen.getByRole('button', { name: 'Выйти и удалить' }));
     await waitFor(() => expect(s.td.deleted).toEqual([ALICE.id]));
@@ -180,8 +180,8 @@ describe('атака 2: выход и вход', () => {
     renderAppRoot(<AppRoutes />, { client: s.auth.client, deps: s.td.deps, path: '/settings' });
     await findByRole('heading', { name: 'Настройки', level: 1 });
     await untilSynced(s);
-    await waitFor(() => expect(screen.getByRole('button', { name: /Выйти и удалить данные/ })).not.toBeDisabled());
-    await user.click(screen.getByRole('button', { name: /Выйти и удалить данные/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Выйти и стереть данные/ })).not.toBeDisabled());
+    await user.click(screen.getByRole('button', { name: /Выйти и стереть данные/ }));
     await findByRole('alertdialog', { name: 'Удалить данные с этого устройства?' });
     // пока диалог открыт, «в фоне» появилась запись (например, из другой вкладки)
     s.net.online = false;

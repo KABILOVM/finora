@@ -22,6 +22,8 @@ export default defineConfig({
     trace: 'retain-on-failure',
     locale: 'ru-RU',
     timezoneId: 'Asia/Dushanbe',
+    // без анимаций: счётчик суммы на «Главной» иначе читается посреди набега
+    reducedMotion: 'reduce',
     launchOptions,
   },
   webServer: {

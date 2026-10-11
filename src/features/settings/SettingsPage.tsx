@@ -1,24 +1,27 @@
 import { Glyph } from '@/components/Glyph';
 import { Link } from 'react-router-dom';
-import { useAuth } from '@/auth/AuthProvider';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
+import { useSyncEnabled, useSyncStatus } from '@/sync/syncContext';
 import { version } from '../../../package.json';
+import { AppearanceSection } from './AppearanceSection';
 import { AccountSection } from './AccountSection';
 import { BackupSection } from './BackupSection';
-import { CloudCheckSection } from './CloudCheckSection';
 import { CurrencySection } from './CurrencySection';
-import { DataCheckSection } from './DataCheckSection';
-import { InstallSection } from './InstallSection';
 import { RatesSection } from './RatesSection';
-import { SettingsSection } from './SettingsSection';
-import { StorageSection } from './StorageSection';
 import { SyncSection } from './SyncSection';
 
-/** Настройки: аккаунт, синхронизация, проверка облака, валюта, курсы, копия, проверка данных, хранилище, установка, версия. */
+/** Сообщает о синхронизации только когда с ней что-то не так; в обычной жизни она идёт сама и статус виден в шапке. */
+function SyncProblems() {
+  const enabled = useSyncEnabled();
+  const status = useSyncStatus();
+  const broken = status.quarantined > 0 || status.phase === 'auth-required' || status.phase === 'error';
+  return enabled && broken ? <SyncSection /> : null;
+}
+
+/** Настройки: только то, чем человек пользуется. Всё остальное (синхронизация, курсы, проверки) работает само. */
 export default function SettingsPage() {
-  const { cloud } = useAuth();
   return (
     <>
       <PageHeader title="Настройки" />
@@ -34,21 +37,16 @@ export default function SettingsPage() {
         </Link>
       </Card>
 
-      <AccountSection />
-      <SyncSection />
-      <CloudCheckSection />
+      <SyncProblems />
+      <AppearanceSection />
       <CurrencySection />
       <RatesSection />
       <BackupSection />
-      <DataCheckSection />
-      <StorageSection />
-      <InstallSection />
+      <AccountSection />
 
-      <SettingsSection title="О приложении">
-        <p>Finora — личный учёт денег. Версия {version}.</p>
-        <p className="text-sm text-muted">{cloud ? 'Режим: с облаком (данные синхронизируются).' : 'Режим: только на этом устройстве.'}</p>
-        <p className="text-xs text-muted">Иконки: Solar (CC BY 4.0) и Lucide (ISC). Шрифт: Manrope (SIL OFL).</p>
-      </SettingsSection>
+      <p className="pb-2 text-center text-xs text-muted">
+        Finora {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Manrope (SIL OFL)
+      </p>
     </>
   );
 }

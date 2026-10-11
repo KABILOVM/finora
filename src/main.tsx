@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { UpdatePromptHost } from './components/UpdatePrompt';
 import './index.css';
+import { applyTheme, readThemePref } from './theme';
+
+// Тема применяется до первой отрисовки: страница не мигает не той темой.
+applyTheme(readThemePref());
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Не найден элемент #root в index.html');

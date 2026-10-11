@@ -48,7 +48,7 @@ export function BackupSection() {
     try {
       const file = await exportBackup(store);
       downloadTextFile(`finora-backup-${todayLocal()}.json`, 'application/json', JSON.stringify(file, null, 2));
-      toast.success('Файл с копией готов — проверьте загрузки на устройстве');
+      toast.success('Копия сохранена в загрузки');
     } catch (e) {
       setError(backupErrorText(e, 'export'));
     } finally {
@@ -62,7 +62,7 @@ export function BackupSection() {
     setError(null);
     try {
       downloadTextFile(`finora-transactions-${todayLocal()}.csv`, 'text/csv', await exportTransactionsCsv(store));
-      toast.success('Файл с операциями готов — проверьте загрузки на устройстве');
+      toast.success('Таблица сохранена в загрузки');
     } catch (e) {
       setError(backupErrorText(e, 'export'));
     } finally {
@@ -108,18 +108,15 @@ export function BackupSection() {
 
   return (
     <SettingsSection title="Резервная копия">
-      <p className="text-muted">
-        Копия — это файл со всеми кошельками, категориями и операциями. Сохраняйте его в надёжное место (облако, почта, компьютер).
-      </p>
       <div className="flex flex-col gap-2">
         <Button variant="secondary" icon="download" loading={busy === 'json'} onClick={() => void exportJson()}>
-          Скачать копию (JSON)
+          Сохранить копию
         </Button>
         <Button variant="secondary" icon="download" loading={busy === 'csv'} onClick={() => void exportCsv()}>
-          Скачать операции (CSV)
+          Операции в таблицу (CSV)
         </Button>
         <Button variant="secondary" icon="upload" loading={busy === 'import'} onClick={() => fileInput.current?.click()}>
-          Загрузить копию (JSON)
+          Загрузить копию
         </Button>
         <input
           ref={fileInput}
@@ -141,16 +138,9 @@ export function BackupSection() {
       {result && (
         <div role="status" className="rounded-xl bg-income/10 p-3">
           <p className="font-semibold text-income">Копия загружена</p>
-          <ul className="mt-1 list-disc pl-5">
-            <li>Добавлено записей: {result.added}</li>
-            <li>Заменено более новыми из файла: {result.replaced}</li>
-            <li>Оставлено текущих (они новее или такие же): {result.keptLocal}</li>
-          </ul>
-          {result.foreign && (
-            <p className="mt-2 text-sm text-muted">
-              Основная валюта и кошелёк по умолчанию из файла не переносились: остались такие, как в этом аккаунте (валюту можно проверить в разделе «Валюта учёта»).
-            </p>
-          )}
+          <p className="mt-1 text-sm">
+            Добавлено: {result.added} · обновлено: {result.replaced}
+          </p>
         </div>
       )}
 

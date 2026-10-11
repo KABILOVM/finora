@@ -1,5 +1,6 @@
 import { useLocation, type Location } from 'react-router-dom';
 import type { IconName } from '@/components/Icon';
+import type { TxKind } from '@/domain/types';
 
 export interface NavItem {
   to: string;
@@ -72,11 +73,11 @@ export const ADD_LABEL = 'Добавить операцию';
 export interface AddLinkProps {
   to: string;
   /** Страница, поверх которой откроется шит: после закрытия возвращаемся на неё. */
-  state: { background: Location };
+  state: { background: Location; kind?: TxKind };
 }
 
 /** Свойства для <Link {...useAddLink()}>: шит «Новая операция» открывается поверх текущей страницы. */
-export function useAddLink(): AddLinkProps {
+export function useAddLink(kind?: TxKind): AddLinkProps {
   const location = useLocation();
-  return { to: ADD_PATH, state: { background: location } };
+  return { to: ADD_PATH, state: kind ? { background: location, kind } : { background: location } };
 }

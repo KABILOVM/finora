@@ -25,13 +25,8 @@ export function AccountSection() {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  if (!auth.cloud) {
-    return (
-      <SettingsSection title="Аккаунт">
-        <p>Входа нет: облако не подключено, это приложение работает только на этом устройстве.</p>
-      </SettingsSection>
-    );
-  }
+  // Без облака входа нет — и показывать нечего
+  if (!auth.cloud) return null;
 
   const email = auth.user?.email || 'почта не указана';
   const offlineKnown = auth.state.status === 'offline-known';
@@ -110,13 +105,10 @@ export function AccountSection() {
 
   return (
     <SettingsSection title="Аккаунт">
-      <div>
-        <div className="text-sm text-muted">Почта</div>
-        <div className="break-all text-lg font-semibold">{email}</div>
-      </div>
+      <div className="break-all text-lg font-semibold">{email}</div>
       {offlineKnown && (
         <p role="status" className="rounded-xl bg-warning/10 p-3 text-warning">
-          Нет связи с аккаунтом. Вы работаете с данными, сохранёнными на этом устройстве; при появлении сети вход подтвердится.
+          Нет связи с аккаунтом. Работаете с данными на устройстве, вход подтвердится при появлении сети.
         </p>
       )}
       <div className="flex flex-col gap-2">
@@ -128,16 +120,10 @@ export function AccountSection() {
         </Button>
       </div>
 
-      <div className="border-t border-border pt-3">
-        <Button variant="danger" disabled={busy || hasUnsent} onClick={() => void startWipe()}>
-          Выйти и удалить данные с этого устройства
-        </Button>
-        <p className="mt-2 text-sm text-muted">
-          {hasUnsent
-            ? 'Недоступно, пока не всё отправлено в облако: эти записи пропали бы насовсем.'
-            : 'Доступно, когда всё отправлено в облако. Нужно, например, если устройство отдаёте другому человеку.'}
-        </p>
-      </div>
+      <Button variant="danger" disabled={busy || hasUnsent} onClick={() => void startWipe()}>
+        Выйти и стереть данные устройства
+      </Button>
+      {hasUnsent && <p className="-mt-1 text-sm text-muted">Недоступно: не всё ещё отправлено в облако.</p>}
 
       {passwordOpen && <ChangePasswordSheet onClose={() => setPasswordOpen(false)} />}
 

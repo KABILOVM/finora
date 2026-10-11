@@ -41,38 +41,23 @@ afterEach(() => {
 });
 
 describe('Настройки: общий вид (локальный режим)', () => {
-  it('все разделы на месте, версия берётся из package.json, ссылка «Категории»', async () => {
+  it('только нужное: оформление, валюта, копия, категории; версия берётся из package.json', async () => {
     await openSettings();
-    for (const name of [
-      'Аккаунт',
-      'Синхронизация',
-      'Валюта учёта',
-      'Курсы валют',
-      'Резервная копия',
-      'Проверка данных',
-      'Хранилище',
-      'Установка на телефон',
-      'О приложении',
-    ]) {
+    for (const name of ['Оформление', 'Валюта учёта', 'Резервная копия']) {
       expect(screen.getByRole('heading', { name, level: 2 })).toBeInTheDocument();
     }
-    expect(screen.getByText(`Finora — личный учёт денег. Версия ${version}.`)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Finora ${version.replace(/\./g, '\\.')} `))).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Категории/ })).toHaveAttribute('href', '/settings/categories');
   });
 
-  it('аккаунт и синхронизация честно говорят, что облака нет; кнопки «Синхронизировать сейчас» нет', async () => {
+  it('лишнего нет: облака и входа в локальном режиме не видно, технических разделов нет вовсе', async () => {
     await openSettings();
-    expect(screen.getByText(/Входа нет: облако не подключено/)).toBeInTheDocument();
-    expect(screen.getByText('Облако не подключено.')).toBeInTheDocument();
+    for (const name of ['Аккаунт', 'Синхронизация', 'Проверка облака', 'Проверка данных', 'Хранилище', 'Установка на телефон', 'О приложении']) {
+      expect(screen.queryByRole('heading', { name, level: 2 })).toBeNull();
+    }
     expect(screen.queryByRole('button', { name: 'Синхронизировать сейчас' })).toBeNull();
-    expect(screen.queryByText('Всё отправлено в облако')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Выйти' })).toBeNull();
-  });
-
-  it('подсказка про iPhone и установку на экран «Домой»', async () => {
-    await openSettings();
-    expect(screen.getByText(/Safari на iPhone может очистить данные сайта, который не открывали около недели/)).toBeInTheDocument();
-    expect(screen.getByText(/На экран Домой/)).toBeInTheDocument();
+    expect(screen.queryByText(/Дополнительно/)).toBeNull();
   });
 });
 
@@ -111,10 +96,10 @@ describe('Настройки: курсы валют', () => {
     icon: '💲',
   };
 
-  it('все кошельки в базовой валюте — курсы не нужны', async () => {
+  it('все кошельки в базовой валюте — курсы не нужны, раздела нет', async () => {
     await openSettings();
-    expect(screen.getByText(/Все кошельки в TJS: курсы не нужны/)).toBeInTheDocument();
-    expect(screen.getByText('Последнее обновление: ещё не обновлялись')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Курсы валют', level: 2 })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Обновить курсы' })).toBeNull();
   });
 
   it('нет курса → «курса нет»; ручной курс сохраняется через сервис и показывается как «задан вручную»', async () => {
@@ -171,7 +156,7 @@ describe('Настройки: курсы валют', () => {
     await service.refresh();
     const td = await openSettings({ rates: service });
     await write(() => store(td).wallets.create(usdWallet));
-    await waitFor(() => expect(screen.getByText(/Курс устарел \(старше 3 суток\)/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Курс устарел/)).toBeInTheDocument());
     expect(screen.getByText(/· устарел/)).toBeInTheDocument();
   });
 
@@ -200,8 +185,9 @@ describe('Настройки: курсы валют', () => {
 
   it('когда курсы ни разу не получилось обновить — сервис не падает, экран спокоен', async () => {
     const { service } = setup([stubProvider('nbt', fail('таймаут'))], { now: () => NOW });
-    await openSettings({ rates: service });
-    expect(screen.getByText('Последнее обновление: ещё не обновлялись')).toBeInTheDocument();
+    const td = await openSettings({ rates: service });
+    await write(() => store(td).wallets.create(usdWallet));
+    await waitFor(() => expect(screen.getByText('Обновлены: ещё нет')).toBeInTheDocument());
   });
 });
 
@@ -234,9 +220,9 @@ describe('Настройки: резервная копия', () => {
     fire(input, new Event('change', { bubbles: true }));
   }
 
-  it('«Скачать копию (JSON)» отдаёт файл finora-backup-ГГГГ-ММ-ДД.json с полными данными', async () => {
+  it('«Сохранить копию» отдаёт файл finora-backup-ГГГГ-ММ-ДД.json с полными данными', async () => {
     const td = await openSettings();
-    await user.click(screen.getByRole('button', { name: 'Скачать копию (JSON)' }));
+    await user.click(screen.getByRole('button', { name: 'Сохранить копию' }));
     await waitFor(() => expect(downloads).toHaveLength(1));
     expect(downloads[0]?.name).toMatch(/^finora-backup-\d{4}-\d{2}-\d{2}\.json$/);
     expect(downloads[0]?.href).toBe('blob:test-1');
@@ -248,11 +234,11 @@ describe('Настройки: резервная копия', () => {
     expect(td.stores).toHaveLength(1);
   });
 
-  it('«Скачать операции (CSV)» отдаёт файл .csv', async () => {
+  it('«Операции в таблицу (CSV)» отдаёт файл .csv', async () => {
     const td = await openSettings();
     const cash = (await store(td).db.wallets.toArray())[0];
     await write(() => store(td).transactions.create({ kind: 'expense', walletId: cash?.id ?? '', amountMinor: 12_345, occurredOn: '2026-10-05', note: 'хлеб' }));
-    await user.click(screen.getByRole('button', { name: 'Скачать операции (CSV)' }));
+    await user.click(screen.getByRole('button', { name: 'Операции в таблицу (CSV)' }));
     await waitFor(() => expect(downloads).toHaveLength(1));
     expect(downloads[0]?.name).toMatch(/^finora-transactions-\d{4}-\d{2}-\d{2}\.csv$/);
     const csv = await readFileText(blobs[0] as Blob);
@@ -264,7 +250,7 @@ describe('Настройки: резервная копия', () => {
     const td = await openSettings();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.spyOn(store(td).db, 'transaction').mockRejectedValue(new Error('IDB упал'));
-    await user.click(screen.getByRole('button', { name: 'Скачать копию (JSON)' }));
+    await user.click(screen.getByRole('button', { name: 'Сохранить копию' }));
     expect(await findByRole('alert')).toHaveTextContent('Не удалось подготовить файл');
     expect(downloads).toHaveLength(0);
   });
@@ -333,7 +319,7 @@ describe('Настройки: резервная копия', () => {
     expect(await findByRole('alert')).toHaveTextContent('слишком большой');
   });
 
-  it('своя копия: подтверждение → отчёт «добавлено / заменено / оставлено текущих»', async () => {
+  it('своя копия: подтверждение → отчёт «добавлено / обновлено»', async () => {
     const td = await openSettings();
     const s = store(td);
     await write(() => s.wallets.create({ name: 'Накопления', currency: 'TJS', kind: 'savings', openingBalanceMinor: 9_000, color: '#7c3aed', icon: '🪙' }));
@@ -350,9 +336,7 @@ describe('Настройки: резервная копия', () => {
     const report = await findByRole('status', { name: undefined });
     await waitFor(() => expect(screen.getByText('Копия загружена')).toBeInTheDocument());
     expect(report).toBeTruthy();
-    expect(screen.getByText(/Добавлено записей: 0/)).toBeInTheDocument();
-    expect(screen.getByText(/Заменено более новыми из файла: 0/)).toBeInTheDocument();
-    expect(screen.getByText(/Оставлено текущих \(они новее или такие же\): \d+/)).toBeInTheDocument();
+    expect(screen.getByText(/Добавлено: 0 · обновлено: 0/)).toBeInTheDocument();
     expect((await s.db.wallets.toArray()).map((w) => w.name).sort()).toEqual(['Накопления', 'Наличные', 'Новее копии']);
   });
 
@@ -386,81 +370,5 @@ describe('Настройки: резервная копия', () => {
     await waitFor(() => expect(screen.getByText('Копия загружена')).toBeInTheDocument());
     const names = (await targetDeps.stores.at(-1)?.db.wallets.toArray())?.map((w) => w.name);
     expect(names).toContain('С другого телефона');
-  });
-});
-
-describe('Настройки: проверка данных', () => {
-  it('чистые данные → «Проблем не найдено»', async () => {
-    await openSettings();
-    await user.click(screen.getByRole('button', { name: 'Проверить данные' }));
-    expect(await waitFor(() => screen.getByText(/Проблем не найдено\. Проверено 0 операций\./))).toBeInTheDocument();
-  });
-
-  it('битая операция (нулевая сумма, неизвестный кошелёк) выводится списком', async () => {
-    const td = await openSettings();
-    const s = store(td);
-    const cash = (await s.db.wallets.toArray())[0];
-    const good = await write(() => s.transactions.create({ kind: 'expense', walletId: cash?.id ?? '', amountMinor: 100, occurredOn: '2026-10-05' }));
-    // портим напрямую в базе (как это могла бы сделать старая версия или чужой импорт)
-    await s.db.transactions.put({ ...good, id: 'bad-1', amountMinor: 0, walletId: 'нет-такого' });
-    await user.click(screen.getByRole('button', { name: 'Проверить данные' }));
-    const alert = await findByRole('alert');
-    expect(alert).toHaveTextContent('Найдено проблем: 2 (проверено 2)');
-    expect(alert).toHaveTextContent('Некорректная сумма');
-    expect(alert).toHaveTextContent('Кошелёк операции не найден');
-  });
-});
-
-describe('Настройки: хранилище', () => {
-  const mockStorage = (persisted: boolean, persist: boolean | 'throw') => {
-    const persistFn = vi.fn(async () => {
-      if (persist === 'throw') throw new Error('нельзя');
-      return persist;
-    });
-    Object.defineProperty(navigator, 'storage', {
-      value: { persisted: vi.fn(async () => persisted), persist: persistFn },
-      configurable: true,
-    });
-    return persistFn;
-  };
-
-  it('браузер не умеет сообщать — так и говорим', async () => {
-    await openSettings();
-    await waitFor(() => expect(screen.getByText('Этот браузер не сообщает, защищены ли данные.')).toBeInTheDocument());
-  });
-
-  it('данные не защищены → кнопка; браузер согласился → «защищены»', async () => {
-    const persist = mockStorage(false, true);
-    await openSettings();
-    await waitFor(() => expect(screen.getByText(/Данные не защищены/)).toBeInTheDocument());
-    const callsBefore = persist.mock.calls.length; // (базу при открытии тоже просит не очищаться)
-    await user.click(screen.getByRole('button', { name: 'Защитить данные от очистки' }));
-    await waitFor(() => expect(screen.getByText(/Данные защищены/)).toBeInTheDocument());
-    expect(persist.mock.calls.length).toBe(callsBefore + 1);
-    expect(screen.queryByRole('button', { name: 'Защитить данные от очистки' })).toBeNull();
-  });
-
-  it('браузер отказал (как Safari) → честное объяснение и совет про экран «Домой»', async () => {
-    mockStorage(false, false);
-    await openSettings();
-    await waitFor(() => expect(screen.getByText(/Данные не защищены/)).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Защитить данные от очистки' }));
-    expect(await findByRole('alert')).toHaveTextContent('Браузер не дал защиту');
-    expect(screen.getByText(/Данные не защищены/)).toBeInTheDocument();
-  });
-
-  it('уже защищены → кнопки нет', async () => {
-    mockStorage(true, true);
-    await openSettings();
-    await waitFor(() => expect(screen.getByText(/Данные защищены: браузер не будет их удалять сам/)).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Защитить данные от очистки' })).toBeNull();
-  });
-
-  it('persist() бросил исключение → сообщение об отказе, экран жив', async () => {
-    mockStorage(false, 'throw');
-    await openSettings();
-    await waitFor(() => expect(screen.getByText(/Данные не защищены/)).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Защитить данные от очистки' }));
-    expect(await findByRole('alert')).toHaveTextContent('Браузер не дал защиту');
   });
 });

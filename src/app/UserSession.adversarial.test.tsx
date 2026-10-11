@@ -77,7 +77,7 @@ describe('ATTACK: «Выйти и удалить данные с этого ус
     }, 8000);
 
     // Кнопка включается, когда СТАТУС синхронизации показал «всё отправлено» — он обновляется чуть позже, чем база; человек это ждёт.
-    const wipe = () => screen.getByRole('button', { name: 'Выйти и удалить данные с этого устройства' });
+    const wipe = () => screen.getByRole('button', { name: 'Выйти и стереть данные устройства' });
     await waitFor(() => expect(wipe()).toBeEnabled(), 8000);
     await user.click(wipe());
     await user.click(await findByRole('button', { name: 'Выйти и удалить' }));

@@ -35,11 +35,7 @@ export function CurrencySection() {
 
   return (
     <SettingsSection title="Валюта учёта">
-      <Field
-        id="base-currency"
-        label="Основная валюта"
-        hint="В ней показываются итоги. Смена касается только НОВЫХ операций: старые остаются в прежней валюте и в итоги месяца в новой валюте не войдут. Менять стоит только в самом начале учёта."
-      >
+      <Field id="base-currency" label="Основная валюта">
         <select
           id="base-currency"
           value={current ?? ''}

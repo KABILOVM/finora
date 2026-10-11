@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
 import { Icon } from '@/components/Icon';
 import { Logo } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/cn';
 import { ADD_LABEL, isNavActive, NAV_ITEMS, useAddLink, type NavItem } from './nav';
 
@@ -50,7 +51,10 @@ export function SideNav({ status }: { status?: ReactNode }) {
           ))}
         </div>
       </nav>
-      {status && <div className="flex flex-wrap gap-2 px-1">{status}</div>}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <ThemeToggle />
+        {status}
+      </div>
     </aside>
   );
 }

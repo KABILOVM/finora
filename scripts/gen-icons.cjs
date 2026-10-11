@@ -15,7 +15,7 @@ const DUO = {
   download: 'download-minimalistic', upload: 'upload-minimalistic', search: 'magnifer', calendar: 'calendar-mark',
   transfer: 'transfer-horizontal', alert: 'danger-triangle', info: 'info-circle', backspace: 'backspace',
   income: 'arrow-left-down', expense: 'arrow-right-up', user: 'user-circle', logout: 'logout-2', mail: 'letter',
-  settings: 'settings', pie: 'pie-chart-2', banknote: 'banknote-2', sliders: 'tuning-2', target: 'target', chart: 'chart-2', fire: 'fire', shield: 'shield-check',
+  settings: 'settings', sun: 'sun-2', moon: 'moon', pie: 'pie-chart-2', banknote: 'banknote-2', sliders: 'tuning-2', target: 'target', chart: 'chart-2', fire: 'fire', shield: 'shield-check',
   // значки категорий и кошельков
   cart: 'cart-large-2', food: 'chef-hat-minimalistic', cup: 'cup-hot', donut: 'donut-bitten', wine: 'wineglass', bus: 'bus',
   car: 'car', fuel: 'gas-station', plane: 'plain-2', scooter: 'scooter', sofa: 'sofa', bulb: 'lightbulb',
