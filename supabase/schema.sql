@@ -414,9 +414,9 @@ revoke all on table public.settings, public.wallets, public.categories, public.t
 grant select, insert, update on table public.settings, public.wallets, public.categories, public.transactions
   to authenticated;
 
-alter table public.settings     enable row level security;
-alter table public.wallets      enable row level security;
-alter table public.categories   enable row level security;
+alter table public.settings enable row level security;
+alter table public.wallets enable row level security;
+alter table public.categories enable row level security;
 alter table public.transactions enable row level security;
 
 -- (select auth.uid()) вместо auth.uid(): значение считается один раз на запрос, а не на каждую строку.
