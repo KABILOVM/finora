@@ -94,6 +94,10 @@ describe('summarizeMonth', () => {
         { categoryId: 'food', totalMinor: 5000 },
         { categoryId: null, totalMinor: 500 },
       ],
+      feeMinor: 0,
+      debtInMinor: 0,
+      debtOutMinor: 0,
+      debtFlowMinor: 0,
       excludedCount: 2,
     });
   });
@@ -104,7 +108,16 @@ describe('summarizeMonth', () => {
   });
 
   it('пустой месяц', () => {
-    expect(summarizeMonth([], '2026-10', 'TJS')).toEqual({ incomeMinor: 0, expenseMinor: 0, byCategory: [], excludedCount: 0 });
+    expect(summarizeMonth([], '2026-10', 'TJS')).toEqual({
+      incomeMinor: 0,
+      expenseMinor: 0,
+      byCategory: [],
+      feeMinor: 0,
+      debtInMinor: 0,
+      debtOutMinor: 0,
+      debtFlowMinor: 0,
+      excludedCount: 0,
+    });
   });
 
   it('при равных суммах порядок категорий устойчив (null — последним)', () => {

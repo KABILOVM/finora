@@ -27,15 +27,18 @@ afterEach(async () => {
   for (const stmt of [
     'alter table public.wallets enable row level security',
     'alter table public.categories enable row level security',
+    'alter table public.debts enable row level security',
+    'alter table public.budgets enable row level security',
+    'alter table public.recurring_rules enable row level security',
     'alter table public.transactions enable row level security',
     'alter table public.settings enable row level security',
-    'grant select, insert, update on table public.settings, public.wallets, public.categories, public.transactions to authenticated',
+    'grant select, insert, update on table public.settings, public.wallets, public.categories, public.debts, public.budgets, public.recurring_rules, public.transactions to authenticated',
   ]) {
     await pg.db.exec(stmt);
   }
   await pg.applySchema();
   await pg.db.exec('delete from public.exchange_rates');
-  for (const t of ['transactions', 'categories', 'wallets', 'settings']) await pg.db.exec(`delete from public.${t}`);
+  for (const t of ['transactions', 'recurring_rules', 'budgets', 'debts', 'categories', 'wallets', 'settings']) await pg.db.exec(`delete from public.${t}`);
 });
 
 function asQuery(run: () => Promise<CloudQueryResult>): CloudQuery {
@@ -120,10 +123,10 @@ describe('diag: здоровая база (контроль — чтобы ат�
 
 // Политику UPDATE (если её одну удалили, а права остались) без правки настоящих данных не проверить: подробности в README
 // («Что проверка не умеет»). Права на вставку и обновление (grant) проверка видит: она шлёт тот же upsert, что и синхронизация.
-describe('diag: шаг «Запись» повторяет настоящую отправку: upsert (insert ... on conflict do update) во все четыре таблицы', () => {
+describe('diag: шаг «Запись» повторяет настоящую отправку: upsert (insert ... on conflict do update) во все семь таблиц', () => {
   it('нет права UPDATE у authenticated: настоящая отправка отвергается (42501), а проверка пишет «Запись разрешена»', async () => {
     await addRates(3);
-    await pg.db.exec('revoke update on public.categories, public.wallets, public.transactions, public.settings from authenticated');
+    await pg.db.exec('revoke update on public.categories, public.wallets, public.debts, public.budgets, public.recurring_rules, public.transactions, public.settings from authenticated');
     // настоящий путь синхронизации (PgliteTransport.push = insert ... on conflict (id) do update, как у supabase-js upsert)
     await expect(pg.transportFor(ME).push('categories', [toWire('categories', makeCategory({ name: 'Еда' }))])).rejects.toMatchObject({ kind: 'rejected', code: '42501' });
     const { steps, by } = await run();
@@ -159,7 +162,7 @@ describe('diag: «Чтение данных» и защита строк (RLS)',
   it('RLS выключена, в базе один пользователь: от здоровой базы не отличить — проверка не обещает защиту и говорит, как проверить', async () => {
     await addRates(3);
     await pg.transportFor(ME).push('wallets', [toWire('wallets', makeWallet())]);
-    for (const t of ['settings', 'wallets', 'categories', 'transactions']) await pg.db.exec(`alter table public.${t} disable row level security`);
+    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions']) await pg.db.exec(`alter table public.${t} disable row level security`);
     // доказательство, что защиты нет: второй пользователь видит чужое
     await pg.addUser(NEIGHBOUR);
     const seen = await pg.as({ role: 'authenticated', sub: NEIGHBOUR }, (tx) => tx.query('select id from public.wallets'));
@@ -173,7 +176,7 @@ describe('diag: «Чтение данных» и защита строк (RLS)',
   it('RLS выключена и у соседа есть данные: чужое видно, проверка поднимает тревогу', async () => {
     await addRates(3);
     await pg.transportFor(NEIGHBOUR).push('wallets', [toWire('wallets', makeWallet({ name: 'Чужой кошелёк' }))]);
-    for (const t of ['settings', 'wallets', 'categories', 'transactions']) await pg.db.exec(`alter table public.${t} disable row level security`);
+    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions']) await pg.db.exec(`alter table public.${t} disable row level security`);
     const { steps, by } = await run();
     expect(by.read.status).toBe('fail');
     expect(by.read.message).toContain('ОПАСНО');

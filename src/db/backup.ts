@@ -1,11 +1,23 @@
 import { computeBalances } from '@/domain/balances';
-import type { Category, Entity, LocalFields, LocalRow, Settings, SyncFields, Transaction, Wallet } from '@/domain/types';
+import type {
+  Budget,
+  Category,
+  Debt,
+  Entity,
+  LocalFields,
+  LocalRow,
+  RecurringRule,
+  Settings,
+  SyncFields,
+  Transaction,
+  Wallet,
+} from '@/domain/types';
 import { TABLE_SPECS, type SyncTableName } from '@/sync/tables';
+import { checkDebtCurrencies, checkDebtPins, checkPlanRefs, checkTransferFees } from './backupChecks';
+import { withAccountIds, withBudgetIds } from './backupRecode';
 import { BACKUP_FORMAT, BACKUP_VERSION, parseBackup, type BackupFile } from './backupSchema';
 import { fail } from './errors';
-import { defaultId, FINORA_NAMESPACE, isUuid, uuidV5 } from './ids';
 import { writeTx } from './repoContext';
-import { SEED_SLUGS } from './seed';
 import { internalContext, type Store } from './store';
 import { compareVersion, TRANSFER_CREATES_MONEY_TEXT, transferCreatesMoney } from './validate';
 
@@ -20,13 +32,25 @@ export function toEntity<T extends Entity>(table: SyncTableName, row: LocalRow<T
   return out as unknown as T;
 }
 
-/** Полная резервная копия: настройки, кошельки, категории и ВСЕ операции, включая удалённые. Снимок читается одной транзакцией. */
+/**
+ * Полная резервная копия: настройки, кошельки, категории, бюджеты, долги, регулярные платежи и ВСЕ операции, включая удалённые.
+ * Снимок читается одной транзакцией.
+ */
 export async function exportBackup(store: Store): Promise<BackupFile> {
   const { db } = store;
-  const [settings, wallets, categories, transactions] = await db.transaction(
+  const [settings, wallets, categories, transactions, budgets, debts, rules] = await db.transaction(
     'r',
-    [db.settings, db.wallets, db.categories, db.transactions],
-    () => Promise.all([db.settings.get(store.userId), db.wallets.toArray(), db.categories.toArray(), db.transactions.toArray()]),
+    [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules],
+    () =>
+      Promise.all([
+        db.settings.get(store.userId),
+        db.wallets.toArray(),
+        db.categories.toArray(),
+        db.transactions.toArray(),
+        db.budgets.toArray(),
+        db.debts.toArray(),
+        db.recurring_rules.toArray(),
+      ]),
   );
   const byCreated = <T extends { createdAt: string; id: string }>(a: T, b: T) =>
     a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
@@ -38,6 +62,9 @@ export async function exportBackup(store: Store): Promise<BackupFile> {
     wallets: wallets.sort(byCreated).map((r) => toEntity<Wallet>('wallets', r)),
     categories: categories.sort(byCreated).map((r) => toEntity<Category>('categories', r)),
     transactions: transactions.sort(byCreated).map((r) => toEntity<Transaction>('transactions', r)),
+    budgets: budgets.sort(byCreated).map((r) => toEntity<Budget>('budgets', r)),
+    debts: debts.sort(byCreated).map((r) => toEntity<Debt>('debts', r)),
+    recurringRules: rules.sort(byCreated).map((r) => toEntity<RecurringRule>('recurring_rules', r)),
   };
 }
 
@@ -95,48 +122,6 @@ function mergeTable<E extends SyncFields, R extends E & LocalFields>(
 const index = <R extends { id: string }>(rows: readonly R[]): Map<string, R> => new Map(rows.map((r) => [r.id, r]));
 
 /**
- * Свои id для чужой копии. На сервере первичный ключ id ОДИН НА ВСЕХ пользователей: запись с id, который уже занят
- * чужой строкой (копия другого или старого аккаунта, копия из локального режима, загруженная во второй аккаунт),
- * сервер отвергает навсегда (нет прав на чужую строку), и она висит «не принята сервером» без шанса уйти.
- * Поэтому каждый id из такого файла заменяется на производный от (этот пользователь + прежний id), а все ссылки
- * (родитель категории, кошелёк и категория операции) переписываются так же. Производный id не случаен: тот же файл
- * второй раз даёт те же id, поэтому повторная загрузка ничего не плодит (записи сливаются по правилу «новее побеждает»),
- * и два устройства одного аккаунта, загрузив один файл, получают одни и те же записи. Ссылка на запись, которой нет в файле,
- * остаётся как есть: её существование проверит импорт.
- */
-async function withAccountIds(file: BackupFile, userId: string, sourceUserId?: string): Promise<BackupFile> {
-  // Стартовые записи (кошелёк «Наличные», категории) у каждого пользователя свои, но выводятся из его id по одним и тем же slug.
-  // Если известно, чья это копия, её стартовые записи сопоставляются со стартовыми записями ЭТОГО пользователя, а не плодят дубли.
-  const seeded = new Map<string, string>();
-  if (sourceUserId !== undefined && isUuid(sourceUserId)) {
-    for (const slug of SEED_SLUGS) seeded.set(await defaultId(sourceUserId, slug), await defaultId(userId, slug));
-  }
-  const derive = async (kind: string, ids: readonly string[]): Promise<Map<string, string>> => {
-    const out = new Map<string, string>();
-    for (const id of ids) out.set(id, seeded.get(id) ?? (await uuidV5(FINORA_NAMESPACE, `${userId}:import:${kind}:${id}`)));
-    return out;
-  };
-  const [w, c, t] = await Promise.all([
-    derive('wallet', file.wallets.map((x) => x.id)),
-    derive('category', file.categories.map((x) => x.id)),
-    derive('transaction', file.transactions.map((x) => x.id)),
-  ]);
-  const pick = (m: Map<string, string>, id: string | null): string | null => (id === null ? null : (m.get(id) ?? id));
-  return {
-    ...file,
-    wallets: file.wallets.map((x) => ({ ...x, id: w.get(x.id) ?? x.id })),
-    categories: file.categories.map((x) => ({ ...x, id: c.get(x.id) ?? x.id, parentId: pick(c, x.parentId) })),
-    transactions: file.transactions.map((x) => ({
-      ...x,
-      id: t.get(x.id) ?? x.id,
-      walletId: pick(w, x.walletId) ?? x.walletId,
-      toWalletId: pick(w, x.toWalletId),
-      categoryId: pick(c, x.categoryId),
-    })),
-  };
-}
-
-/**
  * Импорт резервной копии.
  *  1) Весь файл проверяется до первой записи (структура, типы, границы, дубли id): ошибка — в базе ничего не меняется.
  *  2) Слияние по id по правилу «новее побеждает»: импорт НИКОГДА не затирает более новые локальные данные.
@@ -154,14 +139,20 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
   const ctx = internalContext(store);
   const parsed = parseBackup(data, { userId: store.userId, nowMs: Date.now() });
   // id считаются ДО транзакции Dexie: ожидание не-Dexie промисов (crypto) внутри неё закрыло бы транзакцию
-  const file = parsed.settings === null ? await withAccountIds(parsed, store.userId, options.sourceUserId) : parsed;
+  const file =
+    parsed.settings === null
+      ? await withAccountIds(parsed, store.userId, options.sourceUserId)
+      : await withBudgetIds(parsed, store.userId);
   const { db } = store;
   const tally: ImportResult = { added: 0, replaced: 0, keptLocal: 0 };
 
-  return writeTx(ctx, [db.settings, db.wallets, db.categories, db.transactions], async () => {
+  return writeTx(ctx, [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules], async () => {
     const wallets = index(await db.wallets.toArray());
     const categories = index(await db.categories.toArray());
     const transactions = index(await db.transactions.toArray());
+    const budgets = index(await db.budgets.toArray());
+    const debts = index(await db.debts.toArray());
+    const rules = index(await db.recurring_rules.toArray());
     const settings = index(await db.settings.toArray());
 
     // До слияния: валюта кошельков (чтобы заметить, что импорт её меняет).
@@ -170,6 +161,10 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     const w = mergeTable<Wallet, Row<Wallet>>(wallets, file.wallets, tally);
     const c = mergeTable<Category, Row<Category>>(categories, file.categories, tally);
     const t = mergeTable<Transaction, Row<Transaction>>(transactions, file.transactions, tally);
+    const debtsBefore = new Map([...debts.values()].map((x) => [x.id, { direction: x.direction, currency: x.currency }]));
+    const b = mergeTable<Budget, Row<Budget>>(budgets, file.budgets, tally);
+    const dbt = mergeTable<Debt, Row<Debt>>(debts, file.debts, tally);
+    const rr = mergeTable<RecurringRule, Row<RecurringRule>>(rules, file.recurringRules, tally);
     const s = file.settings
       ? mergeTable<Settings, Row<Settings>>(settings, [file.settings], tally)
       : { written: [] as Row<Settings>[], winners: new Set<string>() };
@@ -219,7 +214,15 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
       if (tx.categoryId !== null && !categories.has(tx.categoryId)) {
         fail('Резервная копия: операция ссылается на несуществующую категорию');
       }
+      if (tx.debtId !== null && !debts.has(tx.debtId)) fail('Резервная копия: операция ссылается на несуществующий долг');
+      if (tx.recurringRuleId !== null && !rules.has(tx.recurringRuleId)) {
+        fail('Резервная копия: операция ссылается на несуществующий регулярный платёж');
+      }
     }
+    checkPlanRefs(file, { wallets, categories, debts, rules }, { debts: dbt.winners, rules: rr.winners, budgets: b.winners });
+    checkDebtPins(debtsBefore, debts, dbt.winners, transactions, t.winners, rules, rr.winners);
+    checkDebtCurrencies(transactions, t.winners, wallets, debts);
+    checkTransferFees(transactions, t.winners, wallets);
     // Перевод в одной валюте не зачисляет больше, чем списал (как и в репозитории). Смотрим живые операции из файла.
     for (const tx of transactions.values()) {
       if (!t.winners.has(tx.id) || tx.deletedAt !== null || tx.kind !== 'transfer' || tx.toWalletId === null) continue;
@@ -256,10 +259,13 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     await db.categories.bulkPut(c.written);
     await db.transactions.bulkPut(t.written);
     await db.settings.bulkPut(s.written);
+    await db.budgets.bulkPut(b.written);
+    await db.debts.bulkPut(dbt.written);
+    await db.recurring_rules.bulkPut(rr.written);
 
     // Следующие правки этого устройства должны быть новее всего, что мы только что записали.
     // (метки файла уже проверены: не дальше «сейчас + 5 минут», поэтому берём самую большую)
-    const written = [...w.written, ...c.written, ...t.written, ...s.written];
+    const written = [...w.written, ...c.written, ...t.written, ...s.written, ...b.written, ...dbt.written, ...rr.written];
     if (written.length > 0) ctx.clock.observe(written.reduce((m, r) => (r.clientUpdatedAt > m ? r.clientUpdatedAt : m), ''));
     return tally;
   });

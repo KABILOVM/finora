@@ -1,27 +1,28 @@
 import { fxSnapshot } from '@/domain/money';
+import { isOccurrence } from '@/domain/schedule';
 import type {
-  Category,
   CurrencyCode,
   IsoDate,
   LocalRow,
   Minor,
+  RecurringRule,
   Transaction,
   TxKind,
   UUID,
   Wallet,
 } from '@/domain/types';
 import { FxRequiredError, ValidationError } from './errors';
-import { isUuid, newId } from './ids';
+import { isUuid, newId, uuidV5 } from './ids';
 import {
   cleanPatch,
   getLiveCategory,
-  getLiveWallet,
   requireSettings,
   touch,
   withDirtyGroups,
   writeTx,
   type RepoContext,
 } from './repoContext';
+import { checkCategoryKind, checkCategoryOf, checkDebtLink, checkTransferAmounts, loadWallets } from './txChecks';
 import {
   BASE_AMOUNT_MAX,
   formatLimit,
@@ -30,6 +31,7 @@ import {
   parseTxSnapshot,
   TRANSFER_CREATES_MONEY_TEXT,
   transferCreatesMoney,
+  reqDate,
   type TxFields,
   type TxSnapshot,
 } from './validate';
@@ -43,8 +45,19 @@ export interface TransactionInput {
   categoryId?: UUID | null;
   occurredOn: IsoDate;
   note?: string;
-  /** Курс валюты кошелька к базовой на момент операции. Обязателен, если валюта кошелька ≠ базовой. */
+  /**
+   * Курс валюты кошелька к базовой на момент операции. Обязателен, если валюта кошелька ≠ базовой; у перевода нужен только
+   * для комиссии (перевод между кошельками одной небазовой валюты с суммой зачисления меньше суммы списания): ею оценивается
+   * комиссия в базовой валюте. fxRate/fxSource у перевода при этом остаются пустыми.
+   */
   fx?: { rate: number; source: string };
+  /** Долг, к которому относится движение денег (только расход/доход; валюта кошелька = валюте долга). */
+  debtId?: UUID | null;
+  /**
+   * Регулярный платёж, по которому создана операция. Тогда id операции ОБЯЗАН быть v5(ruleId, дата) и дата — из расписания
+   * правила; без явного id он выводится сам. Обычно такие операции создаёт createFromRule.
+   */
+  recurringRuleId?: UUID | null;
 }
 
 export type TransactionPatch = Partial<TransactionInput>;
@@ -58,8 +71,37 @@ export interface TransactionCreateOptions {
   id?: UUID;
 }
 
+/** Что можно поменять при создании операции по расписанию (подтверждение «в Предстоящих»). */
+export interface FromRuleOptions {
+  /** Другая сумма вместо суммы правила. У перевода при этом сумма зачисления считается заново, если не передана своя. */
+  amountMinor?: Minor;
+  toAmountMinor?: Minor | null;
+  note?: string;
+  fx?: { rate: number; source: string };
+}
+
 export interface TransactionsRepo {
   create(input: TransactionInput, opts?: TransactionCreateOptions): Promise<LocalRow<Transaction>>;
+  /**
+   * Операция по регулярному платежу за дату `date` ('ГГГГ-ММ-ДД'). id = v5(rule.id, date): повторный вызов (и вызов с другого
+   * устройства) возвращает уже имеющуюся строку, а не дубль — живую или удалённую («пропущенную»). Дата обязана входить в расписание
+   * правила, правило — быть живым и не в архиве (иначе ошибка). Правило читается из базы по id (переданный объект может устареть).
+   */
+  createFromRule(
+    rule: Pick<RecurringRule, 'id'> | UUID,
+    date: IsoDate,
+    opts?: FromRuleOptions,
+  ): Promise<LocalRow<Transaction>>;
+  /**
+   * «Пропустить» платёж за дату: создаёт операцию с тем же детерминированным id СРАЗУ удалённой (deletedAt) — другие устройства
+   * увидят, что за эту дату платёж не нужен, и не проведут его. Уже пропущенная дата — вернёт имеющуюся строку; дата, за которую
+   * платёж уже проведён (операция жива), — ошибка. Для кошелька в небазовой валюте нужен курс (fx), как для обычной операции.
+   */
+  skipOccurrence(
+    rule: Pick<RecurringRule, 'id'> | UUID,
+    date: IsoDate,
+    opts?: { fx?: { rate: number; source: string } },
+  ): Promise<LocalRow<Transaction>>;
   /**
    * Снимок базовой валюты пересчитывается ТОЛЬКО при смене суммы/кошелька/вида или при новом fx.
    * Иначе сохраняется прежний курс: старая операция не переоценивается сегодняшним курсом.
@@ -80,6 +122,8 @@ const KEYS = [
   'occurredOn',
   'note',
   'fx',
+  'debtId',
+  'recurringRuleId',
 ] as const;
 
 const COMPARED: readonly (keyof Transaction)[] = [
@@ -95,6 +139,7 @@ const COMPARED: readonly (keyof Transaction)[] = [
   'baseAmountMinor',
   'fxRate',
   'fxSource',
+  'debtId',
 ];
 
 function fieldsOf(t: Transaction): Record<string, unknown> {
@@ -107,47 +152,21 @@ function fieldsOf(t: Transaction): Record<string, unknown> {
     categoryId: t.categoryId,
     occurredOn: t.occurredOn,
     note: t.note,
+    debtId: t.debtId ?? null,
+    recurringRuleId: t.recurringRuleId ?? null,
   };
-}
-
-function checkCategoryKind(cat: Category, kind: TxKind): void {
-  if (cat.kind !== kind) {
-    throw new ValidationError(
-      `Категория «${cat.name}» не подходит: она для ${cat.kind === 'expense' ? 'расходов' : 'доходов'}`,
-    );
-  }
 }
 
 export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
   const { db } = ctx;
-  const scope = () => [db.transactions, db.wallets, db.categories, db.settings];
-
-  /** Кошельки операции: живые; в архиве — нельзя выбрать заново (а прежний выбор у существующей операции остаётся). */
-  async function loadWallets(f: TxFields, prev?: Transaction) {
-    const wallet = await getLiveWallet(ctx, f.walletId, 'Кошелёк');
-    if (wallet.archivedAt !== null && prev?.walletId !== f.walletId) {
-      throw new ValidationError(`Кошелёк «${wallet.name}» в архиве: выберите другой или верните его из архива`);
-    }
-    let toWallet: LocalRow<Wallet> | null = null;
-    if (f.toWalletId !== null) {
-      toWallet = await getLiveWallet(ctx, f.toWalletId, 'Кошелёк зачисления');
-      if (toWallet.archivedAt !== null && prev?.toWalletId !== f.toWalletId) {
-        throw new ValidationError(`Кошелёк «${toWallet.name}» в архиве: выберите другой или верните его из архива`);
-      }
-    }
-    return { wallet, toWallet };
-  }
+  const scope = () => [db.transactions, db.wallets, db.categories, db.settings, db.debts, db.recurring_rules];
+  type Fx = { rate: number; source: string };
 
   /** Были ли у существующего перевода кошельки одной валюты. Не удалось узнать (кошелька нет) — считаем, что нет. */
   async function wasSameCurrency(cur: Transaction): Promise<boolean> {
     if (cur.kind !== 'transfer' || cur.toWalletId === null) return false;
     const [from, to] = await Promise.all([db.wallets.get(cur.walletId), db.wallets.get(cur.toWalletId)]);
     return from !== undefined && to !== undefined && from.currency === to.currency;
-  }
-
-  async function checkCategory(f: TxFields): Promise<void> {
-    if (f.categoryId === null) return;
-    checkCategoryKind(await getLiveCategory(ctx, f.categoryId), f.kind);
   }
 
   /**
@@ -181,20 +200,11 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     throw new ValidationError('Укажите сумму зачисления заново: сумма или кошельки перевода между валютами изменились');
   }
 
-  function buildSnapshot(
-    f: TxFields,
-    wallet: Wallet,
-    baseCurrency: CurrencyCode,
-    rate: { rate: number; source: string } | null,
-  ): TxSnapshot {
-    if (f.kind === 'transfer') return { baseCurrency, baseAmountMinor: 0, fxRate: null, fxSource: null };
-    if (wallet.currency === baseCurrency) {
-      return { baseCurrency, baseAmountMinor: f.amountMinor, fxRate: 1, fxSource: 'same' };
-    }
-    if (!rate) throw new FxRequiredError(wallet.currency, baseCurrency);
+  /** Сумма в базовой валюте по курсу `rate`; слишком большая — понятная ошибка, а не RangeError/отказ сервера. */
+  function toBase(amount: Minor, from: CurrencyCode, baseCurrency: CurrencyCode, rate: Fx): { baseAmountMinor: Minor; fxRate: number } {
     let s: { baseAmountMinor: Minor; fxRate: number };
     try {
-      s = fxSnapshot(f.amountMinor, wallet.currency, baseCurrency, rate.rate);
+      s = fxSnapshot(amount, from, baseCurrency, rate.rate);
     } catch (e) {
       if (e instanceof RangeError) throw new ValidationError('Сумма слишком велика для пересчёта в базовую валюту');
       throw e;
@@ -205,23 +215,45 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         `Сумма слишком велика для пересчёта в базовую валюту: в ${baseCurrency} получилось бы больше ${formatLimit(BASE_AMOUNT_MAX)} минимальных единиц`,
       );
     }
+    return s;
+  }
+
+  /**
+   * Снимок базовой валюты. У расхода/дохода — сумма операции по курсу. У перевода baseAmountMinor — КОМИССИЯ в базовой валюте:
+   * (списано − зачислено), если кошельки ОДНОЙ валюты и зачислено меньше; для обмена между валютами и без комиссии — 0.
+   * Курс у перевода в операцию не пишется (fxRate/fxSource пусты): он нужен только чтобы оценить комиссию в небазовой валюте.
+   */
+  function buildSnapshot(f: TxFields, wallet: Wallet, toWallet: Wallet | null, baseCurrency: CurrencyCode, rate: Fx | null): TxSnapshot {
+    if (f.kind === 'transfer') {
+      const fee =
+        toWallet !== null && f.toAmountMinor !== null && wallet.currency === toWallet.currency && f.toAmountMinor < f.amountMinor
+          ? f.amountMinor - f.toAmountMinor
+          : 0;
+      if (fee === 0) return { baseCurrency, baseAmountMinor: 0, fxRate: null, fxSource: null };
+      if (wallet.currency === baseCurrency) return { baseCurrency, baseAmountMinor: fee, fxRate: null, fxSource: null };
+      if (!rate) throw new FxRequiredError(wallet.currency, baseCurrency);
+      return { baseCurrency, baseAmountMinor: toBase(fee, wallet.currency, baseCurrency, rate).baseAmountMinor, fxRate: null, fxSource: null };
+    }
+    if (wallet.currency === baseCurrency) {
+      return { baseCurrency, baseAmountMinor: f.amountMinor, fxRate: 1, fxSource: 'same' };
+    }
+    if (!rate) throw new FxRequiredError(wallet.currency, baseCurrency);
+    const s = toBase(f.amountMinor, wallet.currency, baseCurrency, rate);
     return { baseCurrency, baseAmountMinor: s.baseAmountMinor, fxRate: s.fxRate, fxSource: rate.source };
   }
 
-  /** Перевод в одной валюте не может зачислить больше, чем списал (см. transferCreatesMoney). */
-  function checkTransferAmounts(f: TxFields, wallet: Wallet, toWallet: Wallet | null): void {
-    if (f.kind !== 'transfer' || toWallet === null) return;
-    if (transferCreatesMoney(wallet.currency, toWallet.currency, f.amountMinor, f.toAmountMinor)) {
-      throw new ValidationError(TRANSFER_CREATES_MONEY_TEXT);
-    }
-  }
-
-  function assemble(base: Transaction | null, f: TxFields, snap: TxSnapshot, givenId?: UUID): LocalRow<Transaction> {
+  function assemble(
+    base: Transaction | null,
+    f: TxFields,
+    snap: TxSnapshot,
+    givenId?: UUID,
+    deleted = false,
+  ): LocalRow<Transaction> {
     const { stamp, fields } = touch(ctx);
     const row: LocalRow<Transaction> = {
       id: base?.id ?? givenId ?? newId(),
       createdAt: base?.createdAt ?? stamp,
-      deletedAt: base?.deletedAt ?? null,
+      deletedAt: base?.deletedAt ?? (deleted ? stamp : null),
       ...f,
       ...snap,
       ...fields,
@@ -240,6 +272,59 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     return cur;
   }
 
+  /** Операция по расписанию: правило живо, не в архиве, а дата входит в его расписание. */
+  async function checkRule(f: TxFields): Promise<void> {
+    if (f.recurringRuleId === null) return;
+    const rule = await db.recurring_rules.get(f.recurringRuleId);
+    if (!rule) throw new ValidationError('Регулярный платёж не найден');
+    if (rule.deletedAt !== null) throw new ValidationError('Регулярный платёж удалён');
+    if (rule.archivedAt !== null) throw new ValidationError('Регулярный платёж в архиве: верните его из архива');
+    if (!isOccurrence(rule, f.occurredOn)) {
+      throw new ValidationError(`Дата ${f.occurredOn} не входит в расписание регулярного платежа`);
+    }
+  }
+
+  /** Новая строка со всеми проверками. Вызывать ТОЛЬКО внутри writeTx(scope()). */
+  async function insertNew(fields: TxFields, fx: Fx | null, givenId: UUID | undefined, deleted: boolean): Promise<LocalRow<Transaction>> {
+    const settings = await requireSettings(ctx);
+    const { wallet, toWallet } = await loadWallets(ctx, fields);
+    await checkCategoryOf(ctx, fields);
+    await checkDebtLink(ctx, fields, wallet);
+    await checkRule(fields);
+    const f: TxFields = { ...fields, toAmountMinor: resolveToAmount(fields, wallet, toWallet, true) };
+    checkTransferAmounts(f, wallet, toWallet);
+    const row = assemble(null, f, buildSnapshot(f, wallet, toWallet, settings.baseCurrency, fx), givenId, deleted);
+    await db.transactions.add(row);
+    return row;
+  }
+
+  /** id правила (UUID, строчными) из объекта или строки. */
+  function ruleIdOf(rule: unknown): UUID {
+    const id = typeof rule === 'string' ? rule : (rule as { id?: unknown } | null | undefined)?.id;
+    if (!isUuid(id)) throw new ValidationError('Регулярный платёж: id должен быть в виде UUID');
+    return id.toLowerCase();
+  }
+
+  /** Поля операции по правилу за дату (rule читается из базы — переданный объект мог устареть). Внутри writeTx. */
+  async function fieldsFromRule(ruleId: UUID, date: IsoDate, over: { amountMinor?: unknown; toAmountMinor?: unknown; note?: unknown } = {}): Promise<TxFields> {
+    const rule = await db.recurring_rules.get(ruleId);
+    if (!rule) throw new ValidationError('Регулярный платёж не найден');
+    const toAmountMinor =
+      over.toAmountMinor !== undefined ? over.toAmountMinor : over.amountMinor !== undefined ? null : rule.toAmountMinor;
+    return parseTxFields({
+      kind: rule.kind,
+      walletId: rule.walletId,
+      toWalletId: rule.toWalletId,
+      amountMinor: over.amountMinor ?? rule.amountMinor,
+      toAmountMinor,
+      categoryId: rule.categoryId,
+      debtId: rule.debtId,
+      note: over.note ?? rule.note,
+      occurredOn: date,
+      recurringRuleId: rule.id,
+    });
+  }
+
   return {
     async create(input, opts) {
       const clean = cleanPatch(input, KEYS, 'Операция');
@@ -250,23 +335,50 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
       }
       const fx = clean.fx === undefined ? undefined : parseFx(clean.fx);
       const fields = parseTxFields(clean);
+      if (fields.recurringRuleId !== null) {
+        // операция по расписанию: id выводится из правила и даты — иначе два устройства провели бы один платёж дважды
+        const expected = await uuidV5(ruleIdOf(fields.recurringRuleId), fields.occurredOn);
+        if (givenId !== undefined && givenId !== expected) {
+          throw new ValidationError('Операция по расписанию: id должен быть выведен из регулярного платежа и даты');
+        }
+        givenId = expected;
+      }
       return writeTx(ctx, scope(), async () => {
         if (givenId !== undefined) {
           // Идемпотентность: строка с этим id уже есть (живая или удалённая) — отдаём её, ничего не записывая.
           const existing = await db.transactions.get(givenId);
           if (existing) return existing;
         }
-        const settings = await requireSettings(ctx);
-        const { wallet, toWallet } = await loadWallets(fields);
-        await checkCategory(fields);
-        const f: TxFields = {
-          ...fields,
-          toAmountMinor: resolveToAmount(fields, wallet, toWallet, true),
-        };
-        checkTransferAmounts(f, wallet, toWallet);
-        const row = assemble(null, f, buildSnapshot(f, wallet, settings.baseCurrency, fx ?? null), givenId);
-        await db.transactions.add(row);
-        return row;
+        return insertNew(fields, fx ?? null, givenId, false);
+      });
+    },
+
+    async createFromRule(rule, date, opts = {}) {
+      const ruleId = ruleIdOf(rule);
+      const day = reqDate(date, 'Дата платежа');
+      const o = cleanPatch(opts, ['amountMinor', 'toAmountMinor', 'note', 'fx'] as const, 'Операция по расписанию');
+      const fx = o.fx === undefined ? undefined : parseFx(o.fx);
+      const id = await uuidV5(ruleId, day);
+      return writeTx(ctx, scope(), async () => {
+        const existing = await db.transactions.get(id);
+        if (existing) return existing;
+        return insertNew(await fieldsFromRule(ruleId, day, o), fx ?? null, id, false);
+      });
+    },
+
+    async skipOccurrence(rule, date, opts = {}) {
+      const ruleId = ruleIdOf(rule);
+      const day = reqDate(date, 'Дата платежа');
+      const o = cleanPatch(opts, ['fx'] as const, 'Пропуск платежа');
+      const fx = o.fx === undefined ? undefined : parseFx(o.fx);
+      const id = await uuidV5(ruleId, day);
+      return writeTx(ctx, scope(), async () => {
+        const existing = await db.transactions.get(id);
+        if (existing) {
+          if (existing.deletedAt !== null) return existing; // уже пропущен (или проведён и удалён)
+          throw new ValidationError('За эту дату платёж уже проведён: чтобы пропустить, удалите операцию');
+        }
+        return insertNew(await fieldsFromRule(ruleId, day), fx ?? null, id, true);
       });
     },
 
@@ -281,16 +393,26 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         for (const [k, v] of Object.entries(clean)) if (k !== 'fx') merged[k] = v;
         if (clean.kind !== undefined && clean.kind !== cur.kind) {
           // поля, которых у нового вида быть не может, сбрасываются сами (если их не передали явно)
-          if (clean.kind === 'transfer') merged['categoryId'] = clean.categoryId ?? null;
-          else {
+          if (clean.kind === 'transfer') {
+            merged['categoryId'] = clean.categoryId ?? null;
+            merged['debtId'] = clean.debtId ?? null;
+          } else {
             merged['toWalletId'] = clean.toWalletId ?? null;
             merged['toAmountMinor'] = clean.toAmountMinor ?? null;
           }
         }
         const fields = parseTxFields(merged);
+        if (fields.recurringRuleId !== (cur.recurringRuleId ?? null)) {
+          throw new ValidationError('Связь операции с регулярным платежом менять нельзя');
+        }
 
-        const { wallet, toWallet } = await loadWallets(fields, cur);
-        await checkCategory(fields);
+        const { wallet, toWallet } = await loadWallets(ctx, fields, cur);
+        await checkCategoryOf(ctx, fields);
+        const walletChanged = fields.walletId !== cur.walletId;
+        const kindChanged = fields.kind !== cur.kind;
+        if (fields.debtId !== null && (fields.debtId !== (cur.debtId ?? null) || walletChanged || kindChanged)) {
+          await checkDebtLink(ctx, fields, wallet, { debtId: cur.debtId ?? null });
+        }
         const explicitTo = clean.toAmountMinor !== undefined && clean.toAmountMinor !== null;
         const f: TxFields = {
           ...fields,
@@ -298,20 +420,19 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         };
 
         const amountChanged = f.amountMinor !== cur.amountMinor;
-        const walletChanged = f.walletId !== cur.walletId;
-        const kindChanged = f.kind !== cur.kind;
+        const transferChanged = f.kind === 'transfer' && (f.toAmountMinor !== cur.toAmountMinor || f.toWalletId !== cur.toWalletId);
         let snap: TxSnapshot;
-        if (!(amountChanged || walletChanged || kindChanged || fx !== undefined)) {
+        if (!(amountChanged || walletChanged || kindChanged || transferChanged || fx !== undefined)) {
           snap = { baseCurrency: cur.baseCurrency, baseAmountMinor: cur.baseAmountMinor, fxRate: cur.fxRate, fxSource: cur.fxSource };
         } else {
           const settings = await requireSettings(ctx);
           // прежний курс годится, если базовая валюта и валюта кошелька те же, что при внесении
-          let reuse: { rate: number; source: string } | null = null;
+          let reuse: Fx | null = null;
           if (cur.kind !== 'transfer' && cur.fxRate !== null && cur.fxSource !== null && cur.baseCurrency === settings.baseCurrency) {
             const oldWallet = await db.wallets.get(cur.walletId);
             if (oldWallet && oldWallet.currency === wallet.currency) reuse = { rate: cur.fxRate, source: cur.fxSource };
           }
-          snap = buildSnapshot(f, wallet, settings.baseCurrency, fx ?? reuse);
+          snap = buildSnapshot(f, wallet, toWallet, settings.baseCurrency, fx ?? reuse);
         }
 
         const probe = { ...cur, ...f, ...snap } as Transaction;
@@ -339,15 +460,18 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         const cur = await mustGet(id);
         if (cur.deletedAt === null) return cur;
         // всё, на что ссылается операция, должно существовать (архив не мешает: это не новая операция)
-        const from = await getLiveWallet(ctx, cur.walletId, 'Кошелёк');
-        if (cur.toWalletId !== null) {
-          const to = await getLiveWallet(ctx, cur.toWalletId, 'Кошелёк зачисления');
+        const { wallet: from, toWallet: to } = await loadWallets(ctx, cur, cur);
+        if (to !== null) {
           // не оживляем перевод, который в одной валюте зачислил больше, чем списал (старые данные)
           if (transferCreatesMoney(from.currency, to.currency, cur.amountMinor, cur.toAmountMinor)) {
             throw new ValidationError(TRANSFER_CREATES_MONEY_TEXT);
           }
         }
         if (cur.categoryId !== null) checkCategoryKind(await getLiveCategory(ctx, cur.categoryId), cur.kind);
+        if (cur.debtId) {
+          const debt = await db.debts.get(cur.debtId);
+          if (!debt || debt.deletedAt !== null) throw new ValidationError('Долг этой операции удалён: восстановить операцию нельзя');
+        }
         const row = withDirtyGroups<LocalRow<Transaction>>('transactions', cur, { ...cur, deletedAt: null, ...touch(ctx).fields });
         await db.transactions.put(row);
         return row;

@@ -1,6 +1,9 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { makeCategory, makeUserId, makeWallet } from './factories';
+import { SYNC_TABLES, toWire, type SyncTableName } from '@/sync/tables';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type PgliteServer } from './pglite';
 
 /**
@@ -89,5 +92,113 @@ describe('схема: ограничения длины на уже создан
     await s.applySchema();
     const count = await s.db.query<{ n: number }>(`select count(*)::int as n from pg_constraint where conname = any($1)`, [[...NAMES]]);
     expect(count.rows[0]?.n).toBe(NAMES.length);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Обновление с этапа 1 на этап 2: применяем ПРЕЖНЮЮ версию схемы (снимок fixtures/schema.stage1.sql = supabase/schema.sql
+// последнего коммита этапа 1) с данными, затем текущую. Ошибок быть не должно, данные целы, номера server_seq не сдвинулись.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const STAGE1 = readFileSync(fileURLToPath(new URL('./fixtures/schema.stage1.sql', import.meta.url)), 'utf8');
+const STAGE1_TABLES = ['settings', 'wallets', 'categories', 'transactions'] as const;
+const HOUR = 3_600_000;
+const stamps = (offsetMs = -HOUR) => {
+  const t = new Date(Date.now() + offsetMs).toISOString();
+  return { createdAt: t, clientUpdatedAt: t };
+};
+
+/** Строка в виде, понятном схеме этапа 1: без колонок, которых там ещё нет. */
+const asStage1 = (table: SyncTableName, row: Record<string, unknown>): Record<string, unknown> => {
+  const { debt_id: _d, recurring_rule_id: _r, ...rest } = row;
+  return table === 'transactions' ? rest : row;
+};
+
+const dumpAll = async (s: PgliteServer, tables: readonly SyncTableName[]): Promise<Record<string, Record<string, unknown>[]>> =>
+  Object.fromEntries(await Promise.all(tables.map(async (t) => [t, await s.adminRows(t)] as const)));
+
+async function stage1WithData(): Promise<{ s: PgliteServer; userId: string; ids: { w1: string; w2: string; c: string; transfer: string; expense: string } }> {
+  const s = await createPgliteServer({ schema: STAGE1 });
+  server = s;
+  const hasNew = await s.db.query(`select 1 from pg_class where relnamespace = 'public'::regnamespace and relname in ('debts', 'budgets', 'recurring_rules')`);
+  expect(hasNew.rows, 'прежняя схема не должна знать о таблицах этапа 2').toEqual([]);
+  const userId = makeUserId();
+  await s.addUser(userId);
+  const w1 = makeWallet(stamps());
+  const w2 = makeWallet({ ...stamps(), currency: 'USD' });
+  const c = makeCategory(stamps());
+  const expense = makeTransaction({ ...stamps(), walletId: w1.id, categoryId: c.id, note: 'старая операция' });
+  const transfer = makeTransaction({ ...stamps(), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, amountMinor: 10_900, toAmountMinor: 1_000 });
+  const push = (table: SyncTableName, rows: Array<Record<string, unknown>>) => s.transportFor(userId).push(table, rows.map((r) => asStage1(table, r)) as never);
+  await push('settings', [toWire('settings', makeSettings(userId, stamps()))]);
+  await push('wallets', [toWire('wallets', w1), toWire('wallets', w2)]);
+  await push('categories', [toWire('categories', c)]);
+  await push('transactions', [toWire('transactions', expense), toWire('transactions', transfer)]);
+  return { s, userId, ids: { w1: w1.id, w2: w2.id, c: c.id, transfer: transfer.id, expense: expense.id } };
+}
+
+describe('схема: обновление с этапа 1 на этап 2 поверх живой базы', () => {
+  it('прежняя схема + данные → текущая схема: без ошибок, данные и server_seq целы, новые колонки пусты, повторный запуск ничего не меняет', async () => {
+    const { s } = await stage1WithData();
+    const before = await dumpAll(s, STAGE1_TABLES);
+    for (const t of STAGE1_TABLES) expect(before[t], t).not.toHaveLength(0);
+
+    await s.applySchema(); // обновление
+    const after = await dumpAll(s, STAGE1_TABLES);
+    for (const t of STAGE1_TABLES) {
+      const expected = t === 'transactions' ? before[t]!.map((r) => ({ ...r, debt_id: null, recurring_rule_id: null })) : before[t];
+      expect(after[t], t).toEqual(expected);
+    }
+
+    const count = async () =>
+      (
+        await s.db.query<Record<string, number>>(
+          `select (select count(*) from pg_policies where schemaname = 'public')::int as policies,
+                  (select count(*) from pg_constraint c join pg_namespace n on n.oid = c.connamespace where n.nspname = 'public')::int as constraints,
+                  (select count(*) from pg_indexes where schemaname = 'public')::int as indexes,
+                  (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and not t.tgisinternal)::int as triggers`,
+        )
+      ).rows[0];
+    const once = await count();
+    expect(once).toMatchObject({ policies: 22, triggers: 7 });
+    await s.applySchema();
+    await s.applySchema();
+    expect(await count()).toEqual(once);
+    expect(await dumpAll(s, STAGE1_TABLES)).toEqual(after);
+  });
+
+  it('после обновления новые таблицы работают, а старый курсор синхронизации продолжает читать только новое', async () => {
+    const { s, userId, ids } = await stage1WithData();
+    const oldMax = Math.max(...(await s.adminRows('transactions')).map((r) => Number(r['server_seq'])));
+    await s.applySchema();
+    const t = s.transportFor(userId);
+
+    const debt = makeDebt(stamps());
+    await t.push('debts', [toWire('debts', debt)]);
+    await t.push('budgets', [toWire('budgets', makeBudget({ ...stamps(), categoryId: ids.c }))]);
+    const rule = makeRecurringRule({ ...stamps(), walletId: ids.w1, categoryId: ids.c, debtId: debt.id });
+    await t.push('recurring_rules', [toWire('recurring_rules', rule)]);
+    const repay = makeTransaction({ ...stamps(), kind: 'income', walletId: ids.w1, debtId: debt.id, recurringRuleId: rule.id });
+    await t.push('transactions', [toWire('transactions', repay)]);
+
+    // старый перевод (комиссия 0) получает комиссию правкой: новое поле смысла base_amount_minor принимается
+    const old = (await s.adminRows('transactions')).find((r) => r['id'] === ids.transfer)!;
+    await t.push('transactions', [{ ...(old as Record<string, unknown>), base_amount_minor: 150, client_updated_at: new Date().toISOString() } as never]);
+
+    const fresh = await t.pull('transactions', oldMax, 100);
+    expect(fresh.map((r) => r.id).sort()).toEqual([repay.id, ids.transfer].sort());
+    expect(fresh.find((r) => r.id === ids.transfer)).toMatchObject({ base_amount_minor: 150, debt_id: null });
+    expect(fresh.find((r) => r.id === repay.id)).toMatchObject({ debt_id: debt.id, recurring_rule_id: rule.id });
+    for (const table of SYNC_TABLES) expect((await t.pull(table, 0, 100)).length, table).toBeGreaterThan(0);
+  });
+
+  it('база с недоприменённым этапом 2 (нет внешних ключей на операциях) достраивается: ключи и проверка долга появляются', async () => {
+    const { s } = await stage1WithData();
+    await s.applySchema();
+    const drop = ['transactions_debt_fk', 'transactions_recurring_rule_fk', 'transactions_debt_shape'];
+    for (const name of drop) await s.db.exec(`alter table public.transactions drop constraint ${name}`);
+    await s.applySchema();
+    const left = await s.db.query<{ conname: string }>(`select conname from pg_constraint where conname = any($1) order by 1`, [drop]);
+    expect(left.rows.map((r) => r.conname)).toEqual([...drop].sort());
   });
 });

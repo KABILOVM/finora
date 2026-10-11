@@ -10,15 +10,61 @@ export interface NavItem {
   icon: IconName;
   /** Активен только при точном совпадении пути (для «/»). */
   end?: boolean;
+  /** Есть ли пункт в нижней панели телефона (там место только для четырёх). */
+  phone?: boolean;
+  /** Где пункт в боковой панели ПК: основная группа сверху, нижняя группа или его там нет. */
+  side?: 'main' | 'bottom';
+  /** Пункт подсвечен и на этих разделах (и их вложенных адресах) в нижней панели; по умолчанию только на своём. */
+  phoneActiveOn?: readonly string[];
+  /** То же для боковой панели. */
+  sideActiveOn?: readonly string[];
 }
 
-/** Пункты меню. На телефоне «+» (добавить операцию) вставляется между вторым и третьим пунктом. */
+/** Разделы, которые на телефоне лежат за пунктом «Ещё»: там он остаётся подсвеченным. */
+export const MORE_SECTIONS = ['/more', '/budgets', '/recurring', '/debts', '/settings', '/import'] as const;
+
+/**
+ * Пункты меню. На телефоне «+» (добавить операцию) вставляется между вторым и третьим пунктом.
+ * На ПК места больше: в основной группе Бюджеты, Платежи и Долги, внизу «Ещё» и «Настройки».
+ */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { to: '/', label: 'Главная', sideLabel: 'Главная', icon: 'home', end: true },
-  { to: '/transactions', label: 'Операции', sideLabel: 'Операции', icon: 'list' },
-  { to: '/wallets', label: 'Кошельки', sideLabel: 'Кошельки', icon: 'wallet' },
-  { to: '/settings', label: 'Ещё', sideLabel: 'Настройки', icon: 'more' },
+  { to: '/', label: 'Главная', sideLabel: 'Главная', icon: 'home', end: true, phone: true, side: 'main' },
+  { to: '/transactions', label: 'Операции', sideLabel: 'Операции', icon: 'list', phone: true, side: 'main' },
+  { to: '/wallets', label: 'Кошельки', sideLabel: 'Кошельки', icon: 'wallet', phone: true, side: 'main' },
+  { to: '/budgets', label: 'Бюджеты', sideLabel: 'Бюджеты', icon: 'pie', side: 'main' },
+  { to: '/recurring', label: 'Регулярные платежи', sideLabel: 'Платежи', icon: 'repeat', side: 'main' },
+  { to: '/debts', label: 'Долги и кредиты', sideLabel: 'Долги', icon: 'banknote', side: 'main' },
+  {
+    to: '/more',
+    label: 'Ещё',
+    sideLabel: 'Ещё',
+    icon: 'more',
+    phone: true,
+    side: 'bottom',
+    phoneActiveOn: MORE_SECTIONS,
+    // «Настройки» на ПК — отдельный пункт, поэтому «Ещё» там подсвечивается на «Ещё», импорте и категориях
+    sideActiveOn: ['/more', '/import', '/settings/categories'],
+  },
+  { to: '/settings', label: 'Настройки', sideLabel: 'Настройки', icon: 'sliders', end: true, side: 'bottom' },
 ];
+
+/** Путь без хвостовых «/» и в нижнем регистре (маршруты регистр не различают, подсветка тоже). */
+const normalize = (path: string): string => path.toLowerCase().replace(/\/+$/, '') || '/';
+
+/** Путь равен разделу или лежит внутри него (/settings/categories внутри /settings). */
+export function isInSection(pathname: string, section: string): boolean {
+  const p = normalize(pathname);
+  const s = normalize(section);
+  return s === '/' ? p === '/' : p === s || p.startsWith(`${s}/`);
+}
+
+/** Подсвечен ли пункт на этой странице. `surface` — где рисуем: нижняя панель телефона или боковая ПК. */
+export function isNavActive(item: NavItem, pathname: string, surface: 'phone' | 'side'): boolean {
+  const extra = surface === 'phone' ? item.phoneActiveOn : item.sideActiveOn;
+  if (extra) return extra.some((s) => isInSection(pathname, s));
+  if (item.end) return normalize(pathname) === normalize(item.to);
+  return isInSection(pathname, item.to);
+}
 
 export const ADD_PATH = '/add';
 export const ADD_LABEL = 'Добавить операцию';

@@ -146,11 +146,16 @@ export interface PgliteServer {
   close(): Promise<void>;
 }
 
+export interface PgliteServerOptions {
+  /** Какую схему применить при создании (по умолчанию — текущий supabase/schema.sql). Нужна тестам обновления со старой версии. */
+  schema?: string;
+}
+
 /** Поднимает PGlite, ставит заглушки Supabase и применяет схему ДВАЖДЫ подряд (проверка идемпотентности). */
-export async function createPgliteServer(): Promise<PgliteServer> {
+export async function createPgliteServer(options: PgliteServerOptions = {}): Promise<PgliteServer> {
   const db = await PGlite.create();
   await db.exec(SUPABASE_STUBS);
-  const sql = readSchemaSql();
+  const sql = options.schema ?? readSchemaSql();
   await db.exec(sql);
   await db.exec(sql);
 

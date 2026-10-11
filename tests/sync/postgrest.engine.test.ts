@@ -134,7 +134,7 @@ describe('движок на настоящей схеме', () => {
     await a.store.db.transactions.bulkPut([good, orphan].map((t) => ({ ...t, dirty: 1 as const, serverSeq: null, syncError: null })));
     await a.engine.syncNow();
     expect((await rowsOf(u, 'transactions')).map((r) => r['id'])).toEqual([good.id]);
-    expect((await a.store.db.transactions.get(orphan.id))?.syncError).toMatch(/кошельком или категорией.*23503/);
+    expect((await a.store.db.transactions.get(orphan.id))?.syncError).toMatch(/кошельком, категорией, долгом или регулярным платежом.*23503/);
     expect(a.engine.getStatus()).toMatchObject({ phase: 'idle', pending: 0, quarantined: 1 });
   });
 

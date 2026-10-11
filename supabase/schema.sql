@@ -2,8 +2,10 @@
 -- FINORA — схема базы данных для Supabase (Postgres)
 --
 -- ЧТО ЭТО
---   Таблицы личного учёта денег (настройки, кошельки, категории, операции),
---   правила доступа (у каждого пользователя видны и меняются только СВОИ данные)
+--   Таблицы личного учёта денег: настройки, кошельки, категории, операции (этап 1) и долги, бюджеты,
+--   регулярные платежи (этап 2, раздел 8 в конце файла) плюс общие курсы валют. Итого 8 таблиц:
+--   settings, wallets, categories, debts, budgets, recurring_rules, transactions, exchange_rates.
+--   Правила доступа (у каждого пользователя видны и меняются только СВОИ данные)
 --   и защитный триггер, который решает конфликты между устройствами
 --   («побеждает самая поздняя правка») и выдаёт номера для синхронизации.
 --
@@ -38,6 +40,9 @@
 --   * Длина текста ограничена: имя, заметка, device_id — в create table; color, icon, fx_source — в разделе 7 (в конце файла).
 --     Каждое такое правило зеркалится в src/sync/memoryRules.ts (сервер в памяти для тестов); совпадение с этим файлом
 --     проверяет tests/sync/memory.differential.test.ts.
+--   * Этап 2 (раздел 8): таблицы debts, budgets, recurring_rules и колонки transactions.debt_id / recurring_rule_id добавляются
+--     блоками «if not exists» ПОВЕРХ базы этапа 1: данные не трогаются, файл по-прежнему можно запускать повторно.
+--     Комиссия перевода хранится в transactions.base_amount_minor (для перевода это не 0, а комиссия, 0..1e15).
 --   * Если схему придётся менять — добавляйте новые блоки в конец файла (alter ... if not exists),
 --     а не правьте create table: для уже созданных таблиц он ничего не меняет.
 -- =============================================================================
@@ -485,3 +490,226 @@ begin
   end loop;
 end
 $$;
+
+
+-- 8. Этап 2: долги, бюджеты, регулярные платежи ----------------------------------------
+-- Всё ниже идемпотентно и накладывается на базу этапа 1 (таблицы «if not exists», колонки «add column if not exists»,
+-- внешние ключи и ограничения — только если их ещё нет). Правила те же, что выше: user_id ставит сервер, правка принимается
+-- только если метка строго новее, удаления нет, пара (user_id, id) нужна как цель составных внешних ключей.
+-- Составные внешние ключи (user_id, ...) не дают сослаться на чужой кошелёк, категорию, долг или правило.
+-- Ключи с пустой ссылкой не проверяются (MATCH SIMPLE).
+-- Каждое ограничение зеркалится в src/sync/memoryRules.ts под тем же именем.
+
+-- 8.1. Долги. direction: lent — мне должны, borrowed — я должен. Остаток долга нигде не хранится (считается из операций).
+create table if not exists public.debts (
+  id                uuid        not null,
+  created_at        timestamptz not null,
+  client_updated_at timestamptz not null,
+  device_id         text        not null,
+  deleted_at        timestamptz,
+  direction         text        not null,
+  counterparty      text        not null,
+  principal_minor   bigint      not null,
+  currency          text        not null,
+  opened_on         date        not null,
+  due_on            date,
+  note              text        not null,
+  closed_at         timestamptz,
+  archived_at       timestamptz,
+  user_id           uuid        not null,
+  server_seq        bigint      not null,
+  server_updated_at timestamptz not null,
+  constraint debts_pkey primary key (id),
+  constraint debts_user_id_id_key unique (user_id, id),
+  constraint debts_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint debts_direction check (direction in ('lent', 'borrowed')),
+  constraint debts_counterparty_len check (char_length(counterparty) between 1 and 80),
+  constraint debts_principal check (principal_minor between 1 and 1000000000000000),
+  constraint debts_currency_fmt check (currency ~ '^[A-Z]{3}$'),
+  constraint debts_opened_on check (opened_on between date '2000-01-01' and date '2100-01-01'),
+  constraint debts_due_on check (due_on is null or due_on between date '2000-01-01' and date '2100-01-01'),
+  constraint debts_note_len check (char_length(note) <= 500),
+  constraint debts_device_id_len check (char_length(device_id) between 1 and 64),
+  constraint debts_ts_sane check (
+    created_at        between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and client_updated_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and (deleted_at  is null or deleted_at  between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (closed_at   is null or closed_at   between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (archived_at is null or archived_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+  )
+);
+
+-- 8.2. Бюджеты: лимит расходов на месяц в базовой валюте. category_id пустой — общий лимит на все расходы.
+-- id клиент считает сам (v5 от пользователя и категории), чтобы два устройства не завели два бюджета на одно и то же.
+create table if not exists public.budgets (
+  id                uuid        not null,
+  created_at        timestamptz not null,
+  client_updated_at timestamptz not null,
+  device_id         text        not null,
+  deleted_at        timestamptz,
+  category_id       uuid,
+  amount_minor      bigint      not null,
+  currency          text        not null,
+  period            text        not null,
+  archived_at       timestamptz,
+  user_id           uuid        not null,
+  server_seq        bigint      not null,
+  server_updated_at timestamptz not null,
+  constraint budgets_pkey primary key (id),
+  constraint budgets_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint budgets_category_fk foreign key (user_id, category_id) references public.categories (user_id, id),
+  constraint budgets_amount check (amount_minor between 1 and 1000000000000000),
+  constraint budgets_currency_fmt check (currency ~ '^[A-Z]{3}$'),
+  constraint budgets_period check (period = 'month'),
+  constraint budgets_device_id_len check (char_length(device_id) between 1 and 64),
+  constraint budgets_ts_sane check (
+    created_at        between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and client_updated_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and (deleted_at  is null or deleted_at  between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (archived_at is null or archived_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+  )
+);
+
+-- 8.3. Регулярные платежи. Операции по расписанию клиент создаёт с id v5(правило, 'ГГГГ-ММ-ДД'), поэтому два устройства
+-- не задвоят одну и ту же операцию. Форма строки такая же, как у операции: перевод — с кошельком и суммой зачисления,
+-- без категории и долга; расход/доход — без полей перевода.
+create table if not exists public.recurring_rules (
+  id                uuid        not null,
+  created_at        timestamptz not null,
+  client_updated_at timestamptz not null,
+  device_id         text        not null,
+  deleted_at        timestamptz,
+  kind              text        not null,
+  wallet_id         uuid        not null,
+  to_wallet_id      uuid,
+  amount_minor      bigint      not null,
+  to_amount_minor   bigint,
+  category_id       uuid,
+  debt_id           uuid,
+  note              text        not null,
+  frequency         text        not null,
+  interval_n        bigint      not null,
+  start_on          date        not null,
+  end_on            date,
+  auto_post         bigint      not null,
+  archived_at       timestamptz,
+  user_id           uuid        not null,
+  server_seq        bigint      not null,
+  server_updated_at timestamptz not null,
+  constraint recurring_rules_pkey primary key (id),
+  constraint recurring_rules_user_id_id_key unique (user_id, id),
+  constraint recurring_rules_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint recurring_rules_wallet_fk foreign key (user_id, wallet_id) references public.wallets (user_id, id),
+  constraint recurring_rules_to_wallet_fk foreign key (user_id, to_wallet_id) references public.wallets (user_id, id),
+  constraint recurring_rules_category_fk foreign key (user_id, category_id) references public.categories (user_id, id),
+  constraint recurring_rules_debt_fk foreign key (user_id, debt_id) references public.debts (user_id, id),
+  constraint recurring_rules_kind check (kind in ('expense', 'income', 'transfer')),
+  constraint recurring_rules_amount check (amount_minor between 1 and 1000000000000000),
+  constraint recurring_rules_frequency check (frequency in ('daily', 'weekly', 'monthly', 'yearly')),
+  constraint recurring_rules_interval_n check (interval_n between 1 and 1000),
+  constraint recurring_rules_start_on check (start_on between date '2000-01-01' and date '2100-01-01'),
+  constraint recurring_rules_end_on check (end_on is null or (end_on >= start_on and end_on <= date '2100-01-01')),
+  constraint recurring_rules_auto_post check (auto_post in (0, 1)),
+  constraint recurring_rules_note_len check (char_length(note) <= 500),
+  constraint recurring_rules_device_id_len check (char_length(device_id) between 1 and 64),
+  -- перевод: обязательны кошелёк и сумма зачисления, кошельки разные, без категории и долга
+  constraint recurring_rules_transfer_shape check (
+    kind <> 'transfer' or (
+      to_wallet_id is not null
+      and to_amount_minor is not null
+      and to_amount_minor between 1 and 1000000000000000
+      and to_wallet_id <> wallet_id
+      and category_id is null
+      and debt_id is null
+    )
+  ),
+  -- расход/доход: полей перевода быть не должно
+  constraint recurring_rules_plain_shape check (
+    kind = 'transfer' or (to_wallet_id is null and to_amount_minor is null)
+  ),
+  constraint recurring_rules_ts_sane check (
+    created_at        between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and client_updated_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and (deleted_at  is null or deleted_at  between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (archived_at is null or archived_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+  )
+);
+
+-- 8.4. Операции: ссылка на долг и на регулярный платёж.
+-- Операция с долгом не входит в «Доходы/Расходы» месяца и в бюджеты, но меняет остаток кошелька; у перевода долга быть не может.
+-- Комиссия перевода хранится в base_amount_minor (0..1e15): ограничение transactions_base_amount выше этого не запрещает.
+alter table public.transactions add column if not exists debt_id uuid;
+alter table public.transactions add column if not exists recurring_rule_id uuid;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'transactions_debt_fk' and conrelid = 'public.transactions'::regclass) then
+    alter table public.transactions
+      add constraint transactions_debt_fk foreign key (user_id, debt_id) references public.debts (user_id, id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'transactions_recurring_rule_fk' and conrelid = 'public.transactions'::regclass) then
+    alter table public.transactions
+      add constraint transactions_recurring_rule_fk foreign key (user_id, recurring_rule_id) references public.recurring_rules (user_id, id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'transactions_debt_shape' and conrelid = 'public.transactions'::regclass) then
+    alter table public.transactions
+      add constraint transactions_debt_shape check (kind <> 'transfer' or debt_id is null);
+  end if;
+end
+$$;
+
+-- 8.5. Защитный триггер синхронизации (тот же, что у остальных таблиц).
+drop trigger if exists sync_guard on public.debts;
+create trigger sync_guard before insert or update on public.debts
+  for each row execute function private.sync_guard();
+
+drop trigger if exists sync_guard on public.budgets;
+create trigger sync_guard before insert or update on public.budgets
+  for each row execute function private.sync_guard();
+
+drop trigger if exists sync_guard on public.recurring_rules;
+create trigger sync_guard before insert or update on public.recurring_rules
+  for each row execute function private.sync_guard();
+
+-- 8.6. Индексы: курсор синхронизации (user_id, server_seq) у каждой новой таблицы.
+create index if not exists debts_user_seq_idx           on public.debts           (user_id, server_seq);
+create index if not exists budgets_user_seq_idx         on public.budgets         (user_id, server_seq);
+create index if not exists recurring_rules_user_seq_idx on public.recurring_rules (user_id, server_seq);
+
+-- 8.7. Права и защита строк (RLS): как у остальных таблиц — только select / insert / update и только свои строки.
+revoke all on table public.debts, public.budgets, public.recurring_rules from public, anon, authenticated;
+grant select, insert, update on table public.debts, public.budgets, public.recurring_rules to authenticated;
+
+alter table public.debts           enable row level security;
+alter table public.budgets         enable row level security;
+alter table public.recurring_rules enable row level security;
+
+drop policy if exists debts_select_own on public.debts;
+create policy debts_select_own on public.debts for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists debts_insert_own on public.debts;
+create policy debts_insert_own on public.debts for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists debts_update_own on public.debts;
+create policy debts_update_own on public.debts for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+drop policy if exists budgets_select_own on public.budgets;
+create policy budgets_select_own on public.budgets for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists budgets_insert_own on public.budgets;
+create policy budgets_insert_own on public.budgets for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists budgets_update_own on public.budgets;
+create policy budgets_update_own on public.budgets for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+drop policy if exists recurring_rules_select_own on public.recurring_rules;
+create policy recurring_rules_select_own on public.recurring_rules for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists recurring_rules_insert_own on public.recurring_rules;
+create policy recurring_rules_insert_own on public.recurring_rules for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists recurring_rules_update_own on public.recurring_rules;
+create policy recurring_rules_update_own on public.recurring_rules for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

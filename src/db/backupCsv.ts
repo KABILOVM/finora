@@ -41,7 +41,12 @@ function cell(value: string, isText = true): string {
   return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Операции (только живые) в CSV: UTF-8 с BOM, разделитель «;», суммы в основных единицах с запятой, названия вместо id. */
+/**
+ * Операции (только живые) в CSV. Формат НЕ менялся на этапе 2: колонки «Долг» и «Регулярный» не добавлены (заметка — последняя
+ * колонка, на это опираются таблицы людей). Операция по долгу в файле выглядит как обычный доход/расход — при подсчёте итогов
+ * в таблице её нужно исключать вручную.
+ *
+ * Формат: UTF-8 с BOM, разделитель «;», суммы в основных единицах с запятой, названия вместо id. */
 export async function exportTransactionsCsv(store: Store): Promise<string> {
   const { db } = store;
   const [wallets, categories, txs] = await db.transaction('r', [db.wallets, db.categories, db.transactions], () =>

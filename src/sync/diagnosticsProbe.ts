@@ -170,6 +170,30 @@ export const WRITE_PROBES: readonly WriteProbe[] = [
     rule: 'categories_name_len',
     build: (id, stamp) => ({ ...common(id, stamp), name: '', kind: 'expense', parent_id: null, color: '#000000', icon: 'x', sort_order: 0, archived_at: null }),
   },
+  // пустое имя должника (допустимо от 1 до 80 символов)
+  {
+    table: 'debts',
+    rule: 'debts_counterparty_len',
+    build: (id, stamp) => ({
+      ...common(id, stamp), direction: 'lent', counterparty: '', principal_minor: 1, currency: 'TJS', opened_on: '2026-01-01', due_on: null,
+      note: '', closed_at: null, archived_at: null,
+    }),
+  },
+  // лимит 0 (допустимы только от 1); категории нет, поэтому ключ не проверяется
+  {
+    table: 'budgets',
+    rule: 'budgets_amount',
+    build: (id, stamp) => ({ ...common(id, stamp), category_id: null, amount_minor: 0, currency: 'TJS', period: 'month', archived_at: null }),
+  },
+  // сумма 0; кошелёк выдуман, но до ключей дело не доходит: правило суммы срабатывает раньше
+  {
+    table: 'recurring_rules',
+    rule: 'recurring_rules_amount',
+    build: (id, stamp, makeId) => ({
+      ...common(id, stamp), kind: 'expense', wallet_id: makeId(), to_wallet_id: null, amount_minor: 0, to_amount_minor: null, category_id: null,
+      debt_id: null, note: '', frequency: 'monthly', interval_n: 1, start_on: '2026-01-01', end_on: null, auto_post: 0, archived_at: null,
+    }),
+  },
   // сумма 0 (допустимы только от 1); кошелёк выдуман, но до ключей дело не доходит: правило суммы срабатывает раньше
   {
     table: 'transactions',

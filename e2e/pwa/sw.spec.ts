@@ -147,11 +147,14 @@ test('Сеть пропала ПОСЛЕ загрузки страницы: вс
   for (const [name, heading] of [
     ['Операции', 'Операции'],
     ['Кошельки', 'Кошельки'],
-    ['Ещё', 'Настройки'],
+    ['Ещё', 'Ещё'],
   ] as const) {
     await nav.getByRole('link', { name }).click();
     await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible();
   }
+  // «Ещё» — это меню; «Настройки» открываются вторым шагом, тоже без сети (ленивая страница из precache)
+  await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Настройки' }).first()).toBeVisible();
   await page.goto(`${srv.url}#/settings/categories`);
   await expect(page.getByRole('heading', { name: /Категории/ }).first()).toBeVisible();
   await page.getByRole('link', { name: 'Добавить операцию' }).first().click();

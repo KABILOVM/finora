@@ -23,6 +23,12 @@ import { SYNC_TABLES, TABLE_SPECS, type SyncTableName } from '@/sync/tables';
 /** (б) Тест-страж и (а) чистые таблицы слияния по каждой группе и сущности. */
 
 describe('страж: поля договора и группы слияния', () => {
+  it('страж покрывает все семь таблиц договора: групп слияния ровно столько же, сколько синхронизируемых таблиц', () => {
+    expect([...SYNC_TABLES].sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'transactions', 'wallets']);
+    expect(Object.keys(MERGE_GROUPS).sort()).toEqual([...SYNC_TABLES].sort());
+    expect(Object.keys(TABLE_SPECS).sort()).toEqual([...SYNC_TABLES].sort());
+  });
+
   it.each(SYNC_TABLES)('%s: каждое синхронизируемое поле принадлежит ровно одной группе', (table) => {
     const audit = auditGroups(table);
     expect(audit.orphans, `поля без группы (добавьте в src/db/mergeGroups.ts): ${audit.orphans.join(', ')}`).toEqual([]);
@@ -62,9 +68,39 @@ describe('страж: поля договора и группы слияния',
 describe('состав групп (как в договоре задачи)', () => {
   it('transactions', () => {
     expect(MERGE_GROUPS.transactions).toEqual({
-      money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
+      money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
       date: ['occurredOn'],
       note: ['note'],
+      origin: ['recurringRuleId'],
+      deleted: ['deletedAt'],
+    });
+  });
+  it('budgets', () => {
+    expect(MERGE_GROUPS.budgets).toEqual({
+      limit: ['amountMinor', 'currency', 'period'],
+      target: ['categoryId'],
+      archived: ['archivedAt'],
+      deleted: ['deletedAt'],
+    });
+  });
+  it('debts', () => {
+    expect(MERGE_GROUPS.debts).toEqual({
+      party: ['direction', 'counterparty'],
+      amount: ['principalMinor', 'currency'],
+      dates: ['openedOn', 'dueOn'],
+      note: ['note'],
+      closed: ['closedAt'],
+      archived: ['archivedAt'],
+      deleted: ['deletedAt'],
+    });
+  });
+  it('recurring_rules', () => {
+    expect(MERGE_GROUPS.recurring_rules).toEqual({
+      money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId'],
+      schedule: ['frequency', 'intervalN', 'startOn', 'endOn'],
+      mode: ['autoPost'],
+      note: ['note'],
+      archived: ['archivedAt'],
       deleted: ['deletedAt'],
     });
   });
@@ -100,7 +136,16 @@ describe('состав групп (как в договоре задачи)', ()
 const BASE: Record<SyncTableName, Record<string, unknown>> = {
   transactions: {
     kind: 'expense', walletId: 'w1', toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: 'c1', occurredOn: '2026-10-05',
-    note: 'n', baseCurrency: 'TJS', baseAmountMinor: 100, fxRate: 1, fxSource: 'same', deletedAt: null,
+    note: 'n', baseCurrency: 'TJS', baseAmountMinor: 100, fxRate: 1, fxSource: 'same', debtId: null, recurringRuleId: null, deletedAt: null,
+  },
+  budgets: { categoryId: null, amountMinor: 100, currency: 'TJS', period: 'month', archivedAt: null, deletedAt: null },
+  debts: {
+    direction: 'lent', counterparty: 'Али', principalMinor: 100, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '',
+    closedAt: null, archivedAt: null, deletedAt: null,
+  },
+  recurring_rules: {
+    kind: 'expense', walletId: 'w1', toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: null, debtId: null, note: '',
+    frequency: 'monthly', intervalN: 1, startOn: '2026-10-01', endOn: null, autoPost: 0, archivedAt: null, deletedAt: null,
   },
   wallets: { name: 'N', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, deletedAt: null },
   categories: { name: 'N', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, deletedAt: null },

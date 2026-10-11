@@ -63,7 +63,7 @@ async function commit(who: Who, sql: string, params: unknown[] = []): Promise<vo
   });
 }
 
-const TABLES = ['settings', 'wallets', 'categories', 'transactions'] as const;
+const TABLES = ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions'] as const;
 const WALLET_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const NOW = '2026-10-10T10:00:00Z';
 
@@ -136,7 +136,7 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
         has_table_privilege('authenticated', c.oid, 'delete') as auth_del,
         has_table_privilege('authenticated', c.oid, 'truncate') as auth_trunc
       from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname='public' and c.relkind='r'`);
-    expect(privs.rows.length).toBe(5);
+    expect(privs.rows.length).toBe(8); // 7 таблиц синхронизации + курсы валют
     for (const r of privs.rows) expect(r, r.t).toMatchObject({ anon_any: false, auth_del: false, auth_trunc: false });
     // anon не имеет ни одного отдельного права
     const anonAny = await db.query<{ t: string }>(`select c.relname as t from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and (${['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'].map((p) => `has_table_privilege('anon', c.oid, '${p}')`).join(' or ')})`);
@@ -241,5 +241,105 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
       const r = await run(asA, sql);
       expect('error' in r ? r.error : 'ok', sql.replace(/\s+/g, ' ').slice(0, 80)).toBe('ok');
     }
+  });
+  test('каталог: политик ровно 22 (select / insert / update × 7 таблиц синхронизации + 1 select у курсов), политик на delete и «для всех» нет', async () => {
+    const pol = await db.query<{ tablename: string; cmd: string; roles: string }>(`select tablename, cmd, roles::text as roles from pg_policies where schemaname = 'public'`);
+    expect(pol.rows).toHaveLength(22);
+    for (const t of TABLES) expect(pol.rows.filter((p) => p.tablename === t).map((p) => p.cmd).sort(), t).toEqual(['INSERT', 'SELECT', 'UPDATE']);
+    expect(pol.rows.filter((p) => p.tablename === 'exchange_rates').map((p) => p.cmd)).toEqual(['SELECT']);
+    expect(pol.rows.every((p) => p.roles === '{authenticated}')).toBe(true);
+  });
+
+  test('этап 2: долги, бюджеты и регулярные платежи A недоступны B (чтение, правка, upsert), а составные ключи не дают сослаться на чужое', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    const DEBT_A = '11111111-0000-4000-8000-000000000001';
+    const RULE_A = '11111111-0000-4000-8000-000000000002';
+    const BUDGET_A = '11111111-0000-4000-8000-000000000003';
+    const debt = (id: string, who = 'Рустам') =>
+      `insert into public.debts (id, created_at, client_updated_at, device_id, direction, counterparty, principal_minor, currency, opened_on, note)
+       values ('${id}', '${NOW}', '${NOW}', 'dev', 'lent', '${who}', 100000, 'TJS', '2026-09-01', '')`;
+    const rule = (id: string, wallet: string, extra = '') =>
+      `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, kind, wallet_id, amount_minor, note, frequency, interval_n, start_on, auto_post ${extra ? ',' + extra.split('=')[0] : ''})
+       values ('${id}', '${NOW}', '${NOW}', 'dev', 'expense', '${wallet}', 5000, '', 'monthly', 1, '2026-10-01', 0 ${extra ? ',' + extra.split('=')[1] : ''})`;
+    const budget = (id: string) =>
+      `insert into public.budgets (id, created_at, client_updated_at, device_id, amount_minor, currency, period) values ('${id}', '${NOW}', '${NOW}', 'dev', 100000, 'TJS', 'month')`;
+    await commit(asA, debt(DEBT_A));
+    await commit(asA, rule(RULE_A, WALLET_A, `debt_id='${DEBT_A}'`));
+    await commit(asA, budget(BUDGET_A));
+
+    for (const t of ['debts', 'budgets', 'recurring_rules']) {
+      const seen = await run(asB, `select id from public.${t}`);
+      expect('rows' in seen && seen.rows, `B читает ${t}`).toEqual([]);
+      const upd = await run(asB, `update public.${t} set client_updated_at = now() where id in ('${DEBT_A}', '${RULE_A}', '${BUDGET_A}')`);
+      expect('rowCount' in upd && upd.rowCount, `B правит ${t}`).toBe(0);
+    }
+    const take = await run(asB, `${debt(DEBT_A, 'ВЗЛОМ')} on conflict (id) do update set counterparty = excluded.counterparty, client_updated_at = '2099-01-01', device_id = 'zzz'`);
+    expect('error' in take, 'upsert поверх чужого долга обязан упасть').toBe(true);
+    const still = await run(asA, `select counterparty from public.debts where id = '${DEBT_A}'`);
+    expect('rows' in still && still.rows).toEqual([{ counterparty: 'Рустам' }]);
+
+    // составные внешние ключи: B не может сослаться на кошелёк, долг и платёж A
+    const foreignWallet = await run(asB, rule('22222222-0000-4000-8000-000000000001', WALLET_A));
+    expect('error' in foreignWallet && foreignWallet.code, 'платёж B с кошельком A').toBe('23503');
+    const txCols = `(id, created_at, client_updated_at, device_id, kind, wallet_id, amount_minor, occurred_on, note, base_currency, base_amount_minor, debt_id, recurring_rule_id)`;
+    const WALLET_B = 'bbbbbbbb-0000-4000-8000-000000000001';
+    await commit(asB, walletInsert(WALLET_B, 'Кошелёк B'));
+    const tx = (id: string, debtId: string | null, ruleId: string | null) =>
+      `insert into public.transactions ${txCols} values ('${id}', '${NOW}', '${NOW}', 'd', 'expense', '${WALLET_B}', 100, '2026-10-10', '', 'TJS', 100, ${debtId ? `'${debtId}'` : 'null'}, ${ruleId ? `'${ruleId}'` : 'null'})`;
+    const withDebt = await run(asB, tx('22222222-0000-4000-8000-000000000002', DEBT_A, null));
+    expect('error' in withDebt && withDebt.code, 'операция B с долгом A').toBe('23503');
+    const withRule = await run(asB, tx('22222222-0000-4000-8000-000000000003', null, RULE_A));
+    expect('error' in withRule && withRule.code, 'операция B с платежом A').toBe('23503');
+    const budgetCat = await run(asB, `insert into public.budgets (id, created_at, client_updated_at, device_id, category_id, amount_minor, currency, period)
+      values ('22222222-0000-4000-8000-000000000004', '${NOW}', '${NOW}', 'd', '99999999-0000-4000-8000-000000000009', 100, 'TJS', 'month')`);
+    expect('error' in budgetCat && budgetCat.code, 'бюджет с несуществующей категорией').toBe('23503');
+    // свой долг и своя операция с долгом — можно
+    await commit(asB, debt('22222222-0000-4000-8000-000000000005', 'Свой'));
+    const own = await run(asB, tx('22222222-0000-4000-8000-000000000006', '22222222-0000-4000-8000-000000000005', null));
+    expect('error' in own ? own.error : 'ok').toBe('ok');
+  });
+
+  test('этап 2: ограничения долгов, бюджетов и платежей отвергаются по имени; комиссия перевода принимается', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const id = (n: number) => `33333333-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const WALLET_A2 = id(900);
+    await commit(asA, walletInsert(WALLET_A2, 'Второй A'));
+    const cases: Array<[string, string]> = [
+      ['debts_counterparty_len', `insert into public.debts (id, created_at, client_updated_at, device_id, direction, counterparty, principal_minor, currency, opened_on, note) values ('${id(1)}', '${NOW}', '${NOW}', 'd', 'lent', '', 1, 'TJS', '2026-09-01', '')`],
+      ['debts_direction', `insert into public.debts (id, created_at, client_updated_at, device_id, direction, counterparty, principal_minor, currency, opened_on, note) values ('${id(2)}', '${NOW}', '${NOW}', 'd', 'gift', 'Имя', 1, 'TJS', '2026-09-01', '')`],
+      ['debts_principal', `insert into public.debts (id, created_at, client_updated_at, device_id, direction, counterparty, principal_minor, currency, opened_on, note) values ('${id(3)}', '${NOW}', '${NOW}', 'd', 'lent', 'Имя', 0, 'TJS', '2026-09-01', '')`],
+      ['debts_due_on', `insert into public.debts (id, created_at, client_updated_at, device_id, direction, counterparty, principal_minor, currency, opened_on, due_on, note) values ('${id(4)}', '${NOW}', '${NOW}', 'd', 'lent', 'Имя', 1, 'TJS', '2026-09-01', '2100-01-02', '')`],
+      ['budgets_amount', `insert into public.budgets (id, created_at, client_updated_at, device_id, amount_minor, currency, period) values ('${id(5)}', '${NOW}', '${NOW}', 'd', 0, 'TJS', 'month')`],
+      ['budgets_period', `insert into public.budgets (id, created_at, client_updated_at, device_id, amount_minor, currency, period) values ('${id(6)}', '${NOW}', '${NOW}', 'd', 1, 'TJS', 'week')`],
+      ['recurring_rules_interval_n', `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, kind, wallet_id, amount_minor, note, frequency, interval_n, start_on, auto_post) values ('${id(7)}', '${NOW}', '${NOW}', 'd', 'expense', '${WALLET_A}', 1, '', 'monthly', 0, '2026-10-01', 0)`],
+      ['recurring_rules_end_on', `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, kind, wallet_id, amount_minor, note, frequency, interval_n, start_on, end_on, auto_post) values ('${id(8)}', '${NOW}', '${NOW}', 'd', 'expense', '${WALLET_A}', 1, '', 'monthly', 1, '2026-10-01', '2026-09-30', 0)`],
+      ['recurring_rules_transfer_shape', `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, kind, wallet_id, to_wallet_id, to_amount_minor, amount_minor, note, frequency, interval_n, start_on, auto_post) values ('${id(9)}', '${NOW}', '${NOW}', 'd', 'transfer', '${WALLET_A}', '${WALLET_A}', 1, 1, '', 'monthly', 1, '2026-10-01', 0)`],
+      ['recurring_rules_plain_shape', `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, kind, wallet_id, to_amount_minor, amount_minor, note, frequency, interval_n, start_on, auto_post) values ('${id(10)}', '${NOW}', '${NOW}', 'd', 'expense', '${WALLET_A}', 5, 1, '', 'monthly', 1, '2026-10-01', 0)`],
+      ['recurring_rules_auto_post', `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, kind, wallet_id, amount_minor, note, frequency, interval_n, start_on, auto_post) values ('${id(11)}', '${NOW}', '${NOW}', 'd', 'expense', '${WALLET_A}', 1, '', 'monthly', 1, '2026-10-01', 2)`],
+      ['transactions_transfer_shape', `insert into public.transactions (id, created_at, client_updated_at, device_id, kind, wallet_id, to_wallet_id, amount_minor, to_amount_minor, occurred_on, note, base_currency, base_amount_minor) values ('${id(12)}', '${NOW}', '${NOW}', 'd', 'transfer', '${WALLET_A}', '${WALLET_A}', 1, 1, '2026-10-10', '', 'TJS', 0)`],
+    ];
+    for (const [name, sql] of cases) {
+      const r = await run(asA, sql);
+      expect('error' in r && r.code, name).toBe('23514');
+      expect('error' in r && r.error, name).toContain(name);
+    }
+    // перевод с долгом: нельзя (transactions_debt_shape)
+    const DEBT_OWN = id(20);
+    await commit(asA, `insert into public.debts (id, created_at, client_updated_at, device_id, direction, counterparty, principal_minor, currency, opened_on, note) values ('${DEBT_OWN}', '${NOW}', '${NOW}', 'd', 'lent', 'Свой', 1, 'TJS', '2026-09-01', '')`);
+    const transferCols = `(id, created_at, client_updated_at, device_id, kind, wallet_id, to_wallet_id, amount_minor, to_amount_minor, occurred_on, note, base_currency, base_amount_minor, debt_id)`;
+    const transfer = (n: number, fee: number, debt: string | null) =>
+      `insert into public.transactions ${transferCols} values ('${id(n)}', '${NOW}', '${NOW}', 'd', 'transfer', '${WALLET_A}', '${WALLET_A2}', 1000, 990, '2026-10-10', '', 'TJS', ${fee}, ${debt ? `'${debt}'` : 'null'})`;
+    const withDebt = await run(asA, transfer(21, 0, DEBT_OWN));
+    expect('error' in withDebt && withDebt.error, 'перевод с долгом').toContain('transactions_debt_shape');
+    // комиссия перевода (base_amount_minor) — от 0 до 1e15; за пределами нельзя
+    const ok0 = await run(asA, transfer(22, 0, null));
+    const okFee = await run(asA, transfer(23, 10, null));
+    const okMax = await run(asA, transfer(24, 1_000_000_000_000_000, null));
+    for (const r of [ok0, okFee, okMax]) expect('error' in r ? r.error : 'ok').toBe('ok');
+    const neg = await run(asA, transfer(25, -1, null));
+    expect('error' in neg && neg.error, 'отрицательная комиссия').toContain('transactions_base_amount');
+    const over = await run(asA, transfer(26, 1_000_000_000_000_001, null));
+    expect('error' in over && over.error, 'комиссия больше предела').toContain('transactions_base_amount');
   });
 });

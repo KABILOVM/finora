@@ -25,6 +25,12 @@ const TransactionsPage = lazy(() => import('@/features/transactions/Transactions
 const WalletsPage = lazy(() => import('@/features/wallets/WalletsPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
 const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage'));
+const MorePage = lazy(() => import('@/features/more/MorePage'));
+// Пока заглушки «Скоро»: настоящие экраны заменят содержимое этих файлов (имена и default export остаются).
+const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'));
+const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'));
+const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'));
+const ImportPage = lazy(() => import('@/features/import/ImportPage'));
 // Шит «Новая операция» (пока заглушка в src/layout; настоящий подключат вместо неё).
 const AddTransactionSheet = lazy(() => import('@/layout/AddTransactionSheet'));
 // Шит правки операции (default export с пропсами { id, onClose }).
@@ -66,7 +72,7 @@ function historyIndex(): number {
 }
 
 /**
- * Маршруты: / /transactions /wallets /settings /settings/categories внутри каркаса (вход показывает сборка src/app),
+ * Маршруты: / /transactions /wallets /more /budgets /recurring /debts /import /settings /settings/categories внутри каркаса (вход показывает сборка src/app),
  * /add и /edit/:id — шиты поверх страницы, с которой их открыли (при прямом заходе — поверх «Главной»).
  */
 export function AppRoutes() {
@@ -102,6 +108,11 @@ export function AppRoutes() {
             <Route path="/" element={<HomePage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/wallets" element={<WalletsPage />} />
+            <Route path="/more" element={<MorePage />} />
+            <Route path="/budgets" element={<BudgetsPage />} />
+            <Route path="/recurring" element={<RecurringPage />} />
+            <Route path="/debts" element={<DebtsPage />} />
+            <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/categories" element={<CategoriesPage />} />
           </Route>

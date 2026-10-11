@@ -78,7 +78,7 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
   }
 
   async function save(id: UUID, change: (c: LocalRow<Category>) => CategoryData): Promise<LocalRow<Category>> {
-    return writeTx(ctx, [db.categories, db.transactions], async () => {
+    return writeTx(ctx, [db.categories, db.transactions, db.budgets, db.recurring_rules], async () => {
       const cur = await getLiveCategory(ctx, id);
       const next = change(cur);
       if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
@@ -90,6 +90,13 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
           .count();
         if (used > 0) {
           throw new ValidationError(`Нельзя менять вид категории «${cur.name}»: по ней уже есть операции`);
+        }
+        // бюджет (лимит расходов) и регулярный платёж привязаны к виду категории так же, как операции
+        const linked =
+          (await db.budgets.where('categoryId').equals(id).filter((b) => b.deletedAt === null).count()) +
+          (await db.recurring_rules.filter((r) => r.categoryId === id && r.deletedAt === null).count());
+        if (linked > 0) {
+          throw new ValidationError(`Нельзя менять вид категории «${cur.name}»: на неё поставлен бюджет или регулярный платёж`);
         }
         const children = await db.categories
           .filter((c) => c.parentId === id && c.deletedAt === null)

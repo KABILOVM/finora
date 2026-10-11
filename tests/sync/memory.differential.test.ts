@@ -3,9 +3,9 @@ import fc from 'fast-check';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { TxKind } from '@/domain/types';
 import { createMemoryServer } from '@/sync/memoryServer';
-import { TABLE_SPECS, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
+import { SYNC_TABLES, TABLE_SPECS, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
-import { makeCategory, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type PgliteServer } from './pglite';
 
 /**
@@ -35,7 +35,8 @@ interface Spec {
     device: number;
     createdFuture: boolean;
     deleted: boolean;
-    variant: number; // что именно испортить (0 — ничего)
+    variant: number; // что именно испортить в старых таблицах (0 — ничего)
+    v2: number; // то же для таблиц этапа 2 и для новых полей операций (0 — ничего)
     ref: number; // на какие кошелёк/категорию ссылаться
     ref2: number;
     kind: number;
@@ -47,14 +48,32 @@ interface Focus {
   devices: number[];
   ids: number;
   variants: number[];
+  variants2: number[];
 }
-const GENERAL: Focus = { stamps: [0, 1, 2, 3, 4, 5, 6], devices: [0, 1, 2, 3, 4, 5, 6, 7], ids: 4, variants: [0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9] };
+const V2_ALL = Array.from({ length: 20 }, (_, i) => i + 1);
+const GENERAL: Focus = {
+  stamps: [0, 1, 2, 3, 4, 5, 6],
+  devices: [0, 1, 2, 3, 4, 5, 6, 7],
+  ids: 4,
+  variants: [0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  variants2: [0, 0, 0, ...V2_ALL],
+};
 /** Повторы одной и той же правки с «убежавшими» часами: проверяют журнал меток из будущего. */
-const FUTURE: Focus = { stamps: [3, 4, 5, 5, 6, 6], devices: [0, 1, 2], ids: 2, variants: [0, 0, 0, 0, 0, 0, 1] };
+const FUTURE: Focus = { stamps: [3, 4, 5, 5, 6, 6], devices: [0, 1, 2], ids: 2, variants: [0, 0, 0, 0, 0, 0, 1], variants2: [0, 0, 0, 0, 0, 0, 1] };
 
 const specArb = (f: Focus): fc.Arbitrary<Spec> =>
   fc.record({
-    table: fc.constantFrom('wallets' as const, 'categories' as const, 'transactions' as const, 'settings' as const),
+    table: fc.constantFrom(
+      'wallets' as const,
+      'categories' as const,
+      'transactions' as const,
+      'transactions' as const,
+      'settings' as const,
+      'debts' as const,
+      'budgets' as const,
+      'recurring_rules' as const,
+      'recurring_rules' as const,
+    ),
     user: fc.integer({ min: 0, max: 1 }),
     rows: fc.array(
       fc.record({
@@ -64,6 +83,7 @@ const specArb = (f: Focus): fc.Arbitrary<Spec> =>
         createdFuture: fc.boolean(),
         deleted: fc.boolean(),
         variant: fc.constantFrom(...f.variants),
+        v2: fc.constantFrom(...f.variants2),
         ref: fc.integer({ min: 0, max: 5 }),
         ref2: fc.integer({ min: 0, max: 5 }),
         kind: fc.integer({ min: 0, max: 3 }),
@@ -99,6 +119,10 @@ async function compare(specs: Spec[]): Promise<void> {
   const walletIds = Array.from({ length: 4 }, () => makeWallet().id);
   const categoryIds = Array.from({ length: 4 }, () => makeCategory().id);
   const txIds = Array.from({ length: 4 }, () => makeTransaction().id);
+  const debtIds = Array.from({ length: 4 }, () => makeDebt().id);
+  const budgetIds = Array.from({ length: 4 }, () => makeBudget().id);
+  const ruleIds = Array.from({ length: 4 }, () => makeRecurringRule().id);
+  const MAX = 1_000_000_000_000_000;
   const at = (i: number) => new Date(base + (OFFSETS[i] as number)).toISOString();
 
   const build = (spec: Spec, r: Spec['rows'][number]): WireRow => {
@@ -153,10 +177,67 @@ async function compare(specs: Spec[]): Promise<void> {
           toAmountMinor: kind === 'transfer' ? (r.variant === 1 ? null : 10) : null,
           amountMinor: r.variant === 2 ? 0 : 10,
           categoryId: r.variant === 3 ? (categoryIds[r.ref % 4] as string) : null,
+          debtId: r.v2 === 1 || r.v2 === 6 ? (debtIds[r.ref2 % 4] as string) : null,
+          recurringRuleId: r.v2 === 2 || r.v2 === 6 ? (ruleIds[r.ref % 4] as string) : null,
+          // base_amount_minor: у перевода это комиссия (0..1e15), у расхода/дохода — сумма в базовой валюте
+          baseAmountMinor: r.v2 === 3 ? -1 : r.v2 === 4 ? MAX + 1 : r.v2 === 5 ? MAX : kind === 'transfer' ? 0 : 10,
           note: r.variant === 4 ? 'я'.repeat(501) : '',
           fxRate: kind === 'transfer' ? null : r.variant === 1 ? 0 : 1,
           // fx_source: 17 символов — нельзя, 16 (в том числе эмодзи, 32 единицы UTF-16) — можно
           fxSource: kind === 'transfer' ? null : r.variant === 7 ? 'x'.repeat(17) : r.variant === 8 ? 'x'.repeat(16) : r.variant === 9 ? '😀'.repeat(16) : 'same',
+        });
+      }
+      case 'debts': {
+        const v = r.v2;
+        return toWire('debts', {
+          ...makeDebt(sync),
+          id: debtIds[r.id] as string,
+          direction: v === 4 ? ('gift' as 'lent') : r.kind % 2 === 0 ? 'lent' : 'borrowed',
+          counterparty: v === 1 ? '' : v === 2 ? 'я'.repeat(81) : v === 12 ? '😀'.repeat(80) : `d${r.kind}`,
+          principalMinor: v === 3 ? 0 : v === 5 ? MAX + 1 : v === 12 ? MAX : 10,
+          currency: v === 6 ? 'usd' : 'TJS',
+          openedOn: v === 7 ? '1999-12-31' : v === 8 ? '2100-01-02' : '2026-09-01',
+          dueOn: v === 9 ? '2100-01-02' : v === 13 ? '1999-12-31' : v === 15 ? '2100-01-01' : r.kind === 3 ? '2026-12-01' : null,
+          note: v === 10 ? 'я'.repeat(501) : v === 14 ? '😀'.repeat(500) : '',
+          closedAt: v === 11 ? '1999-01-01T00:00:00.000Z' : null,
+        });
+      }
+      case 'budgets': {
+        const v = r.v2;
+        return toWire('budgets', {
+          ...makeBudget(sync),
+          id: budgetIds[r.id] as string,
+          categoryId: v === 6 || v === 10 ? (categoryIds[(v === 6 ? r.ref : r.ref2) % 4] as string) : v === 7 ? makeCategory().id : null,
+          amountMinor: v === 1 ? 0 : v === 2 ? -1 : v === 3 ? MAX + 1 : v === 8 ? MAX : 10 + r.kind,
+          currency: v === 4 ? 'tjs' : 'TJS',
+          period: v === 5 ? ('week' as 'month') : 'month',
+          archivedAt: v === 9 ? '1990-01-01T00:00:00.000Z' : null,
+        });
+      }
+      case 'recurring_rules': {
+        const v = r.v2;
+        const kinds = ['expense', 'income', 'transfer', 'refund'] as const;
+        const freqs = ['daily', 'weekly', 'monthly', 'yearly'] as const;
+        const kind = kinds[r.kind] as TxKind;
+        const transfer = kind === 'transfer';
+        const wid = r.ref === 5 ? makeWallet().id : (walletIds[r.ref % 4] as string);
+        const to = r.ref2 === 5 ? makeWallet().id : (walletIds[r.ref2 % 4] as string);
+        return toWire('recurring_rules', {
+          ...makeRecurringRule(sync),
+          id: ruleIds[r.id] as string,
+          kind,
+          walletId: wid,
+          toWalletId: transfer ? (v === 13 ? wid : to) : v === 15 ? to : null,
+          toAmountMinor: transfer ? (v === 14 ? null : v === 15 ? 0 : 10) : v === 14 ? 5 : null,
+          amountMinor: v === 1 ? 0 : v === 20 ? MAX : 10,
+          categoryId: v === 16 ? (categoryIds[r.ref % 4] as string) : null,
+          debtId: v === 17 ? (debtIds[r.ref2 % 4] as string) : null,
+          frequency: v === 2 ? ('hourly' as 'daily') : (freqs[r.kind] as 'daily'),
+          intervalN: v === 3 ? 0 : v === 4 ? 1001 : v === 5 ? 1000 : 1,
+          startOn: v === 6 ? '1999-12-31' : v === 7 ? '2100-01-02' : v === 19 ? '2100-01-01' : '2026-10-01',
+          endOn: v === 8 ? '2026-09-30' : v === 9 ? '2100-01-02' : v === 18 ? '2026-10-01' : v === 19 ? '2100-01-01' : r.kind === 1 ? '2027-01-01' : null,
+          autoPost: v === 10 ? (2 as 0) : r.kind % 2 === 0 ? 0 : 1,
+          note: v === 11 ? 'я'.repeat(501) : v === 12 ? 'я'.repeat(500) : '',
         });
       }
     }
@@ -179,7 +260,7 @@ async function compare(specs: Spec[]): Promise<void> {
     const b = await outcome(() => pg.transportFor(uid).push(spec.table, batch));
     expect(a, `шаг ${step}: исход пачки ${spec.table} (память против Postgres)`).toBe(b);
     // состояние всех таблиц обоих пользователей
-    for (const table of ['settings', 'wallets', 'categories', 'transactions'] as const) {
+    for (const table of SYNC_TABLES) {
       for (const u of users) {
         const memRows = mem.dump(u, table);
         const pgRows = (

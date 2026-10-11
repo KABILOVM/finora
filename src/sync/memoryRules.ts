@@ -18,6 +18,11 @@ const PG_BIGINT_MAX = 9.2e18;
 /** Длины, добавленные в схему отдельным блоком (раздел 7 supabase/schema.sql): color / icon — не длиннее 32, fx_source — не длиннее 16. */
 const SHORT_MAX = 32;
 const FX_SOURCE_MAX = 16;
+/** Границы дат в схеме: date '2000-01-01' … date '2100-01-01' (включительно). */
+const MIN_DAY = '2000-01-01';
+const MAX_DAY = '2100-01-01';
+const dayOk = (v: Cell): boolean => typeof v === 'string' && v >= MIN_DAY && v <= MAX_DAY;
+const dayOkOrNull = (v: Cell): boolean => v === null || dayOk(v);
 
 /** Колонки, которые клиент может прислать, но сервер их игнорирует и ставит сам. */
 export const SERVER_COLUMNS = ['user_id', 'server_seq', 'server_updated_at'] as const;
@@ -198,27 +203,91 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       } else if (r['to_wallet_id'] != null || r['to_amount_minor'] != null) {
         fail('plain_shape');
       }
+      // долг бывает только у расхода/дохода (этап 2)
+      if (kind === 'transfer' && r['debt_id'] != null) fail('debt_shape');
+      break;
+    }
+    case 'debts': {
+      if (!tsOkOrNull(r['closed_at'] ?? null) || !tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');
+      if (!['lent', 'borrowed'].includes(String(r['direction']))) fail('direction');
+      const n = charLength(String(r['counterparty']));
+      if (n < 1 || n > 80) fail('counterparty_len');
+      if (!inBound(r['principal_minor'] ?? null, 1)) fail('principal');
+      if (!CURRENCY_RE.test(String(r['currency']))) fail('currency_fmt');
+      if (!dayOk(r['opened_on'] ?? null)) fail('opened_on');
+      if (!dayOkOrNull(r['due_on'] ?? null)) fail('due_on');
+      if (charLength(String(r['note'])) > 500) fail('note_len');
+      break;
+    }
+    case 'budgets': {
+      if (!tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');
+      if (!inBound(r['amount_minor'] ?? null, 1)) fail('amount');
+      if (!CURRENCY_RE.test(String(r['currency']))) fail('currency_fmt');
+      if (r['period'] !== 'month') fail('period');
+      break;
+    }
+    case 'recurring_rules': {
+      if (!tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');
+      const kind = String(r['kind']);
+      if (!['expense', 'income', 'transfer'].includes(kind)) fail('kind');
+      if (!inBound(r['amount_minor'] ?? null, 1)) fail('amount');
+      if (!['daily', 'weekly', 'monthly', 'yearly'].includes(String(r['frequency']))) fail('frequency');
+      if (!inBound(r['interval_n'] ?? null, 1, 1000)) fail('interval_n');
+      if (!dayOk(r['start_on'] ?? null)) fail('start_on');
+      const end = r['end_on'] ?? null;
+      if (end !== null && !(dayOk(end) && String(end) >= String(r['start_on']))) fail('end_on');
+      if (r['auto_post'] !== 0 && r['auto_post'] !== 1) fail('auto_post');
+      if (charLength(String(r['note'])) > 500) fail('note_len');
+      if (kind === 'transfer') {
+        const ok =
+          r['to_wallet_id'] != null &&
+          r['to_amount_minor'] != null &&
+          inBound(r['to_amount_minor'], 1) &&
+          r['to_wallet_id'] !== r['wallet_id'] &&
+          r['category_id'] == null &&
+          r['debt_id'] == null;
+        if (!ok) fail('transfer_shape');
+      } else if (r['to_wallet_id'] != null || r['to_amount_minor'] != null) {
+        fail('plain_shape');
+      }
       break;
     }
   }
 }
 
-/** Что нужно знать о соседних таблицах для проверки внешних ключей. */
-export type ParentLookup = (table: 'wallets' | 'categories', userId: string, id: string) => boolean;
+/** Таблицы, на которые могут ссылаться внешние ключи. */
+export type ParentTable = 'wallets' | 'categories' | 'debts' | 'recurring_rules';
 
-/** Внешние ключи операции: кошелёк, кошелёк зачисления, категория — обязаны существовать у ТОГО ЖЕ пользователя. Бросает 23503. */
-export function checkForeignKeys(table: SyncTableName, r: Rec, userId: string, exists: ParentLookup): void {
-  if (table !== 'transactions') return;
-  const refs: Array<[string, 'wallets' | 'categories', string]> = [
+/** Что нужно знать о соседних таблицах для проверки внешних ключей. */
+export type ParentLookup = (table: ParentTable, userId: string, id: string) => boolean;
+
+type FkRef = readonly [column: string, parent: ParentTable, constraint: string];
+
+/** Составные внешние ключи (user_id, колонка) → родитель: обязаны указывать на строку ТОГО ЖЕ пользователя. Имена — как в схеме. */
+const FOREIGN_KEYS: Partial<Record<SyncTableName, readonly FkRef[]>> = {
+  transactions: [
     ['wallet_id', 'wallets', 'transactions_wallet_fk'],
     ['to_wallet_id', 'wallets', 'transactions_to_wallet_fk'],
     ['category_id', 'categories', 'transactions_category_fk'],
-  ];
-  for (const [column, parent, constraint] of refs) {
+    ['debt_id', 'debts', 'transactions_debt_fk'],
+    ['recurring_rule_id', 'recurring_rules', 'transactions_recurring_rule_fk'],
+  ],
+  budgets: [['category_id', 'categories', 'budgets_category_fk']],
+  recurring_rules: [
+    ['wallet_id', 'wallets', 'recurring_rules_wallet_fk'],
+    ['to_wallet_id', 'wallets', 'recurring_rules_to_wallet_fk'],
+    ['category_id', 'categories', 'recurring_rules_category_fk'],
+    ['debt_id', 'debts', 'recurring_rules_debt_fk'],
+  ],
+};
+
+/** Внешние ключи строки: родитель обязан существовать у ТОГО ЖЕ пользователя (даже удалённый мягко). Бросает 23503. */
+export function checkForeignKeys(table: SyncTableName, r: Rec, userId: string, exists: ParentLookup): void {
+  for (const [column, parent, constraint] of FOREIGN_KEYS[table] ?? []) {
     const id = r[column];
     if (id == null) continue; // пустой ключ не проверяется (MATCH SIMPLE)
     if (!exists(parent, userId, String(id))) {
-      throw rejected(`insert or update on table "transactions" violates foreign key constraint "${constraint}"`, '23503');
+      throw rejected(`insert or update on table "${table}" violates foreign key constraint "${constraint}"`, '23503');
     }
   }
 }
