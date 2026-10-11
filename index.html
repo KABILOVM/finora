@@ -3,60 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#f5f7fb">
+  <meta name="theme-color" content="#eef0fb">
   <meta name="description" content="Персональный финансовый учёт: кошельки, расходы, бюджеты и прогноз до зарплаты.">
   <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
   <title>Finora — личные финансы</title>
 </head>
 <body>
+<div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 <div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand"><div class="brand-mark">F</div><div><strong>finora</strong><small>личные финансы</small></div></div>
-    <nav id="sideNav">
-      <button class="nav-item active" data-view="dashboard"><span>▦</span> Обзор</button>
-      <button class="nav-item" data-view="transactions"><span>↕</span> Операции</button>
-      <button class="nav-item" data-view="wallets"><span>▣</span> Кошельки</button>
-      <button class="nav-item" data-view="budgets"><span>◷</span> Бюджеты</button>
-      <button class="nav-item" data-view="analytics"><span>▥</span> Аналитика</button>
-      <button class="nav-item" data-view="settings"><span>⚙</span> Настройки</button>
+  <aside class="sidebar glass">
+    <div class="brand"><div class="brand-mark">F</div></div>
+    <nav id="sideNav" aria-label="Разделы">
+      <button class="nav-item active" data-view="dashboard" aria-label="Обзор"><svg class="ic"><use href="#i-home"/></svg><span>Обзор</span></button>
+      <button class="nav-item" data-view="transactions" aria-label="Операции"><svg class="ic"><use href="#i-list"/></svg><span>Операции</span></button>
+      <button class="nav-item" data-view="wallets" aria-label="Кошельки"><svg class="ic"><use href="#i-wallet"/></svg><span>Кошельки</span></button>
+      <button class="nav-item" data-view="budgets" aria-label="Бюджеты"><svg class="ic"><use href="#i-target"/></svg><span>Бюджеты</span></button>
+      <button class="nav-item" data-view="analytics" aria-label="Аналитика"><svg class="ic"><use href="#i-chart"/></svg><span>Аналитика</span></button>
+      <button class="nav-item" data-view="settings" aria-label="Настройки"><svg class="ic"><use href="#i-settings"/></svg><span>Настройки</span></button>
     </nav>
-    <div class="sidebar-bottom"><div class="sync-dot"></div><div><b>Локальный режим</b><small>Данные на этом устройстве</small></div></div>
+    <div class="sidebar-bottom" id="syncBadge" title="Локальный режим"><div class="sync-dot"></div></div>
   </aside>
   <main class="main">
     <header class="topbar">
-      <div><div class="eyebrow" id="todayLabel">ЛИЧНЫЕ ФИНАНСЫ</div><h1 id="pageTitle">Обзор</h1></div>
-      <div class="top-actions"><button class="icon-btn" id="themeToggle" aria-label="Сменить тему">◐</button><button class="primary-btn" id="quickAdd">＋ <span>Добавить</span></button></div>
+      <div><div class="eyebrow" id="todayLabel"></div><h1 id="pageTitle">Обзор</h1></div>
+      <div class="top-actions">
+        <button class="icon-btn" id="themeToggle" aria-label="Сменить тему"></button>
+        <button class="primary-btn" id="quickAdd" aria-label="Добавить операцию"><svg class="ic"><use href="#i-plus"/></svg><span>Добавить</span></button>
+      </div>
     </header>
     <section id="viewRoot"></section>
-    <footer>Finora <span>•</span> личные финансы</footer>
   </main>
 </div>
 
 <div class="modal-backdrop" id="modalBackdrop" hidden>
-  <form class="modal" id="transactionForm">
-    <div class="modal-head"><div><div class="eyebrow">НОВАЯ ОПЕРАЦИЯ</div><h2>Добавить запись</h2></div><button type="button" class="icon-btn" id="closeModal">×</button></div>
-    <div class="segmented" id="typeSegments">
-      <button type="button" data-type="expense" class="selected">Расход</button>
-      <button type="button" data-type="income">Доход</button>
-      <button type="button" data-type="transfer">Перевод</button>
+  <form class="modal" id="transactionForm" novalidate>
+    <div class="sheet-grip" id="sheetGrip"></div>
+    <div class="modal-head" id="sheetHead">
+      <div class="segmented" id="typeSegments" role="tablist">
+        <button type="button" data-type="expense" class="selected"><svg class="ic"><use href="#i-expense"/></svg><span>Расход</span></button>
+        <button type="button" data-type="income"><svg class="ic"><use href="#i-income"/></svg><span>Доход</span></button>
+        <button type="button" data-type="transfer"><svg class="ic"><use href="#i-transfer"/></svg><span>Перевод</span></button>
+      </div>
+      <button type="button" class="icon-btn" id="closeModal" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
-    <label>Сумма <div class="amount-input"><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required><select id="currency"><option>TJS</option><option>USD</option><option>EUR</option><option>RUB</option></select></div></label>
-    <div class="form-grid">
-      <label id="categoryWrap">Категория<select id="category"></select></label>
-      <label>Кошелёк<select id="wallet" required></select></label>
-      <label id="toWalletWrap" hidden>Куда перевести<select id="toWallet"></select></label>
-      <label>Дата<input id="date" type="date" required></label>
+    <div class="amount-field"><input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0" aria-label="Сумма" autocomplete="off"><span class="cur-badge" id="currencyLabel">TJS</span></div>
+    <div id="sheetBody"></div>
+    <div class="sheet-row">
+      <label class="field-pill"><svg class="ic"><use href="#i-calendar"/></svg><input id="date" type="date" required aria-label="Дата"></label>
+      <button type="button" class="field-pill toggle" id="recurring" aria-pressed="false" aria-label="Повторять каждый месяц"><svg class="ic"><use href="#i-repeat"/></svg><span>Каждый месяц</span></button>
     </div>
-    <label>Примечание <input id="note" maxlength="180" placeholder="Например: обед с коллегами"></label>
-    <label class="check-row"><input id="recurring" type="checkbox"> Повторять ежемесячно (демо)</label>
-    <div class="modal-actions"><button type="button" class="secondary-btn" id="cancelModal">Отмена</button><button class="primary-btn" type="submit">Сохранить операцию</button></div>
+    <label class="field-pill wide"><svg class="ic"><use href="#i-pen"/></svg><input id="note" maxlength="180" placeholder="Заметка" aria-label="Заметка"></label>
+    <button class="primary-btn big" type="submit"><svg class="ic"><use href="#i-tick"/></svg><span>Сохранить</span></button>
   </form>
 </div>
-<div class="toast" id="toast" role="status"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="./supabase-config.js"></script>
 <script defer src="./cloud.js"></script>
+<script defer src="./icons.js"></script>
 <script defer src="./app.js"></script>
 </body>
 </html>
