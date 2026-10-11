@@ -204,6 +204,9 @@ function renderSettings(){
   <div class="settings-row"><div class="lead"><span class="cat-ic sm" style="--h:255">${ic(state.theme==="dark"?"moon":"sun")}</span></div><div class="segmented" id="themeSeg"><button type="button" data-theme-set="light" class="${state.theme==="light"?"selected":""}" aria-label="Светлая">${ic("sun")}</button><button type="button" data-theme-set="dark" class="${state.theme==="dark"?"selected":""}" aria-label="Тёмная">${ic("moon")}</button></div></div>
   <div class="settings-row"><div class="lead"><span class="cat-ic sm" style="--h:150">${ic("money")}</span></div><div class="chip-row">${currencies.map(c=>`<button type="button" class="chip ${state.baseCurrency===c?"selected":""}" data-base="${c}">${c}</button>`).join("")}</div></div>
  </div>
+ <div class="card"><div class="section-head"><h2>Данные</h2></div>
+  <div class="chip-row"><button class="secondary-btn" type="button" id="exportBtn">${ic("download")}<span>Экспорт</span></button><button class="secondary-btn" type="button" id="importBtn">${ic("upload")}<span>Импорт</span></button><input type="file" id="importInput" accept="application/json,.json" hidden></div>
+ </div>
  <div class="card"><div class="section-head"><h2>Аккаунт</h2><span class="pill" id="cloudStatus">${escapeHtml(cs.signedIn?"Синхронизация":cs.label)}</span></div>
   ${cs.signedIn?`<div class="settings-row" style="padding-top:0"><div class="lead"><span class="cat-ic sm" style="--h:230">${ic("user")}</span><span class="email-text">${escapeHtml(cs.email||"")}</span></div></div><div class="chip-row" style="margin-top:12px"><button class="secondary-btn" type="button" id="cloudPull">${ic("clouddown")}<span>Из облака</span></button><button class="secondary-btn" type="button" id="cloudPush">${ic("cloudup")}<span>В облако</span></button><button class="secondary-btn" type="button" id="cloudLogout">${ic("logout")}<span>Выйти</span></button></div>`
    :cs.configured?`<button class="primary-btn" type="button" id="openAuth">${ic("login")}<span>Войти</span></button>`
@@ -254,9 +257,9 @@ function toast(msg,o={}){
 }
 function warn(msg){toast(msg,{icon:"warn"});}
 /* изменение с возможностью отмены */
-function undoable(msg,fn){
+function undoable(msg,fn,icon="trash"){
  const snap=structuredClone(state);fn();save();render();
- toast(msg,{icon:"trash",action:"Отменить",onAction:()=>{state=snap;save();render();}});
+ toast(msg,{icon,action:"Отменить",onAction:()=>{state=snap;save();render();}});
 }
 
 /* ───── добавление операции (нижняя панель) ───── */
@@ -343,6 +346,8 @@ function bindView(){
  const pf=$("#paydayForm");if(pf)pf.onsubmit=e=>{e.preventDefault();const f=new FormData(pf);state.paydays=state.paydays.map((p,i)=>({...p,date:Math.max(1,Math.min(31,Number(f.get("day"+i)||p.date))),amount:Math.max(0,Number(f.get("amount"+i)||0)),currency:f.get("currency"+i)||p.currency}));save();render();toast("Сохранено");};
  $$("[data-theme-set]").forEach(b=>b.onclick=()=>{state.theme=b.dataset.themeSet;save();applyTheme();render();});
  $$("[data-base]").forEach(b=>b.onclick=()=>{state.baseCurrency=b.dataset.base;save();render();});
+ const ex=$("#exportBtn");if(ex)ex.onclick=exportData;
+ const im=$("#importBtn"),imf=$("#importInput");if(im){im.onclick=()=>imf.click();imf.onchange=()=>{if(imf.files[0])importData(imf.files[0]);imf.value="";};}
  const openAuth=$("#openAuth");if(openAuth)openAuth.onclick=()=>showAuth();
  const logout=$("#cloudLogout");if(logout)logout.onclick=async()=>{try{await window.FinoraCloud.signOut();}catch{}
   state=structuredClone(seed);localStorage.setItem("finora-state",JSON.stringify(state));localStorage.removeItem("finora-had-session");localStorage.removeItem("finora-guest");render();showAuth();};
@@ -438,6 +443,30 @@ if("serviceWorker" in navigator && location.protocol!=="file:"){
  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 }
 
+/* ───── резервная копия ───── */
+function exportData(){
+ const blob=new Blob([JSON.stringify({app:"finora",version:1,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`finora-${iso(new Date())}.json`;document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast("Файл сохранён",{icon:"download"});
+}
+/* из файла берём только корректные записи; всё лишнее отбрасываем */
+function sanitizeImport(raw){
+ const src=raw&&raw.state&&typeof raw.state==="object"?raw.state:raw;
+ if(!src||typeof src!=="object"||!Array.isArray(src.wallets)||!Array.isArray(src.transactions))throw new Error("Это не файл Finora");
+ const num=v=>typeof v==="number"&&isFinite(v),str=v=>typeof v==="string"&&v.length>0;
+ const wallets=src.wallets.filter(w=>w&&str(w.id)&&str(w.name)&&currencies.includes(w.currency)&&num(w.balance)).map(w=>({id:w.id,name:w.name.slice(0,40),type:WALLET_ICON[w.type]?w.type:"bank",currency:w.currency,balance:w.balance,...(BANKS[w.bank]?{bank:w.bank}:{})}));
+ const ids=new Set(wallets.map(w=>w.id));
+ const transactions=src.transactions.filter(t=>t&&str(t.id)&&["expense","income","transfer"].includes(t.type)&&num(t.amount)&&t.amount>0&&currencies.includes(t.currency)&&/^\d{4}-\d{2}-\d{2}$/.test(t.date||"")&&ids.has(t.walletId)).map(t=>({id:t.id,type:t.type,amount:t.amount,currency:t.currency,category:String(t.category||"Прочее").slice(0,40),walletId:t.walletId,date:t.date,note:String(t.note||"").slice(0,180),recurring:!!t.recurring,...(t.type==="transfer"&&ids.has(t.toWalletId)?{toWalletId:t.toWalletId}:{})}));
+ const budgets=(Array.isArray(src.budgets)?src.budgets:[]).filter(b=>b&&str(b.category)&&num(b.limit)&&b.limit>0&&currencies.includes(b.currency)).map(b=>({category:b.category,limit:b.limit,currency:b.currency}));
+ const paydays=Array.isArray(src.paydays)&&src.paydays.length?src.paydays.filter(p=>p&&str(p.name)&&num(p.date)&&num(p.amount)&&currencies.includes(p.currency)).map(p=>({name:p.name,date:Math.max(1,Math.min(31,p.date)),amount:Math.max(0,p.amount),currency:p.currency})):structuredClone(seed.paydays);
+ return {theme:src.theme==="dark"?"dark":"light",baseCurrency:currencies.includes(src.baseCurrency)?src.baseCurrency:"TJS",paydays,wallets,transactions,budgets};
+}
+async function importData(file){
+ try{
+  const next=sanitizeImport(JSON.parse(await file.text()));
+  undoable(`Загружено: ${next.wallets.length} кош., ${next.transactions.length} оп.`,()=>{state=next;},"upload");
+ }catch(err){warn(err.message==="Это не файл Finora"?err.message:"Не удалось прочитать файл");}
+}
 /* ───── вход и регистрация ───── */
 const authEl=$("#authScreen"),auth={mode:"login",busy:false};
 const cloud=()=>window.FinoraCloud;
