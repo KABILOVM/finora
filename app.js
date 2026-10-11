@@ -40,7 +40,8 @@ let state;
 try { state = JSON.parse(localStorage.getItem("finora-state")) || structuredClone(seed); } catch { state = structuredClone(seed); }
 if (!localStorage.getItem("finora-clean-start-v1")) { const isDemo = state.transactions?.some(t => ["t1","t2","t3","t4","t5"].includes(t.id)) || state.wallets?.some(w => ["cash","bank","usd"].includes(w.id)); if (isDemo) state = structuredClone(seed); localStorage.setItem("finora-state", JSON.stringify(state)); localStorage.setItem("finora-clean-start-v1","1"); }
 let currentView = "dashboard", lastAddedId = null, shownTheme = null;
-const form = {type:"expense",walletId:"",toWalletId:"",category:"",recurring:false,editId:null};
+const form = {type:"expense",walletId:"",toWalletId:"",category:"",recurring:false,editId:null,addingCat:false};
+const newCat = {icon:"tag",h:255};
 const counterMem = {};
 function save(){localStorage.setItem("finora-state",JSON.stringify(state)); if(window.FinoraCloud) window.FinoraCloud.queueSave(state);}
 function wallet(id){return state.wallets.find(w=>w.id===id)||state.wallets[0]||{name:"Удалённый кошелёк",currency:"TJS"};}
@@ -55,7 +56,12 @@ function escapeHtml(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","
 function dateLabel(d){return new Date(d+"T12:00:00").toLocaleDateString("ru-RU",{day:"numeric",month:"short"});}
 
 /* ───── иконки и мелкие компоненты ───── */
-function catMeta(name){if(CAT[name])return {icon:CAT[name][0],h:CAT[name][1]};let h=0;for(const ch of String(name))h=(h*31+ch.charCodeAt(0))%360;return {icon:"tag",h};}
+/* свои категории: state.customCategories = {expense:[{name,icon,h}], income:[...]} */
+const ICON_CHOICES=["tag","cup","donut","cart","bus","car","plane","home","key","bolt","water","wifi","phone","heart","pills","gym","bag","shirt","scissors","paw","game","music","tv","video","book","gift","laptop","star","invest","money","card","fire"];
+const HUE_CHOICES=[350,28,45,140,175,205,255,320];
+function customCats(type){return state.customCategories?.[type]||[];}
+function catList(type){return type==="transfer"?categories.transfer:[...categories[type],...customCats(type).map(c=>c.name)];}
+function catMeta(name){for(const t of ["expense","income"]){const c=customCats(t).find(x=>x.name===name);if(c)return {icon:c.icon,h:c.h};}if(CAT[name])return {icon:CAT[name][0],h:CAT[name][1]};let h=0;for(const ch of String(name))h=(h*31+ch.charCodeAt(0))%360;return {icon:"tag",h};}
 function catIc(name,size=""){const m=catMeta(name);return `<span class="cat-ic ${size}" style="--h:${m.h}">${ic(m.icon)}</span>`;}
 function bankTile(id,cls=""){const b=BANKS[id];return `<span class="cat-ic bank ${cls}" style="--b1:${b.c1};--b2:${b.c2}">${ic("bank-"+id)}</span>`;}
 function walletGlyph(w){return BANKS[w.bank]?bankTile(w.bank,"xs"):ic(WALLET_ICON[w.type]||"wallet");}
@@ -63,7 +69,7 @@ function walletIc(w,size=""){if(BANKS[w.bank])return bankTile(w.bank,size);retur
 function cnt(v,cur,key,prefix=""){return `<span data-count="${v}" data-cur="${cur}" data-key="${key}" data-prefix="${prefix}">${prefix}${fmt(v,cur)}</span>`;}
 function emptyHtml(icon,text,btn){return `<div class="empty">${ic(icon)}<div>${text}</div>${btn||""}</div>`;}
 function sumBy(list,fn){return list.reduce((a,t)=>a+fn(t),0);}
-function catSpend(mt){return categories.expense.map(c=>({name:c,value:sumBy(mt.filter(t=>t.type==="expense"&&t.category===c),txBase)})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);}
+function catSpend(mt){return [...new Set([...catList("expense"),...mt.filter(t=>t.type==="expense").map(t=>t.category)])].map(c=>({name:c,value:sumBy(mt.filter(t=>t.type==="expense"&&t.category===c),txBase)})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);}
 
 function transactionHtml(t,deletable=false){
  const w=wallet(t.walletId),sign=t.type==="income"?"+":t.type==="expense"?"−":"↔",label=t.type==="transfer"?"Перевод":t.category;
@@ -174,8 +180,8 @@ function renderBudgets(){
   <div class="card"><div class="section-head"><h2>Лимиты</h2></div>${state.budgets.length?`<div class="ring-grid">${state.budgets.map(b=>budgetItem(b,true)).join("")}</div>`:emptyHtml("target","Лимитов нет")}</div>
   <div class="card"><div class="section-head"><h2>Новый лимит</h2></div>
    <form id="budgetForm" class="form">
-    <div class="cat-grid" data-pick="category" style="margin:0">${categories.expense.map((c,i)=>{const m=catMeta(c);return `<button type="button" class="cat-tile ${i?"":"selected"}" data-v="${escapeHtml(c)}" style="--h:${m.h}"><span class="cat-ic sm" style="--h:${m.h}">${ic(m.icon)}</span><span>${escapeHtml(c)}</span></button>`;}).join("")}</div>
-    <input type="hidden" name="category" value="${categories.expense[0]}">
+    <div class="cat-grid" data-pick="category" style="margin:0">${catList("expense").map((c,i)=>{const m=catMeta(c);return `<button type="button" class="cat-tile ${i?"":"selected"}" data-v="${escapeHtml(c)}" style="--h:${m.h}"><span class="cat-ic sm" style="--h:${m.h}">${ic(m.icon)}</span><span>${escapeHtml(c)}</span></button>`;}).join("")}</div>
+    <input type="hidden" name="category" value="${catList("expense")[0]}">
     <input class="input" name="limit" type="number" inputmode="decimal" min="1" step=".01" required placeholder="Лимит" aria-label="Лимит">
     <div class="chip-row" data-pick="currency">${currencies.map(c=>`<button type="button" class="chip ${c===state.baseCurrency?"selected":""}" data-v="${c}">${c}</button>`).join("")}</div>
     <input type="hidden" name="currency" value="${state.baseCurrency}">
@@ -204,6 +210,7 @@ function renderSettings(){
   <div class="settings-row"><div class="lead"><span class="cat-ic sm" style="--h:255">${ic(state.theme==="dark"?"moon":"sun")}</span></div><div class="segmented" id="themeSeg"><button type="button" data-theme-set="light" class="${state.theme==="light"?"selected":""}" aria-label="Светлая">${ic("sun")}</button><button type="button" data-theme-set="dark" class="${state.theme==="dark"?"selected":""}" aria-label="Тёмная">${ic("moon")}</button></div></div>
   <div class="settings-row"><div class="lead"><span class="cat-ic sm" style="--h:150">${ic("money")}</span></div><div class="chip-row">${currencies.map(c=>`<button type="button" class="chip ${state.baseCurrency===c?"selected":""}" data-base="${c}">${c}</button>`).join("")}</div></div>
  </div>
+ ${["expense","income"].some(t=>customCats(t).length)?`<div class="card"><div class="section-head"><h2>Мои категории</h2></div><div class="chip-row">${["expense","income"].flatMap(t=>customCats(t).map(c=>`<span class="chip">${catIc(c.name,"xs")}<span>${escapeHtml(c.name)}</span><button type="button" class="chip-x" data-del-cat="${t}:${escapeHtml(c.name)}" aria-label="Удалить">${ic("x")}</button></span>`)).join("")}</div></div>`:""}
  <div class="card"><div class="section-head"><h2>Данные</h2></div>
   <div class="chip-row"><button class="secondary-btn" type="button" id="exportBtn">${ic("download")}<span>Экспорт</span></button><button class="secondary-btn" type="button" id="importBtn">${ic("upload")}<span>Импорт</span></button><input type="file" id="importInput" accept="application/json,.json" hidden></div>
  </div>
@@ -283,7 +290,8 @@ function closeModal(){
 function setType(type){
  form.type=type;
  $$("#typeSegments button").forEach(b=>b.classList.toggle("selected",b.dataset.type===type));
- form.category=type==="transfer"?"Перевод":(categories[type].includes(form.category)?form.category:categories[type][0]);
+ form.addingCat=false;
+ form.category=type==="transfer"?"Перевод":(catList(type).includes(form.category)?form.category:catList(type)[0]);
  renderSheet();
 }
 function renderSheet(){
@@ -292,8 +300,9 @@ function renderSheet(){
  const chip=(x,sel,attr)=>`<button type="button" class="chip ${sel?"selected":""}" ${attr}="${x.id}">${walletGlyph(x)}<span>${escapeHtml(x.name)}</span><small>${x.currency}</small></button>`;
  let html="";
  if(form.type!=="transfer"){
-  const list=categories[form.type];
-  html+=`<div class="cat-grid" style="grid-template-columns:repeat(${list.length<=6?list.length:5},1fr)">${list.map(c=>{const m=catMeta(c);return `<button type="button" class="cat-tile ${c===form.category?"selected":""}" data-cat="${escapeHtml(c)}" style="--h:${m.h}"><span class="cat-ic sm" style="--h:${m.h}">${ic(m.icon)}</span><span>${escapeHtml(c)}</span></button>`;}).join("")}</div>`;
+  const list=catList(form.type),n=list.length+1;
+  html+=`<div class="cat-grid" style="grid-template-columns:repeat(${n<=6?n:5},1fr)">${list.map(c=>{const m=catMeta(c);return `<button type="button" class="cat-tile ${c===form.category?"selected":""}" data-cat="${escapeHtml(c)}" style="--h:${m.h}"><span class="cat-ic sm" style="--h:${m.h}">${ic(m.icon)}</span><span>${escapeHtml(c)}</span></button>`;}).join("")}<button type="button" class="cat-tile add ${form.addingCat?"selected":""}" data-newcat style="--h:255"><span class="cat-ic sm">${ic("plus")}</span><span>Своя</span></button></div>`;
+  if(form.addingCat)html+=`<div class="newcat" style="--h:${newCat.h}"><div class="newcat-row"><span class="cat-ic" id="newCatPreview" style="--h:${newCat.h}">${ic(newCat.icon)}</span><input class="input" id="newCatName" maxlength="20" placeholder="Название" aria-label="Название категории"><button type="button" class="primary-btn" id="newCatSave" aria-label="Создать">${ic("tick")}</button></div><div class="icon-grid" id="newCatIcons">${ICON_CHOICES.map(n=>`<button type="button" class="${n===newCat.icon?"selected":""}" data-icon="${n}" aria-label="${n}">${ic(n)}</button>`).join("")}</div><div class="hue-row" id="newCatHues">${HUE_CHOICES.map(h=>`<button type="button" class="${h===newCat.h?"selected":""}" data-hue="${h}" style="--h:${h}" aria-label="Цвет"></button>`).join("")}</div></div>`;
  }
  if(form.type==="transfer")html+=`<div class="pick-label">${ic("expense")}Откуда</div>`;
  html+=`<div class="wallet-pick">${state.wallets.map(x=>chip(x,x.id===form.walletId,"data-wallet")).join("")}</div>`;
@@ -304,6 +313,14 @@ function renderSheet(){
  }
  $("#sheetBody").innerHTML=html;
  $$("#sheetBody .wallet-pick").forEach((e,i)=>e.scrollLeft=keep[i]||0);
+}
+function saveNewCat(){
+ const input=$("#newCatName"),name=input.value.trim().slice(0,20);
+ if(!name){shake(input);input.focus();return;}
+ if(catList(form.type).some(c=>c.toLowerCase()===name.toLowerCase()))return warn("Такая категория уже есть");
+ state.customCategories??={expense:[],income:[]};
+ (state.customCategories[form.type]??=[]).push({name,icon:newCat.icon,h:newCat.h});
+ save();form.category=name;form.addingCat=false;renderSheet();
 }
 function shake(el){el.classList.remove("shake");void el.offsetWidth;el.classList.add("shake");}
 
@@ -346,6 +363,7 @@ function bindView(){
  const pf=$("#paydayForm");if(pf)pf.onsubmit=e=>{e.preventDefault();const f=new FormData(pf);state.paydays=state.paydays.map((p,i)=>({...p,date:Math.max(1,Math.min(31,Number(f.get("day"+i)||p.date))),amount:Math.max(0,Number(f.get("amount"+i)||0)),currency:f.get("currency"+i)||p.currency}));save();render();toast("Сохранено");};
  $$("[data-theme-set]").forEach(b=>b.onclick=()=>{state.theme=b.dataset.themeSet;save();applyTheme();render();});
  $$("[data-base]").forEach(b=>b.onclick=()=>{state.baseCurrency=b.dataset.base;save();render();});
+ $$("[data-del-cat]").forEach(b=>b.onclick=()=>{const [t,...r]=b.dataset.delCat.split(":"),name=r.join(":");undoable("Категория удалена",()=>{state.customCategories[t]=state.customCategories[t].filter(c=>c.name!==name);});});
  const ex=$("#exportBtn");if(ex)ex.onclick=exportData;
  const im=$("#importBtn"),imf=$("#importInput");if(im){im.onclick=()=>imf.click();imf.onchange=()=>{if(imf.files[0])importData(imf.files[0]);imf.value="";};}
  const openAuth=$("#openAuth");if(openAuth)openAuth.onclick=()=>showAuth();
@@ -365,10 +383,16 @@ $("#typeSegments").addEventListener("click",e=>{const b=e.target.closest("[data-
 $("#recurring").onclick=e=>{form.recurring=!form.recurring;e.currentTarget.setAttribute("aria-pressed",String(form.recurring));};
 $("#sheetBody").addEventListener("click",e=>{
  const cat=e.target.closest("[data-cat]"),w=e.target.closest("[data-wallet]"),to=e.target.closest("[data-towallet]");
+ const nc=e.target.closest("[data-newcat]"),ico=e.target.closest("[data-icon]"),hue=e.target.closest("[data-hue]");
+ if(nc){form.addingCat=!form.addingCat;renderSheet();if(form.addingCat)setTimeout(()=>$("#newCatName")?.focus({preventScroll:true}),50);return;}
+ if(ico){newCat.icon=ico.dataset.icon;$$("#newCatIcons button").forEach(x=>x.classList.toggle("selected",x===ico));$("#newCatPreview").innerHTML=ic(newCat.icon);return;}
+ if(hue){newCat.h=Number(hue.dataset.hue);$$("#newCatHues button").forEach(x=>x.classList.toggle("selected",x===hue));$(".newcat").style.setProperty("--h",newCat.h);$("#newCatPreview").style.setProperty("--h",newCat.h);return;}
+ if(e.target.closest("#newCatSave")){saveNewCat();return;}
  if(cat){form.category=cat.dataset.cat;$$("#sheetBody [data-cat]").forEach(x=>x.classList.toggle("selected",x===cat));}
  else if(w){form.walletId=w.dataset.wallet;renderSheet();}
  else if(to){form.toWalletId=to.dataset.towallet;$$("#sheetBody [data-towallet]").forEach(x=>x.classList.toggle("selected",x===to));}
 });
+$("#sheetBody").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.id==="newCatName"){e.preventDefault();saveNewCat();}});
 $("#sheetDelete").onclick=()=>{const id=form.editId;closeModal();if(id)setTimeout(()=>deleteTx(id),reducedMotion?0:230);};
 $("#transactionForm").onsubmit=e=>{
  e.preventDefault();
@@ -459,7 +483,8 @@ function sanitizeImport(raw){
  const transactions=src.transactions.filter(t=>t&&str(t.id)&&["expense","income","transfer"].includes(t.type)&&num(t.amount)&&t.amount>0&&currencies.includes(t.currency)&&/^\d{4}-\d{2}-\d{2}$/.test(t.date||"")&&ids.has(t.walletId)).map(t=>({id:t.id,type:t.type,amount:t.amount,currency:t.currency,category:String(t.category||"Прочее").slice(0,40),walletId:t.walletId,date:t.date,note:String(t.note||"").slice(0,180),recurring:!!t.recurring,...(t.type==="transfer"&&ids.has(t.toWalletId)?{toWalletId:t.toWalletId}:{})}));
  const budgets=(Array.isArray(src.budgets)?src.budgets:[]).filter(b=>b&&str(b.category)&&num(b.limit)&&b.limit>0&&currencies.includes(b.currency)).map(b=>({category:b.category,limit:b.limit,currency:b.currency}));
  const paydays=Array.isArray(src.paydays)&&src.paydays.length?src.paydays.filter(p=>p&&str(p.name)&&num(p.date)&&num(p.amount)&&currencies.includes(p.currency)).map(p=>({name:p.name,date:Math.max(1,Math.min(31,p.date)),amount:Math.max(0,p.amount),currency:p.currency})):structuredClone(seed.paydays);
- return {theme:src.theme==="dark"?"dark":"light",baseCurrency:currencies.includes(src.baseCurrency)?src.baseCurrency:"TJS",paydays,wallets,transactions,budgets};
+ const cc={};for(const t of ["expense","income"])cc[t]=(Array.isArray(src.customCategories?.[t])?src.customCategories[t]:[]).filter(c=>c&&str(c.name)&&ICON_CHOICES.includes(c.icon)&&num(c.h)).map(c=>({name:c.name.slice(0,20),icon:c.icon,h:c.h}));
+ return {customCategories:cc,theme:src.theme==="dark"?"dark":"light",baseCurrency:currencies.includes(src.baseCurrency)?src.baseCurrency:"TJS",paydays,wallets,transactions,budgets};
 }
 async function importData(file){
  try{

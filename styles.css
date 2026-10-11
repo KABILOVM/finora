@@ -441,3 +441,24 @@ h2{font-size:16px;letter-spacing:-.2px;margin:0;font-weight:720}
 .ring-card.editable{cursor:pointer;padding-right:44px;transition:transform .25s var(--spring)}
 .ring-card.editable:active{transform:scale(.98)}
 .ring-card .row-del{position:absolute;right:0;top:50%;margin-top:-17px}
+
+/* ───── Свои категории ───── */
+.cat-tile.add .cat-ic{background:none;border:1.5px dashed var(--muted);color:var(--muted)}
+.cat-tile.add.selected{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.newcat{--h:255;display:grid;gap:12px;padding:12px;margin:-4px 0 14px;border-radius:20px;background:var(--field);border:1px solid var(--hair);animation:rise .35s var(--ease) both}
+.newcat-row{display:flex;gap:10px;align-items:center}
+.newcat-row .input{flex:1;min-width:0}
+.newcat-row .primary-btn{padding:11px 14px;font-size:20px;border-radius:14px}
+.newcat-row .cat-ic{transition:background .25s,color .25s}
+.icon-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.icon-grid button{aspect-ratio:1;border-radius:11px;display:grid;place-items:center;font-size:20px;color:var(--muted);transition:transform .2s var(--spring),background .2s,color .2s}
+.icon-grid button:hover{background:var(--glass2);transform:scale(1.1)}
+.icon-grid button.selected{background:hsl(var(--h) 90% 62%/.2);color:hsl(var(--h) 72% 46%)}
+[data-theme="dark"] .icon-grid button.selected{color:hsl(var(--h) 90% 74%)}
+.hue-row{display:flex;gap:8px;justify-content:space-between}
+.hue-row button{width:28px;height:28px;border-radius:50%;background:hsl(var(--h) 78% 58%);box-shadow:0 0 0 0 transparent;transition:transform .25s var(--spring),box-shadow .2s}
+.hue-row button:hover{transform:scale(1.15)}
+.hue-row button.selected{box-shadow:0 0 0 3px var(--glass-solid),0 0 0 5px hsl(var(--h) 78% 58%)}
+.chip-x{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;color:var(--muted);margin-left:2px;transition:background .2s,color .2s}
+.chip-x:hover{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
+.chip-x .ic{font-size:13px}
