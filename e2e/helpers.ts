@@ -45,7 +45,17 @@ function makeSink(): ErrorSink {
  * test с автоматической проверкой «нет ошибок»: каждый сценарий на каждом проекте
  * в конце проверяет, что не было ни pageerror, ни console.error (кроме сетевых сбоев).
  */
-export const test = base.extend<{ errors: ErrorSink }>({
+export const test = base.extend<{ errors: ErrorSink; showOnboarding: boolean; skipOnboarding: void }>({
+  /** Сценарий про сам мастер настройки (26-onboarding) ставит true через test.use: тогда мастер заранее не отключается. */
+  showOnboarding: [false, { option: true }],
+  /** Мастер закрывает «Главную» у человека с чистой базой, а почти все сценарии открывают приложение именно так (и не только через openApp). */
+  skipOnboarding: [
+    async ({ page, showOnboarding }, use) => {
+      if (!showOnboarding) await skipOnboardingInAdvance(page);
+      await use();
+    },
+    { auto: true },
+  ],
   errors: [
     async ({ page }, use) => {
       const sink = makeSink();
@@ -107,10 +117,46 @@ export function moneyExact(text: string): RegExp {
 /* ------------------------------ запуск и ожидание ------------------------------ */
 
 /** Открыть приложение по адресу (хэш-маршрут) и дождаться, пока появится каркас и данные прочитаны. */
-export async function openApp(page: Page, hash = '/'): Promise<void> {
+export async function openApp(page: Page, hash = '/', opts: { onboarding?: boolean } = {}): Promise<void> {
+  // Пошаговая настройка (мастер) появляется у человека с чистой базой и закрывает «Главную». Остальным сценариям она не нужна:
+  // заранее отмечаем её пройденной (только если отметки ещё нет). Сценарий про сам мастер (26-onboarding) просит { onboarding: true }.
+  if (!opts.onboarding) await skipOnboardingInAdvance(page);
   await page.goto(`/#${hash}`);
+  if (opts.onboarding) {
+    await expect(page.getByRole('dialog', { name: 'Настройка Finora' })).toBeVisible();
+    return;
+  }
   await waitReady(page);
+  await closeOnboarding(page);
   await dismissInstallPrompt(page);
+}
+
+/** Пользователи сценариев: локальный режим и общий «вошедший» пользователь заглушек облака (21-reminders, sec/*). */
+const ONBOARDING_USER_IDS = ['10ca1de0-0000-4000-8000-000000000001', '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa48'];
+
+/** Мастер настройки уже отмечен пройденным (скрипт срабатывает при каждой загрузке страницы, существующую отметку не затирает). */
+export async function skipOnboardingInAdvance(page: Page): Promise<void> {
+  await page.addInitScript((ids: string[]) => {
+    try {
+      // e2e.keepOnboarding — запрет затирать отметку (сценарий «старый аккаунт без отметки на устройстве»)
+      if (localStorage.getItem('e2e.keepOnboarding') !== null) return;
+      const done = JSON.stringify({ v: 1, step: 'finish', path: null, done: true, skipped: true, wants: { reminders: false, lock: false, install: false } });
+      for (const id of ids) {
+        const key = `finora:onboarding:v1:${id}`;
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, done);
+      }
+    } catch {
+      // localStorage недоступен — мастер закроет closeOnboarding
+    }
+  }, ONBOARDING_USER_IDS);
+}
+
+/** Если мастер всё же показался — пропустить его («Пропустить, настрою сам»); если его нет, ничего не делает. */
+export async function closeOnboarding(page: Page): Promise<void> {
+  const dlg = page.getByRole('dialog', { name: 'Настройка Finora' });
+  if ((await dlg.count()) === 0) return;
+  await dlg.getByRole('button', { name: 'Пропустить, настрою сам' }).click();
+  await expect(dlg).toBeHidden();
 }
 
 /**

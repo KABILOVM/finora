@@ -17,6 +17,7 @@ import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
+import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { InstallPrompt } from '@/install/InstallPrompt';
 import PushKeeper from '@/push/PushKeeper';
 import { AppShell } from '@/layout/AppShell';
@@ -152,6 +153,8 @@ export default function App() {
         <HashRouter>
           <AppRoot client={client}>
             <AppRoutes />
+            {/* Пошаговая настройка нового человека: поверх «Главной», один раз */}
+            <OnboardingGate />
           </AppRoot>
         </HashRouter>
       </ToastProvider>
