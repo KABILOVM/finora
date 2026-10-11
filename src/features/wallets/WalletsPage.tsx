@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -23,15 +24,7 @@ import { WalletSheet } from './WalletSheet';
 type SheetState = { kind: 'new' } | { kind: 'edit'; wallet: LocalRow<Wallet> };
 
 function WalletIcon({ wallet }: { wallet: Wallet }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex h-10 w-10 items-center justify-center rounded-full text-xl"
-      style={{ backgroundColor: `${wallet.color}26` }}
-    >
-      {wallet.icon}
-    </span>
-  );
+  return <Glyph value={wallet.icon} color={wallet.color} size={40} />;
 }
 
 /** Кошельки: остатки в их валюте, итог «Всего» в базовой, создание и правка, архив, сверка. */

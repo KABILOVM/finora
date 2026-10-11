@@ -140,7 +140,7 @@ describe('каркас: планшет и ПК', () => {
     const aside = document.querySelector('aside') as HTMLElement;
     expect(aside.className).toContain('md:flex');
     expect(aside.className).not.toContain('lg:flex');
-    const bottom = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.className.includes('bottom-0')) as HTMLElement;
+    const bottom = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.className.includes('fixed') && n.className.includes('bottom-')) as HTMLElement;
     expect(bottom.className).toContain('md:hidden');
     // под нижней панелью остаётся запас с учётом «чёлки» снизу (safe-area)
     expect((document.getElementById('main') as HTMLElement).className).toContain('env(safe-area-inset-bottom)');

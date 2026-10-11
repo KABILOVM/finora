@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { useState } from 'react';
 import { ChipPicker, type ChipOption } from '@/components/ChipPicker';
 import { Icon } from '@/components/Icon';
@@ -12,13 +13,14 @@ import type { TxFormController } from './useTxFormController';
 /** Подпись чипа кошелька. Если кошельки в разных валютах — с кодом валюты, чтобы не перепутать «Карта» и «Карта». */
 export function walletOptions(wallets: readonly LocalRow<Wallet>[]): ChipOption[] {
   const mixed = new Set(wallets.map((w) => w.currency)).size > 1;
-  return wallets.map((w) => ({ value: w.id, icon: w.icon, label: mixed ? `${w.name} · ${w.currency}` : w.name }));
+  return wallets.map((w) => ({ value: w.id, icon: w.icon, color: w.color, label: mixed ? `${w.name} · ${w.currency}` : w.name }));
 }
 
 type Panel = 'wallet' | 'toWallet' | 'date' | null;
 
 function ContextChip({
   icon,
+  color,
   label,
   ariaLabel,
   open,
@@ -26,6 +28,7 @@ function ContextChip({
   onClick,
 }: {
   icon: string;
+  color?: string;
   label: string;
   ariaLabel: string;
   open: boolean;
@@ -43,7 +46,7 @@ function ContextChip({
         invalid ? 'border-danger text-danger' : open ? 'border-brand bg-brand/10 text-brand' : 'border-border bg-surface text-text hover:bg-surface-2',
       )}
     >
-      <span aria-hidden="true">{icon}</span>
+      <Glyph value={icon} color={color} size={26} />
       <span className="truncate">{label}</span>
       <Icon name="chevron" size={14} className={cn('shrink-0 text-muted transition-transform', open ? '-rotate-90' : 'rotate-90')} />
     </button>
@@ -83,6 +86,7 @@ export function ContextRow({ c, wallets }: ContextRowProps) {
       <div className="flex flex-wrap gap-2">
         <ContextChip
           icon={wallets.find((w) => w.id === form.walletId)?.icon ?? '👛'}
+          color={wallets.find((w) => w.id === form.walletId)?.color}
           label={walletName}
           ariaLabel={`${isTransfer ? 'Откуда' : 'Кошелёк'}: ${walletName}`}
           open={show === 'wallet'}
@@ -92,6 +96,7 @@ export function ContextRow({ c, wallets }: ContextRowProps) {
         {isTransfer && (
           <ContextChip
             icon={wallets.find((w) => w.id === form.toWalletId)?.icon ?? '👛'}
+            color={wallets.find((w) => w.id === form.toWalletId)?.color}
             label={label(form.toWalletId) ?? 'не выбран'}
             ariaLabel={`Куда: ${label(form.toWalletId) ?? 'не выбран'}`}
             open={show === 'toWallet'}

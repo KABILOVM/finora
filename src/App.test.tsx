@@ -64,7 +64,7 @@ describe('навигация', () => {
   it('нижняя панель телефона: Главная, Операции, «+», Кошельки, Ещё', async () => {
     renderAt('/');
     await findByRole('heading', { name: 'Главная', level: 1 });
-    const bottom = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.className.includes('bottom-0'));
+    const bottom = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.className.includes('fixed') && n.className.includes('bottom-'));
     expect(bottom).toBeDefined();
     const labels = Array.from((bottom as HTMLElement).querySelectorAll('a')).map((a) => a.getAttribute('aria-label') ?? a.textContent);
     expect(labels).toEqual(['Главная', 'Операции', 'Добавить операцию', 'Кошельки', 'Ещё']);

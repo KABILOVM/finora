@@ -1,5 +1,5 @@
 import { Suspense, type ReactNode } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Spinner } from '@/components/Button';
 import { Logo } from '@/components/Logo';
 import { useOnline } from '@/components/OnlineBadge';
@@ -28,11 +28,12 @@ export interface AppShellProps {
  */
 export function AppShell({ status }: AppShellProps) {
   const online = useOnline();
+  const { pathname } = useLocation();
   return (
     <div className="min-h-dvh">
       <SideNav status={status} />
       <div className="md:pl-60">
-        <div className="sticky top-0 z-20 bg-bg/95 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+        <div className="sticky top-0 z-20 bg-bg/55 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
           <div className="flex min-h-[52px] items-center justify-between gap-2 px-4">
             <div className="flex shrink-0 items-center gap-2">
               <Logo size={28} />
@@ -46,9 +47,12 @@ export function AppShell({ status }: AppShellProps) {
           id="main"
           className="mx-auto w-full max-w-3xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 md:px-8 md:pb-12 md:pt-8"
         >
-          <Suspense fallback={<PageFallback />}>
-            <Outlet />
-          </Suspense>
+          {/* key — по пути страницы: при переходе новая страница плавно «всплывает» */}
+          <div key={pathname} className="animate-rise">
+            <Suspense fallback={<PageFallback />}>
+              <Outlet />
+            </Suspense>
+          </div>
         </main>
       </div>
       <BottomNav />

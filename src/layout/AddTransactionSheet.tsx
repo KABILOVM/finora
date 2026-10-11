@@ -117,7 +117,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, onSaved }: Add
       categories.filter((x) => x.kind === kind),
       stats.counts[kind],
     );
-    return ranked.map((x) => ({ value: x.id, label: x.name, icon: x.icon }));
+    return ranked.map((x) => ({ value: x.id, label: x.name, icon: x.icon, color: x.color }));
   }, [categories, kind, stats]);
 
   useScrollToError(formRef, c.errors);

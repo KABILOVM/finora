@@ -33,7 +33,8 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center px-4 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
-      <Logo size={64} />
+      <div className="flex w-full animate-rise flex-col items-center rounded-[2rem] border border-border/70 bg-surface/70 p-6 shadow-card backdrop-blur-xl">
+      <Logo size={72} className="drop-shadow-[0_14px_18px_rgb(var(--brand)/0.4)]" />
       <h1 className="mt-4 text-2xl font-bold tracking-tight">Вход</h1>
       <p className="mt-1 text-center text-muted">Finora — учёт денег. Войдите, чтобы открыть свои записи.</p>
 
@@ -93,6 +94,7 @@ export default function LoginPage() {
       <p className="mt-6 text-center text-sm text-muted">
         Аккаунты создаёт владелец приложения. Если у вас нет почты и пароля — попросите его.
       </p>
+      </div>
     </main>
   );
 }

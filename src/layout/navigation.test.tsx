@@ -11,7 +11,7 @@ afterEach(() => vi.restoreAllMocks());
 const renderAt = (path: string) => renderAppRoot(<AppRoutes />, { path, deps: makeTestDeps().deps });
 
 const navs = () => screen.getAllByRole('navigation', { name: 'Основная навигация' });
-const bottomNav = () => navs().find((n) => n.className.includes('bottom-0')) as HTMLElement;
+const bottomNav = () => navs().find((n) => n.className.includes('bottom-[max')) as HTMLElement;
 const sideNav = () => navs().find((n) => n.closest('aside')) as HTMLElement;
 /** Ссылка с таким именем внутри контейнера (в testUtils нет within). */
 const linkIn = (container: HTMLElement, name: string): HTMLElement => {

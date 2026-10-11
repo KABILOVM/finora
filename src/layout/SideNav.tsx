@@ -14,7 +14,7 @@ function SideLink({ item }: { item: NavItem }) {
       to={item.to}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-base font-semibold transition-colors',
+        'flex min-h-[44px] items-center gap-3 rounded-2xl px-3 text-base font-semibold transition duration-200 active:scale-[0.97]',
         isActive ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-surface-2 hover:text-text',
       )}
     >
@@ -31,7 +31,7 @@ function SideLink({ item }: { item: NavItem }) {
 export function SideNav({ status }: { status?: ReactNode }) {
   const addLink = useAddLink();
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-4 overflow-y-auto border-r border-border bg-surface px-3 py-5 md:flex">
+    <aside className="fixed bottom-3 left-3 top-3 z-30 hidden w-56 flex-col gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-surface/70 px-3 py-5 shadow-card backdrop-blur-xl md:flex">
       <div className="flex items-center gap-3 px-3">
         <Logo size={36} />
         <span className="text-xl font-bold tracking-tight">Finora</span>
@@ -44,7 +44,7 @@ export function SideNav({ status }: { status?: ReactNode }) {
         {NAV_ITEMS.filter((item) => item.side === 'main').map((item) => (
           <SideLink key={item.to} item={item} />
         ))}
-        <div className="mt-auto flex flex-col gap-1 border-t border-border pt-3">
+        <div className="mt-auto flex flex-col gap-1 border-t border-border/70 pt-3">
           {NAV_ITEMS.filter((item) => item.side === 'bottom').map((item) => (
             <SideLink key={item.to} item={item} />
           ))}

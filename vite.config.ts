@@ -83,8 +83,8 @@ export default defineConfig({
         scope: './',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#0f172a',
-        theme_color: '#0f172a',
+        background_color: '#080a18',
+        theme_color: '#080a18',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
@@ -102,6 +102,8 @@ export default defineConfig({
   ],
   build: {
     target: 'es2022',
+    // Шрифты — всегда отдельными файлами: политика безопасности (font-src 'self') не пускает шрифты, встроенные в CSS как data:.
+    assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
     sourcemap: false,
     rollupOptions: {
       output: {

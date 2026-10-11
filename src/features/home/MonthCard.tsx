@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/Glyph';
 import { Card } from '@/components/Card';
 import { MoneyText } from '@/components/MoneyText';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -94,9 +95,9 @@ export function MonthCard({ month, currentMonth, onMonth, categories }: MonthCar
                 return (
                   <li key={isFee ? 'fee' : (row.categoryId ?? 'none')}>
                     <div className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="min-w-0 truncate">
-                        <span aria-hidden="true">{isFee ? '🏦' : (cat?.icon ?? '➖')} </span>
-                        {isFee ? 'Комиссии' : (cat?.name ?? 'Без категории')}
+                      <span className="flex min-w-0 items-center gap-2 truncate">
+                        <Glyph value={isFee ? '🏦' : (cat?.icon ?? '➖')} color={isFee ? undefined : cat?.color} size={24} />
+                        <span className="truncate">{isFee ? 'Комиссии' : (cat?.name ?? 'Без категории')}</span>
                       </span>
                       <span className="shrink-0">
                         <span className="money font-semibold">{formatMinor(row.totalMinor, base)}</span>
