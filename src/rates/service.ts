@@ -4,8 +4,9 @@ import { pickRate } from '@/domain/rates';
 import { describeRateError } from './http';
 import { MAX_PER_UNIT, MIN_PER_UNIT, boundWarnings, daysBetween, isFutureDate, isRateValue, isoDateOf } from './parseUtil';
 import { assessRateTable, pickComparable, withoutCodes } from './sanity';
-import { cleanTable, emptyState, isOwnerId, isStoredState, mergeTables, normalizeStored, pairKey, putTable, serializeState, stamp, type ManualRate, type RatesState } from './state';
-import type { FailureKind, ProviderFailure, RateLookup, RateProvider, RateService, RateServiceStatus, RateStorage, RefreshResult } from './types';
+import { todayLocal } from '@/lib/dates';
+import { cleanTable, emptyState, isOwnerId, isStoredState, mergeTables, normalizeStored, pairKey, putTable, serializeState, stamp, trimEntered, type EnteredRate, type ManualRate, type RatesState } from './state';
+import type { EnteredRateInfo, FailureKind, ProviderFailure, RateLookup, RateProvider, RateService, RateServiceStatus, RateStorage, RefreshResult } from './types';
 
 /** Курс старше стольких календарных суток считается устаревшим (в пятницу-воскресенье курс «живёт» до вторника). */
 export const STALE_AFTER_DAYS = 3;
@@ -112,6 +113,8 @@ export function createRateService(options: RateServiceOptions): RateService {
     if (!unsaved) {
       state.manual = stored.manual;
       state.manualByUser = stored.manualByUser;
+      state.entered = stored.entered;
+      state.enteredByUser = stored.enteredByUser;
     }
     if (stamp(stored.lastAttemptAt) > stamp(state.lastAttemptAt)) {
       state.lastAttemptAt = stored.lastAttemptAt;
@@ -310,17 +313,23 @@ export function createRateService(options: RateServiceOptions): RateService {
     if (!isValidCurrencyCode(f) || !isValidCurrencyCode(t)) return null;
     const today = isoDateOf(now());
     if (f === t) return { rate: 1, source: 'same', asOf: today, stale: false, manual: false };
+    // (1) «Свой курс» из Настроек перекрывает всё
     const manual = manualOf(owner)[pairKey(f, t)];
     if (manual) return { rate: manual.rate, source: 'manual', asOf: manual.setAt.slice(0, 10), stale: false, manual: true };
+    // (2) свежий автоматический курс
     const hit = pickRate(state.tables, f, t);
-    if (!hit || !Number.isFinite(hit.rate) || hit.rate <= 0) return null;
-    return {
-      rate: hit.rate,
-      source: hit.table.source,
-      asOf: hit.table.asOf,
-      stale: daysBetween(hit.table.asOf, today) > STALE_AFTER_DAYS,
-      manual: false,
-    };
+    const auto: RateLookup | null =
+      hit && Number.isFinite(hit.rate) && hit.rate > 0
+        ? { rate: hit.rate, source: hit.table.source, asOf: hit.table.asOf, stale: daysBetween(hit.table.asOf, today) > STALE_AFTER_DAYS, manual: false }
+        : null;
+    if (auto && !auto.stale) return auto;
+    // (3) курс, введённый человеком в операции (любой давности) — но только вместо устаревшего или отсутствующего автоматического
+    const entered = enteredOf(owner)[pairKey(f, t)];
+    if (entered) {
+      return { rate: entered.rate, source: 'manual', asOf: enteredDay(entered), stale: false, manual: false, entered: true };
+    }
+    // (4) устаревший автоматический курс (или его нет совсем)
+    return auto;
   }
 
   function checkedPair(from: CurrencyCode, to: CurrencyCode): [CurrencyCode, CurrencyCode] {
@@ -342,6 +351,56 @@ export function createRateService(options: RateServiceOptions): RateService {
     if (owner === null) return state.manual;
     if (!hasOwn(state.manualByUser, owner)) state.manualByUser[owner] = {};
     return state.manualByUser[owner] as Record<string, ManualRate>;
+  }
+
+  /** Введённые в операциях курсы владельца (null — «ничья» корзина). Только чтение. */
+  function enteredOf(who: string | null): Record<string, EnteredRate> {
+    if (who === null) return state.entered;
+    return hasOwn(state.enteredByUser, who) ? (state.enteredByUser[who] as Record<string, EnteredRate>) : {};
+  }
+
+  /** Корзина введённых курсов текущего владельца для записи (создаётся при первой записи). */
+  function enteredForWrite(): Record<string, EnteredRate> {
+    if (owner === null) return state.entered;
+    if (!hasOwn(state.enteredByUser, owner)) state.enteredByUser[owner] = {};
+    return state.enteredByUser[owner] as Record<string, EnteredRate>;
+  }
+
+  /** День ввода по часам устройства (а не UTC): ввели в час ночи — это сегодняшний день человека. */
+  const enteredDay = (e: EnteredRate): string => todayLocal(new Date(e.enteredAt));
+
+  function rememberEnteredRate(from: CurrencyCode, to: CurrencyCode, rate: number): void {
+    const [f, t] = checkedPair(from, to);
+    if (!isRateValue(rate)) {
+      throw new RangeError(`Курс должен быть числом больше нуля (от ${MIN_PER_UNIT} до ${MAX_PER_UNIT}), получено ${String(rate)}`);
+    }
+    commit(() => {
+      const mine = enteredForWrite();
+      mine[pairKey(f, t)] = { rate, enteredAt: now().toISOString() };
+      trimEntered(mine);
+    });
+    notify();
+  }
+
+  function forgetEnteredRate(from: CurrencyCode, to: CurrencyCode): void {
+    const [f, t] = checkedPair(from, to);
+    pull(); // курс мог быть введён в другой вкладке, а у этой в памяти его ещё нет
+    if (!(pairKey(f, t) in enteredOf(owner))) return;
+    commit(() => {
+      const mine = enteredForWrite();
+      delete mine[pairKey(f, t)];
+      if (owner !== null && Object.keys(mine).length === 0) delete state.enteredByUser[owner]; // пустую корзину не храним
+    });
+    notify();
+  }
+
+  function listEnteredRates(): EnteredRateInfo[] {
+    return Object.entries(enteredOf(owner))
+      .map(([key, e]) => {
+        const [from = '', to = ''] = key.split('>');
+        return { from, to, rate: e.rate, enteredAt: e.enteredAt, enteredOn: enteredDay(e) };
+      })
+      .sort((a, b) => (a.enteredAt < b.enteredAt ? 1 : a.enteredAt > b.enteredAt ? -1 : `${a.from}>${a.to}`.localeCompare(`${b.from}>${b.to}`)));
   }
 
   function setManualRate(from: CurrencyCode, to: CurrencyCode, rate: number): void {
@@ -377,12 +436,18 @@ export function createRateService(options: RateServiceOptions): RateService {
     if (!isOwnerId(userId)) throw new RangeError('Некорректный идентификатор пользователя для ручных курсов');
     owner = userId;
     pull();
-    if (Object.keys(state.manual).length === 0) return;
+    if (Object.keys(state.manual).length === 0 && Object.keys(state.entered).length === 0) return;
     commit(() => {
       const mine = manualForWrite();
       // свои курсы побеждают: «ничьи» подбираются только там, где у пользователя такой пары ещё нет
       for (const [key, value] of Object.entries(state.manual)) if (!hasOwn(mine, key)) mine[key] = value;
       state.manual = {};
+      if (Object.keys(state.entered).length > 0) {
+        const enteredMine = enteredForWrite();
+        for (const [key, value] of Object.entries(state.entered)) if (!hasOwn(enteredMine, key)) enteredMine[key] = value;
+        trimEntered(enteredMine);
+        state.entered = {};
+      }
     });
   }
 
@@ -419,5 +484,17 @@ export function createRateService(options: RateServiceOptions): RateService {
     };
   }
 
-  return { refresh, getRate, setManualRate, clearManualRate, bindUser, listKnownCurrencies, getStatus, subscribe };
+  return {
+    refresh,
+    getRate,
+    setManualRate,
+    clearManualRate,
+    rememberEnteredRate,
+    forgetEnteredRate,
+    listEnteredRates,
+    bindUser,
+    listKnownCurrencies,
+    getStatus,
+    subscribe,
+  };
 }

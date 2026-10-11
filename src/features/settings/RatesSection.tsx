@@ -4,6 +4,8 @@ import { useToast } from '@/components/Toast';
 import { useSettings, useWallets } from '@/db';
 import { currencyInfo } from '@/domain/currency';
 import { formatDayLabel } from '@/lib/dates';
+import { EnteredRatesList } from '@/rates/EnteredRatesList';
+import { enteredLabel } from '@/rates/enteredText';
 import { useRates } from '@/rates/hooks';
 import { ManualRateSheet } from './ManualRateSheet';
 import { formatRate, rateSourceLabel } from './rateInput';
@@ -70,7 +72,9 @@ export function RatesSection() {
                 </div>
                 <div className={lookup?.stale ? 'text-sm text-warning' : 'text-sm text-muted'}>
                   {lookup
-                    ? `${rateSourceLabel(lookup.source)} · на ${formatDayLabel(lookup.asOf)}${lookup.stale ? ' · устарел' : ''}`
+                    ? lookup.entered
+                      ? `${enteredLabel(lookup.asOf)} · в операции`
+                      : `${rateSourceLabel(lookup.source)} · на ${formatDayLabel(lookup.asOf)}${lookup.stale ? ' · устарел' : ''}`
                     : 'Обновите курсы или задайте свой — иначе кошелёк не войдёт в «Всего».'}
                 </div>
               </div>
@@ -81,6 +85,8 @@ export function RatesSection() {
           ))}
         </ul>
       )}
+
+      <EnteredRatesList />
 
       <Button variant="secondary" icon="refresh" loading={refreshing} onClick={() => void doRefresh()}>
         Обновить курсы

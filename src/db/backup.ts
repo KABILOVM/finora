@@ -78,10 +78,8 @@ function mergeTable<E extends SyncFields, R extends E & LocalFields>(
       row = { ...inc, dirty: 1, serverSeq: null, syncError: null } as R;
       tally.added++;
     } else if (compareVersion(inc, cur) > 0) {
-      // serverSeq сохраняем: это «какую версию сервера мы уже видели», он не зависит от импорта. База слияния (dirtyBase) у
-      // уже «грязной» строки тоже остаётся (у «чистой» её положит сама база при записи), иначе импорт стёр бы память о том,
-      // поверх какой версии сервера сделаны правки.
-      row = { ...inc, dirty: 1, serverSeq: cur.serverSeq, syncError: null, ...(cur.dirtyBase ? { dirtyBase: cur.dirtyBase } : {}) } as R;
+      // serverSeq сохраняем: это «какую версию сервера мы уже видели», он не зависит от импорта
+      row = { ...inc, dirty: 1, serverSeq: cur.serverSeq, syncError: null } as R;
       tally.replaced++;
     } else {
       tally.keptLocal++;

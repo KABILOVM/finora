@@ -1,7 +1,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 import { useStoreUserId } from '@/db/storeContext';
 import type { CurrencyCode, IsoDateTime } from '@/domain/types';
-import type { RateLookup, RateService, RateServiceStatus, RefreshResult } from './types';
+import type { EnteredRateInfo, RateLookup, RateService, RateServiceStatus, RefreshResult } from './types';
 
 /** Автообновление не чаще, чем раз в столько после последнего УСПЕШНОГО обновления. */
 export const AUTO_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -125,4 +125,11 @@ export function useRates(): UseRates {
 /** Сам сервис — для ручных курсов (setManualRate / clearManualRate) и списка известных валют. */
 export function useRateService(): RateService {
   return useRatesContext().service;
+}
+
+/** Введённые в операциях курсы текущего пользователя (сначала новые). Обновляется при любом изменении курсов. */
+export function useEnteredRates(): EnteredRateInfo[] {
+  const { service, version, owner } = useRatesContext();
+  // version и owner — только зависимости: список читается заново после изменения курсов или смены пользователя
+  return useMemo(() => service.listEnteredRates(), [service, version, owner]);
 }

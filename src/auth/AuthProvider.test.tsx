@@ -81,12 +81,20 @@ describe('старт с облаком', () => {
 
   it('getSession зависла (нет сети), но здесь уже входили → offline-known за время таймаута, старт не виснет', async () => {
     writeLastUser({ id: ALICE.id, email: ALICE.email });
-    const started = Date.now();
-    const { auth } = setup({ getSession: 'hang' }, 80);
-    expect(auth.api.state.status).toBe('booting');
-    await waitFor(() => expect(auth.api.state.status).toBe('offline-known'));
-    expect(Date.now() - started).toBeLessThan(2000);
-    expect(auth.api.user).toEqual({ id: ALICE.id, email: ALICE.email });
+    // Время поддельное: таймаут старта (80 мс) наступает ровно тогда, когда мы продвинули часы. Замер настоящего времени
+    // («меньше 2 с») на загруженной машине врал бы в обе стороны.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { auth } = setup({ getSession: 'hang' }, 80);
+      expect(auth.api.state.status).toBe('booting');
+      await act(async () => void (await vi.advanceTimersByTimeAsync(79)));
+      expect(auth.api.state.status, 'до таймаута старт ещё ждёт ответа').toBe('booting');
+      await act(async () => void (await vi.advanceTimersByTimeAsync(1)));
+      expect(auth.api.state.status, 'ровно по таймауту старт не висит, а переходит в offline-known').toBe('offline-known');
+      expect(auth.api.user).toEqual({ id: ALICE.id, email: ALICE.email });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('getSession зависла и это первый запуск → signed-out (экран входа), а не вечная заставка', async () => {

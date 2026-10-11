@@ -1,6 +1,6 @@
 import type { CurrencyCode, LocalRow, Settings, UUID } from '@/domain/types';
 import { ValidationError } from './errors';
-import { cleanPatch, getLiveWallet, sameFields, touch, writeTx, type RepoContext } from './repoContext';
+import { cleanPatch, getLiveWallet, sameFields, touch, withDirtyGroups, writeTx, type RepoContext } from './repoContext';
 import { parseSettingsData, type SettingsData } from './validate';
 
 export interface SettingsPatch {
@@ -53,7 +53,7 @@ export function createSettingsRepo(ctx: RepoContext): SettingsRepo {
         const next = parseSettingsData({ ...dataOf(cur), ...clean });
         if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
         if (next.defaultWalletId !== cur.defaultWalletId) await checkDefaultWallet(next.defaultWalletId);
-        const row: LocalRow<Settings> = { ...cur, ...next, ...touch(ctx).fields };
+        const row = withDirtyGroups<LocalRow<Settings>>('settings', cur, { ...cur, ...next, ...touch(ctx).fields });
         await db.settings.put(row);
         return row;
       });
@@ -74,6 +74,7 @@ export function createSettingsRepo(ctx: RepoContext): SettingsRepo {
           ...data,
           ...fields,
           serverSeq: null,
+          dirtyGroups: [], // создана здесь: правки до первой отправки считаются от созданного (см. mergeGroups.ts)
         };
         await db.settings.add(row);
         return row;

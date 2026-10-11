@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FxRequiredError } from '@/db';
 import { TRANSFER_CREATES_MONEY_TEXT } from '@/db/validate';
 import type { Transaction } from '@/domain/types';
-import { describeTx, MISSING_WALLET } from './txDisplay';
+import { describeTx, endSentence, MISSING_WALLET } from './txDisplay';
 import {
   changedFields,
   checkDate,
@@ -338,5 +338,23 @@ describe('describeTx: вид строки списка', () => {
     expect(v.currency).toBe('TJS');
     const t = describeTx(tx({ kind: 'transfer', walletId: 'gone', toWalletId: 'gone2', categoryId: null }), wallets, cats);
     expect(t.title).toBe(`${MISSING_WALLET} → ${MISSING_WALLET}`);
+  });
+});
+
+describe('endSentence: точка в конце предложения', () => {
+  it('сумма в сомони («60 с.») уже кончается точкой — вторую не ставим', () => {
+    expect(endSentence('Расход 60 с.')).toBe('Расход 60 с.');
+  });
+  it('иначе точка ставится: «10 $» → «10 $.»', () => {
+    expect(endSentence('Расход 10 $')).toBe('Расход 10 $.');
+    expect(endSentence('Доход 5 €  ')).toBe('Доход 5 €.');
+  });
+  it('другие знаки конца предложения не дублируются', () => {
+    expect(endSentence('Готово!')).toBe('Готово!');
+    expect(endSentence('Точно?')).toBe('Точно?');
+    expect(endSentence('Ну…')).toBe('Ну…');
+  });
+  it('пустая строка не ломает', () => {
+    expect(endSentence('')).toBe('');
   });
 });

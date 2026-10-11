@@ -75,9 +75,16 @@ describe('Шаг «Связь с сервером»', () => {
   });
 
   it('сервер молчит дольше предела: «не ответил», шаги ниже пропущены', async () => {
-    const t0 = Date.now();
-    const { by } = await check({ tables: { settings: 'hang' } }, {}, { timeoutMs: 30 });
-    expect(Date.now() - t0).toBeLessThan(2000);
+    // Время поддельное: предел наступает ровно тогда, когда мы продвинули часы, а не когда загруженная машина дошла до таймера
+    vi.useFakeTimers();
+    let finished = false;
+    const running = check({ tables: { settings: 'hang' } }, {}, { timeoutMs: 30 });
+    void running.then(() => void (finished = true), () => void (finished = true));
+    await vi.advanceTimersByTimeAsync(29);
+    expect(finished, 'до предела проверка ещё ждёт ответа сервера').toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(finished, 'ровно по истечении предела проверка заканчивается (не висит)').toBe(true);
+    const { by } = await running;
     expect(by.server.status).toBe('fail');
     expect(by.server.message).toContain('не ответил');
     expect(DEPENDENT.every((id) => by[id].status === 'skip')).toBe(true);

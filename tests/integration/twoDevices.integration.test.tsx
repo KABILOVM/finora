@@ -193,24 +193,40 @@ describe('атака 1: два устройства, полный путь', () 
     const server = createMemoryServer();
     const a = await openA(server, '/transactions');
     const storeA = a.td.stores[0] as Store;
+    const engineA = a.engines[0] as SyncEngine;
     await waitFor(() => expect(badge()).toMatch(/Синхронизировано/), 10_000);
     const wallet = (await storeA.db.wallets.toArray())[0]!;
 
-    const lies: string[] = [];
-    const t0 = Date.now();
-    // запись «со стороны» (как из шита), затем 800 мс (до отправки по таймеру 1 с) смотрим на бейдж
-    await act(async () => {
-      await storeA.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 100, occurredOn: '2026-10-06', note: 'x' });
+    // Запись «со стороны» (как из шита). Движок отправит её по таймеру (~1 с после правки): как только он начнёт цикл, бейдж сам
+    // сменится на «Синхронизация…», и ложь, если она была, закончится. Поэтому смотрим, что бейдж показывал МЕЖДУ записью и началом цикла.
+    // Раньше это меряли настоящими часами («ложь не дольше 300 мс»), и на загруженной машине тест краснел сам по себе; теперь окно
+    // задано порядком событий, а не миллисекундами: к моменту начала отправки бейдж обязан был показать очередь и больше не врать.
+    const shown: string[] = [];
+    let sending = false;
+    const unsubscribe = engineA.subscribe((s) => {
+      if (s.phase === 'syncing') sending = true;
     });
-    while (Date.now() - t0 < 800) {
-      const text = badge();
-      const dirty = await dirtyCount(storeA);
-      if (dirty > 0 && /Синхронизировано/.test(text) && Date.now() - t0 < 800) lies.push(`${Date.now() - t0}мс: ${text.slice(0, 80)}`);
-      await act(async () => void (await new Promise((r) => setTimeout(r, 5))));
+    const watcher = new MutationObserver(() => {
+      if (!sending) shown.push(badge());
+    });
+    watcher.observe(document.body, { subtree: true, childList: true, characterData: true });
+    try {
+      await act(async () => {
+        await storeA.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 100, occurredOn: '2026-10-06', note: 'x' });
+      });
+      if (!sending) shown.push(badge());
+      await waitFor(() => {
+        if (!sending) throw new Error('движок ещё не начал отправку');
+      }, 20_000);
+    } finally {
+      watcher.disconnect();
+      unsubscribe();
     }
-    // короткий сбой (пока считается очередь) не считаем ложью: человек его не видит. На загруженной машине пересчёт очереди
-    // бывает медленным, поэтому предел 300 мс; ошибка, которую ловит тест, держалась бы всё окно до отправки (800 мс и дольше)
-    const longLies = lies.filter((l) => Number.parseInt(l, 10) > 300);
-    expect(longLies, `бейдж врал дольше 300 мс: ${lies.join(' | ')}`).toEqual([]);
-  }, 30_000);
+
+    const honest = (t: string) => !/Синхронизировано/.test(t);
+    const firstHonest = shown.findIndex(honest);
+    const trace = shown.map((t, i) => `${i}: ${honest(t) ? 'очередь показана' : 'Синхронизировано'}`).join(' | ');
+    expect(firstHonest, `до начала отправки бейдж так и не показал очередь, хотя запись не отправлена: ${trace}`).toBeGreaterThanOrEqual(0);
+    expect(shown.slice(firstHonest).every(honest), `бейдж показал очередь, а потом снова соврал «Синхронизировано» до отправки: ${trace}`).toBe(true);
+  }, 40_000);
 });

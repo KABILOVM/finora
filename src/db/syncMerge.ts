@@ -1,30 +1,46 @@
-import type { Entity, IsoDateTime, LocalFields, SyncFields } from '@/domain/types';
-import { MERGE_GROUPS, TABLE_SPECS, type SyncTableName } from '@/sync/tables';
+import type { Entity, LocalFields, SyncFields } from '@/domain/types';
+import { TABLE_SPECS, type SyncTableName } from '@/sync/tables';
 import { ValidationError } from './errors';
+import {
+  groupMatches,
+  groupNames,
+  pickGroup,
+  readTracking,
+  sameMergedFields,
+  type DirtyBase,
+  type GroupName,
+} from './mergeGroups';
 import { compareVersion, isCanonicalStamp } from './validate';
 
 /**
  * Чистое правило слияния одной строки, пришедшей с сервера, с локальной.
- * Сервер — источник истины для «чистых» строк. Для строк с неотправленными правками работает трёхстороннее слияние по группам
- * полей (MERGE_GROUPS): база — версия сервера, поверх которой сделаны наши правки (LocalFields.dirtyBase), «наша» — локальная
- * строка, «чужая» — пришедшая. Группу, которую изменила только одна сторона, берём у неё; если изменили обе и по-разному —
- * побеждает большая пара (clientUpdatedAt, deviceId), целиком группой. Так правка заметки с одного телефона и правка суммы
- * с другого не затирают друг друга, как бы ни разошлись часы. Нет базы (строка создана здесь, данные от старой версии) —
- * прежнее правило: побеждает вся строка с большей парой.
+ *
+ *  - Чистая строка заменяется серверной (сервер — источник истины).
+ *  - Строка с известными dirtyGroups (грязная, а также чистая, но ещё не подтверждённая сервером — см. mergeGroups.ts) сливается
+ *    ПО ГРУППАМ ПОЛЕЙ: группы, которые мы не правили, берутся с сервера. По каждой нашей группе:
+ *      · значения совпали — спорить не о чем;
+ *      · сервер группу не менял (там то, с чего мы начали) — наша правка остаётся;
+ *      · мы группу фактически не меняли — берём серверное;
+ *      · менялись обе стороны — побеждает правка с более поздней меткой (метка серверной версии против метки нашей правки),
+ *        а не та, чьё устройство вышло в сеть позже. Проигравшая правка ничего не оставляет «наполовину»: группа берётся целиком.
+ *    Если после этого мы отличаемся от сервера, результат записывается как обычная грязная правка с НОВОЙ меткой (строго больше
+ *    серверной, иначе сервер молча проигнорирует её), а память о правках пересчитывается от серверных значений.
+ *  - Строка БЕЗ dirtyGroups (импорт, строка до обновления приложения) — прежнее правило: побеждает большая пара
+ *    (clientUpdatedAt, deviceId), правка не пропадает молча, если она новее.
  */
 
 export type MergeOutcome =
   /** Локальной строки не было — вставлена. */
   | 'inserted'
-  /** Локальная строка была «чистой» (или это эхо нашей же правки) — заменена серверной версией. */
+  /** Локальная строка была «чистой» (или все её правки совпали с серверными или проиграли) — заменена серверной версией. */
   | 'replaced'
   /** Пришла версия не новее уже известной (по serverSeq) — проигнорирована. */
   | 'ignoredStale'
-  /** Локальная неотправленная правка новее или равна: осталась целиком, база сдвинута на серверную версию. */
+  /** Локальная неотправленная правка новее или равна (или уже содержит всё нужное) — осталась. */
   | 'keptLocal'
-  /** Серверная версия поглотила неотправленную локальную правку (она проиграла или всех групп уже нет) — локальная правка потеряна. */
+  /** Серверная версия новее неотправленной локальной правки — локальная правка проиграла (только для строк без dirtyGroups). */
   | 'lostLocal'
-  /** Правки обеих сторон сложены: строка осталась «грязной» с новой меткой этого устройства поверх серверной версии. */
+  /** Локальные и серверные группы объединены в новую грязную строку с новой меткой. */
   | 'merged';
 
 export interface MergeResult<R> {
@@ -33,129 +49,113 @@ export interface MergeResult<R> {
   row: R | null;
 }
 
-/** Чем располагает слияние для трёхстороннего режима. Без него (или без базы у строки) работает слияние целой строкой. */
-export interface MergeContext {
-  table: SyncTableName;
-  /** Свежая метка правки этого устройства — больше всех, что устройство видело (в том числе в пришедшей странице). Может бросить. */
-  stamp(): IsoDateTime;
+/** Откуда взять метку и устройство для объединённой строки. */
+export interface MergeStamper {
   deviceId: string;
+  /**
+   * Новая метка, строго большая серверной (часы сначала узнают серверную метку). null — не получилось (метка за границами
+   * сервера): тогда строка сливается по старому правилу «новее побеждает».
+   */
+  next(remoteStamp: string): string | null;
 }
 
-type Rec = Record<string, unknown>;
-
-/** Колонки договора строки (лишнее — dirty, serverSeq, dirtyBase — отбрасывается). Это и есть «версия» для слияния. */
-export function snapshotRow(table: SyncTableName, row: unknown): Record<string, unknown> {
-  const src = row as Rec;
-  const out: Rec = {};
-  for (const c of TABLE_SPECS[table].columns) out[c.field] = src[c.field] ?? null;
-  return out;
-}
-
-const sameGroup = (group: readonly string[], a: Rec, b: Rec): boolean => group.every((f) => Object.is(a[f] ?? null, b[f] ?? null));
-
-/** Одинаково ли содержимое строк (все группы; служебные id, createdAt и версия не в счёт). */
-export function sameContent(table: SyncTableName, a: unknown, b: unknown): boolean {
-  return MERGE_GROUPS[table].every((g) => sameGroup(g, a as Rec, b as Rec));
-}
-
-/**
- * Складывает правки по группам. Побеждает у конфликтующей группы (изменили обе стороны и по-разному) большая версия;
- * при равных версиях и разном содержимом — серверная.
- */
-function combine(table: SyncTableName, base: Rec, local: Rec, remote: Rec): Rec {
-  const localWins = compareVersion(local as never, remote as never) > 0;
-  const out: Rec = {};
-  for (const group of MERGE_GROUPS[table]) {
-    const mine = !sameGroup(group, local, base);
-    const theirs = !sameGroup(group, remote, base);
-    let src: Rec;
-    if (mine && theirs) src = sameGroup(group, local, remote) || !localWins ? remote : local;
-    else src = mine ? local : remote;
-    for (const f of group) out[f] = src[f] ?? null;
-  }
-  return out;
-}
+const sameVersion = (a: { clientUpdatedAt: string; deviceId: string }, b: { clientUpdatedAt: string; deviceId: string }): boolean =>
+  a.clientUpdatedAt === b.clientUpdatedAt && a.deviceId === b.deviceId;
 
 export function mergeRemoteRow<R extends SyncFields & LocalFields>(
+  table: SyncTableName,
   local: R | undefined,
   remote: Omit<R, keyof LocalFields> & SyncFields,
   serverSeq: number,
-  ctx?: MergeContext,
+  stamper: MergeStamper,
 ): MergeResult<R> {
   const adopt = (known: number): R => ({ ...remote, dirty: 0, serverSeq: known, syncError: null }) as R;
 
+  /** Прежнее правило «целиком»: побеждает большая пара (clientUpdatedAt, deviceId). */
+  const wholeRow = (cur: R): MergeResult<R> => {
+    if (compareVersion(remote, cur) > 0) {
+      return { outcome: 'lostLocal', row: adopt(Math.max(cur.serverSeq ?? 0, serverSeq)) };
+    }
+    // Локальная правка новее или равна: остаётся в очереди на отправку; запоминаем, какую версию сервера уже видели.
+    if (cur.serverSeq === null || serverSeq > cur.serverSeq) {
+      return { outcome: 'keptLocal', row: { ...cur, serverSeq } };
+    }
+    return { outcome: 'keptLocal', row: null };
+  };
+
   if (!local) return { outcome: 'inserted', row: adopt(serverSeq) };
+
+  const tracking = readTracking(table, local);
+  const seen = local.serverSeq !== null && serverSeq <= local.serverSeq;
 
   if (local.dirty === 0) {
     // Версию с serverSeq не больше уже известного пропускаем: равный serverSeq — это ровно та версия, что мы уже видели
     // (повтор страницы), а наша «чистая» строка могла с тех пор уйти на сервер уже с новой правкой — её нельзя откатывать.
-    if (local.serverSeq !== null && serverSeq <= local.serverSeq) return { outcome: 'ignoredStale', row: null };
-    return { outcome: 'replaced', row: adopt(serverSeq) };
+    if (seen) return { outcome: 'ignoredStale', row: null };
+    // Нечего подтверждать, либо пришла ровно наша отправленная версия — подтверждена, память о правках не нужна.
+    if (!tracking || Object.keys(tracking.base).length === 0 || sameVersion(remote, local)) {
+      return { outcome: 'replaced', row: adopt(serverSeq) };
+    }
+    // Иначе: отправленная нами версия не дошла в чистом виде (сервер отклонил её как устаревшую, её перезаписали, ответ потерялся
+    // и кто-то правил дальше) — сверяем по группам так же, как грязную.
+  } else {
+    if (!tracking) return wholeRow(local);
+    // Эту (или более старую) версию сервера мы уже учли: повтор страницы ничего не меняет и метку не растит.
+    if (seen) return { outcome: 'keptLocal', row: null };
   }
 
-  const known = Math.max(local.serverSeq ?? 0, serverSeq);
-
-  const base = ctx ? (local.dirtyBase ?? null) : null;
-  if (ctx && base !== null) {
-    // Эту или более позднюю серверную версию мы уже сливали с нашими правками.
-    if (local.serverSeq !== null && serverSeq <= local.serverSeq) return { outcome: 'keptLocal', row: null };
-    // Эхо нашей же правки (сервер принял её, а ответ потерялся) тоже попадает сюда: содержимое то же, строка становится «чистой».
-    const merged = threeWay(local, remote, known, base, ctx);
-    if (merged) return merged;
+  if (!tracking) return wholeRow(local); // недостижимо (обе ветки выше отсекают), нужно для типов
+  const data: Record<string, unknown> = {};
+  const pending: GroupName[] = [];
+  const base: DirtyBase = {};
+  for (const g of groupNames(table)) {
+    const theirs = pickGroup(table, g, remote);
+    const mine = tracking.groups.includes(g) && !groupMatches(table, g, remote, pickGroup(table, g, local));
+    const known = tracking.base[g];
+    let takeLocal = false;
+    if (mine) {
+      if (!known) takeLocal = true; // нет памяти (строка до обновления): прежнее правило — наша правка
+      else if (groupMatches(table, g, remote, known.b)) takeLocal = true; // сервер группу не менял
+      else if (known.p?.some((v) => groupMatches(table, g, remote, v))) takeLocal = true; // там наше же прежнее значение (перевезённое)
+      else if (known.s !== true && groupMatches(table, g, local, known.b)) takeLocal = false; // мы группу не меняли
+      else takeLocal = compareVersion(remote, { clientUpdatedAt: known.at, deviceId: stamper.deviceId }) <= 0; // менялись обе: позже — прав
+    }
+    if (takeLocal) {
+      Object.assign(data, pickGroup(table, g, local));
+      pending.push(g);
+      base[g] = { b: theirs, at: known?.at ?? local.clientUpdatedAt, ...(known?.p ? { p: known.p } : {}) };
+    } else {
+      Object.assign(data, theirs);
+    }
   }
 
-  if (compareVersion(remote, local) > 0) {
-    return { outcome: 'lostLocal', row: adopt(known) };
-  }
-  // Локальная правка новее или равна: остаётся в очереди на отправку; запоминаем, какую версию сервера уже видели.
-  if (local.serverSeq === null || serverSeq > local.serverSeq) {
-    return { outcome: 'keptLocal', row: { ...local, serverSeq } };
-  }
-  return { outcome: 'keptLocal', row: null };
-}
+  // Всё, что мы правили, уже есть на сервере (или проиграло ему): расхождений нет — принимаем серверную версию.
+  if (pending.length === 0) return { outcome: 'replaced', row: adopt(serverSeq) };
 
-/** Трёхстороннее слияние. null — не вышло (нет метки от часов): вызывающий откатывается к слиянию целой строкой. */
-function threeWay<R extends SyncFields & LocalFields>(
-  local: R,
-  remote: Omit<R, keyof LocalFields> & SyncFields,
-  known: number,
-  base: Rec,
-  ctx: MergeContext,
-): MergeResult<R> | null {
-  const { table } = ctx;
-  const merged = combine(table, base, local as unknown as Rec, remote as unknown as Rec);
-  const adopt = (): R => ({ ...remote, dirty: 0, serverSeq: known, syncError: null }) as R;
-
-  // Серверная версия включает всё, что у нас осталось: наши правки уже в ней (её сделали из нашей же версии) или проиграли.
-  if (sameContent(table, merged, remote)) {
-    return { outcome: sameContent(table, local, remote) ? 'replaced' : 'lostLocal', row: adopt() };
+  const kept = { dirtyGroups: pending, dirtyBase: base };
+  // Локальная строка уже содержит ровно такое объединение и её метка новее серверной: сервер её примет, метку не растим.
+  if (local.dirty === 1 && compareVersion(local, remote) > 0 && sameMergedFields(table, data, local)) {
+    return { outcome: 'keptLocal', row: { ...local, ...kept, serverSeq } };
   }
-
-  const nextBase = snapshotRow(table, remote);
-  // Всё своё сохранили, и наша метка новее серверной: отправляем как есть, только база и версия сервера сдвигаются.
-  if (sameContent(table, merged, local) && compareVersion(remote, local) < 0) {
-    return { outcome: 'keptLocal', row: { ...local, serverSeq: known, dirtyBase: nextBase } };
+  const stamp = stamper.next(remote.clientUpdatedAt);
+  if (stamp === null || stamp <= remote.clientUpdatedAt) {
+    // Часы не дали метку новее серверной. Грязная строка сливается по старому правилу; «чистой» (ждала подтверждения) нечем
+    // конкурировать — принимаем серверную версию.
+    return local.dirty === 1 ? wholeRow(local) : { outcome: 'replaced', row: adopt(serverSeq) };
   }
-
-  // Настоящее слияние (или своя правка со старой меткой, которую сервер молча проигнорировал бы): новая правка этого
-  // устройства поверх серверной версии — с меткой, которая больше всех виденных.
-  let stamp: IsoDateTime;
-  try {
-    stamp = ctx.stamp();
-  } catch {
-    return null;
-  }
-  const row = {
-    ...remote,
-    ...merged,
-    clientUpdatedAt: stamp,
-    deviceId: ctx.deviceId,
-    dirty: 1,
-    serverSeq: known,
-    syncError: null,
-    dirtyBase: nextBase,
-  } as unknown as R;
-  return { outcome: 'merged', row };
+  return {
+    outcome: 'merged',
+    row: {
+      ...remote,
+      ...data,
+      clientUpdatedAt: stamp,
+      deviceId: stamper.deviceId,
+      dirty: 1,
+      serverSeq,
+      syncError: local.syncError,
+      ...kept,
+    } as unknown as R,
+  };
 }
 
 /**

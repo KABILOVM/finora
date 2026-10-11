@@ -8,11 +8,17 @@ import { remoteWallet, stamp } from './helpers';
 /**
  * Модельный тест слияния: случайные последовательности локальных правок, отправок (markPushed),
  * страниц с сервера, сбоев записи, повторов страниц и скачков часов.
- * Проверки не повторяют код слияния, а сверяют результат с ИСТОРИЕЙ версий:
- *  1) итоговая версия строки = самая новая из всех виденных (локальных и серверных): новая правка не теряется;
+ * Проверки не повторяют код слияния, а сверяют результат с МОДЕЛЬЮ состояния строки (она описана правилами, а не кодом):
+ *  1) чистая строка без памяти заменяется серверной; грязная БЕЗ групп (импорт) — побеждает большая пара (метка, устройство);
+ *     созданная здесь и ни разу не правленная — принимает серверную; строка с памятью о правке имени («имя» — единственная
+ *     группа) спорит с сервером по МЕТКАМ: правка именем побеждает, если её метка (at) позже метки серверной версии. Выигравшая
+ *     правка остаётся с меткой прежней (если она и так новее серверной) либо с новой, строго больше серверной и прежней —
+ *     иначе сервер молча проигнорировал бы отправку;
  *  2) dirty ⇔ версия локальная и ещё не подтверждена именно этой версией (markPushed не чистит изменённую строку);
+ *     отправленная правка (markPushed) остаётся в памяти строки до версии с сервера: её группы видны и у чистой строки;
  *  3) курс = наибольший serverSeq успешно применённых страниц и никогда не опережает данные;
- *  4) сбой записи не оставляет следов; повтор страницы ничего не меняет.
+ *  4) сбой записи не оставляет следов; повтор страницы ничего не меняет (метка не растёт).
+ * В записях с сервера правится только имя (остальные поля равны локальным), поэтому спорной бывает лишь группа «имя».
  */
 
 const IDS = ['wallet-0', 'wallet-1', 'wallet-2'] as const;
@@ -29,7 +35,8 @@ type Op =
   | { t: 'fail'; i: number; delta: number; dev: number }
   | { t: 'replay' }
   | { t: 'time'; delta: number }
-  | { t: 'quarantine'; i: number };
+  | { t: 'quarantine'; i: number }
+  | { t: 'strip'; i: number };
 
 const idx = fc.integer({ min: 0, max: IDS.length - 1 });
 const opArb: fc.Arbitrary<Op> = fc.oneof(
@@ -42,13 +49,21 @@ const opArb: fc.Arbitrary<Op> = fc.oneof(
   { weight: 1, arbitrary: fc.record({ t: fc.constant('replay' as const) }) },
   { weight: 2, arbitrary: fc.record({ t: fc.constant('time' as const), delta: fc.integer({ min: -5000, max: 5000 }) }) },
   { weight: 1, arbitrary: fc.record({ t: fc.constant('quarantine' as const), i: idx }) },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('strip' as const), i: idx }) },
 );
 
-interface Version {
+/** Модель строки: что должно лежать в базе по правилам. */
+interface Model {
+  name: string;
   stamp: string;
   device: string;
-  name: string;
-  local: boolean;
+  dirty: boolean;
+  /**
+   * plain — без памяти о правках; new — создана здесь, не правлена (группы пусты); edit — помнит правку имени (at — её метка);
+   * whole — грязная без групп (как из импорта).
+   */
+  kind: 'plain' | 'new' | 'edit' | 'whole';
+  at?: string;
 }
 const keyOf = (v: { stamp: string; device: string }) => `${v.stamp}|${v.device}`;
 const cmp = (a: { stamp: string; device: string }, b: { stamp: string; device: string }) =>
@@ -65,7 +80,7 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
           dexie: { indexedDB: new IDBFactory(), IDBKeyRange },
         });
         try {
-          const history = new Map<string, Version[]>(IDS.map((id) => [id, []]));
+          const model = new Map<string, Model>();
           const confirmed = new Set<string>();
           const refs = new Map<string, { clientUpdatedAt: string; deviceId: string }>();
           const server = new Map<string, { stamp: string; device: string }>(); // что уже «есть на сервере» по каждому id
@@ -85,32 +100,32 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
             // сервер принимает только версии строго больше уже сохранённой
             if (known && cmp(cand, known) <= 0) cand = { stamp: stamp(Date.parse(known.stamp) + 1), device: cand.device };
             const name = `R${++counter}`;
-            const entity = remoteWallet({ id, name, clientUpdatedAt: cand.stamp, deviceId: cand.device });
+            const entity = remoteWallet({ id, name, clientUpdatedAt: cand.stamp, deviceId: cand.device, sortOrder: local?.sortOrder ?? 0 });
             return { cand, name, entity };
           };
 
           const check = async (step: string) => {
             for (const id of IDS) {
-              const versions = history.get(id)!;
+              const want = model.get(id);
               const row = await rowOf(id);
-              if (versions.length === 0) {
+              if (!want) {
                 expect(row, `${step}: строки быть не должно (${id})`).toBeUndefined();
                 continue;
               }
               expect(row, `${step}: строка пропала (${id})`).toBeDefined();
-              const best = versions.reduce((m, v) => (cmp(v, m) > 0 ? v : m));
-              // 1) побеждает самая новая версия из всех виденных — ни одна новая правка не потеряна
               expect({ stamp: row!.clientUpdatedAt, device: row!.deviceId, name: row!.name }, `${step}: не та версия (${id})`).toEqual({
-                stamp: best.stamp,
-                device: best.device,
-                name: best.name,
+                stamp: want.stamp,
+                device: want.device,
+                name: want.name,
               });
-              // 2) dirty ⇔ локальная версия, не подтверждённая именно ею
-              const expectedDirty = best.local && !confirmed.has(keyOf(best));
-              expect(row!.dirty === 1, `${step}: dirty (${id})`).toBe(expectedDirty);
+              // dirty ⇔ локальная версия, не подтверждённая именно ею
+              expect(row!.dirty === 1, `${step}: dirty (${id})`).toBe(want.dirty);
+              // группы: «имя» у строки с памятью о правке (в том числе отправленной), пусто у новой, нет у остальных
+              const wantGroups = want.kind === 'edit' ? ['name'] : want.kind === 'new' ? [] : undefined;
+              expect(row!.dirtyGroups, `${step}: dirtyGroups (${id})`).toEqual(wantGroups);
               if (row!.syncError !== null) expect(row!.dirty, `${step}: карантин у чистой строки (${id})`).toBe(1);
             }
-            // 3) курс = наибольший успешно применённый serverSeq
+            // курс = наибольший успешно применённый serverSeq
             expect(await store.sync.getCursor('wallets'), `${step}: курс`).toBe(cursor);
           };
 
@@ -121,7 +136,10 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
             const saved = row
               ? await store.wallets.update(id, { name })
               : await store.wallets.create({ name, currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' }, { id });
-            history.get(id)!.push({ stamp: saved.clientUpdatedAt, device: saved.deviceId, name, local: true });
+            const prev = model.get(id);
+            // создание — «новая»; первая правка (чистой, новой или отправленной) — запоминает время правки; импортная остаётся «целиком»
+            const kind: Model['kind'] = !prev ? 'new' : prev.kind === 'whole' ? 'whole' : 'edit';
+            model.set(id, { name, stamp: saved.clientUpdatedAt, device: saved.deviceId, dirty: true, kind, ...(kind === 'edit' ? { at: saved.clientUpdatedAt } : {}) });
           };
           const doSnapshot = async (i: number) => {
             const row = await rowOf(IDS[i]!);
@@ -137,6 +155,11 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
             // markPushed не чистит изменённую строку и чистит ровно ту версию, что отправляли
             expect(cleared, `${step}: markPushed`).toBe(sameVersion && before!.dirty === 1 ? 1 : 0);
             if (sameVersion) {
+              if (before!.dirty === 1) {
+                const m = model.get(id)!;
+                // отправленная правка имени помнится до версии с сервера; остальное становится «чистым»
+                model.set(id, { ...m, dirty: false, kind: m.kind === 'edit' ? 'edit' : 'plain' });
+              }
               confirmed.add(keyOf({ stamp: ref.clientUpdatedAt, device: ref.deviceId }));
               const known = server.get(id);
               const v = { stamp: ref.clientUpdatedAt, device: ref.deviceId };
@@ -166,9 +189,33 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
                 const id = IDS[op.i]!;
                 const { cand, name, entity } = await buildRemote(op.i, op.delta, op.dev);
                 seq += 1;
+                const before = model.get(id);
                 const res = await store.sync.applyRemotePage('wallets', [{ entity, serverSeq: seq }], seq);
                 expect(res.applied + res.keptLocal, `${step}: учтена ровно одна строка`).toBe(1);
-                history.get(id)!.push({ stamp: cand.stamp, device: cand.device, name, local: false });
+                const remoteModel: Model = { name, stamp: cand.stamp, device: cand.device, dirty: false, kind: 'plain' };
+                if (!before || before.kind === 'plain' || before.kind === 'new') {
+                  model.set(id, remoteModel); // вставка / замена чистой / принимает серверную (создана здесь, не правлена)
+                  expect(res.merged, step).toBe(0);
+                } else if (before.kind === 'whole') {
+                  // грязная без групп: побеждает большая пара
+                  if (cmp(cand, before) > 0) model.set(id, remoteModel);
+                  expect(res.merged, step).toBe(0);
+                } else if (cmp(cand, { stamp: before.at!, device: LOCAL_DEVICE }) > 0) {
+                  // менялись обе стороны (серверное имя всегда новое), серверная метка позже нашей правки: побеждает сервер
+                  model.set(id, remoteModel);
+                  expect(res.merged, step).toBe(0);
+                } else if (before.dirty && cmp(before, cand) > 0) {
+                  // наша правка позже и строка новее серверной: имя своё, метка прежняя (писать нечего)
+                  expect(res.merged, `${step}: лишнее слияние`).toBe(0);
+                } else {
+                  // наша правка позже, но отправленная версия не новее серверной (или строка чистая и ждала подтверждения):
+                  // имя своё, метка НОВАЯ — больше серверной (иначе сервер проигнорирует) и больше прежней нашей
+                  expect(res.merged, `${step}: слияние`).toBe(1);
+                  const now = (await rowOf(id))!;
+                  expect(now.clientUpdatedAt > cand.stamp, `${step}: метка слияния не больше серверной`).toBe(true);
+                  expect(now.clientUpdatedAt > before.stamp, `${step}: метка слияния не больше прежней`).toBe(true);
+                  model.set(id, { ...before, stamp: now.clientUpdatedAt, device: LOCAL_DEVICE, dirty: true });
+                }
                 server.set(id, cand);
                 cursor = seq;
                 lastPage = { id, seq, entity };
@@ -193,6 +240,17 @@ describe('applyRemotePage / markPushed — модельный тест (fast-che
               case 'time':
                 nowMs += op.delta;
                 break;
+              case 'strip': {
+                // как строка из импорта или записанная до обновления приложения: грязная, групп нет
+                const id = IDS[op.i]!;
+                const row = await rowOf(id);
+                const m = model.get(id);
+                if (row && m && row.dirty === 1) {
+                  await store.db.wallets.update(id, { dirtyGroups: undefined, dirtyBase: undefined } as never);
+                  model.set(id, { ...m, kind: 'whole' });
+                }
+                break;
+              }
               case 'quarantine': {
                 const id = IDS[op.i]!;
                 const row = await rowOf(id);

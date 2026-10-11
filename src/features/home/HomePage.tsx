@@ -9,8 +9,10 @@ import { PageHeader } from '@/components/PageHeader';
 import { useBalances, useSettings, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
+import { endSentence } from '@/features/transactions/txDisplay';
 import { ruDate } from '@/features/transactions/txForm';
 import { monthKey, todayLocal } from '@/lib/dates';
+import { enteredNote } from '@/rates/enteredText';
 import { useRates } from '@/rates/hooks';
 import { computeHomeTotal } from './homeData';
 import { MonthCard } from './MonthCard';
@@ -95,13 +97,18 @@ export default function HomePage() {
                 {total.approximate && <span title="Приблизительно: часть денег пересчитана по курсу">≈ </span>}
                 <MoneyText minor={total.totalMinor} currency={base} tone={total.totalMinor < 0 ? 'expense' : 'none'} />
               </p>
-              {total.approximate && total.missing.length === 0 && (
+              {total.approximate && total.missing.length === 0 && total.viaOtherRates && (
                 <p className="mt-0.5 text-[13px] text-muted">Остатки в других валютах пересчитаны по курсу.</p>
+              )}
+              {total.entered.length > 0 && (
+                <p className="mt-0.5 text-[13px] text-muted" data-testid="home-total-entered">
+                  {enteredNote(total.entered)}
+                </p>
               )}
               {total.missing.length > 0 && (
                 <p className="mt-2 text-sm font-medium text-warning">
                   Не вошло в итог — нет курса:{' '}
-                  {total.missing.map((m) => formatMinor(m.balanceMinor, m.currency)).join(', ')}.
+                  {endSentence(total.missing.map((m) => formatMinor(m.balanceMinor, m.currency)).join(', '))}
                 </p>
               )}
               {total.stale.length > 0 && (

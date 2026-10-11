@@ -3,9 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ensureSeeded } from '@/db';
 import { createSupabaseTransport } from '@/sync/supabaseTransport';
+import type { SyncTransport } from '@/sync/transport';
 import { toWire } from '@/sync/tables';
 import { makeTransaction, makeUserId, makeWallet } from './factories';
-import { openDevice, snapshotOf, type Device } from './engineHarness';
+import { openDevice, snapshotOf, spy, type Device, type Spy } from './engineHarness';
 import { createPgliteServer, type PgliteServer } from './pglite';
 import { createPostgrestEmulator, makeJwt, type PostgrestEmulator } from './postgrestEmulator';
 
@@ -44,10 +45,11 @@ function clientWith(session: Session) {
 async function device(
   userId: string,
   deviceId: string,
-  o: { session?: Session; timeoutMs?: number; onAuthError?: () => Promise<boolean>; now?: () => number } = {},
+  o: { session?: Session; timeoutMs?: number; onAuthError?: () => Promise<boolean>; now?: () => number; wrap?: (inner: SyncTransport) => SyncTransport } = {},
 ): Promise<Device & { session: Session }> {
   const session = o.session ?? { token: makeJwt({ sub: userId }) };
-  const transport = createSupabaseTransport(clientWith(session), { timeoutMs: o.timeoutMs });
+  const inner = createSupabaseTransport(clientWith(session), { timeoutMs: o.timeoutMs });
+  const transport = o.wrap ? o.wrap(inner) : inner;
   const d = await openDevice(null, deviceId, { userId, transport, seed: true, now: o.now, engine: { onAuthError: o.onAuthError } });
   return Object.assign(d, { session });
 }
@@ -59,6 +61,49 @@ const newWallet = (d: Device, name: string) =>
 const posts = (since: number) => emu.log.slice(since).filter((r) => r.method === 'POST');
 
 describe('движок на настоящей схеме', () => {
+  it('окно между забором и отправкой при часах на час вперёд: чужая правка другой группы не затирается — проверка версии в настоящем SQL', async () => {
+    const u = makeUserId();
+    let spyA!: Spy;
+    const a = await device(u, 'dev-a', {
+      now: () => Date.now() + 3_600_000, // метка правки A больше серверной и шире окна «сейчас + 5 минут»
+      wrap: (inner) => {
+        spyA = spy(inner);
+        return spyA.transport;
+      },
+    });
+    const b = await device(u, 'dev-b');
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    const wallet = (await a.store.db.wallets.toArray())[0]!;
+    const tx = await a.store.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 10_000, occurredOn: '2026-10-05', note: 'такси' });
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+
+    await a.store.transactions.update(tx.id, { note: 'правка с убежавших часов' });
+    let fired = false;
+    spyA.onPull = async (table, _after, rows) => {
+      if (table === 'transactions' && !fired) {
+        fired = true; // предварительный забор A уже ответил, а отправка ещё не ушла: B успевает записать сумму
+        await b.store.transactions.update(tx.id, { amountMinor: 77_700 });
+        await b.engine.syncNow();
+      }
+      return rows;
+    };
+    spyA.calls.length = 0;
+    await a.engine.syncNow();
+    expect(spyA.pushes('transactions'), 'первую отправку настоящий триггер отверг (40001), вторая прошла после слияния').toHaveLength(2);
+    for (let i = 0; i < 3; i++) {
+      await a.engine.syncNow();
+      await b.engine.syncNow();
+    }
+    const row = (await rowsOf(u, 'transactions')).find((r) => r['id'] === tx.id)!;
+    expect(row['amount_minor'], 'сумма B затёрта отправкой A, не знавшей о ней').toBe(77_700);
+    expect(row['note']).toBe('правка с убежавших часов');
+    expect(row['base_seq'] ?? null, 'служебная колонка в таблице пуста').toBeNull();
+    expect(await snapshotOf(b.store)).toEqual(await snapshotOf(a.store));
+    for (const d of [a, b]) expect(d.engine.getStatus()).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0 });
+  });
+
   it('два устройства одного пользователя обмениваются данными, чужой пользователь ничего не видит', async () => {
     const [u, other] = [makeUserId(), makeUserId()];
     const a = await device(u, 'dev-a');

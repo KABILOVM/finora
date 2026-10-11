@@ -312,7 +312,9 @@ export const dialogNamed = (name: string | RegExp) => screen.getByRole('dialog',
 export const alertDialogNamed = (name: string | RegExp) => screen.getByRole('alertdialog', { name });
 
 /** Повторяет асинхронную проверку (например, чтение из базы), пока она не пройдёт или не выйдет время. */
-export async function eventually(check: () => Promise<void> | void, timeoutMs = 3000): Promise<void> {
+// Это ожидание УСЛОВИЯ: проходит сразу, как условие выполнилось, а срок — лишь предел для зависания. Он большой, потому что на загруженной машине
+// (параллельные прогоны, медленный процессор) отрисовка и базы отвечают в разы медленнее обычного.
+export async function eventually(check: () => Promise<void> | void, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {

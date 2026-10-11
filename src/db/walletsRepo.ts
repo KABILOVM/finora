@@ -7,6 +7,7 @@ import {
   nextSortOrder,
   sameFields,
   touch,
+  withDirtyGroups,
   writeTx,
   type RepoContext,
 } from './repoContext';
@@ -77,7 +78,7 @@ export function createWalletsRepo(ctx: RepoContext): WalletsRepo {
           `Нельзя менять валюту кошелька «${cur.name}»: по нему уже есть операции. Заведите новый кошелёк.`,
         );
       }
-      const row: LocalRow<Wallet> = { ...cur, ...next, ...touch(ctx).fields };
+      const row = withDirtyGroups<LocalRow<Wallet>>('wallets', cur, { ...cur, ...next, ...touch(ctx).fields });
       await db.wallets.put(row);
       return row;
     });
@@ -102,6 +103,7 @@ export function createWalletsRepo(ctx: RepoContext): WalletsRepo {
           ...data,
           ...fields,
           serverSeq: null,
+          dirtyGroups: [], // создана здесь: правки до первой отправки считаются от созданного (см. mergeGroups.ts)
         };
         await db.wallets.add(row);
         return row;

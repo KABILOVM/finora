@@ -10,6 +10,8 @@ import { USER, openDevice, snapshotOf, spy, until, type Device, type Spy } from 
 /** Движок синхронизации: основные сценарии на двух «устройствах» одного пользователя и сервере в памяти. */
 
 const iso = (ms: number) => new Date(ms).toISOString();
+/** Тесты на сотни строк: ~4 с на спокойной машине (fake-indexeddb медленный), а при загрузке процессора другими прогонами — в разы дольше. Общий предел 20 с им мал. */
+const HEAVY_MS = 90_000;
 const firstWallet = async (d: Device): Promise<LocalRow<Wallet>> => {
   const w = await d.store.db.wallets.orderBy('sortOrder').first();
   if (!w) throw new Error('нет кошелька');
@@ -63,7 +65,9 @@ describe('простая отправка и получение', () => {
     expect(await snapshotOf(b.store)).toEqual(await snapshotOf(a.store));
   });
 
-  it('конфликт: сервер оставил более новую правку другого устройства; после отправки устройство принимает серверную версию', async () => {
+  it('конфликт в ОДНОЙ группе полей (имя): побеждает правка, сделанная позже, а не тот, кто вышел в сеть позже; оба устройства и сервер сходятся', async () => {
+    // A перед отправкой забирает чужое (src/db/syncMerge.ts). В спорной группе группа берётся целиком у одного из участников:
+    // у того, чья правка позже по метке (правка A сделана раньше правки B, хотя A выходит в сеть позже).
     let t = Date.now(); // общее «настоящее время»; сервер и устройства живут по нему (метки в пределах допуска сервера)
     const server = createMemoryServer({ now: () => t });
     const { d: a } = await ready(server, 'dev-a', () => t);
@@ -75,10 +79,11 @@ describe('простая отправка и получение', () => {
     t += 1000;
     await b.store.wallets.update(w.id, { name: 'правка B' });
     await b.engine.syncNow(); // сервер получает B
-    await a.engine.syncNow(); // старая правка A молча игнорируется сервером; A обязан принять версию B
+    await a.engine.syncNow(); // A забирает B: правка B позже правки A, поэтому спорная группа «имя» остаётся за B
     expect((await a.store.db.wallets.get(w.id))?.name).toBe('правка B');
     expect(a.engine.getStatus().pending).toBe(0);
     await b.engine.syncNow();
+    expect((await b.store.db.wallets.get(w.id))?.name).toBe('правка B');
     expect(await snapshotOf(a.store)).toEqual(await snapshotOf(b.store));
     expect(serverRows(server, 'wallets')[0]?.['name']).toBe('правка B');
   });
@@ -341,7 +346,7 @@ describe('отказы сервера: карантин', () => {
     expect(sp.pushes().length).toBeLessThanOrEqual(600 + 5);
     for (let i = 0; i < 5 && a.engine.getStatus().pending > 0; i++) await a.engine.syncNow();
     expect(a.engine.getStatus()).toMatchObject({ pending: 0, quarantined: 320, phase: 'idle' });
-  });
+  }, HEAVY_MS);
 });
 
 describe('очередь отправки', () => {
@@ -360,7 +365,7 @@ describe('очередь отправки', () => {
     expect(pushes.map((c) => c.size)).toEqual([200, 200, 50]);
     for (const p of pushes) expect(new Set(p.ids).size).toBe(p.size);
     expect(serverRows(server, 'transactions')).toHaveLength(450);
-  });
+  }, HEAVY_MS);
 
   it('таблицы уходят в порядке зависимостей: настройки, кошельки, категории, операции', async () => {
     const server = createMemoryServer();

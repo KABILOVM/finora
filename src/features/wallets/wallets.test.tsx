@@ -120,7 +120,7 @@ describe('computeWalletsTotal', () => {
 
   it('все кошельки в базовой валюте: итог точный, без «≈»', () => {
     const t = computeWalletsTotal([{ id: 'a', currency: 'TJS' }], balances, 'TJS', lookup({}));
-    expect(t).toEqual({ totalMinor: 100_000, missing: [], approximate: false, stale: [] });
+    expect(t).toEqual({ totalMinor: 100_000, missing: [], approximate: false, stale: [], entered: [], viaOtherRates: false });
   });
 
   it('иностранная валюта пересчитывается по курсу и помечается приблизительной', () => {
@@ -174,7 +174,7 @@ describe('computeWalletsTotal', () => {
   });
 
   it('архивные кошельки в итог не передаются вызывающим (здесь — только то, что дали)', () => {
-    expect(computeWalletsTotal([], balances, 'TJS', lookup({}))).toEqual({ totalMinor: 0, missing: [], approximate: false, stale: [] });
+    expect(computeWalletsTotal([], balances, 'TJS', lookup({}))).toEqual({ totalMinor: 0, missing: [], approximate: false, stale: [], entered: [], viaOtherRates: false });
   });
 });
 

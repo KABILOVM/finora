@@ -39,6 +39,9 @@
 --     (журнал private.sync_future_stamps): повтор не плодит новых номеров и не затирает чужие более новые правки.
 --   * Каждая принятая запись получает новый server_seq — курсор синхронизации.
 --   * Колонки таблиц ОБЯЗАНЫ совпадать с TABLE_SPECS в src/sync/tables.ts.
+--   * Длина текста ограничена: имя, заметка, device_id — в create table; color, icon, fx_source — в разделе 7 (в конце файла).
+--     Каждое такое правило зеркалится в src/sync/memoryRules.ts (сервер в памяти для тестов); совпадение с этим файлом
+--     проверяет tests/sync/memory.differential.test.ts.
 --   * Если схему придётся менять — добавляйте новые блоки в конец файла (alter ... if not exists),
 --     а не правьте create table: для уже созданных таблиц он ничего не меняет.
 -- =============================================================================
@@ -485,3 +488,43 @@ create policy exchange_rates_select_auth on public.exchange_rates for select to 
 revoke all on table public.exchange_rates from public, anon, authenticated;
 grant select on table public.exchange_rates to authenticated;
 grant select, insert, update, delete on table public.exchange_rates to service_role;
+
+
+-- 7. Ограничения длины текстовых колонок (добавлены позже) ----------------------------
+-- Без них вошедший пользователь мог положить в color / icon / fx_source мегабайты текста: это раздувает базу
+-- и каждую выборку. Клиент и так режет color / icon по 32 символа (LIMITS.short в src/db/validate.ts);
+-- источник курса там — одно из слов 'same', 'nbt', 'server', 'api', 'manual', 'cached' (не длиннее 6 символов).
+-- Таблицы выше создаются «if not exists» и в уже созданных проектах не меняются, поэтому ограничения
+-- добавляются отдельно, и только если их ещё нет: файл по-прежнему можно запускать повторно.
+-- Ограничение добавляется «not valid» (проверяются все НОВЫЕ и изменяемые строки), а затем делается попытка проверить
+-- и старые. Если среди старых нашлась слишком длинная строка, файл не падает на полпути: сервер выдаст предупреждение
+-- (WARNING), а ограничение останется «не проверенным» для старых строк. Правка такой строки будет принята, только если
+-- поле в ней укорочено.
+-- Длина считается в символах (char_length), как и у остальных ограничений выше.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select * from (values
+      ('wallets',      'wallets_color_len',          'char_length(color) <= 32'),
+      ('wallets',      'wallets_icon_len',           'char_length(icon) <= 32'),
+      ('categories',   'categories_color_len',       'char_length(color) <= 32'),
+      ('categories',   'categories_icon_len',        'char_length(icon) <= 32'),
+      ('transactions', 'transactions_fx_source_len', 'fx_source is null or char_length(fx_source) <= 16')
+    ) as c (tbl, cname, expr)
+  loop
+    if not exists (
+      select 1 from pg_constraint
+       where conname = r.cname and conrelid = format('public.%I', r.tbl)::regclass
+    ) then
+      execute format('alter table public.%I add constraint %I check (%s) not valid', r.tbl, r.cname, r.expr);
+      begin
+        execute format('alter table public.%I validate constraint %I', r.tbl, r.cname);
+      exception when check_violation then
+        raise warning 'В таблице % есть старые строки, нарушающие ограничение %; новые и изменённые строки оно проверяет', r.tbl, r.cname;
+      end;
+    end if;
+  end loop;
+end
+$$;

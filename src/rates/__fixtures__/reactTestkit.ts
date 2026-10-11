@@ -47,7 +47,9 @@ export function renderHook<R>(hook: () => R, options: { wrapper?: ComponentType<
 }
 
 /** Повторяет проверку, пока она не пройдёт или не выйдет время; между попытками даёт React обработать события. */
-export async function waitFor(assertion: () => void, timeoutMs = 3000): Promise<void> {
+// Это ожидание УСЛОВИЯ: проходит сразу, как условие выполнилось, а срок — лишь предел для зависания. Он большой, потому что на загруженной машине
+// (параллельные прогоны, медленный процессор) отрисовка и базы отвечают в разы медленнее обычного.
+export async function waitFor(assertion: () => void, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {

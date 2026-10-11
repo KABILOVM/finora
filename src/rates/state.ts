@@ -8,6 +8,12 @@ export interface ManualRate {
   setAt: IsoDateTime;
 }
 
+/** Курс, набранный человеком в форме операции (запасной слой, см. RateService.rememberEnteredRate). */
+export interface EnteredRate {
+  rate: number;
+  enteredAt: IsoDateTime;
+}
+
 export interface RatesState {
   /** Свежие первыми. Несколько таблиц нужны, чтобы курс, которого нет в самой свежей (например, TJS), нашёлся в прежней. */
   tables: RateTable[];
@@ -18,6 +24,10 @@ export interface RatesState {
   manual: Record<string, ManualRate>;
   /** Ручные курсы по пользователям: id пользователя → ключ 'USD>TJS' → курс. Курс одного человека не виден другому. */
   manualByUser: Record<string, Record<string, ManualRate>>;
+  /** «Ничьи» введённые в операциях курсы (сервису не назвали пользователя): ключ 'USD>TJS'. Как только назвали — переезжают в корзину пользователя. */
+  entered: Record<string, EnteredRate>;
+  /** Введённые в операциях курсы по пользователям: id пользователя → ключ 'USD>TJS' → курс. Не видны другим. */
+  enteredByUser: Record<string, Record<string, EnteredRate>>;
   lastRefreshAt: IsoDateTime | null;
   lastAttemptAt: IsoDateTime | null;
   lastError: string | null;
@@ -33,6 +43,8 @@ export const emptyState = (): RatesState => ({
   tables: [],
   manual: {},
   manualByUser: dictionary(),
+  entered: {},
+  enteredByUser: dictionary(),
   lastRefreshAt: null,
   lastAttemptAt: null,
   lastError: null,
@@ -46,6 +58,8 @@ export const isOwnerId = (v: unknown): v is string => typeof v === 'string' && v
 
 /** Не больше стольких пользователей в хранилище: личному учёту хватает с огромным запасом, а файл не должен пухнуть. */
 export const MAX_MANUAL_OWNERS = 50;
+/** Не больше стольких введённых курсов у одного пользователя (старейшие вытесняются): файл не должен пухнуть от опечаток. */
+export const MAX_ENTERED_PER_OWNER = 40;
 
 export const pairKey = (from: CurrencyCode, to: CurrencyCode): string => `${from}>${to}`;
 
@@ -107,6 +121,29 @@ function parseManual(raw: unknown): Record<string, ManualRate> {
   return out;
 }
 
+/** Корзина введённых в операциях курсов из хранилища: битые пары (ключ, курс, метка) отбрасываются, лишние старейшие — тоже. */
+function parseEntered(raw: unknown): Record<string, EnteredRate> {
+  const out: Record<string, EnteredRate> = {};
+  if (!isPlainObject(raw)) return out;
+  for (const [key, m] of Object.entries(raw)) {
+    const [from, to] = key.split('>');
+    const validKey = /^[A-Z]{3}>[A-Z]{3}$/.test(key) && from !== to;
+    if (validKey && isPlainObject(m) && typeof m.rate === 'number' && m.rate >= MIN_PER_UNIT && m.rate <= MAX_PER_UNIT && isIsoDateTime(m.enteredAt)) {
+      out[key] = { rate: m.rate, enteredAt: m.enteredAt };
+    }
+  }
+  return trimEntered(out);
+}
+
+/** Оставляет MAX_ENTERED_PER_OWNER самых новых курсов (меняет и возвращает тот же объект). */
+export function trimEntered(bucket: Record<string, EnteredRate>): Record<string, EnteredRate> {
+  const keys = Object.keys(bucket);
+  if (keys.length <= MAX_ENTERED_PER_OWNER) return bucket;
+  keys.sort((a, b) => Date.parse((bucket[b] as EnteredRate).enteredAt) - Date.parse((bucket[a] as EnteredRate).enteredAt));
+  for (const k of keys.slice(MAX_ENTERED_PER_OWNER)) delete bucket[k];
+  return bucket;
+}
+
 /** Не бросает: повреждённые части отбрасываются, остальное сохраняется. */
 export function normalizeStored(raw: unknown): RatesState {
   const state = emptyState();
@@ -127,6 +164,15 @@ export function normalizeStored(raw: unknown): RatesState {
       if (!isOwnerId(owner)) continue;
       const parsed = parseManual(rates);
       if (Object.keys(parsed).length > 0) state.manualByUser[owner] = parsed;
+    }
+  }
+  state.entered = parseEntered(raw.entered);
+  if (isPlainObject(raw.enteredByUser)) {
+    for (const [owner, rates] of Object.entries(raw.enteredByUser)) {
+      if (Object.keys(state.enteredByUser).length >= MAX_MANUAL_OWNERS) break;
+      if (!isOwnerId(owner)) continue;
+      const parsed = parseEntered(rates);
+      if (Object.keys(parsed).length > 0) state.enteredByUser[owner] = parsed;
     }
   }
   state.lastRefreshAt = isIsoDateTime(raw.lastRefreshAt) ? raw.lastRefreshAt : null;

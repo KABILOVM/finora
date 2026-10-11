@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HEALTHY, checkViolation, U, ctxOf, fakeCloud, rows, type Reply, type Script, type SessionReply } from './__fixtures__/diagKit';
 import { formatReport, overallStatus, runCloudCheck, type CheckStepId } from './diagnostics';
 
@@ -10,6 +10,10 @@ import { formatReport, overallStatus, runCloudCheck, type CheckStepId } from './
 const ORDER: CheckStepId[] = ['server', 'session', 'schema', 'read', 'write', 'rates', 'local'];
 const TABLES = ['settings', 'wallets', 'categories', 'transactions', 'exchange_rates'] as const;
 const BAD_WORDS = /undefined|\[object|NaN|null/;
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // безопасные строки: чтобы «undefined» в сообщении означал дефект проверки, а не мусор из ответа
 const safeText = fc.stringMatching(/^[a-z ]{0,30}$/);
@@ -86,9 +90,14 @@ describe('runCloudCheck: время и хвосты', () => {
   it('сервер молчит на всё: весь прогон укладывается в один-два лимита, вставка не отправляется, лишних вызовов нет', async () => {
     const hang: Script = { tables: { settings: 'hang', wallets: 'hang', categories: 'hang', transactions: 'hang', exchange_rates: 'hang' }, upsert: 'hang', session: 'hang' };
     const { client, calls } = fakeCloud(hang);
-    const t0 = Date.now();
-    const steps = await runCloudCheck(client, ctxOf(), { timeoutMs: 80 });
-    expect(Date.now() - t0).toBeLessThan(800);
+    // Время поддельное: «укладывается в один-два лимита» проверяем ровно (2 × 80 мс), а не «меньше 800 настоящих мс» на загруженной машине
+    vi.useFakeTimers();
+    let finished = false;
+    const running = runCloudCheck(client, ctxOf(), { timeoutMs: 80 });
+    void running.then(() => void (finished = true), () => void (finished = true));
+    await vi.advanceTimersByTimeAsync(2 * 80);
+    expect(finished, 'весь прогон обязан закончиться не позже двух лимитов (160 мс поддельного времени)').toBe(true);
+    const steps = await running;
     expect(steps).toHaveLength(7);
     expect(calls.upserts).toHaveLength(0); // связи нет — писать вслепую нельзя
     expect(overallStatus(steps)).toBe('fail');

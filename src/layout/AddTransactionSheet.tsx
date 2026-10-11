@@ -134,6 +134,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, onSaved }: Add
     setSaving(again ? 'more' : 'close');
     try {
       const row = await store.transactions.create(prepared.input, { id: idRef.current });
+      prepared.rememberRate(); // курс, набранный руками, запоминаем только после успешного сохранения
       toastWithUndo(toast, 'Сохранено', () => store.transactions.softDelete(row.id), 'Операция отменена');
       onSaved();
       if (again) {

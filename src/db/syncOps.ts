@@ -4,7 +4,8 @@ import { SYNC_TABLES, type EntityOf, type SyncTableName } from '@/sync/tables';
 import type { Clock } from './clock';
 import { cursorKey, META_LAST_STAMP, type FinoraDB, type MetaValue } from './database';
 import { ValidationError } from './errors';
-import { mergeRemoteRow, pickColumns, type MergeContext } from './syncMerge';
+import { hasUnsentMemory, markSent, needsRemoteMerge, readTracking, withTracking } from './mergeGroups';
+import { mergeRemoteRow, pickColumns, type MergeStamper } from './syncMerge';
 
 /**
  * Примитивы для движка синхронизации. Движок только оркестрирует (когда слать, когда забирать),
@@ -31,8 +32,8 @@ export interface ApplyResult {
   /** Сколько неотправленных локальных правок проиграли более новой серверной версии (входят в applied). */
   lostLocal: number;
   /**
-   * Сколько неотправленных правок сложены с серверной версией по группам полей и остались в очереди с новой меткой.
-   * Такие строки надо отправить ещё раз: сервер их версии пока не видел.
+   * Сколько строк объединено по группам полей (входят в applied): локальные группы остались своими, остальные взяты с сервера.
+   * Такие строки снова «грязные» с новой меткой и ждут отправки.
    */
   merged: number;
 }
@@ -77,6 +78,11 @@ export interface SyncOps {
     nextCursor: number,
   ): Promise<ApplyResult>;
   counts(): Promise<SyncCounts>;
+  /**
+   * Есть ли ждущие отправки правки СУЩЕСТВУЮЩИХ записей с известными группами (без карантина). Такие правки перед отправкой
+   * нужно объединить с тем, что уже на сервере, поэтому движок сначала забирает чужое (см. engine.ts).
+   */
+  hasMergeableEdits(): Promise<boolean>;
   /** Полная пересинхронизация: курсы всех таблиц в 0. Локальные данные не трогает. */
   resetCursors(): Promise<void>;
 }
@@ -113,6 +119,31 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
     return row && isSafeSeq(row.value) ? row.value : 0;
   };
 
+  /**
+   * Строки уходят на отправку: с этой минуты сервер мог принять их значения (а ответ — потеряться). Группы с памятью о правках
+   * помечаются «передавалась» (см. GroupBase.s). Запись идёт только если версия строки не изменилась с момента чтения.
+   */
+  const markHandedOut = async (table: SyncTableName, rows: readonly AnyRow[]): Promise<void> => {
+    const todo = rows.filter((r) => {
+      const t = readTracking(table, r);
+      return t !== undefined && hasUnsentMemory(table, t, r);
+    });
+    if (todo.length === 0) return;
+    const tbl = db.syncTable(table);
+    await db.transaction('rw', tbl, async () => {
+      const fresh = await tbl.bulkGet(todo.map((r) => r.id));
+      const out: AnyRow[] = [];
+      fresh.forEach((row, i) => {
+        const was = todo[i];
+        if (!row || !was || row.dirty !== 1) return;
+        if (row.clientUpdatedAt !== was.clientUpdatedAt || row.deviceId !== was.deviceId) return;
+        const t = readTracking(table, row);
+        if (t) out.push(withTracking(row, markSent(table, t, row), true) as AnyRow);
+      });
+      if (out.length > 0) await tbl.bulkPut(out);
+    });
+  };
+
   return {
     async getCursor(table) {
       assertTable(table);
@@ -143,6 +174,7 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
         .filter((r) => r.syncError === null)
         .limit(limit)
         .toArray();
+      await markHandedOut(table as SyncTableName, rows as unknown as AnyRow[]);
       return rows as unknown as LocalRow<EntityOf<T>>[];
     },
 
@@ -157,8 +189,10 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
           const p = pushed[i];
           if (!row || !p || row.dirty !== 1) return;
           if (row.clientUpdatedAt !== p.clientUpdatedAt || row.deviceId !== p.deviceId) return;
-          const { dirtyBase: _confirmed, ...rest } = row as AnyRow & { dirtyBase?: unknown };
-          cleared.push({ ...rest, dirty: 0, syncError: null } as AnyRow);
+          // Отправлено, но подтверждения (версии с нашей меткой с сервера) ещё нет: ответ мог потеряться, сервер мог отклонить
+          // версию как устаревшую или её перезаписали. Поэтому память о правках остаётся до подтверждения (см. mergeGroups.ts).
+          const t = readTracking(table, row);
+          cleared.push(withTracking({ ...row, dirty: 0, syncError: null }, t && markSent(table, t, row), false) as AnyRow);
         });
         if (cleared.length > 0) await tbl.bulkPut(cleared);
         return cleared.length;
@@ -236,18 +270,21 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
         const ids = [...new Set(incoming.map((r) => r.entity.id))];
         (await tbl.bulkGet(ids)).forEach((row, i) => known.set(ids[i] as string, row));
 
-        // Слитая правка получает метку больше всех, что мы видели, — иначе сервер молча проигнорировал бы её как устаревшую.
-        // Метке с СЕРВЕРА верим и тогда, когда она «из будущего» по нашим часам: сервер сам не отдаёт метки дальше своего
-        // «сейчас + 5 минут» (зажимает их), а наши часы могут отставать на часы или дни. Не поверив, мы выдали бы правке метку
-        // старше серверной версии: сервер молча проигнорировал бы её, а мы сочли бы отправленной — устройства разошлись бы
-        // навсегда (проверка границ 2000–2100 остаётся).
-        for (const st of stampsDesc) if (clock.observe(st, true)) break;
-        const merge: MergeContext = { table, stamp: () => clock.tick(), deviceId: clock.deviceId };
-
+        // Метка объединённой строки: часы узнают серверную метку (ей верим, как и ниже), следующая — строго больше неё.
+        const stamper: MergeStamper = {
+          deviceId: clock.deviceId,
+          next: (remoteStamp) => {
+            try {
+              return clock.observe(remoteStamp, true) ? clock.tick() : null;
+            } catch {
+              return null; // часы упёрлись в границу сервера: сливаем по старому правилу
+            }
+          },
+        };
         const result: ApplyResult = { applied: 0, keptLocal: 0, lostLocal: 0, merged: 0 };
         const dirtyIds = new Set<string>();
         for (const { entity, serverSeq } of incoming) {
-          const m = mergeRemoteRow(known.get(entity.id), entity, serverSeq, merge);
+          const m = mergeRemoteRow(table, known.get(entity.id), entity, serverSeq, stamper);
           if (m.row) {
             known.set(entity.id, m.row);
             dirtyIds.add(entity.id);
@@ -256,12 +293,19 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
           else if (m.outcome === 'lostLocal') {
             result.applied++;
             result.lostLocal++;
+          } else if (m.outcome === 'merged') {
+            result.applied++;
+            result.merged++;
           } else if (m.outcome === 'keptLocal') result.keptLocal++;
-          else if (m.outcome === 'merged') result.merged++;
         }
         const toWrite = [...dirtyIds].map((id) => known.get(id)).filter((r): r is AnyRow => r !== undefined);
         if (toWrite.length > 0) await tbl.bulkPut(toWrite);
 
+        // Следующие правки этого устройства будут новее всего, что мы видели. Метке с СЕРВЕРА верим и тогда, когда она
+        // «из будущего» по нашим часам: сервер сам не отдаёт метки дальше своего «сейчас + 5 минут» (зажимает их), а наши часы
+        // могут отставать на часы или дни. Не поверив, мы выдали бы правке метку старше серверной версии: сервер молча
+        // проигнорировал бы её, а мы сочли бы отправленной — устройства разошлись бы навсегда (проверка границ 2000–2100 остаётся).
+        for (const st of stampsDesc) if (clock.observe(st, true)) break;
         await db.meta.put({ key: cursorKey(table), value: Math.max(cursor, nextCursor) });
         return result;
       });
@@ -281,6 +325,19 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
         }
         return { pending, quarantined };
       });
+    },
+
+    async hasMergeableEdits() {
+      for (const name of SYNC_TABLES) {
+        const hit = await db
+          .syncTable(name)
+          .where('dirty')
+          .equals(1)
+          .filter((r) => r.syncError === null && needsRemoteMerge(name, r))
+          .first();
+        if (hit !== undefined) return true;
+      }
+      return false;
     },
 
     async resetCursors() {

@@ -6,7 +6,7 @@ import { IDBKeyRange } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '@/App';
 import { ALICE, fakeAuthClient, makeTestDeps, renderAppRoot } from '@/app/testkit';
-import { act, screen, waitFor } from '@/components/testUtils';
+import { screen, waitFor } from '@/components/testUtils';
 import { openStore, type Store } from '@/db';
 import { createSyncEngine } from '@/sync/engine';
 import { createMemoryServer } from '@/sync/memoryServer';
@@ -45,11 +45,12 @@ describe('соседняя вкладка того же устройства', (
     await tab2.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 1500, occurredOn: new Date().toISOString().slice(0, 10), note: 'из-второй-вкладки' });
 
     // интерфейс первой вкладки обновился сам
-    await waitFor(() => expect(text()).toMatch(/из-второй-вкладки/), 5000);
-    // пока 900 мс (до отправки по таймеру движка) бейдж обязан честно показывать очередь
-    await act(async () => void (await new Promise((r) => setTimeout(r, 300))));
-    const badLate = /Синхронизировано/.test(text()) && (await tab2.sync.counts()).pending > 0;
-    expect(badLate, 'бейдж первой вкладки: «Синхронизировано», а в базе есть неотправленная запись соседней вкладки').toBe(false);
+    await waitFor(() => expect(text()).toMatch(/из-второй-вкладки/), 15_000);
+    // Движок первой вкладки о чужой записи не знает и сам её не отправит (его ближайший цикл — по интервалу в минуту), поэтому честно
+    // показать очередь бейдж может только по базе. Ждём не «300 мс» (на загруженной машине это мало), а самого события: бейдж обязан
+    // перестать говорить «Синхронизировано», пока запись не отправлена. Если он так и не перестанет — тест упадёт по сроку ожидания.
+    await waitFor(() => expect(text(), 'бейдж первой вкладки: «Синхронизировано», а в базе есть неотправленная запись соседней вкладки').not.toMatch(/Синхронизировано/), 15_000);
+    expect((await tab2.sync.counts()).pending, 'запись соседней вкладки действительно ещё не отправлена').toBeGreaterThan(0);
     tab2.close();
   }, 40_000);
 });

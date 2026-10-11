@@ -29,12 +29,30 @@ export type RateTableWithEarlier = ParsedRateTable & { earlier?: RateTable[] };
 export interface RateLookup {
   /** Единиц `to` за 1 единицу `from`. Конечное число > 0. */
   rate: number;
-  /** 'same' | 'nbt' | 'server' | 'api' | 'manual' — совпадает с Transaction.fxSource. */
+  /** 'same' | 'nbt' | 'server' | 'api' | 'manual' — совпадает с Transaction.fxSource (введённый в операции курс — 'manual'). */
   source: string;
+  /** Дата курса. Для введённого в операции курса (`entered`) — день, когда его ввели (по часам устройства). */
   asOf: IsoDate;
-  /** Курс старше 3 суток — интерфейс должен показать «курс устарел». */
+  /** Курс старше 3 суток — интерфейс должен показать «курс устарел». Введённый в операции курс устаревшим не помечается: у него своя подпись с датой. */
   stale: boolean;
+  /** «Свой курс» из Настроек. Введённый в операции курс — НЕ он (`manual: false`, `entered: true`). */
   manual: boolean;
+  /**
+   * true — курс набрал человек в форме операции, и его запомнили как запасной (см. RateService.rememberEnteredRate).
+   * Интерфейс обязан сказать об этом словами и датой asOf: «введён вручную ДД.ММ».
+   */
+  entered?: boolean;
+}
+
+/** Запомненный курс, введённый в операции: 1 `from` = `rate` `to`. */
+export interface EnteredRateInfo {
+  from: CurrencyCode;
+  to: CurrencyCode;
+  rate: number;
+  /** Когда ввели (ISO UTC). */
+  enteredAt: IsoDateTime;
+  /** День ввода по часам устройства. */
+  enteredOn: IsoDate;
 }
 
 export type FailureKind =
@@ -96,6 +114,11 @@ export interface RateService {
    * обрывает запрос, только если его больше никто не ждёт (отменившему приходит aborted: true).
    */
   refresh(signal?: AbortSignal): Promise<RefreshResult>;
+  /**
+   * Курс 1 `from` в `to`. Порядок: (1) «Свой курс» из Настроек → (2) свежий автоматический (не старше 3 суток) →
+   * (3) введённый в операции (`entered`, любой давности) → (4) устаревший автоматический → null.
+   * Введённый в операции курс НИКОГДА не перекрывает свежий автоматический и «Свой курс».
+   */
   getRate(from: CurrencyCode, to: CurrencyCode): RateLookup | null;
   /**
    * Ручной курс действует для пользователя, названного через bindUser (без него — для «общей» корзины).
@@ -103,6 +126,16 @@ export interface RateService {
    */
   setManualRate(from: CurrencyCode, to: CurrencyCode, rate: number): void;
   clearManualRate(from: CurrencyCode, to: CurrencyCode): void;
+  /**
+   * Запомнить курс, который человек набрал в форме операции (когда курса не было совсем или он поправил введённый ранее).
+   * Это отдельный слой по пользователю (как ручные курсы), с датой ввода; в «Свой курс» он не превращается.
+   * Повторный ввод той же пары заменяет прежний. Бросает RangeError, если курс не конечное число > 0 или коды валют некорректны.
+   */
+  rememberEnteredRate(from: CurrencyCode, to: CurrencyCode, rate: number): void;
+  /** Забыть введённый курс этой пары (кнопка «Сбросить» в Настройках). Нет такого — ничего не делает. */
+  forgetEnteredRate(from: CurrencyCode, to: CurrencyCode): void;
+  /** Введённые курсы текущего пользователя: сначала самые новые. */
+  listEnteredRates(): EnteredRateInfo[];
   /**
    * Привязать ручные курсы к пользователю: на общем телефоне свой курс одного человека не становится курсом другого.
    * Автоматические курсы остаются общими. Ручные курсы, заданные до этой привязки, достаются тому, кто привязался первым.

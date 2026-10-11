@@ -22,6 +22,15 @@ type TxLike = Pick<
   'kind' | 'walletId' | 'toWalletId' | 'categoryId' | 'amountMinor' | 'toAmountMinor' | 'note' | 'baseCurrency'
 >;
 
+/**
+ * Ставит точку в конце предложения, если её там ещё нет. Сумма в сомони «60 с.» сама кончается точкой,
+ * и шаблон «${сумма}. Дальше…» давал «60 с..» — отсюда эта функция.
+ */
+export function endSentence(text: string): string {
+  const t = text.trimEnd();
+  return t === '' || /[.!?…]$/.test(t) ? t : `${t}.`;
+}
+
 const HEX = /^#[0-9a-f]{6}$/i;
 export const MISSING_WALLET = 'Кошелёк удалён';
 

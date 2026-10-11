@@ -85,9 +85,9 @@ describe('валюты', () => {
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]).toMatchObject({ amountMinor: 1000, baseAmountMinor: 10_950, fxRate: 10.95, fxSource: 'manual' });
-    // курс записан только в эту операцию: в сервис курсов он не попал (разовый курс или опечатка не должны
-    // перекрывать Нацбанк для всех операций), поэтому следующая операция в долларах снова спросит курс
-    expect(td.rates.getRate('USD', 'TJS')).toBeNull();
+    // курс запомнен отдельным слоем «введённых» курсов (не «Свой курс»): он годится, пока нет свежего курса из сети,
+    // и никогда не перекрывает свежий курс Нацбанка (см. src/rates/entered.test.ts)
+    expect(td.rates.getRate('USD', 'TJS')).toMatchObject({ rate: 10.95, entered: true, manual: false });
   });
 
   it('вместо курса — мусор вроде «1e3», «0» или «-5»: не принимается', async () => {

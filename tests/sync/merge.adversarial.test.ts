@@ -1,402 +1,481 @@
-// @vitest-environment node
-import { createClient } from '@supabase/supabase-js';
-import fc from 'fast-check';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Transaction, Wallet } from '@/domain/types';
-import { compareVersion } from '@/db/validate';
+import { describe, expect, it } from 'vitest';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
-import { createSupabaseTransport } from '@/sync/supabaseTransport';
-import { fromWire, toWire } from '@/sync/tables';
-import type { SyncTransport } from '@/sync/transport';
-import { makeUserId } from './factories';
-import { openDevice, snapshotOf, spy, type Device, type Spy } from './engineHarness';
-import { createPgliteServer, type PgliteServer } from './pglite';
-import { createPostgrestEmulator, makeJwt } from './postgrestEmulator';
+import { toWire } from '@/sync/tables';
+import { TransportError } from '@/sync/transport';
+import { USER, openDevice, settle, snapshotOf, spy, type Device, type Spy } from './engineHarness';
 
 /**
- * Состязательные проверки слияния правок двух устройств и проверки версии на сервере (M5).
- *
- * Риск, который здесь закрыт: между тем, как устройство в последний раз получило строку, и тем, как оно её отправило, другое
- * устройство успело отправить правку ТОЙ ЖЕ записи. Раньше решала только метка: если метка нашей отправки меньше серверной, наша
- * правка молча пропадала; если больше (часы убежали дальше окна «сейчас + 5 минут») — сервер принимал нашу строку ЦЕЛИКОМ и затирал
- * чужую правку другой группы полей. Теперь отправка несёт «ожидаемую» версию (base_seq), сервер отвергает пачку, если версия ушла
- * вперёд, а устройство забирает свежее и сливает по группам полей (db/syncMerge.ts): правки РАЗНЫХ групп складываются при любых часах,
- * правки одной группы решает большая метка. Те же сценарии идут на двух стендах: сервер в памяти и НАСТОЯЩАЯ схема (PGlite)
- * через supabase-js — со всеми триггерами, ограничениями и проверкой версии в SQL.
+ * Состязательные проверки слияния по группам полей (src/db/syncMerge.ts + предварительный забор в engine.ts).
+ * Каждый тест — одна атака; красный тест = найденная поломка.
  */
 
-const HOUR = 3_600_000;
-const MIN = 60_000;
-
-let pg: PgliteServer;
-beforeAll(async () => {
-  pg = await createPgliteServer();
-}, 120_000);
-afterAll(async () => {
-  await pg.close();
-});
-
-type Table = 'settings' | 'wallets' | 'categories' | 'transactions';
-
-interface Stack {
-  label: string;
-  /** Устройство пользователя; skewMs — на сколько его часы убежали вперёд (отрицательное — отстают). */
-  open(userId: string, deviceId: string, skewMs: number, wrap?: (inner: SyncTransport) => SyncTransport): Promise<Device>;
-  /** Строки таблицы на сервере (в проводном виде). */
-  onServer(userId: string, table: Table): Promise<Array<Record<string, unknown>>>;
-  /** Транспорт без обёрток, от имени пользователя (для «контрольных» отправок в обход движка). */
-  raw(userId: string): SyncTransport;
-}
-
-function memoryStack(): Stack {
-  const server: MemoryServer = createMemoryServer();
-  return {
-    label: 'сервер в памяти',
-    open: (userId, deviceId, skewMs, wrap) =>
-      openDevice(server, deviceId, { userId, seed: true, now: () => Date.now() + skewMs, wrap }),
-    onServer: async (userId, table) => server.dump(userId, table),
-    raw: (userId) => server.transportFor(userId),
-  };
-}
-
-function postgresStack(): Stack {
-  const emulator = createPostgrestEmulator(pg);
-  const anon = makeJwt({ role: 'anon' });
-  const transportOf = (userId: string): SyncTransport => {
-    const token = makeJwt({ sub: userId });
-    const client = createClient(emulator.url, anon, {
-      global: { fetch: emulator.fetch },
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      accessToken: async () => token,
-    });
-    return createSupabaseTransport(client);
-  };
-  return {
-    label: 'настоящая схема (PGlite) через supabase-js',
-    open: (userId, deviceId, skewMs, wrap) => {
-      const inner = transportOf(userId);
-      return openDevice(null, deviceId, { userId, seed: true, now: () => Date.now() + skewMs, transport: wrap ? wrap(inner) : inner });
-    },
-    onServer: async (userId, table) => (await pg.adminRows(table)).filter((r) => r['user_id'] === userId),
-    raw: transportOf,
-  };
-}
-
-const stacks = [
-  { label: 'сервер в памяти', make: memoryStack },
-  { label: 'настоящая схема (PGlite) через supabase-js', make: postgresStack },
-] as const;
-
-interface Pair {
-  stack: Stack;
-  userId: string;
+interface Rig {
+  server: MemoryServer;
   a: Device;
   b: Device;
+  spyA: Spy;
   txId: string;
   walletId: string;
 }
 
-/** Два устройства одного пользователя с общей синхронизированной операцией (расход 100,00 «обед» от 2026-10-05). */
-async function pair(
-  stack: Stack,
-  skewA: number,
-  skewB: number,
-  wrapA?: (inner: SyncTransport) => SyncTransport,
-): Promise<Pair> {
-  const userId = makeUserId();
-  const a = await stack.open(userId, 'dev-a', skewA, wrapA);
-  const b = await stack.open(userId, 'dev-b', skewB);
-  await a.engine.syncNow(); // первое устройство кладёт на сервер затравку
-  await b.engine.syncNow(); // второе её получает
-  const wallet = (await a.store.db.wallets.toArray()).find((w) => w.deletedAt === null) as Wallet;
-  const tx = await a.store.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 10_000, occurredOn: '2026-10-05', note: 'обед' });
+/**
+ * Два устройства одного пользователя, обе синхронизированы, одна операция «такси» на 100,00. У A транспорт обёрнут шпионом.
+ * skew — на сколько миллисекунд часы устройства убежали вперёд (отрицательное — отстают); по умолчанию часы идут верно.
+ */
+async function rig(skew: { a?: number; b?: number } = {}): Promise<Rig> {
+  const server = createMemoryServer();
+  let spyA!: Spy;
+  const clock = (ms: number | undefined) => (ms ? () => Date.now() + ms : undefined);
+  const a = await openDevice(server, 'dev-a', {
+    seed: true,
+    now: clock(skew.a),
+    wrap: (inner) => {
+      spyA = spy(inner);
+      return spyA.transport;
+    },
+  });
+  const b = await openDevice(server, 'dev-b', { seed: true, now: clock(skew.b) });
   await a.engine.syncNow();
   await b.engine.syncNow();
-  expect(await b.store.db.transactions.get(tx.id)).toMatchObject({ note: 'обед', amountMinor: 10_000, dirty: 0 });
-  return { stack, userId, a, b, txId: tx.id, walletId: wallet.id };
+  const wallet = (await a.store.db.wallets.toArray())[0]!;
+  const tx = await a.store.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 10_000, occurredOn: '2026-10-05', note: 'такси' });
+  await a.engine.syncNow();
+  await b.engine.syncNow();
+  return { server, a, b, spyA, txId: tx.id, walletId: wallet.id };
 }
 
-const txOf = async (d: Device, id: string): Promise<Transaction> => {
-  const row = await d.store.db.transactions.get(id);
-  if (!row) throw new Error('операции нет');
-  return row;
-};
-const view = (t: Transaction) => ({ note: t.note, occurredOn: t.occurredOn, amountMinor: t.amountMinor, deleted: t.deletedAt !== null });
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const serverTx = (r: Rig) => r.server.dump(USER, 'transactions').find((t) => t['id'] === r.txId)!;
 
-async function serverTx(p: Pair): Promise<Transaction> {
-  const rows = await p.stack.onServer(p.userId, 'transactions');
-  const row = rows.find((r) => r['id'] === p.txId);
-  if (!row) throw new Error('операции нет на сервере');
-  return fromWire('transactions', row).entity as Transaction;
-}
+describe('слияние: причинный порядок правок одной группы', () => {
+  it('A отправил сумму, ответ потерялся; B увидел её и ПОЗЖЕ исправил сумму; повтор A не должен вернуть старую сумму', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    r.spyA.loseResponses = 1; // сервер принял, ответ до телефона не дошёл (обычное дело в мобильной сети)
+    await r.a.engine.syncNow();
+    expect(r.a.engine.getStatus().pending).toBe(1); // A считает, что не отправил
+    expect(serverTx(r)['amount_minor']).toBe(20_000);
 
-/**
- * Два устройства правят, не видя друг друга. Возвращает, чья правка новее по (метке, устройству) — именно это решает общую группу.
- * Расхождение часов само по себе победителя не определяет: устройство с отстающими часами, увидев чужие метки, «подтягивается»
- * к ним (часы монотонны), поэтому кто новее, смотрим по меткам, которые правки реально получили.
- */
-async function editBoth(
-  p: Pair,
-  editA: Parameters<Device['store']['transactions']['update']>[1],
-  editB: Parameters<Device['store']['transactions']['update']>[1],
-): Promise<{ newer: 'A' | 'B'; cmp: number }> {
-  await p.a.store.transactions.update(p.txId, editA);
-  await p.b.store.transactions.update(p.txId, editB);
-  const cmp = compareVersion(await txOf(p.a, p.txId), await txOf(p.b, p.txId));
-  return { newer: cmp > 0 ? 'A' : 'B', cmp };
-}
+    await sleep(5);
+    await r.b.engine.syncNow(); // B видит 200,00
+    expect((await r.b.store.db.transactions.get(r.txId))!.amountMinor).toBe(20_000);
+    await r.b.store.transactions.update(r.txId, { amountMinor: 30_000 }); // сознательная поправка ПОСЛЕ чужой правки
+    await r.b.engine.syncNow();
+    expect(serverTx(r)['amount_minor']).toBe(30_000);
 
-/** Все синхронизируются по кругу до покоя; затем: очередь пуста, ошибок нет, устройства и сервер совпадают. */
-async function settleAll(p: Pair): Promise<Transaction> {
-  for (let round = 0; round < 3; round++) {
-    await p.a.engine.syncNow();
-    await p.b.engine.syncNow();
-  }
-  for (const d of [p.a, p.b]) {
-    expect(d.engine.getStatus(), `${d.deviceId}: статус`).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0, lastError: null });
-  }
-  expect(await snapshotOf(p.b.store)).toEqual(await snapshotOf(p.a.store));
-  const onServer = await serverTx(p);
-  expect(onServer).toEqual((await snapshotOf(p.a.store)).transactions.find((t) => t.id === p.txId));
-  return onServer;
-}
+    await sleep(5);
+    await r.a.engine.syncNow(); // повторная отправка у A
+    await r.b.engine.syncNow();
+    await r.a.engine.syncNow();
+    expect(serverTx(r)['amount_minor'], 'поздняя осознанная правка B затёрта повтором старой правки A').toBe(30_000);
+    expect((await r.a.store.db.transactions.get(r.txId))!.amountMinor).toBe(30_000);
+  });
 
-describe.each(stacks)('слияние двух устройств: $label', ({ make }) => {
-  /** Расхождение часов шире окна сервера «сейчас + 5 минут» в обе стороны и без расхождения. */
-  const SKEWS = [
-    { name: 'часы A на час вперёд (метка A БОЛЬШЕ серверной, шире окна 5 минут)', a: HOUR, b: 0, aNewer: true },
-    { name: 'часы A на час назад (метка A МЕНЬШЕ серверной)', a: -HOUR, b: 0, aNewer: false },
-    { name: 'часы A на 10 минут вперёд, часы B на 10 минут назад', a: 10 * MIN, b: -10 * MIN, aNewer: true },
-    { name: 'часы идут одинаково', a: 0, b: 0, aNewer: null },
-  ] as const;
-
-  describe.each(SKEWS)('$name', ({ a: skewA, b: skewB, aNewer }) => {
-    /** Сценарий действительно тот, что назван: чья метка больше, определено расхождением часов (кроме случая одинаковых часов). */
-    const expectOrder = (cmp: number): void => {
-      if (aNewer === true) expect(cmp, 'метка правки A больше метки правки B').toBeGreaterThan(0);
-      if (aNewer === false) expect(cmp, 'метка правки A меньше метки правки B').toBeLessThan(0);
+  it('правка во время отправки, затем обрыв связи: в очереди остаётся уже отправленная группа и затирает чужую поправку', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    const gate = r.spyA.holdNextPush();
+    let pushes = 0;
+    r.spyA.onPush = () => {
+      if (pushes++ >= 1) throw new TransportError('network', 'обрыв связи'); // первая отправка (с суммой) проходит, повтор — нет
     };
-    // обе очерёдности: кто первым успел отправить, тот и «опередил»
-    const ORDERS = [
-      { name: 'первым отправляет B', first: 'b' as const },
-      { name: 'первым отправляет A', first: 'a' as const },
-    ];
+    // у A идёт отправка суммы; пока запрос в пути, человек правит заметку той же операции
+    const p = r.a.engine.syncNow();
+    await gate.entered;
+    await r.a.store.transactions.update(r.txId, { note: 'такси из аэропорта' });
+    gate.open();
+    await p;
+    expect(serverTx(r)['amount_minor']).toBe(20_000); // сумма уже на сервере
+    expect(r.a.engine.getStatus().pending).toBe(1); // а заметка ждёт: связь оборвалась
 
-    it.each(ORDERS)('правки РАЗНЫХ групп (A — заметка, B — сумма) складываются, $name', async ({ first }) => {
-      const p = await pair(make(), skewA, skewB);
-      expectOrder((await editBoth(p, { note: 'заметка с A' }, { amountMinor: 25_000 })).cmp);
-      const [one, two] = first === 'b' ? [p.b, p.a] : [p.a, p.b];
-      await one.engine.syncNow();
-      await two.engine.syncNow();
-      const merged = await settleAll(p);
-      expect(view(merged)).toEqual({ note: 'заметка с A', occurredOn: '2026-10-05', amountMinor: 25_000, deleted: false });
-    });
+    // B видит 200,00 и сознательно поправляет на 300,00
+    await sleep(5);
+    await r.b.engine.syncNow();
+    await r.b.store.transactions.update(r.txId, { amountMinor: 30_000 });
+    await r.b.engine.syncNow();
+    expect(serverTx(r)['amount_minor']).toBe(30_000);
 
-    it.each(ORDERS)('три группы у двоих: каждый своё, дата — общая и решается меткой, $name', async ({ first }) => {
-      const p = await pair(make(), skewA, skewB);
-      const { newer, cmp } = await editBoth(p, { note: 'A', occurredOn: '2026-10-07' }, { amountMinor: 33_300, occurredOn: '2026-10-09' });
-      expectOrder(cmp);
-      const [one, two] = first === 'b' ? [p.b, p.a] : [p.a, p.b];
-      await one.engine.syncNow();
-      await two.engine.syncNow();
-      const merged = await settleAll(p);
-      // дату правили оба: побеждает большая метка (только здесь она что-то решает); остальное — у того, кто это менял
-      expect(view(merged)).toEqual({ note: 'A', occurredOn: newer === 'A' ? '2026-10-07' : '2026-10-09', amountMinor: 33_300, deleted: false });
-    });
-
-    it.each(ORDERS)('правка ОДНОЙ группы двумя устройствами: побеждает большая метка, одна для всех, $name', async ({ first }) => {
-      const p = await pair(make(), skewA, skewB);
-      const { newer, cmp } = await editBoth(p, { amountMinor: 11_000 }, { amountMinor: 25_000 });
-      expectOrder(cmp);
-      const [one, two] = first === 'b' ? [p.b, p.a] : [p.a, p.b];
-      await one.engine.syncNow();
-      await two.engine.syncNow();
-      const merged = await settleAll(p);
-      expect(merged.amountMinor).toBe(newer === 'A' ? 11_000 : 25_000);
-    });
-
-    it.each(ORDERS)('удаление на одном устройстве и правка заметки на другом: запись удалена, заметка сохранена, $name', async ({ first }) => {
-      const p = await pair(make(), skewA, skewB);
-      await p.a.store.transactions.softDelete(p.txId);
-      await p.b.store.transactions.update(p.txId, { note: 'правка без знания об удалении' });
-      const [one, two] = first === 'b' ? [p.b, p.a] : [p.a, p.b];
-      await one.engine.syncNow();
-      await two.engine.syncNow();
-      const merged = await settleAll(p);
-      expect(view(merged)).toEqual({ note: 'правка без знания об удалении', occurredOn: '2026-10-05', amountMinor: 10_000, deleted: true });
-    });
-
-    it.each(ORDERS)('кошелёк: переименование с одного устройства и смена цвета с другого, $name', async ({ first }) => {
-      const p = await pair(make(), skewA, skewB);
-      await p.a.store.wallets.update(p.walletId, { name: 'Новое имя' });
-      await p.b.store.wallets.update(p.walletId, { color: '#123456' });
-      const [one, two] = first === 'b' ? [p.b, p.a] : [p.a, p.b];
-      await one.engine.syncNow();
-      await two.engine.syncNow();
-      for (let i = 0; i < 2; i++) {
-        await p.a.engine.syncNow();
-        await p.b.engine.syncNow();
-      }
-      for (const d of [p.a, p.b]) {
-        expect(await d.store.db.wallets.get(p.walletId), d.deviceId).toMatchObject({ name: 'Новое имя', color: '#123456', dirty: 0 });
-      }
-      const onServer = (await p.stack.onServer(p.userId, 'wallets')).find((r) => r['id'] === p.walletId);
-      expect(onServer).toMatchObject({ name: 'Новое имя', color: '#123456' });
-    });
+    // связь у A вернулась
+    r.spyA.onPush = undefined;
+    await sleep(5);
+    await r.a.engine.syncNow();
+    await r.b.engine.syncNow();
+    expect(serverTx(r)['amount_minor'], 'сумма уже была отправлена, а группа «money» всё ещё числится у A грязной').toBe(30_000);
+    expect(String(serverTx(r)['note'])).toBe('такси из аэропорта');
   });
 
-  it('ГЛАВНЫЙ СЛУЧАЙ: метка нашей отправки больше серверной (часы на час вперёд) — чужая правка другой группы НЕ затирается', async () => {
-    let sp!: Spy;
-    const p = await pair(make(), HOUR, 0, (inner) => {
-      sp = spy(inner);
-      return sp.transport;
-    });
-    const { newer } = await editBoth(p, { note: 'правка с убежавших часов' }, { amountMinor: 77_700 });
-    expect(newer, 'метка правки A больше метки правки B — это и есть опасный случай').toBe('A');
-    await p.b.engine.syncNow(); // B успел раньше: на сервере сумма 777,00
-    expect((await serverTx(p)).amountMinor).toBe(77_700);
-    sp.calls.length = 0;
-    await p.a.engine.syncNow(); // отправка A: версия ушла вперёд → отказ → получение → слияние → повторная отправка
-    expect(sp.pushes('transactions'), 'первая отправка отвергнута, вторая (после слияния) принята').toHaveLength(2);
-    expect(sp.pulls('transactions').length).toBeGreaterThanOrEqual(1);
-    const merged = await settleAll(p);
-    expect(view(merged)).toEqual({ note: 'правка с убежавших часов', occurredOn: '2026-10-05', amountMinor: 77_700, deleted: false });
+  it('A трижды поменял сумму и вернул прежнюю (итого ничего не менял), B за это время поменял сумму: правка B не должна пропасть', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    await r.a.store.transactions.update(r.txId, { amountMinor: 10_000 });
+    expect((await r.a.store.db.transactions.get(r.txId))!.amountMinor).toBe(10_000);
+    await sleep(5);
+    await r.b.store.transactions.update(r.txId, { amountMinor: 15_000 });
+    await r.b.engine.syncNow();
+    await sleep(5);
+    await r.a.engine.syncNow();
+    await r.b.engine.syncNow();
+    expect(serverTx(r)['amount_minor'], 'A ничего не менял по итогу, но его «возвращённое» значение стёрло правку B').toBe(15_000);
   });
 
-  it('контроль: без проверки версии (старый клиент) сервер принимает строку целиком и затирает чужую правку — вот от чего защищает base_seq', async () => {
-    const p = await pair(make(), 0, 0);
-    await p.b.store.transactions.update(p.txId, { amountMinor: 77_700 });
-    await p.b.engine.syncNow();
-    // старый клиент: строка со старой суммой и новой заметкой, часы убежали на час (сервер зажмёт метку до «сейчас + 5 минут» — это
-    // всё равно новее метки B), колонки base_seq нет
-    const stale = { ...(await txOf(p.a, p.txId)), note: 'старый клиент', clientUpdatedAt: new Date(Date.now() + HOUR).toISOString(), deviceId: 'dev-old' };
-    await p.stack.raw(p.userId).push('transactions', [toWire('transactions', stale)]);
-    const onServer = await serverTx(p);
-    expect(onServer).toMatchObject({ note: 'старый клиент', amountMinor: 10_000 }); // сумма B пропала
-    // а с base_seq — тот же случай отвергается
-    const sent = await p.stack.raw(p.userId).push('transactions', [toWire('transactions', { ...stale, note: 'новый клиент', deviceId: 'dev-new', clientUpdatedAt: new Date(Date.now() + HOUR + 1).toISOString() }, 1)]).then(
-      () => 'принято',
-      (e: unknown) => (e as { kind?: string }).kind,
-    );
-    expect(sent).toBe('conflict');
+  it('A удалил операцию и сразу вернул (итого ничего не менял), B удалил её по-настоящему: операция остаётся удалённой', async () => {
+    const r = await rig();
+    await r.a.store.transactions.softDelete(r.txId);
+    await r.a.store.transactions.restore(r.txId); // «отменить»
+    await sleep(5);
+    await r.b.store.transactions.softDelete(r.txId);
+    await r.b.engine.syncNow();
+    await sleep(5);
+    await r.a.engine.syncNow();
+    await r.b.engine.syncNow();
+    await r.a.engine.syncNow();
+    expect(serverTx(r)['deleted_at'], 'удаление B отменено «чистым нулём» A: операция воскресла и снова считается в остатке').not.toBeNull();
+    expect((await r.a.store.db.transactions.get(r.txId))!.deletedAt).not.toBeNull();
   });
 
-  it('ответ потерялся, хотя сервер правку принял: повтор не считается конфликтом, не двигает server_seq и ничего не теряет', async () => {
-    let sp!: Spy;
-    const p = await pair(make(), 0, 0, (inner) => {
-      sp = spy(inner);
-      return sp.transport;
-    });
-    await p.a.store.transactions.update(p.txId, { note: 'правка A' });
-    sp.loseResponses = 1;
-    await p.a.engine.syncNow(); // сервер принял, ответ потерялся
-    expect(p.a.engine.getStatus()).toMatchObject({ phase: 'offline', pending: 1 });
-    const seqAfterApply = (await p.stack.onServer(p.userId, 'transactions')).find((r) => r['id'] === p.txId)?.['server_seq'];
-    sp.calls.length = 0;
-    await p.a.engine.syncNow(); // та же правка с прежней (теперь устаревшей) версией: точный повтор
-    expect(p.a.engine.getStatus()).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0 });
-    expect((await p.stack.onServer(p.userId, 'transactions')).find((r) => r['id'] === p.txId)?.['server_seq']).toBe(seqAfterApply);
-    expect(sp.pushes('transactions')).toHaveLength(1); // без отказа и повторов
-    const merged = await settleAll(p);
-    expect(merged.note).toBe('правка A');
-  });
-
-  it('чужое устройство пишет ту же запись при каждой нашей отправке: цикл останавливается с понятной ошибкой, следующий — доходит', async () => {
-    let writes = 0;
-    let sp!: Spy;
-    const p = await pair(make(), 0, 0, (inner) => {
-      sp = spy(inner);
-      return sp.transport;
-    });
-    sp.onPush = async (table) => {
-      if (table !== 'transactions' || writes >= 8) return;
-      writes++;
-      await p.b.store.transactions.update(p.txId, { note: `B-${writes}` });
-      await p.b.engine.syncNow(); // B успевает раньше каждой отправки A
-    };
-    await p.a.store.transactions.update(p.txId, { occurredOn: '2026-10-20' });
-    await p.a.engine.syncNow();
-    expect(p.a.engine.getStatus()).toMatchObject({ phase: 'error', pending: 1 });
-    expect(p.a.engine.getStatus().lastError).toMatch(/меняются на другом устройстве/);
-    // ничего не потеряно и не перезаписано: сумма и дата A ещё ждут отправки
-    expect((await txOf(p.a, p.txId)).occurredOn).toBe('2026-10-20');
-
-    await p.a.engine.syncNow(); // помехи кончились
-    const merged = await settleAll(p);
-    expect(merged.occurredOn).toBe('2026-10-20'); // дата A (B её не трогал)
-    expect(merged.note).toMatch(/^B-\d$/); // заметка B
-  });
-
-  it('операция создана на A, уточнена на B, сумма исправлена на A (часы A на час вперёд): обе правки сохраняются', async () => {
-    const stack = make();
-    const userId = makeUserId();
-    const a = await stack.open(userId, 'dev-a', HOUR);
-    const b = await stack.open(userId, 'dev-b', 0);
-    await a.engine.syncNow();
-    await b.engine.syncNow();
-    const wallet = (await a.store.db.wallets.toArray())[0] as Wallet;
-    const tx = await a.store.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 500, occurredOn: '2026-10-06', note: 'создано на A' });
-    await a.engine.syncNow();
-    await b.engine.syncNow();
-    await b.store.transactions.update(tx.id, { note: 'уточнено на B' });
-    await a.store.transactions.update(tx.id, { amountMinor: 900 });
-    await b.engine.syncNow();
-    await a.engine.syncNow();
-    await b.engine.syncNow();
-    for (const d of [a, b]) expect(await d.store.db.transactions.get(tx.id), d.deviceId).toMatchObject({ note: 'уточнено на B', amountMinor: 900, dirty: 0 });
+  it('старая правка суммы на A (10:00) против более поздней правки суммы на B (11:00): побеждает та, что позже', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 }); // A офлайн, раньше
+    await sleep(20);
+    await r.b.store.transactions.update(r.txId, { amountMinor: 30_000 }); // B позже
+    await r.b.engine.syncNow();
+    await sleep(20);
+    await r.a.engine.syncNow(); // A приходит с сетью позже
+    await r.b.engine.syncNow();
+    expect(serverTx(r)['amount_minor'], 'устаревшая правка победила по порядку синхронизации, а не по времени правки').toBe(30_000);
   });
 });
 
-describe('слияние двух устройств: случайные правки групп, часы и порядок синхронизаций (сервер в памяти)', () => {
-  const GROUPS = ['note', 'date', 'amount'] as const;
-  type Group = (typeof GROUPS)[number];
-  const A_VALUES = { note: 'заметка A', date: '2026-10-07', amount: 11_100 } as const;
-  const B_VALUES = { note: 'заметка B', date: '2026-10-09', amount: 22_200 } as const;
-  const patch = (groups: readonly Group[], v: typeof A_VALUES | typeof B_VALUES) => ({
-    ...(groups.includes('note') ? { note: v.note } : {}),
-    ...(groups.includes('date') ? { occurredOn: v.date } : {}),
-    ...(groups.includes('amount') ? { amountMinor: v.amount } : {}),
+describe('слияние: перевезённые и возвращённые значения', () => {
+  it('B правит другую группу и перевозит МОЁ прежнее значение с новой меткой: моя более поздняя правка не проигрывает по метке', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { note: 'первая' });
+    r.spyA.loseResponses = 1; // сервер принял «первая», ответ потерян
+    await r.a.engine.syncNow();
+    await r.a.store.transactions.update(r.txId, { note: 'вторая' });
+    await sleep(5);
+    await r.b.store.transactions.update(r.txId, { amountMinor: 20_000 }); // B видел «первая» и несёт её дальше, поднимая метку записи
+    await r.b.engine.syncNow();
+    await sleep(5);
+    await r.a.engine.syncNow();
+    await r.b.engine.syncNow();
+    await r.a.engine.syncNow();
+    expect(String(serverTx(r)['note']), 'перевезённое чужим устройством старое значение победило более позднюю правку').toBe('вторая');
+    expect(serverTx(r)['amount_minor']).toBe(20_000);
+    expect(await snapshotOf(r.a.store)).toEqual(await snapshotOf(r.b.store));
   });
-  const subset = fc.subarray([...GROUPS], { minLength: 1 });
-  // расхождения часов шире окна сервера «сейчас + 5 минут» и без расхождения; кто новее при общей группе — по меткам, которые получили правки
-  const skewPair = fc.constantFrom(
-    [HOUR, 0],
-    [0, HOUR],
-    [-HOUR, 0],
-    [0, -HOUR],
-    [HOUR, -HOUR],
-    [-HOUR, HOUR],
-  ) as fc.Arbitrary<[number, number]>;
-  const schedule = fc.array(fc.constantFrom('a', 'b'), { minLength: 1, maxLength: 4 });
 
-  it('итог не зависит от порядка: каждая группа — у того, кто её менял; при общей группе — у того, чья метка больше', async () => {
-    await fc.assert(
-      fc.asyncProperty(subset, subset, skewPair, schedule, async (groupsA, groupsB, [skewA, skewB], order) => {
-        const p = await pair(memoryStack(), skewA, skewB);
-        try {
-          const { newer } = await editBoth(p, patch(groupsA, A_VALUES), patch(groupsB, B_VALUES));
-          for (const who of order) await (who === 'a' ? p.a : p.b).engine.syncNow();
-          const merged = await settleAll(p);
-          const expected = { note: 'обед', occurredOn: '2026-10-05', amountMinor: 10_000, deleted: false };
-          for (const g of GROUPS) {
-            const byA = groupsA.includes(g);
-            const byB = groupsB.includes(g);
-            const owner = byA && byB ? newer : byA ? 'A' : 'B';
-            if (!byA && !byB) continue;
-            const values = owner === 'A' ? A_VALUES : B_VALUES;
-            if (g === 'note') expected.note = values.note;
-            if (g === 'date') expected.occurredOn = values.date;
-            if (g === 'amount') expected.amountMinor = values.amount;
-          }
-          expect(view(merged)).toEqual(expected);
-        } finally {
-          for (const d of [p.a, p.b]) {
-            d.engine.dispose();
-            d.store.close();
-          }
-        }
-      }),
-      { numRuns: Number(process.env['MERGE_RUNS'] ?? 40), endOnFailure: true },
-    );
-  }, 300_000);
+  it('сумма отправлена (ответ потерян), затем возвращена к прежней: возврат доходит до сервера, а не принимается за «ничего не менялось»', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    r.spyA.loseResponses = 1;
+    await r.a.engine.syncNow();
+    expect(serverTx(r)['amount_minor']).toBe(20_000);
+    await r.a.store.transactions.update(r.txId, { amountMinor: 10_000 }); // «отменил»: вернул прежнюю сумму
+    await sleep(5);
+    await r.a.engine.syncNow();
+    await r.b.engine.syncNow();
+    await r.a.engine.syncNow();
+    expect(serverTx(r)['amount_minor'], 'возврат к исходному принят за «не менялось», на сервере осталась отправленная сумма').toBe(10_000);
+    expect((await r.b.store.db.transactions.get(r.txId))!.amountMinor).toBe(10_000);
+  });
+
+  it('удаление отправлено, затем отменено; B после этого удалил по-настоящему: остаётся удалённой, а не воскресает', async () => {
+    const r = await rig();
+    await r.a.store.transactions.softDelete(r.txId);
+    r.spyA.loseResponses = 1;
+    await r.a.engine.syncNow();
+    await r.a.store.transactions.restore(r.txId);
+    await sleep(5);
+    await r.b.engine.syncNow(); // B видит удаление A
+    await r.b.store.transactions.restore(r.txId);
+    await r.b.store.transactions.softDelete(r.txId); // и удаляет сам, позже «отмены» A
+    await r.b.engine.syncNow();
+    await sleep(5);
+    await r.a.engine.syncNow();
+    await r.b.engine.syncNow();
+    expect(serverTx(r)['deleted_at']).not.toBeNull();
+    expect((await r.a.store.db.transactions.get(r.txId))!.deletedAt).not.toBeNull();
+  });
+});
+
+describe('слияние: строка, чьё создание ушло, но ответ потерялся', () => {
+  it('A создал операцию (ответ потерян) и правит заметку; B за это время правит дату: обе правки сохраняются', async () => {
+    const server = createMemoryServer();
+    let spyA!: Spy;
+    const a = await openDevice(server, 'dev-a', { seed: true, wrap: (i) => ((spyA = spy(i)), spyA.transport) });
+    const b = await openDevice(server, 'dev-b', { seed: true });
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    const wallet = (await a.store.db.wallets.toArray())[0]!;
+    const tx = await a.store.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 10_000, occurredOn: '2026-10-05', note: 'такси' });
+    spyA.loseResponses = 1; // сервер принял создание, телефон об этом не знает
+    await a.engine.syncNow();
+    expect(a.engine.getStatus().pending).toBe(1);
+
+    await sleep(5);
+    await b.engine.syncNow(); // B получил операцию
+    await b.store.transactions.update(tx.id, { occurredOn: '2026-10-01' });
+    await b.engine.syncNow();
+    await sleep(5);
+    await a.store.transactions.update(tx.id, { note: 'такси из аэропорта' }); // у строки ещё нет групп: «вся запись»
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    await a.engine.syncNow();
+
+    const row = server.dump(USER, 'transactions').find((t) => t['id'] === tx.id)!;
+    expect(row['occurred_on'], 'дата B затёрта слепой отправкой всей строки A').toBe('2026-10-01');
+    expect(String(row['note'])).toBe('такси из аэропорта');
+  });
+
+  it('то же, но правка A старше правки B по метке: заметка A не должна пропасть молча', async () => {
+    const server = createMemoryServer();
+    let spyA!: Spy;
+    const a = await openDevice(server, 'dev-a', { seed: true, wrap: (i) => ((spyA = spy(i)), spyA.transport) });
+    const b = await openDevice(server, 'dev-b', { seed: true });
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    const wallet = (await a.store.db.wallets.toArray())[0]!;
+    const tx = await a.store.transactions.create({ kind: 'expense', walletId: wallet.id, amountMinor: 10_000, occurredOn: '2026-10-05', note: 'такси' });
+    spyA.loseResponses = 1;
+    await a.engine.syncNow();
+    await a.store.transactions.update(tx.id, { note: 'такси из аэропорта' });
+    await sleep(5);
+    await b.engine.syncNow();
+    await b.store.transactions.update(tx.id, { occurredOn: '2026-10-01' });
+    await b.engine.syncNow();
+    await sleep(5);
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    await a.engine.syncNow();
+    const row = server.dump(USER, 'transactions').find((t) => t['id'] === tx.id)!;
+    expect(row['occurred_on']).toBe('2026-10-01');
+    expect(String(row['note']), 'заметка A проиграла по метке и пропала молча').toBe('такси из аэропорта');
+  });
+});
+
+describe('слияние: часы устройства убежали вперёд + потерянный ответ', () => {
+  it('новая запись с меткой из будущего: после повторной отправки её метки и дата создания совпадают с серверными на всех устройствах', async () => {
+    const server = createMemoryServer();
+    const HOURS_11 = 11 * 3_600_000;
+    let spyA!: Spy;
+    const a = await openDevice(server, 'dev-a', { seed: true, now: () => Date.now() + HOURS_11, wrap: (i) => ((spyA = spy(i)), spyA.transport) });
+    const b = await openDevice(server, 'dev-b', { seed: true });
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    const seeded = (await a.store.db.wallets.toArray())[0]!;
+    // у A есть правка существующей записи (значит, перед отправкой идёт забор) и новый кошелёк
+    await a.store.wallets.update(seeded.id, { name: 'Переименован' });
+    const w = await a.store.wallets.create({ name: 'Новый', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#111111', icon: 'c' });
+    spyA.loseResponses = 1; // сервер принял обе записи (метки зажал до «сейчас + 5 минут»), ответ потерян
+    await a.engine.syncNow();
+    for (let i = 0; i < 3; i++) {
+      await a.engine.syncNow();
+      await b.engine.syncNow();
+    }
+    const onA = (await a.store.db.wallets.get(w.id))!;
+    const onB = (await b.store.db.wallets.get(w.id))!;
+    const onServer = server.dump(USER, 'wallets').find((x) => x['id'] === w.id)!;
+    expect(Date.parse(String(onServer['created_at']))).toBeLessThan(Date.now() + 10 * 60_000);
+    expect(onB.clientUpdatedAt).toBe(new Date(String(onServer['client_updated_at'])).toISOString());
+    expect({ createdAt: onA.createdAt, clientUpdatedAt: onA.clientUpdatedAt }, 'A хранит свои метки из будущего, а не серверные').toEqual({
+      createdAt: onB.createdAt,
+      clientUpdatedAt: onB.clientUpdatedAt,
+    });
+  });
+});
+
+describe('слияние: окно между предварительным забором и отправкой', () => {
+  it('B успевает отправить заметку между заборами A и отправкой A: обе правки сохраняются', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    let fired = false;
+    r.spyA.onPull = async (table, _after, rows) => {
+      if (table === 'transactions' && !fired) {
+        fired = true;
+        await r.b.store.transactions.update(r.txId, { note: 'такси из аэропорта' });
+        await r.b.engine.syncNow();
+      }
+      return rows;
+    };
+    await r.a.engine.syncNow();
+    for (let i = 0; i < 3; i++) {
+      await r.b.engine.syncNow();
+      await r.a.engine.syncNow();
+    }
+    expect(serverTx(r)['amount_minor']).toBe(20_000);
+    expect(String(serverTx(r)['note']), 'заметка B затёрта отправкой A, которая не знала о ней').toBe('такси из аэропорта');
+  });
+
+  it('то же, но чужая правка успевает раньше по метке, чем слияние A: правка A не пропадает', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { note: 'моя заметка' });
+    let fired = false;
+    r.spyA.onPull = async (table, _after, rows) => {
+      if (table === 'transactions' && !fired) {
+        fired = true;
+        await r.b.store.transactions.update(r.txId, { amountMinor: 55_000 });
+        await r.b.engine.syncNow();
+      }
+      return rows;
+    };
+    await r.a.engine.syncNow();
+    for (let i = 0; i < 3; i++) {
+      await r.b.engine.syncNow();
+      await r.a.engine.syncNow();
+    }
+    expect(String(serverTx(r)['note'])).toBe('моя заметка');
+    expect(serverTx(r)['amount_minor'], 'сумма B затёрта').toBe(55_000);
+  });
+});
+
+describe('слияние: сервер отверг объединённую запись', () => {
+  it('отказ по одной записи после слияния не клинит очередь и не теряет остальные', async () => {
+    const r = await rig();
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    await r.b.store.transactions.update(r.txId, { note: 'заметка B' });
+    await r.b.engine.syncNow();
+    let rejectOnce = true;
+    r.spyA.onPush = (table) => {
+      if (table === 'transactions' && rejectOnce) {
+        rejectOnce = false;
+        throw new TransportError('rejected', 'значение вне границ', '23514');
+      }
+    };
+    await r.a.store.wallets.update(r.walletId, { color: '#123456' }); // другая запись не должна пострадать
+    await r.a.engine.syncNow();
+    expect(r.a.engine.getStatus().quarantined).toBe(1);
+    expect(r.server.dump(USER, 'wallets').find((w) => w['id'] === r.walletId)!['color']).toBe('#123456');
+    // человек нажал «повторить»
+    await r.a.store.sync.retryQuarantined();
+    await r.a.engine.syncNow();
+    await r.b.engine.syncNow();
+    expect(serverTx(r)['amount_minor']).toBe(20_000);
+    expect(String(serverTx(r)['note'])).toBe('заметка B');
+    expect(r.a.engine.getStatus()).toMatchObject({ pending: 0, quarantined: 0 });
+    expect(await snapshotOf(r.a.store)).toEqual(await snapshotOf(r.b.store));
+    await settle(5);
+  });
+});
+
+describe('слияние: расхождение часов за окно сервера и проверка версии (base_seq)', () => {
+  const HOUR = 3_600_000;
+
+  /**
+   * Чужое устройство B успевает записать операцию в окне между предварительным забором A и отправкой A (забор уже ответил, отправка
+   * ещё не ушла). Если метка отправки A БОЛЬШЕ серверной (часы A убежали за окно «сейчас + 5 минут»), сервер раньше принимал строку A
+   * целиком и затирал правку B другой группы; если МЕНЬШЕ — правка A молча пропадала. Теперь отправка A несёт версию, поверх которой
+   * сделана, сервер её отвергает, и A забирает чужое, объединяет и отправляет заново.
+   */
+  const inWindow = (r: Rig, writeB: () => Promise<void>): void => {
+    let fired = false;
+    r.spyA.onPull = async (table, _after, rows) => {
+      if (table === 'transactions' && !fired) {
+        fired = true;
+        await writeB();
+        await r.b.engine.syncNow();
+      }
+      return rows;
+    };
+  };
+  const converge = async (r: Rig): Promise<void> => {
+    for (let i = 0; i < 3; i++) {
+      await r.a.engine.syncNow();
+      await r.b.engine.syncNow();
+    }
+    for (const d of [r.a, r.b]) expect(d.engine.getStatus(), `${d.deviceId}: статус`).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0, lastError: null });
+    expect(await snapshotOf(r.a.store)).toEqual(await snapshotOf(r.b.store));
+  };
+
+  it.each([
+    ['часы A на час вперёд: метка отправки A БОЛЬШЕ серверной', HOUR],
+    ['часы A на час назад: метка отправки A МЕНЬШЕ серверной', -HOUR],
+    ['часы A на 10 минут вперёд (шире окна 5 минут)', 10 * 60_000],
+  ])('%s: сумма B и заметка A сохраняются обе', async (_name, skewA) => {
+    const r = await rig({ a: skewA });
+    await r.a.store.transactions.update(r.txId, { note: 'заметка с A' });
+    inWindow(r, () => r.b.store.transactions.update(r.txId, { amountMinor: 77_700 }).then(() => undefined));
+    r.spyA.calls.length = 0;
+    await r.a.engine.syncNow();
+    expect(r.spyA.pushes('transactions'), 'первая отправка отвергнута проверкой версии, вторая (после слияния) принята').toHaveLength(2);
+    await converge(r);
+    expect(serverTx(r)['amount_minor'], 'сумма B затёрта отправкой A, не знавшей о ней').toBe(77_700);
+    expect(serverTx(r)['note']).toBe('заметка с A');
+  });
+
+  it.each([
+    ['часы A на час вперёд', HOUR],
+    ['часы A на час назад', -HOUR],
+  ])('%s: заметка B в окне, сумма A — обе сохраняются (группы наоборот)', async (_name, skewA) => {
+    const r = await rig({ a: skewA });
+    await r.a.store.transactions.update(r.txId, { amountMinor: 20_000 });
+    inWindow(r, () => r.b.store.transactions.update(r.txId, { note: 'заметка с B' }).then(() => undefined));
+    await r.a.engine.syncNow();
+    await converge(r);
+    expect(serverTx(r)['amount_minor']).toBe(20_000);
+    expect(serverTx(r)['note']).toBe('заметка с B');
+  });
+
+  it('обе стороны правят одну группу: побеждает правка с более поздней меткой, устройства и сервер сходятся (часы A на час вперёд — выигрывает A)', async () => {
+    const r = await rig({ a: HOUR });
+    await r.a.store.transactions.update(r.txId, { amountMinor: 11_000 });
+    inWindow(r, () => r.b.store.transactions.update(r.txId, { amountMinor: 25_000 }).then(() => undefined));
+    await r.a.engine.syncNow();
+    await converge(r);
+    expect(serverTx(r)['amount_minor']).toBe(11_000);
+    expect((await r.b.store.db.transactions.get(r.txId))!.amountMinor).toBe(11_000);
+  });
+
+  it('контроль: клиент без base_seq (старая версия приложения) по-прежнему затирает чужую правку — вот от чего защищает проверка версии', async () => {
+    const r = await rig();
+    await r.b.store.transactions.update(r.txId, { amountMinor: 77_700 });
+    await r.b.engine.syncNow();
+    const stale = { ...(await r.a.store.db.transactions.get(r.txId))!, note: 'старый клиент', clientUpdatedAt: new Date(Date.now() + HOUR).toISOString(), deviceId: 'dev-old' };
+    await r.server.transportFor(USER).push('transactions', [toWire('transactions', stale)]); // без base_seq: проверки версии нет
+    expect(serverTx(r)).toMatchObject({ note: 'старый клиент', amount_minor: 10_000 });
+    // а та же правка с base_seq отвергается и ничего не записывает
+    const sent = await r.server
+      .transportFor(USER)
+      .push('transactions', [toWire('transactions', { ...stale, note: 'новый клиент', deviceId: 'dev-new', clientUpdatedAt: new Date(Date.now() + HOUR + 1).toISOString() }, 1)])
+      .then(
+        () => 'принято',
+        (e: unknown) => (e as TransportError).kind,
+      );
+    expect(sent).toBe('conflict');
+    expect(serverTx(r)).toMatchObject({ note: 'старый клиент' });
+  });
+
+  it('ответ потерялся, хотя сервер правку принял: повтор не считается конфликтом и не двигает server_seq', async () => {
+    const r = await rig({ a: HOUR });
+    await r.a.store.transactions.update(r.txId, { note: 'правка A' });
+    r.spyA.loseResponses = 1;
+    await r.a.engine.syncNow(); // сервер принял, ответ потерялся
+    const seq = serverTx(r)['server_seq'];
+    r.spyA.calls.length = 0;
+    await r.a.engine.syncNow(); // предварительный забор уже видит свою правку; если отправка всё же уходит — это точный повтор с устаревшей версией
+    expect(serverTx(r)['server_seq'], 'повтор не двигает номер версии').toBe(seq);
+    expect(r.spyA.pushes('transactions').length, 'не больше одной отправки: без отказа проверки версии и повторов').toBeLessThanOrEqual(1);
+    await converge(r);
+    expect(serverTx(r)['note']).toBe('правка A');
+  });
+
+  it('чужое устройство пишет ту же запись перед каждой нашей отправкой: цикл останавливается с понятной ошибкой, следующий доходит', async () => {
+    const r = await rig();
+    let writes = 0;
+    r.spyA.onPush = async (table) => {
+      if (table !== 'transactions' || writes >= 8) return;
+      writes++;
+      await r.b.store.transactions.update(r.txId, { note: `B-${writes}` });
+      await r.b.engine.syncNow(); // B успевает раньше каждой отправки A
+    };
+    await r.a.store.transactions.update(r.txId, { occurredOn: '2026-10-20' });
+    await r.a.engine.syncNow();
+    expect(r.a.engine.getStatus()).toMatchObject({ phase: 'error', pending: 1 });
+    expect(r.a.engine.getStatus().lastError).toMatch(/меняются на другом устройстве/);
+    expect((await r.a.store.db.transactions.get(r.txId))!.occurredOn, 'правка A не потеряна').toBe('2026-10-20');
+    await r.a.engine.syncNow(); // помехи кончились
+    await converge(r);
+    expect(serverTx(r)['occurred_on']).toBe('2026-10-20');
+    expect(String(serverTx(r)['note'])).toMatch(/^B-\d$/);
+  });
 });

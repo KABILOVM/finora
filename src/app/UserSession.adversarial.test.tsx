@@ -82,11 +82,17 @@ describe('ATTACK: «Выйти и удалить данные с этого ус
     await user.click(wipe());
     await user.click(await findByRole('button', { name: 'Выйти и удалить' }));
     await findByRole('heading', { name: 'Вход', level: 1 });
-    await tick(300);
 
-    expect(td.deleted).toEqual([ALICE.id]);
-    const names = (await td.factory.databases()).map((d) => d.name);
-    expect(names, 'после удаления с устройства не должно остаться базы Алисы (даже пустой, пересозданной живым запросом)').not.toContain(`finora-v1-${ALICE.id}`);
+    // Удаление базы идёт в фоне: сколько оно займёт, зависит от загрузки машины, поэтому ждём ЕГО ОКОНЧАНИЯ, а не фиксированные 300 мс...
+    const aliceDb = `finora-v1-${ALICE.id}`;
+    const dbNames = async () => (await td.factory.databases()).map((d) => d.name);
+    await eventually(async () => {
+      expect(td.deleted).toEqual([ALICE.id]);
+      expect(await dbNames()).not.toContain(aliceDb);
+    }, 15_000);
+    // ...и только потом даём время «воскреснуть»: живой запрос мог бы пересоздать пустую базу уже после удаления
+    await tick(300);
+    expect(await dbNames(), 'после удаления с устройства не должно остаться базы Алисы (даже пустой, пересозданной живым запросом)').not.toContain(aliceDb);
 
     // тот же человек возвращается
     await signInUi(ALICE.email, ALICE.password);
@@ -121,6 +127,8 @@ describe('ATTACK: на одном устройстве входит другой
       fake.emit('SIGNED_IN', BOB);
     });
     await waitFor(() => expect(screen.queryByText('ТАЙНА-АЛИСЫ')).toBeNull());
+    // база Боба открывается не мгновенно (на загруженной машине — не за 1,5 с): сначала дожидаемся её, потом даём время на утечку
+    await eventually(() => expect(td.stores[td.stores.length - 1]?.userId).toBe(BOB.id), 15_000);
     await tick(1500);
 
     const bobWallets = server.dump(BOB.id, 'wallets').map((r) => r['name']);

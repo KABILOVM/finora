@@ -103,27 +103,6 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
   },
 };
 
-/**
- * Группы полей для слияния правок двух устройств (см. db/syncMerge.ts). Группа — неделимая единица: правки РАЗНЫХ групп одной
- * строки (заметку с одного телефона, сумму с другого) складываются, а правки одной группы решает «новее побеждает» — целиком группой.
- * Поля, связанные проверками сервера (CHECK transactions_transfer_shape / plain_shape: вид, кошельки, суммы, категория, курс),
- * живут в одной группе: так слияние не соберёт строку, которую сервер отвергнет.
- * Каждая колонка договора, кроме служебных (MERGE_META_FIELDS), входит ровно в одну группу — это проверяет тест.
- */
-export const MERGE_META_FIELDS: readonly string[] = ['id', 'createdAt', 'clientUpdatedAt', 'deviceId'];
-
-export const MERGE_GROUPS: Record<SyncTableName, ReadonlyArray<readonly string[]>> = {
-  settings: [['baseCurrency'], ['locale'], ['weekStartsOn'], ['defaultWalletId'], ['deletedAt']],
-  wallets: [['name'], ['currency', 'openingBalanceMinor'], ['kind'], ['color', 'icon'], ['sortOrder'], ['archivedAt'], ['deletedAt']],
-  categories: [['name'], ['kind'], ['parentId'], ['color', 'icon'], ['sortOrder'], ['archivedAt'], ['deletedAt']],
-  transactions: [
-    ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
-    ['occurredOn'],
-    ['note'],
-    ['deletedAt'],
-  ],
-};
-
 export type EntityOf<T extends SyncTableName> = T extends 'settings'
   ? Settings
   : T extends 'wallets'

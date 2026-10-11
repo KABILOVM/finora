@@ -22,15 +22,11 @@ export interface PullResult {
   applied: number;
   /** Сколько записей пришлось переписать, чтобы операции не поменяли смысл (см. reconcile.ts): они ждут отправки. */
   repaired: number;
-  /** Сколько неотправленных правок слито с чужими по группам полей (см. db/syncMerge.ts): они остались в очереди и ждут отправки. */
+  /** Сколько строк объединено с локальными правками по группам полей (db/syncMerge.ts): они снова ждут отправки. */
   merged: number;
 }
 
-async function pullTable(
-  ctx: PhaseCtx,
-  table: SyncTableName,
-  watch: Watch,
-): Promise<{ unreadable: boolean; applied: number; merged: number }> {
+async function pullTable(ctx: PhaseCtx, table: SyncTableName, watch: Watch): Promise<{ unreadable: boolean; applied: number; merged: number }> {
   let applied = 0;
   let merged = 0;
   let cursor = await ctx.store.sync.getCursor(table);
@@ -58,9 +54,9 @@ async function pullTable(
       if (maxSeq <= cursor) throw new TransportError('server', `Сервер вернул строки не новее курса ${cursor} (таблица ${table})`);
       try {
         await noteIncoming(ctx.store, table, good, watch); // пока в базе ещё локальные версии
-        const page = await ctx.store.sync.applyRemotePage(table, good, maxSeq);
-        applied += page.applied;
-        merged += page.merged;
+        const r = await ctx.store.sync.applyRemotePage(table, good, maxSeq);
+        applied += r.applied;
+        merged += r.merged;
       } catch (e) {
         // страница не прошла проверку базы целиком — как нечитаемая: ничего не записано, курс на месте
         if (e instanceof ValidationError) return { unreadable: true, applied, merged };
