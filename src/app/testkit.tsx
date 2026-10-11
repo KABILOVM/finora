@@ -42,13 +42,15 @@ export interface FakeAuthOptions {
   getSession?: 'ok' | 'hang' | 'network';
   /** true — любая сетевая операция падает («нет сети»). */
   offline?: boolean;
+  /** Как отвечает регистрация: 'open' — сразу входит; 'confirm' — просит подтвердить почту; 'disabled' — отключена. */
+  signup?: 'open' | 'confirm' | 'disabled';
 }
 
 export function fakeAuthClient(options: FakeAuthOptions = {}) {
   const accounts = options.accounts ?? [ALICE, BOB];
   let current: FakeAccount | null = options.session ?? null;
   const listeners = new Set<Listener>();
-  const calls = { signIn: 0, signOut: 0, updateUser: 0, refreshSession: 0, getSession: 0, signOutArgs: [] as unknown[] };
+  const calls = { signIn: 0, signUp: 0, signOut: 0, updateUser: 0, refreshSession: 0, getSession: 0, signOutArgs: [] as unknown[] };
   const state = {
     offline: options.offline ?? false,
     getSession: options.getSession ?? 'ok',
@@ -99,6 +101,25 @@ export function fakeAuthClient(options: FakeAuthOptions = {}) {
       current = found;
       const session = sessionOf(found);
       emit('SIGNED_IN', found);
+      return { data: { user: session?.user ?? null, session }, error: null };
+    },
+    async signUp({ email, password }: { email: string; password: string }) {
+      calls.signUp++;
+      if (state.offline) return { data: { user: null, session: null }, error: networkError() };
+      if (options.signup === 'disabled') {
+        return { data: { user: null, session: null }, error: authError('AuthApiError', 'Signups not allowed', { status: 422, code: 'signup_disabled' }) };
+      }
+      if (accounts.some((a) => a.email === email)) {
+        return { data: { user: null, session: null }, error: authError('AuthApiError', 'User already registered', { status: 422, code: 'user_already_exists' }) };
+      }
+      const created: FakeAccount = { id: `00000000-0000-4000-8000-${String(accounts.length + 1).padStart(12, '0')}`, email, password };
+      accounts.push(created);
+      if (options.signup === 'confirm') {
+        return { data: { user: { id: created.id, email, identities: [{}] }, session: null }, error: null };
+      }
+      current = created;
+      const session = sessionOf(created);
+      emit('SIGNED_IN', created);
       return { data: { user: session?.user ?? null, session }, error: null };
     },
     async signOut(args?: unknown) {

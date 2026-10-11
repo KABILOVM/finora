@@ -1,6 +1,6 @@
 /** Перевод ошибок входа и смены пароля на понятный русский. Английские тексты Supabase человеку не показываем. */
 
-export type AuthAction = 'sign-in' | 'password' | 'other';
+export type AuthAction = 'sign-in' | 'sign-up' | 'password' | 'other';
 
 interface ErrorLike {
   name?: unknown;
@@ -32,7 +32,16 @@ export function describeAuthError(e: unknown, action: AuthAction = 'other'): str
   const c = text(code);
 
   if (isNetworkError(e) || (typeof navigator !== 'undefined' && navigator.onLine === false && c === '')) {
-    return action === 'sign-in' ? NO_CONNECTION_TEXT : 'Нет связи. Проверьте интернет и повторите.';
+    return action === 'sign-in' || action === 'sign-up' ? NO_CONNECTION_TEXT : 'Нет связи. Проверьте интернет и повторите.';
+  }
+  if (c === 'user_already_exists' || c === 'email_exists' || /already (been )?registered|already exists/i.test(msg)) {
+    return 'Эта почта уже зарегистрирована. Войдите.';
+  }
+  if (c === 'signup_disabled' || /signups? (not allowed|(are )?disabled)/i.test(msg)) {
+    return 'Регистрация отключена. Обратитесь к владельцу приложения.';
+  }
+  if (c === 'email_address_invalid' || c === 'validation_failed' || /invalid .*email|unable to validate email/i.test(msg)) {
+    return 'Проверьте почту: она указана неверно.';
   }
   if (c === 'invalid_credentials' || /invalid login credentials|invalid credentials/i.test(msg)) {
     return 'Неверная почта или пароль';
@@ -55,6 +64,7 @@ export function describeAuthError(e: unknown, action: AuthAction = 'other'): str
   }
   if (typeof status === 'number' && status >= 500) return 'Сервер сейчас недоступен. Попробуйте позже.';
   if (action === 'sign-in') return 'Не удалось войти. Попробуйте ещё раз.';
+  if (action === 'sign-up') return 'Не удалось зарегистрироваться. Попробуйте ещё раз.';
   if (action === 'password') return 'Не удалось сменить пароль. Попробуйте ещё раз.';
   return 'Что-то пошло не так. Попробуйте ещё раз.';
 }
