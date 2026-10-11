@@ -88,6 +88,28 @@ function revertTx(t){
  if(t.type==="income")w.balance-=t.amount;
  if(t.type==="transfer"){w.balance+=t.amount;const dest=state.wallets.find(x=>x.id===t.toWalletId);if(dest)dest.balance-=t.amount;}
 }
+/* демо-данные старых версий: узнаём их по id и точным значениям, чужие записи не трогаем */
+const DEMO_WALLETS={cash:["Наличные",850],bank:["Банковская карта",4650],usd:["USD кошелёк",120]};
+const DEMO_TX=["t1","t2","t3","t4","t5"];
+const DEMO_BUDGETS={"Обед":900,"Транспорт":500,"Продукты":1800,"Развлечения":400};
+function findDemo(){
+ const tx=state.transactions.filter(t=>DEMO_TX.includes(t.id)&&Object.keys(DEMO_WALLETS).includes(t.walletId)).map(t=>t.id);
+ /* кошелёк, в котором есть ваши операции, не считаем демо: его нельзя удалять */
+ const own=new Set(state.transactions.filter(t=>!tx.includes(t.id)).flatMap(t=>[t.walletId,t.toWalletId]));
+ const wallets=state.wallets.filter(w=>DEMO_WALLETS[w.id]&&w.name===DEMO_WALLETS[w.id][0]&&!own.has(w.id)).map(w=>w.id);
+ const any=wallets.length||tx.length;
+ const budgets=any?state.budgets.filter(b=>DEMO_BUDGETS[b.category]===b.limit&&b.currency==="TJS").map(b=>b.category):[];
+ return {wallets,tx,budgets,any:!!(any||budgets.length)};
+}
+function removeDemo(){
+ const d=findDemo();if(!d.any)return;
+ /* демо-операции в примере не менялись балансы кошельков, поэтому балансы не пересчитываем */
+ undoable("Демо-данные удалены",()=>{
+  state.transactions=state.transactions.filter(t=>!d.tx.includes(t.id));
+  state.wallets=state.wallets.filter(w=>!d.wallets.includes(w.id));
+  state.budgets=state.budgets.filter(b=>!d.budgets.includes(b.category));
+ });
+}
 function deleteTx(id,rowEl){
  const t=state.transactions.find(x=>x.id===id);if(!t)return;
  if(rowEl)rowEl.classList.add("removing");
@@ -140,6 +162,7 @@ function renderDashboard(){
    <button class="quick trf" data-add="transfer">${ic("transfer")}<span>Перевод</span></button>
   </div>
  </div>
+ ${findDemo().any?`<div class="card onboard demo-note"><div class="wallet-left"><span class="cat-ic lg" style="--h:28">${ic("fire")}</span><div><h2>Демо-данные</h2><div class="metric-foot">Из примера, не ваши</div></div></div><button class="primary-btn" data-clear-demo>${ic("trash")}<span>Удалить</span></button></div>`:""}
  ${state.wallets.length?"":`<div class="card onboard"><div class="wallet-left"><span class="cat-ic lg" style="--h:230">${ic("wallet")}</span><div><h2>Первый кошелёк</h2><div class="metric-foot">Карта или наличные</div></div></div><button class="primary-btn" data-goto="wallets">${ic("plus")}<span>Создать</span></button></div>`}
  <div class="grid two-col">
   <div class="card forecast">
@@ -376,6 +399,7 @@ function bindTxRows(){
 function bindView(){
  $$("[data-goto]").forEach(b=>b.onclick=()=>goto(b.dataset.goto));
  $$("[data-add]").forEach(b=>b.onclick=()=>openModal(b.dataset.add));
+ $$("[data-clear-demo]").forEach(b=>b.onclick=removeDemo);
  const eye=$("#heroEye");if(eye)eye.onclick=()=>{localStorage.setItem("finora-hide",localStorage.getItem("finora-hide")==="1"?"0":"1");render();};
  bindPicks();
  bindTxRows();
