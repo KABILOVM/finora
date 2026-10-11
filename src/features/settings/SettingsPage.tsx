@@ -5,12 +5,14 @@ import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { version } from '../../../package.json';
 import { AccountSection } from './AccountSection';
+import { AppLockSection } from './AppLockSection';
 import { BackupSection } from './BackupSection';
 import { CloudCheckSection } from './CloudCheckSection';
 import { CurrencySection } from './CurrencySection';
 import { DataCheckSection } from './DataCheckSection';
 import { InstallSection } from './InstallSection';
 import { RatesSection } from './RatesSection';
+import { RemindersSection } from './RemindersSection';
 import { SettingsSection } from './SettingsSection';
 import { StorageSection } from './StorageSection';
 import { SyncSection } from './SyncSection';
@@ -36,7 +38,9 @@ export default function SettingsPage() {
       </Card>
 
       <AccountSection />
+      <AppLockSection />
       <SyncSection />
+      <RemindersSection />
       <CloudCheckSection />
       <CurrencySection />
       <RatesSection />

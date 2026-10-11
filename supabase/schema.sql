@@ -713,3 +713,94 @@ create policy recurring_rules_insert_own on public.recurring_rules for insert to
 drop policy if exists recurring_rules_update_own on public.recurring_rules;
 create policy recurring_rules_update_own on public.recurring_rules for update to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+
+-- 9. Этап 3: напоминания (push) ---------------------------------------------------------------
+-- Эти три таблицы НЕ синхронизируются через локальную базу устройства: приложение пишет в них напрямую (когда есть сеть),
+-- а читает их серверная функция send-reminders. Как везде: authenticated не может удалять строки (только select / insert / update
+-- и только свои), поэтому «отписаться» = выставить revoked_at; настоящую чистку делает серверная функция.
+
+-- 9.1. Подписки устройств на push. Одна строка на (пользователь, адрес push-сервиса браузера).
+create table if not exists public.push_subscriptions (
+  id           uuid        not null default gen_random_uuid(),
+  user_id      uuid        not null default auth.uid(),
+  device_id    text        not null,
+  endpoint     text        not null,
+  p256dh       text        not null,
+  auth_secret  text        not null,
+  user_agent   text        not null default '',
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  -- отписка (человек выключил напоминания на этом устройстве); пусто — подписка действует
+  revoked_at   timestamptz,
+  constraint push_subscriptions_pkey primary key (id),
+  constraint push_subscriptions_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint push_subscriptions_user_endpoint_key unique (user_id, endpoint),
+  constraint push_subscriptions_endpoint_fmt check (endpoint like 'https://%' and char_length(endpoint) between 12 and 2048),
+  constraint push_subscriptions_keys_len check (char_length(p256dh) between 20 and 200 and char_length(auth_secret) between 8 and 100),
+  constraint push_subscriptions_device_len check (char_length(device_id) between 1 and 64),
+  constraint push_subscriptions_ua_len check (char_length(user_agent) <= 300)
+);
+
+-- 9.2. Настройки напоминаний: одна строка на пользователя.
+--   hour_local — час (0–23) по часовому поясу timezone, когда присылать; show_details — писать ли в уведомлении названия
+--   (по умолчанию нет: на заблокированном экране чужие глаза ничего лишнего не увидят).
+create table if not exists public.reminder_settings (
+  user_id         uuid        not null default auth.uid(),
+  enabled         boolean     not null default false,
+  hour_local      smallint    not null default 9,
+  timezone        text        not null default 'Asia/Dushanbe',
+  remind_payments boolean     not null default true,
+  remind_debts    boolean     not null default true,
+  remind_daily    boolean     not null default false,
+  show_details    boolean     not null default false,
+  updated_at      timestamptz not null default now(),
+  constraint reminder_settings_pkey primary key (user_id),
+  constraint reminder_settings_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint reminder_settings_hour check (hour_local between 0 and 23),
+  constraint reminder_settings_tz_len check (char_length(timezone) between 1 and 64)
+);
+
+-- 9.3. Журнал отправленного: по нему функция не шлёт одно и то же напоминание дважды за день. Только для service_role
+-- (функция), у anon и authenticated прав нет совсем и политик нет.
+create table if not exists public.push_log (
+  user_id    uuid        not null,
+  kind       text        not null,
+  ref        text        not null,
+  sent_on    date        not null,
+  created_at timestamptz not null default now(),
+  constraint push_log_pkey primary key (user_id, kind, ref, sent_on),
+  constraint push_log_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint push_log_kind check (kind in ('payment', 'debt', 'daily')),
+  constraint push_log_ref_len check (char_length(ref) <= 200)
+);
+
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions (user_id) where revoked_at is null;
+create index if not exists push_log_sent_on_idx on public.push_log (sent_on);
+
+revoke all on table public.push_subscriptions, public.reminder_settings, public.push_log from public, anon, authenticated;
+grant select, insert, update on table public.push_subscriptions, public.reminder_settings to authenticated;
+
+alter table public.push_subscriptions enable row level security;
+alter table public.reminder_settings  enable row level security;
+alter table public.push_log           enable row level security;
+
+drop policy if exists push_subscriptions_select_own on public.push_subscriptions;
+create policy push_subscriptions_select_own on public.push_subscriptions for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists push_subscriptions_insert_own on public.push_subscriptions;
+create policy push_subscriptions_insert_own on public.push_subscriptions for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists push_subscriptions_update_own on public.push_subscriptions;
+create policy push_subscriptions_update_own on public.push_subscriptions for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+drop policy if exists reminder_settings_select_own on public.reminder_settings;
+create policy reminder_settings_select_own on public.reminder_settings for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists reminder_settings_insert_own on public.reminder_settings;
+create policy reminder_settings_insert_own on public.reminder_settings for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists reminder_settings_update_own on public.reminder_settings;
+create policy reminder_settings_update_own on public.reminder_settings for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

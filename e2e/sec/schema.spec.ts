@@ -136,7 +136,7 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
         has_table_privilege('authenticated', c.oid, 'delete') as auth_del,
         has_table_privilege('authenticated', c.oid, 'truncate') as auth_trunc
       from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname='public' and c.relkind='r'`);
-    expect(privs.rows.length).toBe(8); // 7 таблиц синхронизации + курсы валют
+    expect(privs.rows.length).toBe(11); // 7 таблиц синхронизации + курсы валют + подписки, настройки напоминаний, журнал отправленного
     for (const r of privs.rows) expect(r, r.t).toMatchObject({ anon_any: false, auth_del: false, auth_trunc: false });
     // anon не имеет ни одного отдельного права
     const anonAny = await db.query<{ t: string }>(`select c.relname as t from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and (${['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'].map((p) => `has_table_privilege('anon', c.oid, '${p}')`).join(' or ')})`);
@@ -242,10 +242,11 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
       expect('error' in r ? r.error : 'ok', sql.replace(/\s+/g, ' ').slice(0, 80)).toBe('ok');
     }
   });
-  test('каталог: политик ровно 22 (select / insert / update × 7 таблиц синхронизации + 1 select у курсов), политик на delete и «для всех» нет', async () => {
+  test('каталог: политик ровно 28 (select / insert / update × 9 своих таблиц + 1 select у курсов), политик на delete и «для всех» нет', async () => {
     const pol = await db.query<{ tablename: string; cmd: string; roles: string }>(`select tablename, cmd, roles::text as roles from pg_policies where schemaname = 'public'`);
-    expect(pol.rows).toHaveLength(22);
-    for (const t of TABLES) expect(pol.rows.filter((p) => p.tablename === t).map((p) => p.cmd).sort(), t).toEqual(['INSERT', 'SELECT', 'UPDATE']);
+    expect(pol.rows).toHaveLength(28);
+    for (const t of [...TABLES, 'push_subscriptions', 'reminder_settings']) expect(pol.rows.filter((p) => p.tablename === t).map((p) => p.cmd).sort(), t).toEqual(['INSERT', 'SELECT', 'UPDATE']);
+    expect(pol.rows.filter((p) => p.tablename === 'push_log'), 'журнал отправленного: политик нет, доступ только у service_role').toEqual([]);
     expect(pol.rows.filter((p) => p.tablename === 'exchange_rates').map((p) => p.cmd)).toEqual(['SELECT']);
     expect(pol.rows.every((p) => p.roles === '{authenticated}')).toBe(true);
   });
