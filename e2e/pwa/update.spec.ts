@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { addExpense, buildCopy, cacheDump, listFiles, makeWorkCopy, patchFile, precacheUrls, startStatic, waitForSw, type StaticServer } from './helpers';
 
 // 4. Обновление версии A -> B на одной раздаче. Исходники копируются во временную папку, репозиторий не трогаем.
-// Версия различима и в главном бандле (подпись «Настройки A/B» в меню), и в ленивом чанке (заголовок «Кошельки A/B»).
+// Версия различима и в главном бандле (подпись «Ещё A/B» в меню), и в ленивом чанке (заголовок «Кошельки A/B»).
 test.setTimeout(120_000);
 
 let srv: StaticServer;
@@ -18,17 +18,17 @@ test.beforeAll(async ({ browserName: _b }, info) => {
   if (info.project.name !== 'desktop') return; // сборки тяжёлые: только для проекта desktop
   test.setTimeout(240_000);
   const copy = makeWorkCopy('upd');
-  patchFile(join(copy, NAV), "sideLabel: 'Настройки'", "sideLabel: 'Настройки A'");
+  patchFile(join(copy, NAV), "label: 'Ещё'", "label: 'Ещё A'");
   patchFile(join(copy, WALLETS), 'title="Кошельки"', 'title="Кошельки A"');
   dirA = join(copy, '..', 'upd-dist-A');
   buildCopy(copy, dirA);
-  patchFile(join(copy, NAV), "sideLabel: 'Настройки A'", "sideLabel: 'Настройки B'");
+  patchFile(join(copy, NAV), "label: 'Ещё A'", "label: 'Ещё B'");
   patchFile(join(copy, WALLETS), 'title="Кошельки A"', 'title="Кошельки B"');
   dirB = join(copy, '..', 'upd-dist-B');
   buildCopy(copy, dirB);
   // Версия A2: как A, но «падает» при отрисовке, если в localStorage стоит finora-test-crash=1 (имитация ошибки в выпущенной версии).
   const copy2 = makeWorkCopy('upd2');
-  patchFile(join(copy2, NAV), "sideLabel: 'Настройки'", "sideLabel: 'Настройки A'");
+  patchFile(join(copy2, NAV), "label: 'Ещё'", "label: 'Ещё A'");
   patchFile(
     join(copy2, 'src/App.tsx'),
     'export function AppRoutes() {',
@@ -53,7 +53,7 @@ const checkUpdate = (page: Page) =>
     await reg?.update();
   });
 const prompt = (page: Page) => page.getByText('Доступна новая версия');
-const navLabel = (page: Page) => page.getByRole('navigation').first().getByRole('link', { name: /^Настройки/ });
+const navLabel = (page: Page) => page.getByRole('navigation').first().getByRole('link', { name: /^Ещё/ });
 
 async function openA(ctx: BrowserContext): Promise<Page> {
   const page = await ctx.newPage();
@@ -75,7 +75,7 @@ test('A открыта, выложена B: подсказка «Доступн�
   const errors: string[] = [];
   const page = await openA(ctx);
   page.on('pageerror', (e) => errors.push(e.message));
-  await expect(navLabel(page)).toHaveText('Настройки A');
+  await expect(navLabel(page)).toHaveText('Ещё A');
   await addExpense(page, '321');
 
   // человек посреди ввода новой операции
@@ -92,8 +92,8 @@ test('A открыта, выложена B: подсказка «Доступн�
   // пока не нажали «Обновить»: всё ещё A, шит и введённая сумма на месте
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('input.money').first()).toHaveValue('55');
-  expect(await page.evaluate(() => document.body.textContent)).toContain('Настройки A');
-  expect(await page.evaluate(() => document.body.textContent)).not.toContain('Настройки B');
+  expect(await page.evaluate(() => document.body.textContent)).toContain('Ещё A');
+  expect(await page.evaluate(() => document.body.textContent)).not.toContain('Ещё B');
   // кнопка «Обновить» доступна, даже когда открыт шит (не закрыта им)
   await page.getByRole('button', { name: 'Обновить' }).click({ trial: true });
 
@@ -107,7 +107,7 @@ test('A открыта, выложена B: подсказка «Доступн�
 
   // «Обновить»
   await page.getByRole('button', { name: 'Обновить' }).click();
-  await expect(navLabel(page)).toHaveText('Настройки B', { timeout: 20_000 });
+  await expect(navLabel(page)).toHaveText('Ещё B', { timeout: 20_000 });
   await expect(prompt(page)).toHaveCount(0);
   await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
   await expect(page.getByRole('heading', { name: 'Кошельки B' })).toBeVisible();
@@ -127,7 +127,7 @@ test('A открыта, выложена B: подсказка «Доступн�
   // и без сети работает B целиком
   await ctx.setOffline(true);
   await page.reload();
-  await expect(navLabel(page)).toHaveText('Настройки B');
+  await expect(navLabel(page)).toHaveText('Ещё B');
   await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
   await expect(page.getByRole('heading', { name: 'Кошельки B' })).toBeVisible();
   expect(errors).toEqual([]);
@@ -148,7 +148,7 @@ test('«Позже» не ломает приложение; после пере
   await expect(page.getByRole('heading', { name: 'Кошельки A' })).toBeVisible();
   // обычная перезагрузка вкладки: воркер B ещё ждёт, страница всё ещё A целиком, подсказка снова на месте
   await page.reload();
-  await expect(navLabel(page)).toHaveText('Настройки A');
+  await expect(navLabel(page)).toHaveText('Ещё A');
   await expect(prompt(page)).toBeVisible({ timeout: 15_000 });
   await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
   await expect(page.getByRole('heading', { name: 'Кошельки A' })).toBeVisible();
@@ -171,7 +171,7 @@ test('Закрыли ВСЕ вкладки и открыли заново: ср�
   // воркер B может сменить A не сразу (ждёт, пока закроются клиенты): допускается ровно одна из двух согласованных версий
   const label = await navLabel(p2).textContent();
   await p2.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
-  const heading = label === 'Настройки B' ? 'Кошельки B' : 'Кошельки A';
+  const heading = label === 'Ещё B' ? 'Кошельки B' : 'Кошельки A';
   await expect(p2.getByRole('heading', { name: heading })).toBeVisible();
   await p2.goto(`${srv.url}#/transactions`);
   await expect(p2.getByText('−12 с.').first()).toBeVisible();
@@ -188,9 +188,9 @@ test('Вторая вкладка: после «Обновить» в перво
   await expect(prompt(tab1)).toBeVisible({ timeout: 15_000 });
   await expect(prompt(tab2)).toBeVisible({ timeout: 15_000 });
   await tab1.getByRole('button', { name: 'Обновить' }).click();
-  await expect(navLabel(tab1)).toHaveText('Настройки B', { timeout: 20_000 });
+  await expect(navLabel(tab1)).toHaveText('Ещё B', { timeout: 20_000 });
   // вкладка 2 ещё не открывала «Кошельки»: если бы она осталась на A, чанк A уже пропал бы
-  await expect(navLabel(tab2)).toHaveText('Настройки B', { timeout: 20_000 });
+  await expect(navLabel(tab2)).toHaveText('Ещё B', { timeout: 20_000 });
   await tab2.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
   await expect(tab2.getByRole('heading', { name: 'Кошельки B' })).toBeVisible();
   await ctx.close();
@@ -206,10 +206,10 @@ test('Вторая вкладка с НЕСОХРАНЁННЫМ вводом н�
   await checkUpdate(tab1);
   await expect(prompt(tab1)).toBeVisible({ timeout: 15_000 });
   await tab1.getByRole('button', { name: 'Обновить' }).click();
-  await expect(navLabel(tab1)).toHaveText('Настройки B', { timeout: 20_000 });
+  await expect(navLabel(tab1)).toHaveText('Ещё B', { timeout: 20_000 });
   await tab2.waitForTimeout(3000);
   // Человек во второй вкладке не нажимал «Обновить», а набранная сумма пропала бы при перезагрузке.
-  expect(await tab2.evaluate(() => document.body.textContent)).toContain('Настройки A');
+  expect(await tab2.evaluate(() => document.body.textContent)).toContain('Ещё A');
   await expect(tab2.getByRole('dialog').locator('input.money').first()).toHaveValue('99');
   await ctx.close();
 });
@@ -224,13 +224,13 @@ test('Вторая вкладка с вводом: как только ввод 
   await checkUpdate(tab1);
   await expect(prompt(tab1)).toBeVisible({ timeout: 15_000 });
   await tab1.getByRole('button', { name: 'Обновить' }).click();
-  await expect(navLabel(tab1)).toHaveText('Настройки B', { timeout: 20_000 });
+  await expect(navLabel(tab1)).toHaveText('Ещё B', { timeout: 20_000 });
   // пока окно открыто, вторая вкладка остаётся на A и честно говорит, что приложение уже обновлено
   await expect(tab2.getByText('Приложение обновлено')).toBeVisible({ timeout: 10_000 });
-  expect(await tab2.evaluate(() => document.body.textContent)).toContain('Настройки A');
+  expect(await tab2.evaluate(() => document.body.textContent)).toContain('Ещё A');
   // человек закрыл окно — вкладка переходит на B без нажатий
   await tab2.keyboard.press('Escape');
-  await expect(navLabel(tab2)).toHaveText('Настройки B', { timeout: 15_000 });
+  await expect(navLabel(tab2)).toHaveText('Ещё B', { timeout: 15_000 });
   await ctx.close();
 });
 
@@ -295,7 +295,7 @@ test('Выпущенная версия «падает» при отрисовк
     .catch(() => 'страница как раз перезагружается');
   console.log('После «Перезагрузить»:', JSON.stringify(state));
   // Ожидание: после перезагрузки (исправление уже на сервере) человек получает рабочее приложение, а не тот же экран ошибки.
-  await expect(navLabel(page), `остался на сломанной версии (${JSON.stringify(state)}): исправленная версия не применяется`).toHaveText('Настройки B', {
+  await expect(navLabel(page), `остался на сломанной версии (${JSON.stringify(state)}): исправленная версия не применяется`).toHaveText('Ещё B', {
     timeout: 15_000,
   });
   await ctx.close();
@@ -303,7 +303,7 @@ test('Выпущенная версия «падает» при отрисовк
 
 test('Выпущенная версия «падает» при отрисовке, человек ничего не нажимает: исправленная версия ставится сама, потому что на экране ошибки терять нечего', async ({ browser }) => {
   const { ctx, page } = await crashScenario(browser);
-  await expect(navLabel(page)).toHaveText('Настройки B', { timeout: 20_000 });
+  await expect(navLabel(page)).toHaveText('Ещё B', { timeout: 20_000 });
   await expect(page.getByText('Что-то пошло не так')).toHaveCount(0);
   await ctx.close();
 });
@@ -325,7 +325,7 @@ test('«Позже» нажали до поломки: исправление в
   // …и после этого сломанная версия падает на его данных прямо во время работы (без перезагрузки; воркер B всё ещё ждёт).
   await page.evaluate(() => localStorage.setItem('finora-test-crash', '1'));
   await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
-  await expect(navLabel(page)).toHaveText('Настройки B', { timeout: 20_000 });
+  await expect(navLabel(page)).toHaveText('Ещё B', { timeout: 20_000 });
   await expect(page.getByText('Что-то пошло не так')).toHaveCount(0);
   await ctx.close();
 });
