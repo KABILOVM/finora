@@ -1,87 +1,52 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#eef0fb">
-  <meta name="description" content="Персональный финансовый учёт: кошельки, расходы, бюджеты и прогноз до зарплаты.">
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
-  <title>Finora — личные финансы</title>
-</head>
-<body>
-<div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
-<div class="app-shell">
-  <aside class="sidebar glass">
-    <div class="brand"><div class="brand-mark" aria-label="Finora"><svg viewBox="0 0 48 48" class="logo" aria-hidden="true"><defs><linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6a6cff"/><stop offset="1" stop-color="#9a5cf7"/></linearGradient><radialGradient id="bg2" cx=".28" cy=".1" r=".95"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="bgf" gradientUnits="userSpaceOnUse" x1="0" y1="10" x2="0" y2="38"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#e4defd"/></linearGradient></defs><rect width="48" height="48" rx="15" fill="url(#bg1)"/><rect width="48" height="48" rx="15" fill="url(#bg2)"/><g transform="translate(5.1 0) skewX(-12)"><path d="M16 11H36V17.4H23V21.8H32V28H23V37H16Z" fill="url(#bgf)" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></g></svg></div></div>
-    <nav id="sideNav" aria-label="Разделы">
-      <button class="nav-item active" data-view="dashboard" aria-label="Обзор"><svg class="ic"><use href="#i-home"/></svg><span>Обзор</span></button>
-      <button class="nav-item" data-view="transactions" aria-label="Операции"><svg class="ic"><use href="#i-list"/></svg><span>Операции</span></button>
-      <button class="nav-item" data-view="wallets" aria-label="Кошельки"><svg class="ic"><use href="#i-wallet"/></svg><span>Кошельки</span></button>
-      <button class="nav-item" data-view="budgets" aria-label="Бюджеты"><svg class="ic"><use href="#i-target"/></svg><span>Бюджеты</span></button>
-      <button class="nav-item" data-view="analytics" aria-label="Аналитика"><svg class="ic"><use href="#i-chart"/></svg><span>Аналитика</span></button>
-      <button class="nav-item" data-view="settings" aria-label="Настройки"><svg class="ic"><use href="#i-settings"/></svg><span>Настройки</span></button>
-    </nav>
-    <div class="sidebar-bottom" id="syncBadge" title="Локальный режим"><div class="sync-dot"></div></div>
-  </aside>
-  <main class="main">
-    <header class="topbar">
-      <div><div class="eyebrow" id="todayLabel"></div><h1 id="pageTitle">Обзор</h1></div>
-      <div class="top-actions">
-        <button class="icon-btn" id="themeToggle" aria-label="Сменить тему"></button>
-        <button class="primary-btn" id="quickAdd" aria-label="Добавить операцию"><svg class="ic"><use href="#i-plus"/></svg><span>Добавить</span></button>
-      </div>
-    </header>
-    <section id="viewRoot"></section>
-  </main>
-</div>
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Политика безопасности страницы (CSP): запрещает всё, что не перечислено. Если кто-то сумеет подсунуть в страницу
+      чужой скрипт (XSS), браузер его не выполнит, а токен входа Supabase (лежит в localStorage) не уйдёт на чужой сервер.
+      Это ПОЛНАЯ политика. Заголовок из vercel.json добавляет к ней только frame-ancestors 'none' (в <meta> эта директива
+      не работает); браузер применяет оба вместе, и действует более строгое из двух.
+      Две метки внутри content ниже заменяет плагин finoraCsp в vite.config.ts (при сборке и в `npm run dev`), руками их не трогать:
+        метка SUPABASE_CONNECT (между двойными «@») — точные адреса Supabase из VITE_SUPABASE_URL: `https://<хост>` и `wss://<хост>`. Если облака нет
+          (переменных нет или в них заготовки из .env.example), адресов Supabase в политике нет вовсе. Подстановки *.supabase.co
+          нет нарочно: с ней при XSS данные можно было бы выгрузить в ЧУЖОЙ проект Supabase, а свой домен Supabase
+          (не *.supabase.co) браузер блокировал бы. Сменили VITE_SUPABASE_URL — нужна новая сборка.
+        метка DEV_STYLE (между двойными «@») — `'unsafe-inline'` для стилей ТОЛЬКО в `npm run dev`: там Vite вставляет CSS тегом <style>, и при
+          строгой политике страница в разработке остаётся без стилей (проверено). В сборке стили лежат файлом, а React ставит
+          style={{…}} через CSSOM (element.style.x = …), которое политика не блокирует (проверено в браузере на всех экранах),
+          поэтому в сборке style-src строгий: 'self'.
+      script-src 'self' — без unsafe-inline/unsafe-eval: в сборке нет встроенных скриптов (Vite и PWA кладут только файлы).
+      connect-src: nbt.tj, jsdelivr.net, currency-api.pages.dev — курсы валют (src/rates).
+      Тест e2e/sec/csp.spec.ts проверяет и этот файл, и собранный результат.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'@@DEV_STYLE@@; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'@@SUPABASE_CONNECT@@ https://www.nbt.tj https://cdn.jsdelivr.net https://latest.currency-api.pages.dev; worker-src 'self'; manifest-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
+    <!-- Адрес приложения не уходит в запросах к источникам курсов и по ссылкам (дублирует заголовок Referrer-Policy из vercel.json). -->
+    <meta name="referrer" content="no-referrer" />
+    <!-- Масштабирование НЕ запрещаем (доступность). viewport-fit=cover — чтобы работали safe-area на iPhone. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Finora — учёт денег</title>
+    <meta name="description" content="Личный учёт расходов и доходов. Работает без интернета." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4f6f8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
 
-<div class="auth loading" id="authScreen">
-  <div class="auth-card glass">
-    <div class="auth-logo" id="authLogo"></div>
-    <h2 class="auth-title">Finora</h2>
-    <div class="segmented" id="authTabs" role="tablist">
-      <button type="button" data-mode="login" class="selected">Вход</button>
-      <button type="button" data-mode="signup">Регистрация</button>
-    </div>
-    <form id="authForm" class="form" novalidate>
-      <label class="field-pill wide"><svg class="ic"><use href="#i-mail"/></svg><input id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="Email" aria-label="Email"></label>
-      <label class="field-pill wide"><svg class="ic"><use href="#i-lock"/></svg><input id="authPass" type="password" autocomplete="current-password" placeholder="Пароль" aria-label="Пароль"><button type="button" class="eye" id="authEye" aria-label="Показать пароль"><svg class="ic"><use href="#i-eye"/></svg></button></label>
-      <div class="auth-msg" id="authMsg" role="alert"></div>
-      <button class="primary-btn big" type="submit" id="authSubmit"><span class="spin"></span><span id="authSubmitText">Войти</span></button>
-    </form>
-    <button type="button" class="text-btn" id="authGuest">Без аккаунта</button>
-  </div>
-</div>
+    <!-- iOS: запуск с экрана «Домой» как приложение -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Finora" />
+    <meta name="format-detection" content="telephone=no" />
 
-<div class="modal-backdrop" id="modalBackdrop" hidden>
-  <form class="modal" id="transactionForm" novalidate>
-    <div class="sheet-grip" id="sheetGrip"></div>
-    <div class="modal-head" id="sheetHead">
-      <div class="segmented" id="typeSegments" role="tablist">
-        <button type="button" data-type="expense" class="selected"><svg class="ic"><use href="#i-expense"/></svg><span>Расход</span></button>
-        <button type="button" data-type="income"><svg class="ic"><use href="#i-income"/></svg><span>Доход</span></button>
-        <button type="button" data-type="transfer"><svg class="ic"><use href="#i-transfer"/></svg><span>Перевод</span></button>
-      </div>
-      <button type="button" class="icon-btn danger" id="sheetDelete" aria-label="Удалить" title="Удалить" hidden><svg class="ic"><use href="#i-trash"/></svg></button>
-      <button type="button" class="icon-btn" id="closeModal" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></button>
-    </div>
-    <div class="amount-field"><input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0" aria-label="Сумма" autocomplete="off"><span class="cur-badge" id="currencyLabel">TJS</span></div>
-    <div id="sheetBody"></div>
-    <div class="sheet-row">
-      <label class="field-pill"><svg class="ic"><use href="#i-calendar"/></svg><input id="date" type="date" required aria-label="Дата"></label>
-      <button type="button" class="field-pill toggle" id="recurring" aria-pressed="false" aria-label="Повторять каждый месяц"><svg class="ic"><use href="#i-repeat"/></svg><span>Каждый месяц</span></button>
-    </div>
-    <label class="field-pill wide"><svg class="ic"><use href="#i-pen"/></svg><input id="note" maxlength="180" placeholder="Заметка" aria-label="Заметка"></label>
-    <button class="primary-btn big" type="submit"><svg class="ic"><use href="#i-tick"/></svg><span>Сохранить</span></button>
-  </form>
-</div>
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script defer src="./vendor/supabase.js"></script>
-<script defer src="./supabase-config.js"></script>
-<script defer src="./cloud.js"></script>
-<script defer src="./icons.js"></script>
-<script defer src="./app.js"></script>
-</body>
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>Для работы Finora нужен включённый JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

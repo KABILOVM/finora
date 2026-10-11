@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Дизайн-токены. Значения — «R G B» (для модификаторов прозрачности: bg-brand/10).
+ * Светлая тема по умолчанию, тёмная — по prefers-color-scheme.
+ * Контраст текста проверен на WCAG AA (≥ 4.5:1) для всех пар «цвет текста на фоне»;
+ * --border-strong (рамки полей ввода) — ≥ 3:1.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: 244 246 248;
+  --surface: 255 255 255;
+  --surface-2: 236 240 244;
+  --text: 15 23 42;
+  --muted: 82 96 115;
+  --border: 218 224 232;
+  --border-strong: 116 128 145;
+  --brand: 4 110 80;
+  --brand-hover: 3 90 66;
+  --on-brand: 255 255 255;
+  --danger: 185 28 28;
+  --income: 4 110 80;
+  --expense: 190 18 60;
+  --warning: 146 64 14;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 15 23 42;
+    --surface: 24 34 54;
+    --surface-2: 34 46 70;
+    --text: 241 245 249;
+    --muted: 160 174 192;
+    --border: 45 58 82;
+    --border-strong: 112 128 150;
+    --brand: 52 211 153;
+    --brand-hover: 110 231 183;
+    --on-brand: 5 30 22;
+    --danger: 248 113 113;
+    --income: 74 222 128;
+    --expense: 251 113 133;
+    --warning: 251 191 36;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    background-color: rgb(var(--bg));
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--text));
+    font-family: theme('fontFamily.sans');
+    font-size: 16px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    /* Резиновая прокрутка за краем страницы не должна «дёргать» шапку и нижнюю панель. */
+    overscroll-behavior-y: none;
+  }
+
+  /* iOS приближает страницу, если у поля шрифт < 16px, поэтому у всех полей — минимум 16px. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Убирает задержку двойного тапа, но НЕ запрещает щипок-масштабирование. */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+  }
+
+  /* Строки списка лежат в карточках с overflow-hidden: рамка фокуса снаружи обрезалась бы, поэтому внутри таких карточек она рисуется внутрь. */
+  .overflow-hidden :focus-visible {
+    outline-offset: -2px;
+  }
+
+  ::selection {
+    background-color: rgb(var(--brand) / 0.25);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Числа с одинаковой шириной цифр: суммы не «прыгают» при изменении. */
+  .money {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /*
+   * Индикаторы в шапке телефона: всегда ОДНА строка. Если места мало, длинная подпись первого индикатора сокращается «…»
+   * (полный текст — в подсказке title), а «Офлайн» (data-keep) не сжимается и остаётся виден целиком.
+   */
+  .header-status {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+  }
+  .header-status > * {
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
+  }
+  .header-status > [data-keep] {
+    flex-shrink: 0;
+  }
+  .header-status > * > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Строка с горизонтальной прокруткой без полосы (чипы периода): прокручивается пальцем, полоса не занимает место. */
+  .scroll-x-quiet {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-x-quiet::-webkit-scrollbar {
+    display: none;
+  }
+}
