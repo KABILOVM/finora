@@ -8,14 +8,26 @@ import { dismissToasts, expect, goSection, isPhone, money, norm, openApp, sheet,
 const overflowX = (page: Page) =>
   page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
 
-/** Элементы внутри main (или окна), правый край которых уходит за правый край экрана. */
+/**
+ * Элементы внутри main (или окна), правый край которых уходит за правый край экрана. Не считается выходом то, что обрезано
+ * родителем с overflow (hidden/clip/auto/scroll), чей край на экране: например, декоративные круги в карточке «Всего»
+ * на «Главной» (overflow-hidden) или полоса чипов, которую листают пальцем. Страница при этом не едет вбок — это проверяет overflowX.
+ */
 const spillingOut = (page: Page, root = 'main') =>
   page.evaluate((sel) => {
     const vw = document.documentElement.clientWidth;
+    const top = document.querySelector(sel);
+    const clipped = (el: Element): boolean => {
+      for (let p = el.parentElement; p && p !== top; p = p.parentElement) {
+        const ox = getComputedStyle(p).overflowX;
+        if (ox !== 'visible' && p.getBoundingClientRect().right <= vw + 0.5) return true;
+      }
+      return false;
+    };
     const out: string[] = [];
     for (const el of Array.from(document.querySelectorAll(`${sel} *`))) {
       const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.right > vw + 0.5) out.push(`${el.tagName.toLowerCase()}[${(el.textContent ?? '').trim().slice(0, 40)}] right=${Math.round(r.right)} vw=${vw}`);
+      if (r.width > 0 && r.right > vw + 0.5 && !clipped(el)) out.push(`${el.tagName.toLowerCase()}[${(el.textContent ?? '').trim().slice(0, 40)}] right=${Math.round(r.right)} vw=${vw}`);
     }
     return out;
   }, root);

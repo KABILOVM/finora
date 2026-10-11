@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BrowserContext, CDPSession, Locator, Page, Request, Route, Worker } from '@playwright/test';
 import { activateServiceWorker, expect, goSection, openApp, shot, test } from '../helpers';
-import { DIST, buildVariant, headersFor, startHeaderServer, type HeaderServer } from '../sec/helpers';
+import { DIST, SEC_TMP, buildVariant, headersFor, startHeaderServer, type HeaderServer } from '../sec/helpers';
 
 /* Этап 3, напоминания (push), сторона приложения: (1) локальный режим; (2) НАСТОЯЩИЙ приём push в Chromium (CDP deliverPushMessage);
  * (3) облачная сборка с подменёнными Supabase и PushManager (настоящий push-сервис без интернета недоступен): что уходит в сеть.
@@ -228,16 +228,22 @@ interface Cloud {
 }
 
 let srv: HeaderServer | null = null;
+let variantName: string | null = null;
 
 async function cloudServer(): Promise<HeaderServer> {
   if (srv) return srv;
-  const dir = buildVariant('reminders-cloud', { VITE_SUPABASE_URL: SUPA, VITE_SUPABASE_ANON_KEY: ANON, VITE_VAPID_PUBLIC_KEY: VAPID_PUBLIC });
+  // Своя папка сборки на каждый запуск: общая «reminders-cloud» в /tmp пересобирается (--emptyOutDir) любым параллельным прогоном
+  // этого файла, и сервер на миг отдаёт 404 на sw.js («A bad HTTP response code (404) was received when fetching the script»).
+  variantName = `reminders-cloud-${process.pid}`;
+  const dir = buildVariant(variantName, { VITE_SUPABASE_URL: SUPA, VITE_SUPABASE_ANON_KEY: ANON, VITE_VAPID_PUBLIC_KEY: VAPID_PUBLIC });
   srv = await startHeaderServer(dir);
   return srv;
 }
 test.afterAll(async () => {
   await srv?.close();
   srv = null;
+  if (variantName) rmSync(join(SEC_TMP, variantName), { recursive: true, force: true });
+  variantName = null;
 });
 
 /** Заглушка Supabase: вход, две таблицы напоминаний (в памяти), функция send-reminders; остальные таблицы пустые. */

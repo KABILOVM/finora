@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addTx, createWallet, dismissToasts, expect, goSection, isPhone, money, norm, openApp, shot, sheet, tapAmount, test } from '../helpers';
+import { addTx, createWallet, dismissToasts, expect, goSection, isPhone, money, norm, openApp, openCategories, shot, sheet, tapAmount, test } from '../helpers';
 
 /**
  * Атаки «ломателя» на экран «Бюджеты»: самый узкий телефон (320px), длинные суммы и длинные названия.
@@ -22,14 +22,26 @@ async function addLimit(page: Page, scope: string, amount: string): Promise<void
   await dismissToasts(page);
 }
 
-/** Элементы внутри main, правый край которых уходит за правый край экрана. */
+/**
+ * Элементы внутри main, правый край которых уходит за правый край экрана. Не считается выходом то, что обрезано родителем
+ * с overflow (hidden/clip/auto/scroll), чей край на экране: например, декоративные круги в карточке «Всего» (overflow-hidden)
+ * или полоса кошельков, которую листают пальцем. Страница при этом не едет вбок — это проверяет overflowX.
+ */
 const spillingOut = (page: Page) =>
   page.evaluate(() => {
     const vw = document.documentElement.clientWidth;
+    const main = document.querySelector('main');
+    const clipped = (el: Element): boolean => {
+      for (let p = el.parentElement; p && p !== main; p = p.parentElement) {
+        const ox = getComputedStyle(p).overflowX;
+        if (ox !== 'visible' && p.getBoundingClientRect().right <= vw + 0.5) return true;
+      }
+      return false;
+    };
     const out: string[] = [];
     for (const el of Array.from(document.querySelectorAll('main *'))) {
       const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.right > vw + 0.5) out.push(`${el.tagName.toLowerCase()}[${(el.textContent ?? '').trim().slice(0, 40)}] right=${Math.round(r.right)} vw=${vw}`);
+      if (r.width > 0 && r.right > vw + 0.5 && !clipped(el)) out.push(`${el.tagName.toLowerCase()}[${(el.textContent ?? '').trim().slice(0, 40)}] right=${Math.round(r.right)} vw=${vw}`);
     }
     return out;
   });
@@ -70,8 +82,7 @@ test.describe('16-adv. Бюджеты на самом узком телефон�
     await openApp(page);
 
     const longName = 'Ж'.repeat(40) + 'ааааааааааааааааааааааааааааааааааа';
-    await goSection(page, 'Ещё');
-    await page.getByRole('main').getByRole('link', { name: 'Категории', exact: true }).click();
+    await openCategories(page);
     await page.getByRole('button', { name: 'Добавить', exact: true }).click();
     const cat = sheet(page, 'Новая категория расходов');
     await cat.getByRole('textbox', { name: 'Название' }).fill(longName);
@@ -96,6 +107,8 @@ test.describe('16-adv. Бюджеты на самом узком телефон�
     expect(o2.scroll, `шит: страница шире экрана (${o2.scroll} > ${o2.client})`).toBeLessThanOrEqual(o2.client);
     const box = await edit.boundingBox();
     expect(box!.x + box!.width, 'шит шире экрана').toBeLessThanOrEqual(320 + 0.5);
+    const close = await edit.getByRole('button', { name: 'Закрыть', exact: true }).boundingBox();
+    expect(close!.x + close!.width, 'кнопка «Закрыть» ушла за правый край: длинное название растянуло заголовок шита').toBeLessThanOrEqual(320 + 0.5);
     const save = await edit.getByRole('button', { name: 'Сохранить', exact: true }).boundingBox();
     expect(save!.y + save!.height, 'кнопка «Сохранить» ушла за низ экрана').toBeLessThanOrEqual(568);
   });

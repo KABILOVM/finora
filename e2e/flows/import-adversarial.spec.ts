@@ -1,4 +1,4 @@
-import { expect, openApp, openFromMore, test } from '../helpers';
+import { expect, goSection, openApp, test } from '../helpers';
 
 /**
  * Узкий экран 320 px (iPhone SE, маленькие Android). Строка перевода в предпросмотре показывает обе суммы без переноса
@@ -18,7 +18,10 @@ const CSV =
 test('320 px: название перевода в предпросмотре не ломается по букве в столбик', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'узкий экран задан в самом тесте; одного проекта достаточно');
   await openApp(page);
-  await openFromMore(page, 'Импорт из Zenmoney');
+  // Импорт лежит внутри «Настроек»: Настройки → строка «Импорт из Zenmoney»
+  await goSection(page, 'Настройки');
+  await page.getByRole('main').getByRole('link', { name: 'Импорт из Zenmoney', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Импорт из Zenmoney' })).toBeVisible();
   await page.getByLabel('Файл Zenmoney').setInputFiles({ name: 'z.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV, 'utf8') });
   await expect(page.getByRole('region', { name: 'Итоги разбора файла' })).toBeVisible();
 

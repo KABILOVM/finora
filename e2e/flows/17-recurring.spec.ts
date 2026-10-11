@@ -30,7 +30,15 @@ async function addRule(page: Page, r: RuleInput): Promise<void> {
   await expect(dlg).toBeVisible();
   if (r.wallet) await dlg.getByRole('group', { name: 'Кошелёк' }).getByRole('button', { name: new RegExp(r.wallet) }).click();
   await dlg.getByRole('textbox', { name: /^Сумма/ }).fill(r.amount);
-  if (r.category) await dlg.getByRole('group', { name: 'Категория' }).getByRole('button', { name: r.category, exact: true }).click();
+  if (r.category) {
+    const group = dlg.getByRole('group', { name: 'Категория' });
+    const chip = group.getByRole('button', { name: r.category, exact: true });
+    await group.getByRole('button').first().waitFor();
+    // видны только самые частые категории: остальные под кнопкой «Ещё N»
+    if ((await chip.count()) === 0) await group.getByRole('button', { name: /^Ещё/ }).click();
+    await chip.click();
+    await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  }
   await dlg.getByRole('textbox', { name: 'Название или заметка' }).fill(r.note);
   if (r.frequency) await dlg.getByRole('group', { name: 'Периодичность' }).getByRole('button', { name: r.frequency, exact: true }).click();
   if (r.start) await dlg.getByLabel('Первый платёж').fill(r.start);

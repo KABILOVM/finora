@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { makeBigCsv } from '../../src/import/__fixtures__/bigCsv';
-import { expect, goSection, isPhone, money, norm, openApp, openFromMore, shot, test, walletRowText } from '../helpers';
+import { expect, goSection, isPhone, money, norm, openApp, shot, test, walletRowText } from '../helpers';
 
 const FIXTURES = join(process.cwd(), 'src', 'import', '__fixtures__');
 const fixture = (name: string) => ({ name, mimeType: 'text/csv', buffer: readFileSync(join(FIXTURES, name)) });
@@ -40,8 +40,10 @@ const rateField = (page: Page, cur: string): Locator => page.getByRole('textbox'
 const walletSelect = (page: Page, account: string): Locator => page.getByRole('combobox', { name: `Кошелёк для счёта «${account}»` });
 const selectedText = (select: Locator): Promise<string> => select.evaluate((el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent ?? '');
 
+/** Импорт лежит внутри «Настроек» (и на телефоне, и на ПК): Настройки → строка «Импорт из Zenmoney». */
 async function openImport(page: Page): Promise<void> {
-  await openFromMore(page, 'Импорт из Zenmoney');
+  await goSection(page, 'Настройки');
+  await page.getByRole('main').getByRole('link', { name: 'Импорт из Zenmoney', exact: true }).click();
   await expect(heading1(page)).toBeVisible();
 }
 

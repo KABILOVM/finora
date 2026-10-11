@@ -129,7 +129,7 @@ export default function UpcomingWidget() {
         <h2 id="home-upcoming" className="text-lg font-bold">
           Ближайшие платежи
         </h2>
-        <Link to="/recurring" className="inline-flex min-h-[44px] items-center text-base font-semibold text-brand">
+        <Link to="/recurring" className="inline-flex min-h-[44px] shrink-0 items-center text-base font-semibold text-brand">
           Все платежи
         </Link>
       </div>
