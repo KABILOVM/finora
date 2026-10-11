@@ -104,7 +104,7 @@ describe('схема: структура', () => {
         )
       ).rows[0];
     const before = await snapshot();
-    expect(before).toMatchObject({ policies: 22, triggers: 7 }); // 3 политики × 7 таблиц + 1 у курсов; по триггеру на каждую из 7 таблиц синхронизации
+    expect(before).toMatchObject({ policies: 28, triggers: 7 }); // 3 политики × 9 таблиц (7 синхронизации + подписки и настройки напоминаний) + 1 у курсов; по триггеру на каждую из 7 таблиц синхронизации
     const { userId } = await userWithWallet();
     await server.applySchema();
     await server.applySchema();
@@ -112,17 +112,18 @@ describe('схема: структура', () => {
     expect(await server.transportFor(userId).pull('wallets', 0, 10)).toHaveLength(1);
   });
 
-  it('каталог: у всех 8 таблиц public включена RLS; политик 22 (select/insert/update × 7 таблиц + 1 у курсов), других нет', async () => {
+  it('каталог: у всех 11 таблиц public включена RLS; политик 28 (select/insert/update × 9 таблиц + 1 у курсов), других нет', async () => {
     const tables = await server.db.query<{ relname: string; relrowsecurity: boolean }>(
       `select relname, relrowsecurity from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' order by relname`,
     );
-    expect(tables.rows.map((r) => r.relname)).toEqual([...SYNC_TABLES, 'exchange_rates'].sort());
+    expect(tables.rows.map((r) => r.relname)).toEqual([...SYNC_TABLES, 'exchange_rates', 'push_log', 'push_subscriptions', 'reminder_settings'].sort());
     expect(tables.rows.every((r) => r.relrowsecurity)).toBe(true);
     const policies = await server.db.query<{ tablename: string; cmd: string; roles: string }>(
       `select tablename, cmd, roles::text as roles from pg_policies where schemaname = 'public' order by tablename, cmd`,
     );
-    expect(policies.rows).toHaveLength(22);
-    for (const t of SYNC_TABLES) {
+    expect(policies.rows).toHaveLength(28);
+    expect(policies.rows.filter((p) => p.tablename === 'push_log'), 'журнал отправленного: политик нет').toEqual([]);
+    for (const t of [...SYNC_TABLES, 'push_subscriptions', 'reminder_settings']) {
       const own = policies.rows.filter((p) => p.tablename === t);
       expect(own.map((p) => p.cmd).sort(), t).toEqual(['INSERT', 'SELECT', 'UPDATE']);
       expect(own.every((p) => p.roles === '{authenticated}'), t).toBe(true);

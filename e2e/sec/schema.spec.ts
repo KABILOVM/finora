@@ -343,4 +343,346 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
     const over = await run(asA, transfer(26, 1_000_000_000_000_001, null));
     expect('error' in over && over.error, 'комиссия больше предела').toContain('transactions_base_amount');
   });
+
+  /* -------------------------------------------------------------------------------------------
+   * Этап 3: напоминания (раздел 9). Эти таблицы пишет приложение (authenticated, только свои строки), а читает и чистит серверная
+   * функция send-reminders (service_role). Журнал push_log — только для функции.
+   * ----------------------------------------------------------------------------------------- */
+
+  const PUSH_TABLES = ['push_subscriptions', 'reminder_settings', 'push_log'] as const;
+  const EP = (n: number | string) => `https://fcm.googleapis.com/fcm/send/device-${n}`;
+  const P256 = 'p'.repeat(87);
+  const AUTH_KEY = 'a'.repeat(22);
+  const SUB_A = '51000000-0000-4000-8000-00000000000a';
+  const SUB_B = '51000000-0000-4000-8000-00000000000b';
+
+  type SubCols = Partial<Record<'id' | 'user_id' | 'device_id' | 'endpoint' | 'p256dh' | 'auth_secret' | 'user_agent', string>>;
+  const subInsert = (o: SubCols = {}, tail = '') => {
+    const row: Record<string, string> = { device_id: 'dev-1', endpoint: EP('x'), p256dh: P256, auth_secret: AUTH_KEY, ...o };
+    const cols = Object.keys(row);
+    return `insert into public.push_subscriptions (${cols.join(', ')}) values (${cols.map((c) => `'${row[c]}'`).join(', ')})${tail}`;
+  };
+  const settingsInsert = (cols: Record<string, string | number | boolean> = {}, tail = '') => {
+    const keys = Object.keys(cols);
+    return keys.length === 0
+      ? `insert into public.reminder_settings default values${tail}`
+      : `insert into public.reminder_settings (${keys.join(', ')}) values (${keys.map((k) => (typeof cols[k] === 'string' ? `'${cols[k]}'` : String(cols[k]))).join(', ')})${tail}`;
+  };
+  const asService: Who = { role: 'service_role' };
+  const sqlState = (r: { error: string; code: string } | { rows: unknown[] }): string => ('error' in r ? r.code : 'ok');
+  /** Начальные строки (по одной подписке и настройке у A и B); повторный вызов ничего не меняет. Нужны тестам, чтобы не зависеть от порядка. */
+  const seedPush = async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    await commit(asA, subInsert({ id: SUB_A, endpoint: EP('a-phone'), device_id: 'phone-a' }, ' on conflict do nothing'));
+    await commit(asB, subInsert({ id: SUB_B, endpoint: EP('b-phone'), device_id: 'phone-b' }, ' on conflict do nothing'));
+    await commit(asA, settingsInsert({ enabled: true, hour_local: 7, timezone: 'Asia/Dushanbe', show_details: true }, ' on conflict do nothing'));
+    await commit(asB, settingsInsert({ enabled: false, hour_local: 22 }, ' on conflict do nothing'));
+  };
+
+  test('напоминания: подписки A недоступны B — чтение, правка, перехват через upsert, вставка и перенос на чужой user_id', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    await commit(asA, subInsert({ id: SUB_A, endpoint: EP('a-phone'), device_id: 'phone-a' }));
+    // user_id по умолчанию = auth.uid(): клиент его не присылает
+    const owner = await db.query<{ user_id: string }>(`select user_id from public.push_subscriptions where id = '${SUB_A}'`);
+    expect(owner.rows).toEqual([{ user_id: A }]);
+
+    const seen = await run(asB, `select id from public.push_subscriptions`);
+    expect('rows' in seen && seen.rows, 'B читает подписки A').toEqual([]);
+    const upd = await run(asB, `update public.push_subscriptions set revoked_at = now(), p256dh = 'взлом' where id = '${SUB_A}'`);
+    expect('rowCount' in upd && upd.rowCount, 'B правит подписку A').toBe(0);
+    // вставка с чужим user_id и перехват строки через upsert по id и по (user_id, endpoint)
+    const foreign = await run(asB, subInsert({ id: SUB_B, user_id: A, endpoint: EP('b-forged') }));
+    expect('error' in foreign && foreign.code, 'вставка B с user_id = A').toBe('42501');
+    const takeId = await run(asB, subInsert({ id: SUB_A, endpoint: EP('a-phone') }, ` on conflict (id) do update set endpoint = excluded.endpoint, revoked_at = now()`));
+    expect('error' in takeId, 'перехват чужой строки по id').toBe(true);
+    const takeKey = await run(asB, subInsert({ user_id: A, endpoint: EP('a-phone') }, ` on conflict (user_id, endpoint) do update set p256dh = excluded.p256dh`));
+    expect('error' in takeKey && takeKey.code, 'перехват по (user_id, endpoint) с user_id = A').toBe('42501');
+    // перенос своей строки на чужого пользователя и смена чужой
+    await commit(asB, subInsert({ id: SUB_B, endpoint: EP('b-phone'), device_id: 'phone-b' }));
+    const move = await run(asB, `update public.push_subscriptions set user_id = '${A}' where id = '${SUB_B}'`);
+    expect('error' in move && move.code, 'перенос своей подписки на A').toBe('42501');
+    // тот же адрес у B — его собственная строка, строка A не затронута
+    const rows = await db.query<{ id: string; user_id: string; p256dh: string; revoked_at: string | null }>(`select id, user_id, p256dh, revoked_at from public.push_subscriptions where id in ('${SUB_A}', '${SUB_B}') order by id`);
+    expect(rows.rows).toEqual([
+      { id: SUB_A, user_id: A, p256dh: P256, revoked_at: null },
+      { id: SUB_B, user_id: B, p256dh: P256, revoked_at: null },
+    ]);
+  });
+
+  test('напоминания: настройки A недоступны B — чтение, правка, upsert, вставка с чужим user_id; свои создаются сами', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    await commit(asA, settingsInsert({ enabled: true, hour_local: 7, timezone: 'Asia/Dushanbe', show_details: true }));
+    const mine = await db.query(`select user_id, enabled, hour_local, show_details, remind_payments, remind_debts, remind_daily from public.reminder_settings where user_id = '${A}'`);
+    expect(mine.rows).toEqual([{ user_id: A, enabled: true, hour_local: 7, show_details: true, remind_payments: true, remind_debts: true, remind_daily: false }]);
+
+    const seen = await run(asB, `select * from public.reminder_settings`);
+    expect('rows' in seen && seen.rows, 'B читает настройки A').toEqual([]);
+    const upd = await run(asB, `update public.reminder_settings set enabled = false, hour_local = 1 where user_id = '${A}'`);
+    expect('rowCount' in upd && upd.rowCount, 'B правит настройки A').toBe(0);
+    const foreign = await run(asB, settingsInsert({ user_id: `${A}`, enabled: true }));
+    expect('error' in foreign && foreign.code, 'вставка B с user_id = A').toBe('42501');
+    const take = await run(asB, settingsInsert({ user_id: `${A}`, enabled: false }, ` on conflict (user_id) do update set enabled = excluded.enabled, hour_local = 0`));
+    expect('error' in take && take.code, 'перехват настроек A через upsert').toBe('42501');
+    // свои настройки B: user_id подставляется сервером; повторный upsert по user_id обновляет свою строку
+    await commit(asB, settingsInsert({ enabled: true, hour_local: 21 }));
+    await commit(asB, settingsInsert({ enabled: false, hour_local: 22 }, ` on conflict (user_id) do update set enabled = excluded.enabled, hour_local = excluded.hour_local`));
+    const bRows = await db.query(`select user_id, enabled, hour_local from public.reminder_settings where user_id = '${B}'`);
+    expect(bRows.rows).toEqual([{ user_id: B, enabled: false, hour_local: 22 }]);
+    const move = await run(asB, `update public.reminder_settings set user_id = '${A}' where user_id = '${B}'`);
+    expect('error' in move && move.code, 'перенос своих настроек на A').toBe('42501');
+    const still = await db.query(`select user_id, enabled, hour_local from public.reminder_settings where user_id = '${A}'`);
+    expect(still.rows).toEqual([{ user_id: A, enabled: true, hour_local: 7 }]);
+  });
+
+  test('напоминания: DELETE и TRUNCATE у authenticated невозможны на всех трёх таблицах; anon не может ничего', async () => {
+    await seedPush();
+    for (const t of PUSH_TABLES) {
+      for (const sql of [`delete from public.${t}`, `truncate public.${t}`]) {
+        const r = await run({ role: 'authenticated', sub: A }, sql);
+        expect('error' in r && r.code, `authenticated: ${sql}`).toBe('42501');
+      }
+      for (const sql of [`select * from public.${t}`, `delete from public.${t}`, `truncate public.${t}`]) {
+        const r = await run({ role: 'anon' }, sql);
+        expect('error' in r && r.code, `anon: ${sql}`).toBe('42501');
+      }
+    }
+    const anonIns = await run({ role: 'anon' }, subInsert({ endpoint: EP('anon') }));
+    expect('error' in anonIns && anonIns.code, 'anon вставляет подписку').toBe('42501');
+    const anonSet = await run({ role: 'anon' }, settingsInsert({ enabled: true }));
+    expect('error' in anonSet && anonSet.code, 'anon вставляет настройки').toBe('42501');
+    // подписки и настройки уцелели после всех попыток
+    const left = await db.query<{ n: number }>(`select count(*)::int as n from public.push_subscriptions where id in ('${SUB_A}', '${SUB_B}')`);
+    expect(left.rows).toEqual([{ n: 2 }]);
+  });
+
+  test('напоминания: журнал push_log недоступен ни anon, ни authenticated (ни одно из четырёх действий), а service_role работает', async () => {
+    const REF = 'r'.repeat(60);
+    for (const who of [{ role: 'anon' }, { role: 'authenticated', sub: A }] as Who[]) {
+      for (const sql of [
+        `select * from public.push_log`,
+        `insert into public.push_log (user_id, kind, ref, sent_on) values ('${A}', 'daily', 'day', '2026-10-10')`,
+        `update public.push_log set ref = 'x'`,
+        `delete from public.push_log`,
+        `select count(*) from public.push_log`,
+      ]) {
+        const r = await run(who, sql);
+        expect('error' in r && r.code, `${who.role}: ${sql}`).toBe('42501');
+      }
+    }
+    // функция (service_role): запись, повтор без ошибки, чтение, чистка
+    const ins = (kind: string, ref: string, day: string) => `insert into public.push_log (user_id, kind, ref, sent_on) values ('${A}', '${kind}', '${ref}', '${day}') on conflict (user_id, kind, ref, sent_on) do nothing returning ref`;
+    await commit(asService, ins('payment', REF, '2026-10-10'));
+    const dup = await run(asService, ins('payment', REF, '2026-10-10'));
+    expect('rows' in dup && dup.rows, 'повтор того же дня не создаёт строку и возвращает пусто').toEqual([]);
+    const nextDay = await run(asService, ins('payment', REF, '2026-10-11'));
+    expect('rows' in nextDay && nextDay.rows, 'на следующий день та же запись — новая').toEqual([{ ref: REF }]);
+    const otherKind = await run(asService, ins('debt', REF, '2026-10-10'));
+    expect('rows' in otherKind && otherKind.rows).toEqual([{ ref: REF }]);
+    const read = await run(asService, `select user_id, kind, to_char(sent_on, 'YYYY-MM-DD') as sent_on, created_at is not null as stamped from public.push_log`);
+    expect('rows' in read && read.rows).toEqual([{ user_id: A, kind: 'payment', sent_on: '2026-10-10', stamped: true }]);
+    const del = await run(asService, `delete from public.push_log where sent_on < '2026-10-11'`);
+    expect('rowCount' in del && del.rowCount).toBe(1);
+    await commit(asService, `delete from public.push_log`);
+  });
+
+  test('напоминания: служебная функция (service_role) читает подписки и настройки всех и отзывает подписку; в таблицах чужих пользователей не путается', async () => {
+    await seedPush();
+    const rows = await run(asService, `select user_id, endpoint from public.push_subscriptions where revoked_at is null order by endpoint`);
+    expect('rows' in rows && rows.rows.map((r) => r.user_id).sort()).toEqual([A, B]);
+    const revoke = await run(asService, `update public.push_subscriptions set revoked_at = now() where id = '${SUB_A}' and revoked_at is null returning id`);
+    expect('rows' in revoke && revoke.rows).toEqual([{ id: SUB_A }]);
+    const on = await run(asService, `select user_id from public.reminder_settings where enabled = true`);
+    expect('rows' in on && on.rows).toEqual([{ user_id: A }]);
+  });
+
+  test('напоминания: ограничения подписок отвергаются по имени (23514), границы принимаются; повтор адреса — 23505', async () => {
+    await seedPush();
+    const asA: Who = { role: 'authenticated', sub: A };
+    const bad: Array<[string, SubCols]> = [
+      ['push_subscriptions_endpoint_fmt', { endpoint: 'http://fcm.googleapis.com/fcm/send/x' }],
+      ['push_subscriptions_endpoint_fmt', { endpoint: 'HTTPS://fcm.googleapis.com/fcm/send/x' }],
+      ['push_subscriptions_endpoint_fmt', { endpoint: 'javascript:alert(1)//https://x' }],
+      ['push_subscriptions_endpoint_fmt', { endpoint: 'https://' }],
+      ['push_subscriptions_endpoint_fmt', { endpoint: `https://${'e'.repeat(2041)}` }],
+      ['push_subscriptions_keys_len', { p256dh: 'p'.repeat(19) }],
+      ['push_subscriptions_keys_len', { p256dh: 'p'.repeat(201) }],
+      ['push_subscriptions_keys_len', { auth_secret: 'a'.repeat(7) }],
+      ['push_subscriptions_keys_len', { auth_secret: 'a'.repeat(101) }],
+      ['push_subscriptions_device_len', { device_id: '' }],
+      ['push_subscriptions_device_len', { device_id: 'd'.repeat(65) }],
+      ['push_subscriptions_ua_len', { user_agent: 'u'.repeat(301) }],
+      ['push_subscriptions_ua_len', { user_agent: '😀'.repeat(301) }],
+    ];
+    for (const [name, cols] of bad) {
+      const r = await run(asA, subInsert({ endpoint: EP('bad'), ...cols }));
+      expect('error' in r && r.code, `${name} ${JSON.stringify(cols).slice(0, 50)}`).toBe('23514');
+      expect('error' in r && r.error, name).toContain(name);
+    }
+    const ok: SubCols[] = [
+      { endpoint: `https://${'e'.repeat(2040)}` }, // ровно 2048 знаков
+      { endpoint: 'https://a.b' + 'c' }, // ровно 12 знаков
+      { p256dh: 'p'.repeat(20), auth_secret: 'a'.repeat(8) },
+      { p256dh: 'p'.repeat(200), auth_secret: 'a'.repeat(100) },
+      { device_id: 'd' },
+      { device_id: 'д'.repeat(64) },
+      { user_agent: '' },
+      { user_agent: '😀'.repeat(300) },
+    ];
+    for (const [i, cols] of ok.entries()) {
+      const r = await run(asA, subInsert({ endpoint: EP(`ok-${i}`), ...cols }));
+      expect(sqlState(r), JSON.stringify(cols).slice(0, 60)).toBe('ok');
+    }
+    // один и тот же адрес у одного человека — одна строка
+    const dup = await run(asA, subInsert({ endpoint: EP('a-phone') }));
+    expect('error' in dup && dup.code).toBe('23505');
+    expect('error' in dup && dup.error).toContain('push_subscriptions_user_endpoint_key');
+  });
+
+  test('напоминания: ограничения настроек (час 0–23, длина часового пояса) и журнала (вид, длина ссылки) отвергаются по имени', async () => {
+    await seedPush();
+    const asB: Who = { role: 'authenticated', sub: B };
+    const cases: Array<[string, Record<string, string | number | boolean>]> = [
+      ['reminder_settings_hour', { hour_local: -1 }],
+      ['reminder_settings_hour', { hour_local: 24 }],
+      ['reminder_settings_hour', { hour_local: 99 }],
+      ['reminder_settings_tz_len', { timezone: '' }],
+      ['reminder_settings_tz_len', { timezone: 'z'.repeat(65) }],
+      ['reminder_settings_tz_len', { timezone: '😀'.repeat(65) }],
+    ];
+    for (const [name, cols] of cases) {
+      // user_id не передаём — берётся из входа; строка B есть (seedPush), поэтому бьём по upsert со своей же строкой
+      const r = await run(asB, settingsInsert(cols, ` on conflict (user_id) do update set ${Object.keys(cols).map((k) => `${k} = excluded.${k}`).join(', ')}`));
+      expect('error' in r && r.code, `${name} ${JSON.stringify(cols).slice(0, 40)}`).toBe('23514');
+      expect('error' in r && r.error, name).toContain(name);
+    }
+    const goodCases: Array<Record<string, string | number | boolean>> = [{ hour_local: 0 }, { hour_local: 23 }, { timezone: 'z' }, { timezone: 'я'.repeat(64) }, { timezone: '😀'.repeat(64) }];
+    for (const cols of goodCases) {
+      const r = await run(asB, settingsInsert(cols, ` on conflict (user_id) do update set ${Object.keys(cols).map((k) => `${k} = excluded.${k}`).join(', ')}`));
+      expect(sqlState(r), JSON.stringify(cols).slice(0, 40)).toBe('ok');
+    }
+    const junk = await run(asB, settingsInsert({ hour_local: 'девять' }, ` on conflict (user_id) do update set hour_local = excluded.hour_local`));
+    expect('error' in junk && junk.code, 'час — не число').toBe('22P02');
+    const flag = await run(asB, settingsInsert({ enabled: 'maybe' }, ` on conflict (user_id) do update set enabled = excluded.enabled`));
+    expect('error' in flag && flag.code, 'флаг — не boolean').toBe('22P02');
+
+    const log = (kind: string, ref: string) => `insert into public.push_log (user_id, kind, ref, sent_on) values ('${A}', '${kind}', '${ref}', '2026-10-10')`;
+    const k = await run(asService, log('weekly', 'x'));
+    expect('error' in k && k.code).toBe('23514');
+    expect('error' in k && k.error).toContain('push_log_kind');
+    const long = await run(asService, log('payment', 'r'.repeat(201)));
+    expect('error' in long && long.error).toContain('push_log_ref_len');
+    expect(sqlState(await run(asService, log('payment', 'r'.repeat(200))))).toBe('ok');
+    expect(sqlState(await run(asService, log('payment', '😀'.repeat(200))))).toBe('ok');
+    const ghost = await run(asService, `insert into public.push_log (user_id, kind, ref, sent_on) values ('99999999-9999-4999-8999-999999999999', 'daily', 'day', '2026-10-10')`);
+    expect('error' in ghost && ghost.code, 'журнал несуществующего пользователя').toBe('23503');
+  });
+
+  test('напоминания: свою подписку можно отозвать (revoked_at); повторное подключение той же подписки через upsert снимает отзыв и обновляет ключи', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    const ENDPOINT = EP('re-subscribe');
+    await commit(asA, subInsert({ endpoint: ENDPOINT, device_id: 'phone-a' }));
+    const before = await db.query<{ id: string }>(`select id from public.push_subscriptions where user_id = '${A}' and endpoint = '${ENDPOINT}'`);
+    expect(before.rows).toHaveLength(1);
+    const id = before.rows[0]!.id;
+
+    const revoke = await run(asA, `update public.push_subscriptions set revoked_at = now() where user_id = '${A}' and endpoint = '${ENDPOINT}'`);
+    expect('rowCount' in revoke && revoke.rowCount, 'A отзывает свою подписку').toBe(1);
+    await commit(asA, `update public.push_subscriptions set revoked_at = now() where endpoint = '${ENDPOINT}'`);
+    const foreignRevoke = await run(asB, `update public.push_subscriptions set revoked_at = null where endpoint = '${ENDPOINT}'`);
+    expect('rowCount' in foreignRevoke && foreignRevoke.rowCount, 'B снимает отзыв с подписки A').toBe(0);
+    const active = await db.query(`select id from public.push_subscriptions where endpoint = '${ENDPOINT}' and revoked_at is null`);
+    expect(active.rows, 'отозванная подписка не считается действующей').toEqual([]);
+
+    // то же устройство подключилось снова: upsert по (user_id, endpoint), как делает приложение
+    const upsert = `insert into public.push_subscriptions (device_id, endpoint, p256dh, auth_secret, user_agent, last_seen_at, revoked_at)
+      values ('phone-a-2', '${ENDPOINT}', '${'n'.repeat(87)}', '${'m'.repeat(22)}', 'Safari', now(), null)
+      on conflict (user_id, endpoint) do update set device_id = excluded.device_id, p256dh = excluded.p256dh, auth_secret = excluded.auth_secret,
+        user_agent = excluded.user_agent, last_seen_at = excluded.last_seen_at, revoked_at = excluded.revoked_at
+      returning id, revoked_at, p256dh`;
+    const r = await run(asA, upsert);
+    expect('rows' in r && r.rows).toEqual([{ id, revoked_at: null, p256dh: 'n'.repeat(87) }]);
+    await commit(asA, upsert);
+    const after = await db.query<{ id: string; revoked_at: string | null; device_id: string; auth_secret: string }>(`select id, revoked_at, device_id, auth_secret from public.push_subscriptions where endpoint = '${ENDPOINT}'`);
+    expect(after.rows).toEqual([{ id, revoked_at: null, device_id: 'phone-a-2', auth_secret: 'm'.repeat(22) }]); // одна строка, тот же id
+  });
+
+  test('напоминания: при удалении пользователя его подписки, настройки и журнал удаляются каскадом, чужие остаются', async () => {
+    const GONE = '77777777-7777-4777-8777-777777777777';
+    await db.exec(`insert into auth.users (id) values ('${GONE}')`);
+    const asGone: Who = { role: 'authenticated', sub: GONE };
+    await commit(asGone, subInsert({ endpoint: EP('gone') }));
+    await commit(asGone, settingsInsert({ enabled: true }));
+    await commit(asService, `insert into public.push_log (user_id, kind, ref, sent_on) values ('${GONE}', 'daily', 'day', '2026-10-10')`);
+    const count = (t: string) => db.query<{ n: number }>(`select count(*)::int as n from public.${t} where user_id = '${GONE}'`);
+    for (const t of PUSH_TABLES) expect((await count(t)).rows, t).toEqual([{ n: 1 }]);
+    await db.exec(`delete from auth.users where id = '${GONE}'`);
+    for (const t of PUSH_TABLES) expect((await count(t)).rows, `${t} после удаления пользователя`).toEqual([{ n: 0 }]);
+    const others = await db.query<{ n: number }>(`select count(*)::int as n from public.push_subscriptions where user_id in ('${A}', '${B}')`);
+    expect(others.rows[0]!.n).toBeGreaterThanOrEqual(2);
+  });
+
+  test('напоминания: права в каталоге — у authenticated только select/insert/update на подписки и настройки, на журнал ничего; у anon ничего; у service_role всё', async () => {
+    const priv = async (role: string, t: string, p: string) => (await db.query<{ ok: boolean }>(`select has_table_privilege('${role}', 'public.${t}', '${p}') as ok`)).rows[0]!.ok;
+    for (const t of ['push_subscriptions', 'reminder_settings']) {
+      for (const p of ['select', 'insert', 'update']) expect(await priv('authenticated', t, p), `authenticated ${p} ${t}`).toBe(true);
+      for (const p of ['delete', 'truncate', 'references', 'trigger']) expect(await priv('authenticated', t, p), `authenticated ${p} ${t}`).toBe(false);
+    }
+    for (const p of ['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']) expect(await priv('authenticated', 'push_log', p), `authenticated ${p} push_log`).toBe(false);
+    for (const t of PUSH_TABLES) {
+      for (const p of ['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']) expect(await priv('anon', t, p), `anon ${p} ${t}`).toBe(false);
+      for (const p of ['select', 'insert', 'update', 'delete']) expect(await priv('service_role', t, p), `service_role ${p} ${t}`).toBe(true);
+    }
+    // у каждой из трёх таблиц включена защита строк; политик у журнала нет, у остальных — по одной на select/insert/update и все «только для authenticated»
+    const rls = await db.query<{ relname: string; relrowsecurity: boolean }>(`select relname, relrowsecurity from pg_class where relname in ('push_subscriptions', 'reminder_settings', 'push_log') and relkind = 'r' order by relname`);
+    expect(rls.rows).toEqual([
+      { relname: 'push_log', relrowsecurity: true },
+      { relname: 'push_subscriptions', relrowsecurity: true },
+      { relname: 'reminder_settings', relrowsecurity: true },
+    ]);
+    const pol = await db.query<{ tablename: string; policyname: string; cmd: string; qual: string | null; with_check: string | null }>(
+      `select tablename, policyname, cmd, qual, with_check from pg_policies where tablename in ('push_subscriptions', 'reminder_settings') order by tablename, cmd`,
+    );
+    expect(pol.rows).toHaveLength(6);
+    for (const p of pol.rows) {
+      if (p.cmd !== 'INSERT') expect(p.qual, p.policyname).toContain('auth.uid()');
+      if (p.cmd !== 'SELECT') expect(p.with_check, p.policyname).toContain('auth.uid()');
+    }
+  });
+
+  test('напоминания: один адрес push может быть действующим у двух людей и строки друг друга они не трогают — хозяина адреса выбирает функция по last_seen_at (узкий запрос service_role)', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    const PHONE = EP('shared-phone');
+    const SHARED_A = '52000000-0000-4000-8000-00000000000a';
+    const SHARED_B = '52000000-0000-4000-8000-00000000000b';
+    try {
+      // A вышел без отзыва подписки, потом на том же телефоне вошёл B (тот же адрес): схема обе строки принимает
+      await commit(asA, subInsert({ id: SHARED_A, endpoint: PHONE, device_id: 'phone' }));
+      await db.exec(`update public.push_subscriptions set last_seen_at = '2026-10-01T10:00:00Z' where id = '${SHARED_A}'`);
+      const second = await run(asB, subInsert({ id: SHARED_B, endpoint: PHONE, device_id: 'phone' }));
+      expect(sqlState(second), 'схема допускает тот же адрес у другого человека (уникальна пара «человек + адрес»)').toBe('ok');
+      await commit(asB, subInsert({ id: SHARED_B, endpoint: PHONE, device_id: 'phone' }));
+      await db.exec(`update public.push_subscriptions set last_seen_at = '2026-10-09T10:00:00Z' where id = '${SHARED_B}'`);
+
+      // строка A цела: вход B ничего в ней не менял и отозвать её B не может
+      const revoke = await run(asB, `update public.push_subscriptions set revoked_at = now() where id = '${SHARED_A}'`);
+      expect('rowCount' in revoke && revoke.rowCount, 'B отзывает подписку A').toBe(0);
+      const own = await run(asA, `select id, revoked_at from public.push_subscriptions where endpoint = '${PHONE}'`);
+      expect('rows' in own && own.rows, 'A видит только свою строку по этому адресу').toEqual([{ id: SHARED_A, revoked_at: null }]);
+
+      // запрос функции «кто ещё на этом адресе»: только id и время, только действующие, свежие первыми; ключей и user_id не отдаёт
+      const claims = await run(asService, `select id, last_seen_at from public.push_subscriptions where endpoint = '${PHONE}' and revoked_at is null order by last_seen_at desc, id asc limit 50`);
+      expect('rows' in claims && claims.rows.map((r) => r.id)).toEqual([SHARED_B, SHARED_A]);
+      // отзыв строки B (человек снял устройство) убирает её из выборки: хозяином остаётся единственная действующая строка
+      await commit(asB, `update public.push_subscriptions set revoked_at = now() where id = '${SHARED_B}'`);
+      const after = await run(asService, `select id from public.push_subscriptions where endpoint = '${PHONE}' and revoked_at is null`);
+      expect('rows' in after && after.rows).toEqual([{ id: SHARED_A }]);
+    } finally {
+      await db.exec(`delete from public.push_subscriptions where endpoint = '${PHONE}'`);
+    }
+  });
 });

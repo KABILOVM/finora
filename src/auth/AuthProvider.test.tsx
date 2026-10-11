@@ -173,6 +173,15 @@ describe('signIn', () => {
     expect(fake.calls.signIn).toBe(1);
   });
 
+  it('почта со вставки с невидимыми метками (направление текста, мягкий перенос) входит так же, как набранная', async () => {
+    const { fake, auth } = setup({ session: null });
+    await waitFor(() => expect(auth.api.state.status).toBe('signed-out'));
+    const r = await act(async () => auth.api.signIn(`\u2066Alice@Example.COM\u2069\u00AD`, ALICE.password));
+    expect(r).toEqual({ ok: true });
+    expect(auth.api.state).toEqual({ status: 'signed-in', user: { id: ALICE.id, email: ALICE.email } });
+    expect(fake.calls.signIn).toBe(1);
+  });
+
   it('без сети → честная фраза про первый вход', async () => {
     const { auth } = setup({ session: null, offline: true });
     await waitFor(() => expect(auth.api.state.status).toBe('signed-out'));
