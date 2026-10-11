@@ -289,6 +289,7 @@ test.describe('Хранилище, длинные строки, адрес', () 
     const dlg = sheet(page, 'Новая операция');
     await expect(dlg).toBeVisible();
     await dlg.getByRole('group', { name: 'Цифровая клавиатура' }).getByRole('button', { name: '5', exact: true }).click();
+    await dlg.getByRole('button', { name: 'Заметка', exact: true }).click();
     await dlg.getByRole('textbox', { name: 'Заметка' }).fill('я'.repeat(600));
     await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(dlg).toBeVisible(); // шит остался: ошибка длины

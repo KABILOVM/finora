@@ -6,10 +6,12 @@ import { useRateService, useRates } from '@/rates/hooks';
 import type { RateLookup } from '@/rates/types';
 import {
   checkDate,
+  computeFee,
   errorField,
   firstOtherWallet,
   fxSourceOf,
   NOTE_MAX,
+  NO_FEE,
   parseRateText,
   resolveDate,
   type FormErrors,
@@ -33,9 +35,9 @@ export type FxView =
 export interface ReceivedView {
   /** 'cross' — кошельки в разных валютах (сумму зачисления задаёт курс); 'fee' — одна валюта (разница = комиссия). */
   mode: 'cross' | 'fee';
-  /** Показывать ли поле. Для 'cross' всегда; для 'fee' — только если человек открыл «Указать комиссию». */
+  /** Показывать ли поле. Для 'cross' всегда; для 'fee' (комиссия) — только если человек её открыл. */
   show: boolean;
-  /** Что сейчас в поле. */
+  /** Что сейчас в поле. Для 'fee' — сумма списания минус комиссия. */
   value: Minor | null;
   /** Что подсказывает курс (для 'fee' — сумма списания). */
   suggested: Minor | null;
@@ -79,6 +81,10 @@ export interface TxFormController {
   base: CurrencyCode;
   fx: FxView;
   received: ReceivedView | null;
+  /** Комиссия в минорных единицах валюты кошелька (null — поле комиссии заполнено неверно) и итог списания. */
+  fee: { minor: Minor | null; total: Minor | null };
+  /** Правка существующей операции (комиссию к уже внесённому расходу не добавляем). */
+  editing: boolean;
   set(patch: Partial<TxFormState>): void;
   setKind(kind: TxKind): void;
   setWallet(id: string): void;
@@ -99,7 +105,10 @@ const CLEARS: Partial<Record<keyof TxFormState, (keyof FormErrors)[]>> = {
   walletId: ['wallet', 'amount', 'toAmount', 'rate'],
   toWalletId: ['toWallet', 'toAmount'],
   toAmountOverride: ['toAmount'],
-  feeOpen: ['toAmount'],
+  feeOpen: ['toAmount', 'fee'],
+  feeMode: ['toAmount', 'fee'],
+  feeAmount: ['toAmount', 'fee'],
+  feePct: ['toAmount', 'fee'],
   categoryId: ['category'],
   date: ['date'],
   note: ['note'],
@@ -141,6 +150,7 @@ function computeReceived(
   wallet: Wallet | undefined,
   toWallet: Wallet | undefined,
   getRate: (a: CurrencyCode, b: CurrencyCode) => RateLookup | null,
+  fee: Minor | null,
 ): ReceivedView | null {
   if (form.kind !== 'transfer' || !wallet || !toWallet) return null;
   const from = wallet.currency;
@@ -148,7 +158,9 @@ function computeReceived(
   const amount = form.amountMinor !== null && form.amountMinor > 0 ? form.amountMinor : null;
   const override = form.toAmountOverride;
   if (from === to) {
-    return { mode: 'fee', show: form.feeOpen, value: override !== undefined ? override : amount, suggested: amount, lookup: null, from, to };
+    // Комиссия задана — зачисляется сумма минус комиссия (считается сама, в том числе по проценту)
+    const net = form.feeOpen && amount !== null && fee !== null ? amount - fee : amount;
+    return { mode: 'fee', show: form.feeOpen, value: override !== undefined ? override : net, suggested: amount, lookup: null, from, to };
   }
   const lookup = getRate(from, to);
   let suggested: Minor | null = null;
@@ -179,7 +191,14 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     () => computeFx({ mode, orig, allWallets, base }, form, wallet, getRate),
     [mode, orig, allWallets, base, form, wallet, getRate],
   );
-  const received = useMemo(() => computeReceived(form, wallet, toWallet, getRate), [form, wallet, toWallet, getRate]);
+  const feeBase = form.amountMinor !== null && form.amountMinor > 0 ? form.amountMinor : null;
+  const feeMinor = form.feeOpen ? computeFee(form, feeBase) : 0;
+  const received = useMemo(
+    () => computeReceived(form, wallet, toWallet, getRate, feeMinor),
+    [form, wallet, toWallet, getRate, feeMinor],
+  );
+  // Расход: комиссия добавляется к списанию. Перевод: вычитается из зачисления (см. received).
+  const total = form.kind === 'expense' && feeMinor !== null && feeBase !== null ? feeBase + feeMinor : feeBase;
 
   const clearErrors = (keys: (keyof FormErrors)[]) =>
     setErrorsState((e) => {
@@ -220,7 +239,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         kind === 'transfer' && (f.toWalletId === null || f.toWalletId === f.walletId)
           ? firstOtherWallet(wallets, f.walletId)
           : f.toWalletId;
-      return { ...f, kind, categoryId: null, toWalletId, toAmountOverride: undefined, feeOpen: false };
+      return { ...f, kind, categoryId: null, toWalletId, toAmountOverride: undefined, ...NO_FEE };
     });
     clearErrors(CLEARS.kind ?? []);
   };
@@ -235,7 +254,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         toWalletId: sameTarget ? firstOtherWallet(wallets, id) : f.toWalletId,
         // «Получено» и ручной курс относились к прежней паре кошельков
         toAmountOverride: undefined,
-        feeOpen: false,
+        ...NO_FEE,
         rateText: '',
       };
     });
@@ -243,7 +262,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
   };
 
   const setToWallet = (id: string) => {
-    setForm((f) => (f.toWalletId === id ? f : { ...f, toWalletId: id, toAmountOverride: undefined, feeOpen: false }));
+    setForm((f) => (f.toWalletId === id ? f : { ...f, toWalletId: id, toAmountOverride: undefined, ...NO_FEE }));
     clearErrors(CLEARS.toWalletId ?? []);
   };
 
@@ -254,7 +273,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
       categoryId: null,
       note: '',
       toAmountOverride: undefined,
-      feeOpen: false,
+      ...NO_FEE,
       rateText: '',
     }));
     setErrorsState({});
@@ -266,6 +285,8 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         return form.kind === 'transfer';
       case 'toAmount':
         return form.kind === 'transfer' && received !== null && received.show;
+      case 'fee':
+        return form.feeOpen;
       case 'category':
         return form.kind !== 'transfer';
       case 'rate':
@@ -291,6 +312,12 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     const note = form.note.trim();
     if (note.length > NOTE_MAX) e.note = `Заметка не длиннее ${NOTE_MAX} символов (сейчас ${note.length})`;
 
+    // Комиссия: неверный процент и «комиссия не меньше суммы» объясняются у поля комиссии
+    if (form.feeOpen && (form.kind === 'expense' || (form.kind === 'transfer' && received?.mode === 'fee'))) {
+      if (feeMinor === null) e.fee = 'Процент — число больше нуля и меньше 100, например 1,5';
+      else if (form.kind === 'transfer' && amount !== null && feeMinor >= amount) e.fee = 'Комиссия должна быть меньше суммы перевода';
+    }
+
     let toAmount: Minor | null = null;
     if (form.kind === 'transfer') {
       if (!toWallet) e.toWallet = 'Выберите, куда переводите';
@@ -304,6 +331,8 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
               : 'Укажите, сколько получено';
         } else if (toAmount <= 0) {
           e.toAmount = 'Получено должно быть больше нуля';
+        } else if (e.fee) {
+          // сообщение уже у поля комиссии
         } else if (received.mode === 'fee' && amount !== null && toAmount > amount) {
           e.toAmount = 'Получено не может быть больше списанного: разница — это комиссия';
         }
@@ -375,7 +404,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         walletId: wallet.id,
         toWalletId: null,
         toAmountMinor: null,
-        amountMinor: amount,
+        amountMinor: form.kind === 'expense' && total !== null ? total : amount,
         categoryId: form.categoryId,
         occurredOn,
         note,
@@ -393,6 +422,8 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     base,
     fx,
     received,
+    fee: { minor: feeMinor, total },
+    editing: mode === 'edit',
     set,
     setKind,
     setWallet,

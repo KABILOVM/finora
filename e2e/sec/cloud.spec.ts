@@ -175,8 +175,13 @@ test.describe('Облачный режим: CSP и Supabase', () => {
     test.info().annotations.push({ type: 'indexedDB', description: String(idb) });
 
     // экран «Настройки» не показывает секретов
-    await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: 'Ещё', exact: true }).first().click();
-    await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
+    const nav = page.getByRole('navigation', { name: 'Основная навигация' });
+    if ((await nav.getByRole('link', { name: 'Настройки', exact: true }).count()) > 0) {
+      await nav.getByRole('link', { name: 'Настройки', exact: true }).first().click(); // ПК: пункт боковой панели
+    } else {
+      await nav.getByRole('link', { name: 'Ещё', exact: true }).first().click(); // телефон: через «Ещё»
+      await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
+    }
     const body = await page.locator('body').innerText();
     for (const secret of [ACCESS, REFRESH, ANON, PASSWORD]) expect(body).not.toContain(secret);
     if (process.env.SEC_DEBUG) console.log(`--- localStorage: ${JSON.stringify(ls).replace(ACCESS, '<ACCESS>')}\n--- idb: ${idb}\n--- консоль:\n${logs.join('\n')}`);

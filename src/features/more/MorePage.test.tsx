@@ -11,7 +11,7 @@ const show = () =>
   );
 
 describe('MorePage', () => {
-  it('единственный h1 «Ещё» и шесть пунктов в нужном порядке', () => {
+  it('единственный h1 «Ещё» и четыре пункта в нужном порядке (категории и импорт лежат в «Настройках»)', () => {
     show();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1, name: 'Ещё' })).toBeTruthy();
@@ -19,26 +19,19 @@ describe('MorePage', () => {
       '/budgets',
       '/recurring',
       '/debts',
-      '/settings/categories',
-      '/import',
       '/settings',
     ]);
   });
 
-  it('имя ссылки — название раздела, пояснение читается отдельно (aria-describedby)', () => {
+  it('имя ссылки — название раздела, без поясняющих строк', () => {
     show();
     for (const item of MORE_ITEMS) {
       const a = screen.getByRole('link', { name: item.title });
-      const hint = document.getElementById(a.getAttribute('aria-describedby') ?? '');
-      expect(hint?.textContent).toBe(item.hint);
+      expect(a.getAttribute('aria-describedby')).toBeNull();
     }
   });
 
-  it('пояснения короткие: помещаются в одну строку на телефоне', () => {
-    for (const item of MORE_ITEMS) expect(item.hint.length, item.title).toBeLessThanOrEqual(34);
-  });
-
-  it('названия и пояснения без повторов', () => {
+  it('названия и адреса без повторов', () => {
     expect(new Set(MORE_ITEMS.map((i) => i.title)).size).toBe(MORE_ITEMS.length);
     expect(new Set(MORE_ITEMS.map((i) => i.to)).size).toBe(MORE_ITEMS.length);
   });

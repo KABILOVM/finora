@@ -104,6 +104,7 @@ describe('шит правки: поля заполнены', () => {
     expect(screen.getByRole('button', { name: 'Еда' })).toHaveAttribute('aria-pressed', 'true');
     expect(contextChip('Кошелёк').getAttribute('aria-label')).toBe('Кошелёк: Наличные · TJS');
     expect(contextChip('Дата').getAttribute('aria-label')).toBe('Дата: Вчера');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     expect((screen.getByRole('textbox', { name: /^Заметка/ }) as HTMLInputElement).value).toBe('обед');
   });
 
@@ -151,6 +152,7 @@ describe('сохранение правки', () => {
     const { td, ids, onClose } = await openEdit(food12());
     await user.click(screen.getByRole('button', { name: 'Транспорт' }));
     await pickWallet('Карта · TJS');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     const note = screen.getByRole('textbox', { name: /^Заметка/ });
     await user.clear(note);
     await user.type(note, 'такси');
@@ -265,6 +267,7 @@ describe('правка не переоценивает курс', () => {
     const newer = table({ perUnit: { TJS: 1, USD: 11.5 } });
     const { td, ids, onClose } = await openEdit(usdExpense, [newer]);
     const before = await row(td, ids.tx);
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'кофе');
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -409,6 +412,7 @@ describe('архивный кошелёк и категория', () => {
     expect(chipLabels('Кошелёк')).toEqual(['Наличные', 'Карта']);
     await user.click(contextChip('Кошелёк'));
     expect(screen.getByRole('button', { name: 'Еда (в архиве)' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'ок');
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());

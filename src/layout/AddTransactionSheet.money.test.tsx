@@ -186,34 +186,75 @@ describe('переводы', () => {
     expect((await liveTxs(td))[0]).toMatchObject({ kind: 'transfer', amountMinor: 10_000, toAmountMinor: 900 });
   });
 
-  it('в одной валюте: зачисление равно списанию; комиссия — меньшая сумма зачисления', async () => {
+  it('в одной валюте: зачисление равно списанию; комиссия суммой вычитается из зачисления', async () => {
     const td = opsDeps([], { setup: withCard });
     const { onClose } = await openAddSheet(td);
     await user.click(screen.getByRole('radio', { name: 'Перевод' }));
     await tapAmount('100');
-    expect(screen.queryByRole('textbox', { name: /^Получено/ })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Указать комиссию' }));
-    const received = screen.getByRole('textbox', { name: /^Получено/ });
-    expect((received as HTMLInputElement).value).toBe('100');
-    await user.clear(received);
-    await user.type(received, '98');
-    expect(screen.getByText('Комиссия: 2 с.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Комиссия' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+    const fee = screen.getByRole('textbox', { name: /^Комиссия/ });
+    await user.type(fee, '2');
+    expect(screen.getByText('Получит: 98 с.')).toBeInTheDocument();
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]).toMatchObject({ kind: 'transfer', amountMinor: 10_000, toAmountMinor: 9800 });
   });
 
-  it('в одной валюте зачислить больше, чем списали, нельзя (лишний ноль не плодит деньги)', async () => {
+  it('комиссия в процентах считается сама и пересчитывается при смене суммы', async () => {
+    const td = opsDeps([], { setup: withCard });
+    const { onClose } = await openAddSheet(td);
+    await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+    await tapAmount('200');
+    await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+    await user.click(screen.getByRole('radio', { name: 'Проценты' }));
+    await user.type(screen.getByRole('textbox', { name: 'Комиссия в процентах' }), '1,5');
+    expect(screen.getByText('Комиссия: 3 с.')).toBeInTheDocument();
+    expect(screen.getByText('Получит: 197 с.')).toBeInTheDocument();
+    await tapAmount('⌫0'); // 200 → 20 → 200
+    // ещё один нуль: 2000
+    await tapAmount('0');
+    expect(screen.getByText('Получит: 1 970 с.')).toBeInTheDocument();
+    await clickSave();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect((await liveTxs(td))[0]).toMatchObject({ kind: 'transfer', amountMinor: 200_000, toAmountMinor: 197_000 });
+  });
+
+  it('комиссия не меньше суммы перевода нельзя: сообщение у поля, ничего не сохранено', async () => {
     const td = opsDeps([], { setup: withCard });
     const { onClose } = await openAddSheet(td);
     await user.click(screen.getByRole('radio', { name: 'Перевод' }));
     await tapAmount('100');
-    await user.click(screen.getByRole('button', { name: 'Указать комиссию' }));
-    const received = screen.getByRole('textbox', { name: /^Получено/ });
-    await user.clear(received);
-    await user.type(received, '1000');
+    await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+    await user.type(screen.getByRole('textbox', { name: /^Комиссия/ }), '100');
     await clickSave();
-    expect(await waitFor(() => screen.getByText(/Получено не может быть больше списанного/))).toBeInTheDocument();
+    expect(await waitFor(() => screen.getByText('Комиссия должна быть меньше суммы перевода'))).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await allTxs(td)).toHaveLength(0);
+  });
+
+  it('расход: комиссия добавляется к списанию, итог показан, сохраняется одной операцией на всю сумму', async () => {
+    const td = opsDeps([], { setup: withCard });
+    const { onClose } = await openAddSheet(td);
+    await tapAmount('100');
+    await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+    await user.click(screen.getByRole('radio', { name: 'Проценты' }));
+    await user.type(screen.getByRole('textbox', { name: 'Комиссия в процентах' }), '2');
+    expect(screen.getByText('Итого спишется: 102 с.')).toBeInTheDocument();
+    await clickSave();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect((await liveTxs(td))[0]).toMatchObject({ kind: 'expense', amountMinor: 10_200 });
+  });
+
+  it('неверный процент: понятная ошибка, расход не сохраняется', async () => {
+    const td = opsDeps([], { setup: withCard });
+    const { onClose } = await openAddSheet(td);
+    await tapAmount('100');
+    await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+    await user.click(screen.getByRole('radio', { name: 'Проценты' }));
+    await user.type(screen.getByRole('textbox', { name: 'Комиссия в процентах' }), '150');
+    await clickSave();
+    expect(await waitFor(() => screen.getByText(/Процент — число больше нуля и меньше 100/))).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(await allTxs(td)).toHaveLength(0);
   });

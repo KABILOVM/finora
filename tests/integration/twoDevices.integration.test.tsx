@@ -122,6 +122,7 @@ describe('атака 1: два устройства, полный путь', () 
     await user.click(addLink());
     await findByRole('dialog', { name: 'Новая операция' });
     await tapAmount('100');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'плов');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
@@ -130,6 +131,7 @@ describe('атака 1: два устройства, полный путь', () 
     await user.click(addLink());
     await findByRole('dialog', { name: 'Новая операция' });
     await tapAmount('7');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'лишнее');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());

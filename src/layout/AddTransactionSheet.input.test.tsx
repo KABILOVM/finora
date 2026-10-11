@@ -80,6 +80,7 @@ describe('проверка ввода', () => {
   it('заметка: ровно 500 символов можно, 501 — нет', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('1');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     const note = screen.getByRole('textbox', { name: /^Заметка/ });
     await user.click(note);
     await user.paste('я'.repeat(501));

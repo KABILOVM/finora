@@ -31,10 +31,10 @@ describe('«Ещё» ведёт на страницу «Ещё», а не в н�
     expect(await findByRole('heading', { name: 'Ещё', level: 1 })).toBeInTheDocument();
   });
 
-  it('боковая панель: «Ещё» → /more, «Настройки» → /settings', async () => {
+  it('боковая панель: «Ещё» нет, «Настройки» → /settings', async () => {
     renderAt('/');
     await findByRole('heading', { name: 'Главная', level: 1 });
-    expect(linkIn(sideNav(), 'Ещё').getAttribute('href')).toMatch(/\/more$/);
+    expect(Array.from(sideNav().querySelectorAll('a')).map((a) => a.textContent)).not.toContain('Ещё');
     expect(linkIn(sideNav(), 'Настройки').getAttribute('href')).toMatch(/\/settings$/);
   });
 });
@@ -70,9 +70,8 @@ describe('подсветка боковой панели', () => {
     ['/budgets', 'Бюджеты', 'Бюджеты'],
     ['/recurring', 'Регулярные платежи', 'Платежи'],
     ['/debts', 'Долги и кредиты', 'Долги'],
-    ['/more', 'Ещё', 'Ещё'],
-    ['/import', 'Импорт из Zenmoney', 'Ещё'],
-    ['/settings/categories', 'Категории', 'Ещё'],
+    ['/import', 'Импорт из Zenmoney', 'Настройки'],
+    ['/settings/categories', 'Категории', 'Настройки'],
     ['/settings', 'Настройки', 'Настройки'],
   ])('%s: горит один пункт «%s»', async (path, title, label) => {
     renderAt(path);
@@ -86,8 +85,6 @@ describe('переходы из страницы «Ещё»', () => {
     ['Бюджеты', '/budgets', 'Бюджеты'],
     ['Регулярные платежи', '/recurring', 'Регулярные платежи'],
     ['Долги и кредиты', '/debts', 'Долги и кредиты'],
-    ['Категории', '/settings/categories', 'Категории'],
-    ['Импорт из Zenmoney', '/import', 'Импорт из Zenmoney'],
     ['Настройки', '/settings', 'Настройки'],
   ])('«%s» ведёт на %s', async (link, href, title) => {
     renderAt('/more');
@@ -101,12 +98,19 @@ describe('переходы из страницы «Ещё»', () => {
     expect(current(bottomNav())).toEqual(['Ещё']);
   });
 
-  it('у каждого пункта есть пояснение (одна строка под названием)', async () => {
+  it('в «Ещё» четыре пункта, категорий и импорта нет: они внутри «Настроек»', async () => {
     renderAt('/more');
     await findByRole('heading', { name: 'Ещё', level: 1 });
     const links = screen.getAllByRole('link').filter((a) => screen.getByRole('main').contains(a));
-    expect(links).toHaveLength(6);
-    for (const a of links) expect(a.getAttribute('aria-describedby')).toBeTruthy();
+    expect(links).toHaveLength(4);
+  });
+
+  it('в «Настройках» есть категории и импорт', async () => {
+    renderAt('/settings');
+    await findByRole('heading', { name: 'Настройки', level: 1 });
+    const main = screen.getByRole('main');
+    expect(linkIn(main, 'Категории').getAttribute('href')).toMatch(/\/settings\/categories$/);
+    expect(linkIn(main, 'Импорт из Zenmoney').getAttribute('href')).toMatch(/\/import$/);
   });
 });
 

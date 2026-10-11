@@ -79,6 +79,7 @@ describe('обычный расход', () => {
   it('заметка сохраняется без лишних пробелов', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('5');
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), '  хлеб и молоко ');
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -196,9 +197,9 @@ describe('кошелёк по умолчанию и частые категор�
     });
     await openAddSheet(td);
     const labels = chipLabels('Категория');
-    expect(labels.slice(0, 5)).toEqual(['Транспорт', 'Покупки', 'Еда', 'Продукты', 'Жильё']); // остальные — в порядке из затравки
-    // сразу видны 6 основных, остальные 6 — под «Ещё»; плюс чип «Новая»
-    expect(labels).toEqual(['Транспорт', 'Покупки', 'Еда', 'Продукты', 'Жильё', 'Связь', 'Ещё 6', 'Новая']);
+    expect(labels.slice(1, 6)).toEqual(['Транспорт', 'Покупки', 'Еда', 'Продукты', 'Жильё']); // остальные — в порядке из затравки
+    // сразу видны «+ Новая» и 6 основных, остальные 6 — под «Ещё»
+    expect(labels).toEqual(['Новая', 'Транспорт', 'Покупки', 'Еда', 'Продукты', 'Жильё', 'Связь', 'Ещё 6']);
     await user.click(screen.getByRole('button', { name: /^Ещё 6/ }));
     expect(chipLabels('Категория')).toHaveLength(13);
   });
