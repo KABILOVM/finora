@@ -218,10 +218,10 @@ describe('Настройки: смена пароля', () => {
 
   it('короткий пароль и несовпадение — ошибка без обращения к серверу', async () => {
     const { first, second, fake } = await openSheet();
-    await user.type(first, '1234567');
-    await user.type(second, '1234567');
+    await user.type(first, '12345');
+    await user.type(second, '12345');
     await user.click(screen.getAllByRole('button', { name: 'Сменить пароль' }).at(-1) as HTMLElement);
-    expect(await findByRole('alert')).toHaveTextContent('не короче 8 символов');
+    expect(await findByRole('alert')).toHaveTextContent('не короче 6 символов');
     await user.clear(first);
     await user.clear(second);
     await user.type(first, 'правильный-пароль');
