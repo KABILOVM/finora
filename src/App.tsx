@@ -17,6 +17,7 @@ import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
+import PushKeeper from '@/push/PushKeeper';
 import { AppShell } from '@/layout/AppShell';
 import { ADD_PATH } from '@/layout/nav';
 
@@ -103,6 +104,7 @@ export function AppRoutes() {
   return (
     <>
       <AutoPostRunner />
+      <PushKeeper />
       <Routes location={pagesLocation}>
         {/* Экран входа показывает сама сборка (src/app), пока никто не вошёл; сюда попадают уже вошедшие. */}
         <Route path="/login" element={<Navigate to="/" replace />} />
