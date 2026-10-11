@@ -1,9 +1,12 @@
 import type { DexieOptions } from 'dexie';
+import { createBudgetsRepo, type BudgetsRepo } from './budgetsRepo';
 import { createCategoriesRepo, type CategoriesRepo } from './categoriesRepo';
 import { createClock } from './clock';
 import { FinoraDB, META_LAST_STAMP } from './database';
+import { createDebtsRepo, type DebtsRepo } from './debtsRepo';
 import { getDeviceId } from './deviceId';
 import { ValidationError } from './errors';
+import { createRecurringRepo, type RecurringRepo } from './recurringRepo';
 import type { RepoContext } from './repoContext';
 import { createSettingsRepo, type SettingsRepo } from './settingsRepo';
 import { createSyncOps, type SyncOps } from './syncOps';
@@ -17,6 +20,9 @@ export interface Store {
   readonly wallets: WalletsRepo;
   readonly categories: CategoriesRepo;
   readonly transactions: TransactionsRepo;
+  readonly budgets: BudgetsRepo;
+  readonly debts: DebtsRepo;
+  readonly recurring: RecurringRepo;
   readonly settings: SettingsRepo;
   readonly sync: SyncOps;
   /**
@@ -101,6 +107,9 @@ export async function openStore(userId: string, options: OpenStoreOptions = {}):
     wallets: createWalletsRepo(ctx),
     categories: createCategoriesRepo(ctx),
     transactions: createTransactionsRepo(ctx),
+    budgets: createBudgetsRepo(ctx),
+    debts: createDebtsRepo(ctx),
+    recurring: createRecurringRepo(ctx),
     settings: createSettingsRepo(ctx),
     sync: createSyncOps(db, clock),
     onLocalChange(listener) {

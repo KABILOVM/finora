@@ -7,6 +7,7 @@ import {
   conflict,
   formatTimestamp,
   rejected,
+  type ParentTable,
   type Rec,
 } from './memoryRules';
 import { SYNC_TABLES, TABLE_SPECS, type PulledRow, type SyncTableName, type WireRow } from './tables';
@@ -187,7 +188,7 @@ export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer
     const stagedRows = new Map<string, Stored>();
     const touched = new Set<string>(); // строки, которые этот оператор уже вставил или изменил
     const stagedOf = (id: string): Stored | undefined => stagedRows.get(id) ?? tables[table].get(id);
-    const parentExists = (parent: 'wallets' | 'categories', uid: string, id: string): boolean => tables[parent].get(id)?.userId === uid;
+    const parentExists = (parent: ParentTable, uid: string, id: string): boolean => tables[parent].get(id)?.userId === uid;
     const store = tables[table];
     const foreignKeyChecks: Array<() => void> = [];
 

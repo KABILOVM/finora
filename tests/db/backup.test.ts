@@ -26,7 +26,7 @@ describe('exportBackup', () => {
     const store = await fresh();
     const { gone } = await populated(store);
     const file = await exportBackup(store);
-    expect(file).toMatchObject({ format: 'finora-backup', version: 1 });
+    expect(file).toMatchObject({ format: 'finora-backup', version: 2 });
     expect(Number.isNaN(Date.parse(file.exportedAt))).toBe(false);
     expect(file.settings?.id).toBe(store.userId);
     expect(file.wallets).toHaveLength(2);
@@ -119,7 +119,7 @@ describe('importBackup — мусорные файлы: ничего не зап
     ['массив', []],
     ['пустой объект', {}],
     ['чужой формат', { format: 'other', version: 1 }],
-    ['более новая версия', { format: 'finora-backup', version: 2, exportedAt: '2026-01-01T00:00:00.000Z', wallets: [], categories: [], transactions: [], settings: null }],
+    ['более новая версия', { format: 'finora-backup', version: 3, exportedAt: '2026-01-01T00:00:00.000Z', wallets: [], categories: [], transactions: [], budgets: [], debts: [], recurringRules: [], settings: null }],
     ['нет списков', { format: 'finora-backup', version: 1, exportedAt: '2026-01-01T00:00:00.000Z' }],
     ['нет даты создания', { format: 'finora-backup', version: 1, wallets: [], categories: [], transactions: [] }],
     ['списки не массивы', { format: 'finora-backup', version: 1, exportedAt: '2026-01-01T00:00:00.000Z', wallets: {}, categories: 'x', transactions: null }],

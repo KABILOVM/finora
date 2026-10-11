@@ -55,4 +55,30 @@ describe('отправка несёт ожидаемую версию строк
     expect(server.dump(a.store.userId, 'wallets')).toHaveLength(1);
     expect(await b.store.db.wallets.toArray()).toEqual(await a.store.db.wallets.toArray());
   });
+
+  // Один и тот же id создан на двух устройствах офлайн: решает позднейшая метка, а не порядок синхронизации.
+  it.each([
+    ['a', 'a'],
+    ['a', 'b'],
+    ['b', 'a'],
+    ['b', 'b'],
+  ] as const)('двойное создание: первым синхронизируется %s, правка позже у %s — побеждает позднейшая при любом порядке', async (first, later) => {
+    const server = createMemoryServer();
+    const T = Date.UTC(2026, 9, 10, 12, 0, 0);
+    const clock = { a: T + (later === 'a' ? 5_000 : 1_000), b: T + (later === 'b' ? 5_000 : 1_000) };
+    const a = await openDevice(server, 'dev-a', { seed: false, now: () => clock.a });
+    const b = await openDevice(server, 'dev-b', { seed: false, now: () => clock.b });
+    const mk = (d: typeof a, name: string) =>
+      d.store.wallets.create({ name, currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#111111', icon: 'w' }, { id: '00000000-0000-4000-8000-0000000000bb' });
+    await mk(a, 'с устройства A');
+    await mk(b, 'с устройства B');
+    const order = first === 'a' ? [a, b, a, b] : [b, a, b, a];
+    for (const d of order) await d.engine.syncNow();
+    const winner = later === 'a' ? 'с устройства A' : 'с устройства B';
+    expect(server.dump(a.store.userId, 'wallets')).toEqual([expect.objectContaining({ name: winner })]);
+    for (const d of [a, b]) {
+      expect(d.engine.getStatus(), d.deviceId).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0 });
+      expect(await d.store.db.wallets.toArray(), d.deviceId).toEqual([expect.objectContaining({ name: winner, dirty: 0 })]);
+    }
+  });
 });

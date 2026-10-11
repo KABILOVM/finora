@@ -20,6 +20,7 @@ import { fail } from './errors';
 export const WALLET_KINDS: readonly WalletKind[] = ['cash', 'card', 'bank', 'savings', 'other'];
 export const CATEGORY_KINDS: readonly CategoryKind[] = ['expense', 'income'];
 export const TX_KINDS: readonly TxKind[] = ['expense', 'income', 'transfer'];
+
 /** Откуда может быть взят курс при ручной/сетевой передаче. 'same' ставит только сама база (валюта кошелька = базовая). */
 export const FX_SOURCES: readonly string[] = ['nbt', 'server', 'api', 'manual', 'cached'];
 
@@ -290,6 +291,10 @@ export interface TxFields {
   categoryId: UUID | null;
   occurredOn: IsoDate;
   note: string;
+  /** Долг, к которому относится операция (только расход/доход). */
+  debtId: UUID | null;
+  /** Регулярный платёж, по которому создана операция. */
+  recurringRuleId: UUID | null;
 }
 
 /**
@@ -308,17 +313,20 @@ export function parseTxFields(raw: Record<string, unknown>, opts: { requireToAmo
   const toAmountRaw = raw['toAmountMinor'];
   const toAmountMinor =
     toAmountRaw === null || toAmountRaw === undefined ? null : reqPositiveMinor(toAmountRaw, 'Сумма зачисления');
+  const debtId = optId(raw['debtId'], 'Долг');
+  const recurringRuleId = optId(raw['recurringRuleId'], 'Регулярный платёж');
 
   if (kind === 'transfer') {
     if (toWalletId === null) fail('Перевод: укажите кошелёк зачисления');
     if (toWalletId === walletId) fail('Перевод: кошелёк зачисления должен отличаться от кошелька списания');
     if (categoryId !== null) fail('У перевода не бывает категории');
     if (opts.requireToAmount && toAmountMinor === null) fail('Перевод: не указана сумма зачисления');
+    if (debtId !== null) fail('У перевода не бывает долга: долг связывают только с расходом или доходом');
   } else {
     if (toWalletId !== null) fail('Кошелёк зачисления бывает только у перевода');
     if (toAmountMinor !== null) fail('Сумма зачисления бывает только у перевода');
   }
-  return { kind, walletId, toWalletId, amountMinor, toAmountMinor, categoryId, occurredOn, note };
+  return { kind, walletId, toWalletId, amountMinor, toAmountMinor, categoryId, occurredOn, note, debtId, recurringRuleId };
 }
 
 /**
@@ -352,7 +360,12 @@ export function parseTxSnapshot(kind: TxKind, amountMinor: Minor, raw: Record<st
   const rate = raw['fxRate'] ?? null;
   const source = raw['fxSource'] ?? null;
   if (kind === 'transfer') {
-    if (baseAmountMinor !== 0) fail('Перевод: сумма в базовой валюте должна быть 0');
+    // baseAmountMinor перевода = КОМИССИЯ в базовой валюте (0 — без комиссии и для обмена валют). Комиссия бывает только там,
+    // где сумма зачисления меньше суммы списания; курс и источник у перевода всегда пусты.
+    if (baseAmountMinor > 0) {
+      const to = raw['toAmountMinor'];
+      if (typeof to !== 'number' || !(to < amountMinor)) fail('Перевод: комиссия указана, но сумма зачисления не меньше суммы списания');
+    }
     if (rate !== null || source !== null) fail('Перевод: курс не используется');
     return { baseCurrency, baseAmountMinor, fxRate: null, fxSource: null };
   }

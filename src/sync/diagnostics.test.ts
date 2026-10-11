@@ -22,12 +22,12 @@ describe('Проверка облака: всё в порядке', () => {
     }
   });
 
-  it('каждая таблица читается один раз, повторы запроса выключены, в каждую из четырёх таблиц пишется одна заведомо неверная строка', async () => {
+  it('каждая таблица читается один раз, повторы запроса выключены, в каждую из семи таблиц пишется одна заведомо неверная строка', async () => {
     const { calls } = await check();
-    expect(calls.selects.map((s) => s.table).sort()).toEqual(['categories', 'exchange_rates', 'settings', 'transactions', 'wallets']);
-    expect(calls.retriesOff).toBe(5);
+    expect(calls.selects.map((s) => s.table).sort()).toEqual(['budgets', 'categories', 'debts', 'exchange_rates', 'recurring_rules', 'settings', 'transactions', 'wallets']);
+    expect(calls.retriesOff).toBe(8);
     expect(calls.selects.every((s) => s.limit > 0 && s.limit <= 50)).toBe(true);
-    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['categories', 'settings', 'transactions', 'wallets']);
+    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'transactions', 'wallets']);
     for (const u of calls.upserts) {
       expect(u.row).toMatchObject({ id: 'probe-id-1', device_id: 'cloud-check' });
       expect(u.row['deleted_at']).toEqual(expect.any(String)); // даже если строка пройдёт, в приложении её не видно
@@ -38,6 +38,9 @@ describe('Проверка облака: всё в порядке', () => {
     expect(by('categories')).toMatchObject({ name: '' });
     expect(by('wallets')).toMatchObject({ name: '' });
     expect(by('transactions')).toMatchObject({ amount_minor: 0 });
+    expect(by('debts')).toMatchObject({ counterparty: '' });
+    expect(by('budgets')).toMatchObject({ amount_minor: 0 });
+    expect(by('recurring_rules')).toMatchObject({ amount_minor: 0 });
   });
 });
 
@@ -222,18 +225,18 @@ describe('Шаг «Таблицы в базе»', () => {
     expect(by.read.status).toBe('ok'); // wallets не считаем, остальные читаются
     expect(by.write.status).toBe('ok');
     expect(by.rates.status).toBe('skip');
-    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['categories', 'settings', 'transactions']); // в отсутствующую wallets не пишем
+    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'transactions']); // в отсутствующую wallets не пишем
   });
 
   it('нет таблицы categories: в неё ничего не отправляется, в остальные — как обычно', async () => {
     const { by, calls } = await check({ tables: { categories: NO_TABLE } });
     expect(by.schema.status).toBe('fail');
     expect(by.write.status).toBe('ok');
-    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['settings', 'transactions', 'wallets']);
+    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'debts', 'recurring_rules', 'settings', 'transactions', 'wallets']);
   });
 
   it('нет ни одной таблицы пользователя: чтение пропущено', async () => {
-    const none = { settings: NO_TABLE, wallets: NO_TABLE, categories: NO_TABLE, transactions: NO_TABLE };
+    const none = { settings: NO_TABLE, wallets: NO_TABLE, categories: NO_TABLE, debts: NO_TABLE, budgets: NO_TABLE, recurring_rules: NO_TABLE, transactions: NO_TABLE };
     const { by, calls } = await check({ tables: none });
     expect(by.server.status).toBe('ok'); // сервер отвечает: это именно «нет схемы»
     expect(by.schema.status).toBe('fail');

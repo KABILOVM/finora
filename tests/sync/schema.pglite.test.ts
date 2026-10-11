@@ -4,7 +4,7 @@ import type { Transaction } from '@electric-sql/pglite';
 import { BASE_SEQ_COLUMN, SYNC_TABLES, TABLE_SPECS, toWire } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
 import { runConformance } from './conformance';
-import { makeCategory, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type Actor, type PgliteServer } from './pglite';
 
 let server: PgliteServer;
@@ -106,12 +106,71 @@ describe('схема: структура', () => {
         )
       ).rows[0];
     const before = await snapshot();
-    expect(before).toMatchObject({ policies: 13, triggers: 4 }); // 3 политики × 4 таблицы + 1 у курсов; по триггеру на таблицу
+    expect(before).toMatchObject({ policies: 22, triggers: 7 }); // 3 политики × 7 таблиц + 1 у курсов; по триггеру на каждую из 7 таблиц синхронизации
     const { userId } = await userWithWallet();
     await server.applySchema();
     await server.applySchema();
     expect(await snapshot()).toEqual(before);
     expect(await server.transportFor(userId).pull('wallets', 0, 10)).toHaveLength(1);
+  });
+
+  it('каталог: у всех 8 таблиц public включена RLS; политик 22 (select/insert/update × 7 таблиц + 1 у курсов), других нет', async () => {
+    const tables = await server.db.query<{ relname: string; relrowsecurity: boolean }>(
+      `select relname, relrowsecurity from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' order by relname`,
+    );
+    expect(tables.rows.map((r) => r.relname)).toEqual([...SYNC_TABLES, 'exchange_rates'].sort());
+    expect(tables.rows.every((r) => r.relrowsecurity)).toBe(true);
+    const policies = await server.db.query<{ tablename: string; cmd: string; roles: string }>(
+      `select tablename, cmd, roles::text as roles from pg_policies where schemaname = 'public' order by tablename, cmd`,
+    );
+    expect(policies.rows).toHaveLength(22);
+    for (const t of SYNC_TABLES) {
+      const own = policies.rows.filter((p) => p.tablename === t);
+      expect(own.map((p) => p.cmd).sort(), t).toEqual(['INSERT', 'SELECT', 'UPDATE']);
+      expect(own.every((p) => p.roles === '{authenticated}'), t).toBe(true);
+    }
+    expect(policies.rows.filter((p) => p.tablename === 'exchange_rates').map((p) => p.cmd)).toEqual(['SELECT']);
+  });
+
+  it('каталог этапа 2: ключи, триггеры и составные внешние ключи новых таблиц на месте', async () => {
+    const names = async (sql: string): Promise<string[]> => (await server.db.query<{ n: string }>(sql)).rows.map((r) => r.n);
+    // триггер sync_guard на каждой из 7 таблиц синхронизации (и больше нигде)
+    const triggers = await names(
+      `select c.relname as n from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace s on s.oid = c.relnamespace
+        where s.nspname = 'public' and not t.tgisinternal and t.tgname = 'sync_guard' order by 1`,
+    );
+    expect(triggers).toEqual([...SYNC_TABLES].sort());
+    // PK(id) у каждой; пара (user_id, id) нужна как цель составных ключей — у wallets, categories, debts, recurring_rules
+    for (const t of SYNC_TABLES) {
+      const pk = await names(`select pg_get_constraintdef(oid) as n from pg_constraint where conrelid = 'public.${t}'::regclass and contype = 'p'`);
+      expect(pk, t).toEqual(['PRIMARY KEY (id)']);
+    }
+    for (const t of ['wallets', 'categories', 'debts', 'recurring_rules']) {
+      const uq = await names(`select pg_get_constraintdef(oid) as n from pg_constraint where conrelid = 'public.${t}'::regclass and contype = 'u'`);
+      expect(uq, t).toEqual(['UNIQUE (user_id, id)']);
+    }
+    // составные внешние ключи: всегда (user_id, колонка) → родитель (user_id, id); каскадов и «set null» нет
+    const fks = await server.db.query<{ t: string; name: string; def: string }>(
+      `select conrelid::regclass::text as t, conname as name, pg_get_constraintdef(oid) as def from pg_constraint
+        where contype = 'f' and connamespace = 'public'::regnamespace and confrelid <> 'auth.users'::regclass order by 1, 2`,
+    );
+    const got = Object.fromEntries(fks.rows.map((r) => [r.name, r.def]));
+    expect(got).toEqual({
+      budgets_category_fk: 'FOREIGN KEY (user_id, category_id) REFERENCES categories(user_id, id)',
+      recurring_rules_category_fk: 'FOREIGN KEY (user_id, category_id) REFERENCES categories(user_id, id)',
+      recurring_rules_debt_fk: 'FOREIGN KEY (user_id, debt_id) REFERENCES debts(user_id, id)',
+      recurring_rules_to_wallet_fk: 'FOREIGN KEY (user_id, to_wallet_id) REFERENCES wallets(user_id, id)',
+      recurring_rules_wallet_fk: 'FOREIGN KEY (user_id, wallet_id) REFERENCES wallets(user_id, id)',
+      transactions_category_fk: 'FOREIGN KEY (user_id, category_id) REFERENCES categories(user_id, id)',
+      transactions_debt_fk: 'FOREIGN KEY (user_id, debt_id) REFERENCES debts(user_id, id)',
+      transactions_recurring_rule_fk: 'FOREIGN KEY (user_id, recurring_rule_id) REFERENCES recurring_rules(user_id, id)',
+      transactions_to_wallet_fk: 'FOREIGN KEY (user_id, to_wallet_id) REFERENCES wallets(user_id, id)',
+      transactions_wallet_fk: 'FOREIGN KEY (user_id, wallet_id) REFERENCES wallets(user_id, id)',
+    });
+    // у операций комиссия перевода может быть любой от 0 до 1e15: старое «у перевода base_amount = 0» не возвращено
+    const base = await names(`select pg_get_constraintdef(oid) as n from pg_constraint where conname = 'transactions_base_amount'`);
+    expect(base).toHaveLength(1);
+    expect(base[0]).toMatch(/base_amount_minor >= 0\) AND \(base_amount_minor <= '?1000000000000000/);
   });
 
   it('индексы: (user_id, server_seq) на каждой таблице и (user_id, occurred_on desc) у операций', async () => {
@@ -361,9 +420,14 @@ describe('поведение сервера, специфичное для Postg
     await t.push('settings', [toWire('settings', makeSettings(userId, stamps(-HOUR)))]);
     await t.push('wallets', [toWire('wallets', w1), toWire('wallets', w2)]);
     await t.push('categories', [toWire('categories', c)]);
+    const debt = makeDebt(stamps(-HOUR));
+    await t.push('debts', [toWire('debts', debt)]);
+    await t.push('budgets', [toWire('budgets', makeBudget({ ...stamps(-HOUR), categoryId: c.id }))]);
+    const rule = makeRecurringRule({ ...stamps(-HOUR), walletId: w1.id, categoryId: c.id, debtId: debt.id });
+    await t.push('recurring_rules', [toWire('recurring_rules', rule)]);
     await t.push('transactions', [
-      toWire('transactions', makeTransaction({ ...stamps(-HOUR), walletId: w1.id, categoryId: c.id })),
-      toWire('transactions', makeTransaction({ ...stamps(-HOUR), kind: 'transfer', walletId: w1.id, toWalletId: w2.id })),
+      toWire('transactions', makeTransaction({ ...stamps(-HOUR), walletId: w1.id, categoryId: c.id, debtId: debt.id, recurringRuleId: rule.id })),
+      toWire('transactions', makeTransaction({ ...stamps(-HOUR), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, baseAmountMinor: 100, recurringRuleId: rule.id })),
     ]);
     for (const table of SYNC_TABLES) expect((await server.adminRows(table)).filter((r) => r['user_id'] === userId), table).not.toHaveLength(0);
     await server.db.query('delete from auth.users where id = $1', [userId]);

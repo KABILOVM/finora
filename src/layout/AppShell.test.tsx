@@ -57,6 +57,11 @@ describe('подсказка «как установить»: только «Г�
   it.each([
     ['/transactions', 'Операции'],
     ['/wallets', 'Кошельки'],
+    ['/more', 'Ещё'],
+    ['/budgets', 'Бюджеты'],
+    ['/recurring', 'Регулярные платежи'],
+    ['/debts', 'Долги и кредиты'],
+    ['/import', 'Импорт из Zenmoney'],
     ['/settings', 'Настройки'],
     ['/settings/categories', 'Категории'],
   ])('на странице %s подсказки нет', async (path, title) => {

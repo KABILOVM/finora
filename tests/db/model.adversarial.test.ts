@@ -127,7 +127,14 @@ describe('модель: репозитории + импорт держат см�
                 expect(t.toWalletId).not.toBeNull();
                 expect(t.toAmountMinor! > 0).toBe(true);
                 expect(t.categoryId).toBeNull();
-                expect(t.baseAmountMinor).toBe(0);
+                // baseAmountMinor перевода — КОМИССИЯ в базовой валюте: только между кошельками одной валюты, где зачислено меньше
+                const from = w.get(t.walletId)!;
+                const to = w.get(t.toWalletId!)!;
+                const fee = from.currency === to.currency && t.toAmountMinor! < t.amountMinor ? t.amountMinor - t.toAmountMinor! : 0;
+                if (fee === 0) expect(t.baseAmountMinor, `перевод без комиссии ${JSON.stringify(op)}`).toBe(0);
+                else if (from.currency === t.baseCurrency) expect(t.baseAmountMinor, `комиссия в базовой валюте ${JSON.stringify(op)}`).toBe(fee);
+                else expect(t.baseAmountMinor).toBeGreaterThanOrEqual(0);
+                expect([t.fxRate, t.fxSource], 'у перевода курс пуст').toEqual([null, null]);
               } else {
                 // снимок согласован с валютой кошелька и курсом
                 const wc = w.get(t.walletId)!.currency;

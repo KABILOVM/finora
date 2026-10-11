@@ -65,11 +65,13 @@ export function createWalletsRepo(ctx: RepoContext): WalletsRepo {
   /** Любая операция (даже удалённая) по кошельку закрепляет его валюту: иначе при восстановлении операции суммы поменяют смысл. */
   async function hasTransactions(walletId: UUID): Promise<boolean> {
     if ((await db.transactions.where('walletId').equals(walletId).count()) > 0) return true;
-    return (await db.transactions.where('toWalletId').equals(walletId).count()) > 0;
+    if ((await db.transactions.where('toWalletId').equals(walletId).count()) > 0) return true;
+    // регулярный платёж тоже закрепляет валюту: его сумма задана в валюте кошелька
+    return (await db.recurring_rules.filter((r) => r.deletedAt === null && (r.walletId === walletId || r.toWalletId === walletId)).count()) > 0;
   }
 
   async function save(id: UUID, change: (w: LocalRow<Wallet>) => WalletData): Promise<LocalRow<Wallet>> {
-    return writeTx(ctx, [db.wallets, db.transactions], async () => {
+    return writeTx(ctx, [db.wallets, db.transactions, db.recurring_rules], async () => {
       const cur = await getLiveWallet(ctx, id);
       const next = change(cur);
       if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;

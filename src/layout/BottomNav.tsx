@@ -1,30 +1,30 @@
-import { Link, NavLink } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
 import { cn } from '@/lib/cn';
-import { ADD_LABEL, NAV_ITEMS, useAddLink, type NavItem } from './nav';
+import { ADD_LABEL, isNavActive, NAV_ITEMS, useAddLink, type NavItem } from './nav';
 
 function Item({ item }: { item: NavItem }) {
+  const { pathname } = useLocation();
+  const isActive = isNavActive(item, pathname, 'phone');
   return (
-    <NavLink
+    <Link
       to={item.to}
-      end={item.end}
-      className={({ isActive }) =>
-        cn(
-          'flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold transition duration-200 active:scale-95',
-          isActive ? 'text-brand' : 'text-muted hover:text-text',
-        )
-      }
+      aria-current={isActive ? 'page' : undefined}
+      className={cn(
+        'flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-2xl text-xs font-semibold transition duration-200 active:scale-95',
+        isActive ? 'text-brand' : 'text-muted hover:text-text',
+      )}
     >
       <Icon name={item.icon} size={24} />
       <span>{item.label}</span>
-    </NavLink>
+    </Link>
   );
 }
 
 /** Нижняя панель телефона (< 768px): 2 пункта, большая «+», 2 пункта. Уважает «чёлку» снизу (safe-area). */
 export function BottomNav() {
   const addLink = useAddLink();
-  const [first, second, third, fourth] = NAV_ITEMS;
+  const [first, second, third, fourth] = NAV_ITEMS.filter((item) => item.phone);
   return (
     <nav
       aria-label="Основная навигация"

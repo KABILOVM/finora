@@ -88,15 +88,16 @@ export function MonthCard({ month, currentMonth, onMonth, categories }: MonthCar
           {bars && bars.top.length > 0 ? (
             <ul className="mt-2 flex flex-col gap-3">
               {bars.top.map((row) => {
+                const isFee = row.kind === 'fee';
                 const cat = row.categoryId === null ? undefined : categories.get(row.categoryId);
                 const pct = sharePercent(row.totalMinor, summary.expenseMinor);
                 const color = cat && /^#[0-9a-f]{6}$/i.test(cat.color) ? cat.color : 'rgb(var(--brand))';
                 return (
-                  <li key={row.categoryId ?? 'none'}>
+                  <li key={isFee ? 'fee' : (row.categoryId ?? 'none')}>
                     <div className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="flex min-w-0 items-center gap-2 truncate">
-                        <Glyph value={cat?.icon ?? '➖'} color={cat?.color} size={24} />
-                        <span className="truncate">{cat?.name ?? 'Без категории'}</span>
+                        <Glyph value={isFee ? '🏦' : (cat?.icon ?? '➖')} color={isFee ? undefined : cat?.color} size={24} />
+                        <span className="truncate">{isFee ? 'Комиссии' : (cat?.name ?? 'Без категории')}</span>
                       </span>
                       <span className="shrink-0">
                         <span className="money font-semibold">{formatMinor(row.totalMinor, base)}</span>

@@ -184,6 +184,8 @@ describe('formFromTx', () => {
     baseAmountMinor: 0,
     fxRate: null,
     fxSource: null,
+    debtId: null,
+    recurringRuleId: null,
     createdAt: '2026-10-05T10:00:00.000Z',
     clientUpdatedAt: '2026-10-05T10:00:00.000Z',
     deviceId: 'd',
@@ -238,6 +240,8 @@ describe('changedFields: что уходит в базу при правке', (
     baseAmountMinor: 1000,
     fxRate: 1,
     fxSource: 'same',
+    debtId: null,
+    recurringRuleId: null,
   };
   const input = (over: Record<string, unknown> = {}) => ({
     kind: 'expense' as const,
