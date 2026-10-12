@@ -1,4 +1,4 @@
-import type { Budget, Category, Debt, Entity, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, Entity, RecurringRule, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
 
 /**
  * ДОГОВОР между клиентом и базой: какие таблицы синхронизируются и как поля сущностей
@@ -15,6 +15,7 @@ export const SYNC_TABLES = [
   'budgets',
   'recurring_rules',
   'transactions',
+  'shopping_items',
 ] as const;
 export type SyncTableName = (typeof SYNC_TABLES)[number];
 
@@ -157,6 +158,19 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
     ],
   },
+  shopping_items: {
+    remote: 'shopping_items',
+    columns: [
+      ...COMMON,
+      { field: 'name', column: 'name', type: 'text' },
+      { field: 'qtyMilli', column: 'qty_milli', type: 'int' },
+      { field: 'unit', column: 'unit', type: 'text' },
+      { field: 'priceMinor', column: 'price_minor', type: 'int', nullable: true },
+      { field: 'checkedAt', column: 'checked_at', type: 'ts', nullable: true },
+      { field: 'purchasedAt', column: 'purchased_at', type: 'ts', nullable: true },
+      { field: 'transactionId', column: 'transaction_id', type: 'uuid', nullable: true },
+    ],
+  },
 };
 
 export type EntityOf<T extends SyncTableName> = T extends 'settings'
@@ -171,7 +185,9 @@ export type EntityOf<T extends SyncTableName> = T extends 'settings'
           ? Budget
           : T extends 'recurring_rules'
             ? RecurringRule
-            : Transaction;
+            : T extends 'shopping_items'
+              ? ShoppingItem
+              : Transaction;
 
 export class WireError extends Error {
   constructor(message: string) {

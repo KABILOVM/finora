@@ -23,8 +23,8 @@ import { SYNC_TABLES, TABLE_SPECS, type SyncTableName } from '@/sync/tables';
 /** (б) Тест-страж и (а) чистые таблицы слияния по каждой группе и сущности. */
 
 describe('страж: поля договора и группы слияния', () => {
-  it('страж покрывает все семь таблиц договора: групп слияния ровно столько же, сколько синхронизируемых таблиц', () => {
-    expect([...SYNC_TABLES].sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'transactions', 'wallets']);
+  it('страж покрывает все восемь таблиц договора: групп слияния ровно столько же, сколько синхронизируемых таблиц', () => {
+    expect([...SYNC_TABLES].sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'shopping_items', 'transactions', 'wallets']);
     expect(Object.keys(MERGE_GROUPS).sort()).toEqual([...SYNC_TABLES].sort());
     expect(Object.keys(TABLE_SPECS).sort()).toEqual([...SYNC_TABLES].sort());
   });
@@ -122,6 +122,14 @@ describe('состав групп (как в договоре задачи)', ()
       deleted: ['deletedAt'],
     });
   });
+  it('shopping_items', () => {
+    expect(MERGE_GROUPS.shopping_items).toEqual({
+      name: ['name'],
+      qty: ['qtyMilli', 'unit'],
+      state: ['priceMinor', 'checkedAt', 'purchasedAt', 'transactionId'],
+      deleted: ['deletedAt'],
+    });
+  });
   it('settings', () => {
     expect(MERGE_GROUPS.settings).toEqual({
       baseCurrency: ['baseCurrency'],
@@ -150,6 +158,7 @@ const BASE: Record<SyncTableName, Record<string, unknown>> = {
   wallets: { name: 'N', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, deletedAt: null },
   categories: { name: 'N', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, deletedAt: null },
   settings: { baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, deletedAt: null },
+  shopping_items: { name: 'Молоко', qtyMilli: 2000, unit: 'l', priceMinor: null, checkedAt: null, purchasedAt: null, transactionId: null, deletedAt: null },
 };
 
 /** Другое значение поля (для проверки, что именно эта группа заметила разницу). */

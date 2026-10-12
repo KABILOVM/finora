@@ -8,6 +8,7 @@ import { getDeviceId } from './deviceId';
 import { ValidationError } from './errors';
 import { createRecurringRepo, type RecurringRepo } from './recurringRepo';
 import type { RepoContext } from './repoContext';
+import { createShoppingRepo, type ShoppingRepo } from './shoppingRepo';
 import { createSettingsRepo, type SettingsRepo } from './settingsRepo';
 import { createSyncOps, type SyncOps } from './syncOps';
 import { createTransactionsRepo, type TransactionsRepo } from './transactionsRepo';
@@ -23,6 +24,7 @@ export interface Store {
   readonly budgets: BudgetsRepo;
   readonly debts: DebtsRepo;
   readonly recurring: RecurringRepo;
+  readonly shopping: ShoppingRepo;
   readonly settings: SettingsRepo;
   readonly sync: SyncOps;
   /**
@@ -100,16 +102,18 @@ export async function openStore(userId: string, options: OpenStoreOptions = {}):
   };
 
   const ctx: RepoContext = { userId, deviceId, db, clock, notify };
+  const transactions = createTransactionsRepo(ctx);
   const store: Store = {
     userId,
     deviceId,
     db,
     wallets: createWalletsRepo(ctx),
     categories: createCategoriesRepo(ctx),
-    transactions: createTransactionsRepo(ctx),
+    transactions,
     budgets: createBudgetsRepo(ctx),
     debts: createDebtsRepo(ctx),
     recurring: createRecurringRepo(ctx),
+    shopping: createShoppingRepo(ctx, transactions),
     settings: createSettingsRepo(ctx),
     sync: createSyncOps(db, clock),
     onLocalChange(listener) {

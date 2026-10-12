@@ -1,4 +1,4 @@
-import type { Budget, Category, Debt, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, RecurringRule, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
 import { MAX_FUTURE_SKEW_MS, MAX_OBSERVE_AHEAD_MS, MAX_STAMP, MAX_STAMP_MS, MIN_STAMP, MIN_STAMP_MS } from './clock';
 import { fail, ValidationError } from './errors';
 import { isUuid } from './ids';
@@ -16,7 +16,7 @@ import {
   SORT_ORDER_MIN,
   type SyncData,
 } from './validate';
-import { parseBudgetData, parseDebtData, parseRuleData } from './validatePlans';
+import { parseBudgetData, parseDebtData, parseRuleData, parseShoppingData } from './validatePlans';
 
 /**
  * Строгая проверка файла резервной копии. Выполняется ЦЕЛИКОМ до первой записи в базу:
@@ -27,6 +27,7 @@ export const BACKUP_FORMAT = 'finora-backup';
 /**
  * Версия 2 добавила бюджеты, долги и регулярные платежи (и debtId / recurringRuleId у операций).
  * Версию 1 читаем без них (новые списки пусты, у операций debtId и recurringRuleId = null).
+ * Список покупок (shoppingItems) добавлен без смены версии: нет блока в файле — список пуст.
  */
 export const BACKUP_VERSION = 2;
 
@@ -38,6 +39,7 @@ export const BACKUP_LIMITS = {
   budgets: 6_000,
   debts: 10_000,
   recurringRules: 10_000,
+  shoppingItems: 50_000,
 } as const;
 
 export interface BackupFile {
@@ -52,6 +54,8 @@ export interface BackupFile {
   budgets: Budget[];
   debts: Debt[];
   recurringRules: RecurringRule[];
+  /** Список покупок (в файлах без этого блока — пусто). */
+  shoppingItems: ShoppingItem[];
 }
 
 export interface ParseBackupOptions {
@@ -194,6 +198,7 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
   // Версия 1 новых списков не знает: даже если они в файле есть, это не её данные — читаем как пустые.
   const budgetsRaw = version === 1 ? [] : rows(data, 'budgets', 'бюджеты', BACKUP_LIMITS.budgets);
   const debtsRaw = version === 1 ? [] : rows(data, 'debts', 'долги', BACKUP_LIMITS.debts);
+  const shopRaw = version === 1 || data['shoppingItems'] === undefined ? [] : rows(data, 'shoppingItems', 'список покупок', BACKUP_LIMITS.shoppingItems);
   const rulesRaw = version === 1 ? [] : rows(data, 'recurringRules', 'регулярные платежи', BACKUP_LIMITS.recurringRules);
 
   const seen = (set: Set<string>, id: string) => {
@@ -305,6 +310,16 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
     }),
   );
 
+  const shopIds = new Set<string>();
+  const shoppingItems = shopRaw.map((r, i) =>
+    atRow('позиция покупок', i, () => {
+      const raw = withClampedStamps(withUuids(reqObject(r, 'Позиция покупок'), { id: 'Идентификатор записи', transactionId: 'Расход покупки' }), ['checkedAt', 'purchasedAt']);
+      const sync = limitStamps(parseSyncData(raw), limits);
+      seen(shopIds, sync.id);
+      return { ...sync, ...parseShoppingData(raw) } satisfies ShoppingItem;
+    }),
+  );
+
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
@@ -316,5 +331,6 @@ export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile
     budgets,
     debts,
     recurringRules,
+    shoppingItems,
   };
 }

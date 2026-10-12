@@ -15,6 +15,7 @@ interface MoreItem {
 export const MORE_ITEMS: readonly MoreItem[] = [
   { to: '/budgets', title: 'Бюджеты', icon: 'pie' },
   { to: '/recurring', title: 'Регулярные платежи', icon: 'repeat' },
+  { to: '/shopping', title: 'Покупки', icon: 'cart' },
   { to: '/debts', title: 'Долги и кредиты', icon: 'banknote' },
   { to: '/settings', title: 'Настройки', icon: 'sliders' },
 ];

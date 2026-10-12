@@ -8,7 +8,7 @@ import { formatReport, overallStatus, runCloudCheck, type CheckStepId } from './
  */
 
 const ORDER: CheckStepId[] = ['server', 'session', 'schema', 'read', 'write', 'rates', 'local'];
-const TABLES = ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'exchange_rates'] as const;
+const TABLES = ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items', 'exchange_rates'] as const;
 const BAD_WORDS = /undefined|\[object|NaN|null/;
 
 afterEach(() => {
@@ -52,7 +52,7 @@ const sessionReply: fc.Arbitrary<SessionReply> = fc.oneof(
 describe('runCloudCheck: мусор от сервера', () => {
   it('на любые ответы возвращает 7 шагов в порядке, не бросает, не пишет в сообщениях undefined/[object]/NaN/null', async () => {
     await fc.assert(
-      fc.asyncProperty(fc.record({ settings: reply, wallets: reply, categories: reply, debts: reply, budgets: reply, recurring_rules: reply, transactions: reply, exchange_rates: reply }), reply, sessionReply, async (tables, insert, session) => {
+      fc.asyncProperty(fc.record({ settings: reply, wallets: reply, categories: reply, debts: reply, budgets: reply, recurring_rules: reply, transactions: reply, shopping_items: reply, exchange_rates: reply }), reply, sessionReply, async (tables, insert, session) => {
         const { client } = fakeCloud({ tables, upsert: insert, session });
         const steps = await runCloudCheck(client, ctxOf(), { timeoutMs: 15, newId: () => 'probe' });
         expect(steps.map((s) => s.id)).toEqual(ORDER);
@@ -70,7 +70,7 @@ describe('runCloudCheck: мусор от сервера', () => {
 
   it('итог «ok» бывает ТОЛЬКО когда все чтения успешны (массив, без ошибки) и вставка отклонена кодом 23514', async () => {
     await fc.assert(
-      fc.asyncProperty(fc.record({ settings: reply, wallets: reply, categories: reply, debts: reply, budgets: reply, recurring_rules: reply, transactions: reply, exchange_rates: reply }), reply, async (tables, insert) => {
+      fc.asyncProperty(fc.record({ settings: reply, wallets: reply, categories: reply, debts: reply, budgets: reply, recurring_rules: reply, transactions: reply, shopping_items: reply, exchange_rates: reply }), reply, async (tables, insert) => {
         const { client } = fakeCloud({ tables, upsert: insert });
         const steps = await runCloudCheck(client, ctxOf(), { timeoutMs: 15, newId: () => 'probe' });
         if (overallStatus(steps) !== 'ok') return;
@@ -152,10 +152,10 @@ describe('runCloudCheck: клиент бросает не Error', () => {
 });
 
 describe('runCloudCheck: пробная запись', () => {
-  it('отправляет ровно по одной строке в каждую из семи таблиц, каждая заведомо неверна и уже «удалена»; user_id не присылает', async () => {
+  it('отправляет ровно по одной строке в каждую из восьми таблиц, каждая заведомо неверна и уже «удалена»; user_id не присылает', async () => {
     const { client, calls } = fakeCloud();
     await runCloudCheck(client, ctxOf(), { newId: () => 'probe-1' });
-    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'transactions', 'wallets']);
+    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'shopping_items', 'transactions', 'wallets']);
     for (const ins of calls.upserts) {
       expect(ins.row['deleted_at'], ins.table).not.toBeNull();
       expect('user_id' in ins.row, ins.table).toBe(false);
@@ -193,8 +193,8 @@ describe('runCloudCheck: пробная запись', () => {
 });
 
 describe('runCloudCheck: чужие данные', () => {
-  it('чужие строки в любой из семи таблиц — ошибка, даже если свои тоже есть', async () => {
-    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions']) {
+  it('чужие строки в любой из восьми таблиц — ошибка, даже если свои тоже есть', async () => {
+    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items']) {
       const { client } = fakeCloud({ tables: { [t]: rows([{ id: 'a', user_id: U }, { id: 'b', user_id: '22222222-2222-4222-8222-222222222222' }]) } });
       const steps = await runCloudCheck(client, ctxOf());
       expect(steps.find((s) => s.id === 'read')?.status, t).toBe('fail');

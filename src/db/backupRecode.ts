@@ -31,11 +31,12 @@ export async function withAccountIds(file: BackupFile, userId: string, sourceUse
     for (const id of ids) out.set(id, seeded.get(id) ?? (await uuidV5(FINORA_NAMESPACE, `${userId}:import:${kind}:${id}`)));
     return out;
   };
-  const [w, c, d, r] = await Promise.all([
+  const [w, c, d, r, sh] = await Promise.all([
     derive('wallet', file.wallets.map((x) => x.id)),
     derive('category', file.categories.map((x) => x.id)),
     derive('debt', file.debts.map((x) => x.id)),
     derive('rule', file.recurringRules.map((x) => x.id)),
+    derive('shopping', file.shoppingItems.map((x) => x.id)),
   ]);
   const pick = (m: Map<string, string>, id: string | null): string | null => (id === null ? null : (m.get(id) ?? id));
 
@@ -70,6 +71,7 @@ export async function withAccountIds(file: BackupFile, userId: string, sourceUse
       categoryId: pick(c, x.categoryId),
       debtId: pick(d, x.debtId),
     })),
+    shoppingItems: file.shoppingItems.map((x) => ({ ...x, id: sh.get(x.id) ?? x.id, transactionId: pick(txIds, x.transactionId) })),
     transactions: file.transactions.map((x) => ({
       ...x,
       id: txIds.get(x.id) ?? x.id,

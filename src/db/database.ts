@@ -1,5 +1,5 @@
 import Dexie, { type DexieOptions, type EntityTable, type Table } from 'dexie';
-import type { Budget, Category, Debt, LocalRow, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, LocalRow, RecurringRule, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
 import { SYNC_TABLES, type EntityOf, type SyncTableName } from '@/sync/tables';
 
 /** Служебное значение в таблице meta: курсоры синхронизации, lastSyncedAt, последняя метка часов. */
@@ -26,13 +26,15 @@ export function dbNameFor(userId: string): string {
  *  - transactions: occurredOn (периоды), walletId/toWalletId (история кошелька, проверки), categoryId,
  *    debtId (операции долга), recurringRuleId (операции по расписанию);
  *  - budgets: categoryId; debts: direction, closedAt, archivedAt; recurring_rules: startOn, archivedAt.
+ *    shopping_items: purchasedAt (активные позиции), transactionId (чек расхода).
  *    (Пустые значения null в индекс IndexedDB не попадают — для запросов «по значению» это то, что нужно.)
  * Остатки кошельков и остатки долгов НЕ хранятся (считаются из операций, см. domain/balances.ts и domain/debts.ts).
  *
  * Версии схемы (имя базы не меняется — данные остаются на месте):
  *  - 1: настройки, кошельки, категории, операции;
  *  - 2: + budgets, debts, recurring_rules, индексы debtId и recurringRuleId у операций. Старым операциям в upgrade()
- *    проставляется debtId = null и recurringRuleId = null (новые поля договора обязательны, а не «может не быть»).
+ *    проставляется debtId = null и recurringRuleId = null (новые поля договора обязательны, а не «может не быть»);
+ *  - 3: + shopping_items (список покупок).
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -42,6 +44,7 @@ export class FinoraDB extends Dexie {
   declare debts: EntityTable<LocalRow<Debt>, 'id'>;
   declare budgets: EntityTable<LocalRow<Budget>, 'id'>;
   declare recurring_rules: EntityTable<LocalRow<RecurringRule>, 'id'>;
+  declare shopping_items: EntityTable<LocalRow<ShoppingItem>, 'id'>;
   declare meta: EntityTable<MetaRow, 'key'>;
 
   constructor(userId: string, options?: DexieOptions) {
@@ -71,6 +74,9 @@ export class FinoraDB extends Dexie {
             if (t['recurringRuleId'] === undefined) t['recurringRuleId'] = null;
           }),
       );
+    this.version(3).stores({
+      shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    });
   }
 
   /** Таблица синхронизируемой сущности по имени. */

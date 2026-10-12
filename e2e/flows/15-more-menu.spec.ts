@@ -5,6 +5,7 @@ import { expect, goSection, isPhone, mainNav, openApp, openFromMore, shot, test 
 const MORE: ReadonlyArray<readonly [string, string, string]> = [
   ['Бюджеты', 'Бюджеты', '#/budgets'],
   ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
+  ['Покупки', 'Покупки', '#/shopping'],
   ['Долги и кредиты', 'Долги и кредиты', '#/debts'],
   ['Настройки', 'Настройки', '#/settings'],
 ];

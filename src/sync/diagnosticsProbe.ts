@@ -194,6 +194,14 @@ export const WRITE_PROBES: readonly WriteProbe[] = [
       debt_id: null, note: '', frequency: 'monthly', interval_n: 1, start_on: '2026-01-01', end_on: null, auto_post: 0, archived_at: null,
     }),
   },
+  // пустое название товара (допустимо от 1 до 80 символов)
+  {
+    table: 'shopping_items',
+    rule: 'shopping_items_name_len',
+    build: (id, stamp) => ({
+      ...common(id, stamp), name: '', qty_milli: 1000, unit: 'pcs', price_minor: null, checked_at: null, purchased_at: null, transaction_id: null,
+    }),
+  },
   // сумма 0 (допустимы только от 1); кошелёк выдуман, но до ключей дело не доходит: правило суммы срабатывает раньше
   {
     table: 'transactions',

@@ -273,6 +273,20 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       }
       break;
     }
+    case 'shopping_items': {
+      const n = charLength(String(r['name']));
+      if (n < 1 || n > 80) fail('name_len');
+      if (!inBound(r['qty_milli'] ?? null, 1, 1_000_000_000)) fail('qty');
+      if (!['pcs', 'kg', 'l'].includes(String(r['unit']))) fail('unit');
+      const price = r['price_minor'] ?? null;
+      if (price !== null && !inBound(price, 0)) fail('price');
+      if (!tsOkOrNull(r['checked_at'] ?? null) || !tsOkOrNull(r['purchased_at'] ?? null)) fail('ts_sane');
+      // отметка и цена ставятся вместе; купленная позиция — отмеченная и с чеком; чек есть только у купленной
+      if (((r['checked_at'] ?? null) === null) !== (price === null)) fail('state_shape');
+      if ((r['purchased_at'] ?? null) !== null && ((r['checked_at'] ?? null) === null || (r['transaction_id'] ?? null) === null)) fail('purchase_shape');
+      if ((r['transaction_id'] ?? null) !== null && (r['purchased_at'] ?? null) === null) fail('purchase_shape');
+      break;
+    }
   }
 }
 

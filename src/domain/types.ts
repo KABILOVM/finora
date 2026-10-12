@@ -169,6 +169,26 @@ export interface RecurringRule extends SyncFields {
   archivedAt: IsoDateTime | null;
 }
 
+export type ShoppingUnit = 'pcs' | 'kg' | 'l';
+
+/**
+ * Позиция списка покупок. Количество — целое в тысячных долях единицы (qtyMilli: 1400 = 1,4 кг, 3000 = 3 шт), без дробных чисел.
+ * Цены — целые минорные единицы основной валюты. Отметка «в корзине» (checkedAt) ставится вместе с ценой, вписанной в магазине
+ * (priceMinor — за всю позицию); «куплено» (purchasedAt) — после подтверждения покупки: тогда позиция входит в чек расхода
+ * (transactionId) и больше не меняется. Прошлые цены берутся из купленных позиций с тем же названием и единицей (domain/shopping.ts).
+ */
+export interface ShoppingItem extends SyncFields {
+  name: string;
+  qtyMilli: number;
+  unit: ShoppingUnit;
+  /** Цена позиции целиком, вписанная в магазине; null = не отмечена. */
+  priceMinor: Minor | null;
+  checkedAt: IsoDateTime | null;
+  purchasedAt: IsoDateTime | null;
+  /** Расход, в чек которого вошла позиция. */
+  transactionId: UUID | null;
+}
+
 /** Настройки пользователя. ОДНА строка на пользователя, id = id пользователя (чтобы устройства не плодили дубли). */
 export interface Settings extends SyncFields {
   baseCurrency: CurrencyCode;
@@ -180,7 +200,7 @@ export interface Settings extends SyncFields {
 
 export type LocalRow<T> = T & LocalFields;
 
-export type Entity = Wallet | Category | Transaction | Settings | Budget | Debt | RecurringRule;
+export type Entity = Wallet | Category | Transaction | Settings | Budget | Debt | RecurringRule | ShoppingItem;
 
 /**
  * Таблица курсов относительно «опорной» валюты (pivot): 1 единица X стоит perUnit[X] единиц pivot.

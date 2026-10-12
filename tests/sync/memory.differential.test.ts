@@ -5,7 +5,7 @@ import type { TxKind } from '@/domain/types';
 import { createMemoryServer } from '@/sync/memoryServer';
 import { SYNC_TABLES, TABLE_SPECS, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type PgliteServer } from './pglite';
 
 /**
@@ -83,6 +83,8 @@ const specArb = (f: Focus): fc.Arbitrary<Spec> =>
       'budgets' as const,
       'recurring_rules' as const,
       'recurring_rules' as const,
+      'shopping_items' as const,
+      'shopping_items' as const,
     ),
     user: fc.integer({ min: 0, max: 1 }),
     rows: fc.array(
@@ -133,6 +135,7 @@ async function compare(specs: Spec[]): Promise<void> {
   const debtIds = Array.from({ length: 4 }, () => makeDebt().id);
   const budgetIds = Array.from({ length: 4 }, () => makeBudget().id);
   const ruleIds = Array.from({ length: 4 }, () => makeRecurringRule().id);
+  const shopIds = Array.from({ length: 4 }, () => makeShoppingItem().id);
   const MAX = 1_000_000_000_000_000;
   const at = (i: number) => new Date(base + (OFFSETS[i] as number)).toISOString();
 
@@ -249,6 +252,25 @@ async function compare(specs: Spec[]): Promise<void> {
           endOn: v === 8 ? '2026-09-30' : v === 9 ? '2100-01-02' : v === 18 ? '2026-10-01' : v === 19 ? '2100-01-01' : r.kind === 1 ? '2027-01-01' : null,
           autoPost: v === 10 ? (2 as 0) : r.kind % 2 === 0 ? 0 : 1,
           note: v === 11 ? 'я'.repeat(501) : v === 12 ? 'я'.repeat(500) : '',
+        });
+      }
+      case 'shopping_items': {
+        const v = r.v2;
+        const at = new Date(base - 5 * MIN).toISOString();
+        const tx = txIds[r.ref % 4] as string;
+        // отметка и цена идут парой; купленная — отмеченная и с чеком (v 14)
+        const checked = v === 7 || v === 8 || v === 9 || v === 11 || v === 12 || v === 14 || v === 15 || v === 17;
+        const price = v === 7 ? -1 : v === 8 ? MAX + 1 : v === 9 ? MAX : v === 10 ? 100 : v === 11 ? null : v === 15 ? 0 : checked ? 250 : null;
+        return toWire('shopping_items', {
+          ...makeShoppingItem(sync),
+          id: shopIds[r.id] as string,
+          name: v === 1 ? '' : v === 2 ? 'я'.repeat(81) : v === 16 ? 'я'.repeat(80) : `п${r.kind}`,
+          qtyMilli: v === 3 ? 0 : v === 4 ? 1_000_000_001 : v === 5 ? 1_000_000_000 : 1400,
+          unit: v === 6 ? ('kgs' as 'kg') : (['pcs', 'kg', 'l'] as const)[r.kind % 3]!,
+          priceMinor: price,
+          checkedAt: checked ? at : null,
+          purchasedAt: v === 12 || v === 14 ? at : null,
+          transactionId: v === 13 || v === 14 ? tx : null,
         });
       }
     }
