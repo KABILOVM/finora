@@ -29,7 +29,7 @@ function Body({ m }: { m: RemindersModel }) {
           <p>
             <strong className="font-semibold">Напоминания работают только при входе в облако.</strong>
           </p>
-          <p className="text-muted">Напоминания присылает сервер, поэтому нужен вход в облако. Сейчас Finora хранит данные только на этом устройстве.</p>
+          <p className="text-muted">Напоминания присылает сервер, поэтому нужен вход в облако. Сейчас Sumoima хранит данные только на этом устройстве.</p>
         </>
       );
     case 'not-configured':
@@ -77,7 +77,7 @@ function Ready({ m }: { m: RemindersModel }) {
       <div role="status" aria-live="polite" className="flex flex-col gap-1">
         <p className={cn('text-lg font-semibold', status.cls)}>{status.text}</p>
         {!enabled && (
-          <p className="text-muted">Finora напомнит о платежах по расписанию и о сроках возврата долгов, даже если приложение закрыто.</p>
+          <p className="text-muted">Sumoima напомнит о платежах по расписанию и о сроках возврата долгов, даже если приложение закрыто.</p>
         )}
         {m.notice && <p className={cn('font-medium', NOTICE_CLASS[m.notice.tone])}>{m.notice.text}</p>}
       </div>

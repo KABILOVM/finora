@@ -14,7 +14,7 @@ const ANDROID =
 const DESKTOP =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
-const TITLE = 'Установить Finora на экран телефона';
+const TITLE = 'Установить Sumoima на экран телефона';
 const DELAY = 1500;
 
 function env(ua: string, touch = 5) {

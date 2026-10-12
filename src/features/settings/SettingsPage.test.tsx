@@ -46,7 +46,7 @@ describe('Настройки: общий вид (локальный режим)'
     for (const name of ['Оформление', 'Валюта учёта', 'Резервная копия']) {
       expect(screen.getByRole('heading', { name, level: 2 })).toBeInTheDocument();
     }
-    expect(screen.getByText(new RegExp(`Finora ${version.replace(/\./g, '\\.')} `))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Sumoima ${version.replace(/\./g, '\\.')} `))).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Категории/ })).toHaveAttribute('href', '/settings/categories');
   });
 
@@ -220,11 +220,11 @@ describe('Настройки: резервная копия', () => {
     fire(input, new Event('change', { bubbles: true }));
   }
 
-  it('«Сохранить копию» отдаёт файл finora-backup-ГГГГ-ММ-ДД.json с полными данными', async () => {
+  it('«Сохранить копию» отдаёт файл sumoima-backup-ГГГГ-ММ-ДД.json с полными данными', async () => {
     const td = await openSettings();
     await user.click(screen.getByRole('button', { name: 'Сохранить копию' }));
     await waitFor(() => expect(downloads).toHaveLength(1));
-    expect(downloads[0]?.name).toMatch(/^finora-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(downloads[0]?.name).toMatch(/^sumoima-backup-\d{4}-\d{2}-\d{2}\.json$/);
     expect(downloads[0]?.href).toBe('blob:test-1');
     const parsed = JSON.parse(await readFileText(blobs[0] as Blob)) as Awaited<ReturnType<typeof exportBackup>>;
     expect(parsed.format).toBeTruthy();
@@ -240,7 +240,7 @@ describe('Настройки: резервная копия', () => {
     await write(() => store(td).transactions.create({ kind: 'expense', walletId: cash?.id ?? '', amountMinor: 12_345, occurredOn: '2026-10-05', note: 'хлеб' }));
     await user.click(screen.getByRole('button', { name: 'Операции в таблицу (CSV)' }));
     await waitFor(() => expect(downloads).toHaveLength(1));
-    expect(downloads[0]?.name).toMatch(/^finora-transactions-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(downloads[0]?.name).toMatch(/^sumoima-transactions-\d{4}-\d{2}-\d{2}\.csv$/);
     const csv = await readFileText(blobs[0] as Blob);
     expect(csv).toContain('хлеб');
     expect(csv).toContain('123,45');
@@ -255,17 +255,17 @@ describe('Настройки: резервная копия', () => {
     expect(downloads).toHaveLength(0);
   });
 
-  it('файл не JSON → «не копия Finora», данные не тронуты, окно подтверждения не открывается', async () => {
+  it('файл не JSON → «не копия Sumoima», данные не тронуты, окно подтверждения не открывается', async () => {
     const td = await openSettings();
     const before = await store(td).db.wallets.count();
     chooseFile('это просто текст, а не копия');
-    expect(await findByRole('alert')).toHaveTextContent('это не копия Finora');
+    expect(await findByRole('alert')).toHaveTextContent('это не копия Sumoima');
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Загрузить копию?' })).toBeNull();
     expect(await store(td).db.wallets.count()).toBe(before);
   });
 
-  it('JSON, но не копия Finora → после подтверждения понятная ошибка, данные не изменены', async () => {
+  it('JSON, но не копия Sumoima → после подтверждения понятная ошибка, данные не изменены', async () => {
     const td = await openSettings();
     const before = JSON.stringify(await store(td).db.wallets.toArray());
     chooseFile(JSON.stringify({ hello: 'world' }));
@@ -273,7 +273,7 @@ describe('Настройки: резервная копия', () => {
     await user.click(screen.getByRole('button', { name: 'Загрузить' }));
     const alert = await findByRole('alert');
     expect(alert.textContent ?? '').not.toBe('');
-    expect((alert.textContent ?? '').replace(/Finora/g, '')).not.toMatch(/[A-Za-z]{5,}/); // без английских технических слов
+    expect((alert.textContent ?? '').replace(/Sumoima/g, '')).not.toMatch(/[A-Za-z]{5,}/); // без английских технических слов
     expect(JSON.stringify(await store(td).db.wallets.toArray())).toBe(before);
     expect(screen.queryByText('Копия загружена')).toBeNull();
   });

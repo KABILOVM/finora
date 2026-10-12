@@ -41,7 +41,7 @@ export function CurrencyStep({ onBack, onNext }: { onBack: () => void; onNext: (
     <WizardFrame
       step="currency"
       title="Основная валюта"
-      lead="В ней Finora считает «Всего», итоги месяца и отчёты."
+      lead="В ней Sumoima считает «Всего», итоги месяца и отчёты."
       onBack={onBack}
       onNext={() => void next()}
       nextDisabled={!settings}

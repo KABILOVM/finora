@@ -220,7 +220,7 @@ describe('Шаг «Таблицы в базе»', () => {
   it('схема не применена: точная подсказка и список недостающих таблиц; остальные шаги работают по тому, что есть', async () => {
     const { by, calls } = await check({ tables: { wallets: NO_TABLE, exchange_rates: fail('42P01', 'relation "exchange_rates" does not exist', 404) } });
     expect(by.schema.status).toBe('fail');
-    expect(by.schema.message).toContain('Выполните файл supabase/schema.sql в SQL Editor вашего проекта Finora');
+    expect(by.schema.message).toContain('Выполните файл supabase/schema.sql в SQL Editor вашего проекта Sumoima');
     expect(by.schema.message).toContain('wallets, exchange_rates');
     expect(by.read.status).toBe('ok'); // wallets не считаем, остальные читаются
     expect(by.write.status).toBe('ok');

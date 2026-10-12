@@ -39,7 +39,7 @@ export function AppShell({ status }: AppShellProps) {
           <div className="flex min-h-[52px] items-center justify-between gap-2 px-4">
             <div className="flex shrink-0 items-center gap-2">
               <Logo size={28} />
-              {/* Без сети на узком экране слово «Finora» уступает место индикаторам: они должны уместиться в одну строку. */}
+              {/* Без сети на узком экране слово «Sumoima» уступает место индикаторам: они должны уместиться в одну строку. */}
               <Wordmark className={cn('text-lg', !online && 'max-[419px]:sr-only')} />
             </div>
             <div className="flex min-w-0 items-center gap-1">

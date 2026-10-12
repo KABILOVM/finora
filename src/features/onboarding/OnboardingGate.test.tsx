@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 
 const saved = () => parseProgress(localStorage.getItem(onboardingKey(LOCAL_USER_ID)));
-const wizard = () => screen.queryByRole('dialog', { name: 'Настройка Finora' });
+const wizard = () => screen.queryByRole('dialog', { name: 'Настройка Sumoima' });
 const click = (el: HTMLElement) => user.click(el);
 
 function renderGate(path = '/') {

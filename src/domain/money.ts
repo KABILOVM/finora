@@ -2,7 +2,7 @@ import { exponentOf, factorOf, currencyInfo } from './currency';
 import type { CurrencyCode, Minor } from './types';
 
 /**
- * Правила денег Finora:
+ * Правила денег Sumoima:
  *  1) сумма — всегда целое число минорных единиц (Number.isSafeInteger), без дробных;
  *  2) разбор строки и форматирование — только целочисленная арифметика (без Number("12.34") * 100);
  *  3) переполнение — ошибка, а не тихая потеря точности.

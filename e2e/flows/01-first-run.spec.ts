@@ -17,7 +17,7 @@ test.describe('1. Первый запуск', () => {
     });
 
     await openApp(page);
-    await expect(page).toHaveTitle(/Finora/);
+    await expect(page).toHaveTitle(/Sumoima/);
 
     // Честный индикатор вместо «Синхронизировано»
     const badge = page.getByRole('status', { name: /Облако не подключено/ });

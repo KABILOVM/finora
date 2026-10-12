@@ -150,7 +150,7 @@ export function LockCover({ state, cloud, onUnlock, onLeave }: LockCoverProps) {
         {view === 'main' ? (
           <>
             <h2 id={titleId} className="text-2xl font-bold tracking-tight">
-              Finora закрыта
+              Sumoima закрыта
             </h2>
             <p id={descId} className="text-muted">
               {state.kind === 'on'

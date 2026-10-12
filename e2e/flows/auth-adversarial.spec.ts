@@ -19,7 +19,7 @@ async function addAuthenticator(page: Page): Promise<{ cdp: CDPSession; verified
 }
 
 const lockSwitch = (page: Page) => page.getByRole('switch', { name: 'Открывать по Face ID / отпечатку' });
-const cover = (page: Page) => page.getByRole('dialog', { name: 'Finora закрыта' });
+const cover = (page: Page) => page.getByRole('dialog', { name: 'Sumoima закрыта' });
 
 const hide = (page: Page, hidden: boolean) =>
   page.evaluate((h) => {
@@ -99,7 +99,7 @@ test.describe('auth-adversarial: данные не уходят из-под за
     const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => 'ERR'));
     test.info().annotations.push({ type: 'selection', description: JSON.stringify(sel.slice(0, 200)) });
     test.info().annotations.push({ type: 'clipboard', description: JSON.stringify(clip.slice(0, 200)) });
-    expect(sel, 'выделение — это сама заслонка, а не приложение под ней').toContain('Finora закрыта');
+    expect(sel, 'выделение — это сама заслонка, а не приложение под ней').toContain('Sumoima закрыта');
     expect(sel, 'выделение захватило текст закрытого приложения').not.toMatch(/Копилка|Главная|Кошельки/);
     expect(clip, 'буфер обмена получил текст закрытого приложения').not.toMatch(/Копилка|Главная|Кошельки/);
   });

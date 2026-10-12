@@ -186,7 +186,7 @@ describe('Проверка облака на настоящей схеме', () 
     await pg.db.exec('drop table public.exchange_rates');
     const { by } = await run();
     expect(by.schema.status).toBe('fail');
-    expect(by.schema.message).toContain('Выполните файл supabase/schema.sql в SQL Editor вашего проекта Finora');
+    expect(by.schema.message).toContain('Выполните файл supabase/schema.sql в SQL Editor вашего проекта Sumoima');
     expect(by.schema.message).toContain('exchange_rates');
     expect(by.rates.status).toBe('skip');
     expect(by.write.status).toBe('ok');
@@ -210,7 +210,7 @@ describe('Проверка облака на настоящей схеме', () 
       const { by, steps } = await run({ server: empty, emulator: createPostgrestEmulator(empty) });
       expect(by.server.status).toBe('ok');
       expect(by.schema.status).toBe('fail');
-      expect(by.schema.message).toContain('Выполните файл supabase/schema.sql в SQL Editor вашего проекта Finora');
+      expect(by.schema.message).toContain('Выполните файл supabase/schema.sql в SQL Editor вашего проекта Sumoima');
       expect(by.schema.message).toContain('settings, wallets, categories, debts, budgets, recurring_rules, transactions, shopping_items, exchange_rates');
       expect(['read', 'write', 'rates'].map((id) => by[id as CheckStepId].status)).toEqual(['skip', 'skip', 'skip']);
       expect(steps).toHaveLength(7);

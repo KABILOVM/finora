@@ -114,7 +114,7 @@ describe('шапка телефона: индикаторы в одну стро
     expect(statusRow().className).not.toContain('flex-wrap');
   });
 
-  it('без сети «Офлайн» появляется в том же контейнере, а слово «Finora» на узком экране уступает место (остаётся для скринридера)', async () => {
+  it('без сети «Офлайн» появляется в том же контейнере, а слово «Sumoima» на узком экране уступает место (остаётся для скринридера)', async () => {
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
     renderAt('/wallets');
     await findByRole('heading', { name: 'Кошельки', level: 1 });
@@ -122,14 +122,14 @@ describe('шапка телефона: индикаторы в одну стро
     expect(statusRow()).toHaveTextContent('Офлайн');
     expect(statusRow().querySelectorAll('[role="status"]')).toHaveLength(2);
     expect(statusRow().querySelector('[data-keep]')).toHaveTextContent('Офлайн'); // «Офлайн» не сжимается, сокращается соседний индикатор
-    const word = Array.from(document.querySelectorAll('.sticky span')).find((s) => s.textContent === 'Finora') as HTMLElement;
+    const word = Array.from(document.querySelectorAll('.sticky span')).find((s) => s.textContent === 'Sumoima') as HTMLElement;
     expect(word.className).toContain('sr-only');
   });
 
-  it('с сетью слово «Finora» видно всегда', async () => {
+  it('с сетью слово «Sumoima» видно всегда', async () => {
     renderAt('/wallets');
     await findByRole('heading', { name: 'Кошельки', level: 1 });
-    const word = Array.from(document.querySelectorAll('.sticky span')).find((s) => s.textContent === 'Finora') as HTMLElement;
+    const word = Array.from(document.querySelectorAll('.sticky span')).find((s) => s.textContent === 'Sumoima') as HTMLElement;
     expect(word.className).not.toContain('sr-only');
   });
 });

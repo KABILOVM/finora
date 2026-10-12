@@ -123,7 +123,7 @@ export async function openApp(page: Page, hash = '/', opts: { onboarding?: boole
   if (!opts.onboarding) await skipOnboardingInAdvance(page);
   await page.goto(`/#${hash}`);
   if (opts.onboarding) {
-    await expect(page.getByRole('dialog', { name: 'Настройка Finora' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Настройка Sumoima' })).toBeVisible();
     return;
   }
   await waitReady(page);
@@ -153,14 +153,14 @@ export async function skipOnboardingInAdvance(page: Page): Promise<void> {
 
 /** Если мастер всё же показался — пропустить его («Пропустить, настрою сам»); если его нет, ничего не делает. */
 export async function closeOnboarding(page: Page): Promise<void> {
-  const dlg = page.getByRole('dialog', { name: 'Настройка Finora' });
+  const dlg = page.getByRole('dialog', { name: 'Настройка Sumoima' });
   if ((await dlg.count()) === 0) return;
   await dlg.getByRole('button', { name: 'Пропустить, настрою сам' }).click();
   await expect(dlg).toBeHidden();
 }
 
 /**
- * Окно «Установить Finora на экран телефона» появляется через ~1,5 с после входа (только на телефоне) и перекрывает экран.
+ * Окно «Установить Sumoima на экран телефона» появляется через ~1,5 с после входа (только на телефоне) и перекрывает экран.
  * Дождаться его и закрыть кнопкой «Не сейчас»; на ПК и если окно не появилось — ничего не делает.
  * Сценарий про само окно (25-install-prompt) этот помощник не вызывает.
  */
@@ -175,7 +175,7 @@ export async function dismissInstallPrompt(page: Page): Promise<void> {
     }
   });
   if (remembered) return;
-  const dlg = page.getByRole('dialog', { name: 'Установить Finora на экран телефона' });
+  const dlg = page.getByRole('dialog', { name: 'Установить Sumoima на экран телефона' });
   try {
     await dlg.waitFor({ state: 'visible', timeout: 4000 });
   } catch {

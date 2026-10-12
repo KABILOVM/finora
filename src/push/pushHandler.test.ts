@@ -12,7 +12,7 @@ import { BAD_PATHS, GOOD_PATHS } from './__fixtures__/paths';
 
 const SOURCE = readFileSync(new URL('../../public/push-handler.js', import.meta.url), 'utf8');
 const SCOPE = 'https://finora.example/app/';
-const FALLBACK = 'Finora: есть напоминание';
+const FALLBACK = 'Sumoima: есть напоминание';
 
 interface Win {
   url: string;
@@ -118,13 +118,13 @@ describe('public/push-handler.js: событие push', () => {
     }
   });
 
-  it('неверные типы полей заменяются; есть только текст — заголовок «Finora»', async () => {
+  it('неверные типы полей заменяются; есть только текст — заголовок «Sumoima»', async () => {
     const h = load();
     await h.push(JSON.stringify({ title: 123, body: ['a'], tag: { x: 1 }, url: 5 }));
     expect(h.shown[0]!.title).toBe(FALLBACK);
     const h2 = load();
     await h2.push(JSON.stringify({ title: { a: 1 }, body: 'Есть платёж', tag: 7, url: null }));
-    expect(h2.shown[0]!.title).toBe('Finora');
+    expect(h2.shown[0]!.title).toBe('Sumoima');
     expect(h2.shown[0]!.options).toMatchObject({ body: 'Есть платёж', tag: 'finora-reminder', data: { url: '/' } });
   });
 

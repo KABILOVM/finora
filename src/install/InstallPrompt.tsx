@@ -42,14 +42,14 @@ const SHARE_STEPS: { icon: IconName; text: string }[] = [
 function Why() {
   return (
     <p className="text-sm text-muted">
-      Только из установленного приложения работают уведомления, а замок Face ID надёжнее. Заодно Finora открывается
+      Только из установленного приложения работают уведомления, а замок Face ID надёжнее. Заодно Sumoima открывается
       сразу, как обычное приложение.
     </p>
   );
 }
 
 /**
- * Окно «Установить Finora на экран телефона». Рисуется внутри уже вошедшего приложения (не поверх входа и не поверх
+ * Окно «Установить Sumoima на экран телефона». Рисуется внутри уже вошедшего приложения (не поверх входа и не поверх
  * заслонки замка: её z-index 1000, а у окна 50, и пока заслонка есть, окно ждёт).
  */
 export function InstallPrompt({ delayMs = SHOW_DELAY_MS }: { delayMs?: number }) {
@@ -100,7 +100,7 @@ export function InstallPrompt({ delayMs = SHOW_DELAY_MS }: { delayMs?: number })
     <Sheet
       open
       onClose={later}
-      title="Установить Finora на экран телефона"
+      title="Установить Sumoima на экран телефона"
       footer={
         mode === 'native' ? (
           <div className="flex flex-col gap-2">
@@ -120,7 +120,7 @@ export function InstallPrompt({ delayMs = SHOW_DELAY_MS }: { delayMs?: number })
     >
       <div className="flex flex-col gap-4">
         {mode === 'native' && (
-          <p className="text-base">Значок Finora появится на экране телефона, как у обычного приложения.</p>
+          <p className="text-base">Значок Sumoima появится на экране телефона, как у обычного приложения.</p>
         )}
         {mode === 'ios-safari' && (
           <ol className="flex flex-col gap-3" aria-label="Как установить">

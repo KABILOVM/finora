@@ -193,7 +193,7 @@ export function fxSourceOf(lookup: Pick<RateLookup, 'source' | 'manual'>): strin
 
 const SOURCE_LABELS: Record<string, string> = {
   nbt: 'Нацбанк',
-  server: 'сервер Finora',
+  server: 'сервер Sumoima',
   api: 'интернет-курс',
   manual: 'задан вручную',
   cached: 'сохранённый курс',

@@ -66,7 +66,7 @@ const lockLog = (page: Page) =>
 const disarm = (page: Page) => page.evaluate(() => void ((window as unknown as { __lockLog: { armed: boolean } }).__lockLog.armed = false));
 
 const lockSwitch = (page: Page) => page.getByRole('switch', { name: 'Открывать по Face ID / отпечатку' });
-const cover = (page: Page) => page.getByRole('dialog', { name: 'Finora закрыта' });
+const cover = (page: Page) => page.getByRole('dialog', { name: 'Sumoima закрыта' });
 const openButton = (page: Page) => page.getByRole('button', { name: 'Открыть по Face ID / отпечатку' });
 
 /** Включить замок в Настройках (аутентификатор подтверждает) и вернуться на «Главную». */

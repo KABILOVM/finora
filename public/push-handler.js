@@ -1,5 +1,5 @@
 /*
- * Finora: показ push-напоминаний. Этот файл подключается к сервис-воркеру через importScripts (см. vite.config.ts) и работает
+ * Sumoima: показ push-напоминаний. Этот файл подключается к сервис-воркеру через importScripts (см. vite.config.ts) и работает
  * внутри него. Без зависимостей, обычный JavaScript (ES5): никаких стрелок, let/const и async.
  *
  * Сообщение приходит снаружи (его шлёт сервер), поэтому ему не доверяем: разбираем безопасно, режем длину, а ссылку по нажатию
@@ -11,8 +11,8 @@
 (function () {
   'use strict';
 
-  var FALLBACK_TITLE = 'Finora: есть напоминание';
-  var DEFAULT_TITLE = 'Finora';
+  var FALLBACK_TITLE = 'Sumoima: есть напоминание';
+  var DEFAULT_TITLE = 'Sumoima';
   var DEFAULT_TAG = 'finora-reminder';
   var MAX_TITLE = 100;
   var MAX_BODY = 300;

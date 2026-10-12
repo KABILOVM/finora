@@ -202,7 +202,7 @@ describe('formatReport и overallStatus', () => {
     const { steps } = await check({ tables: { wallets: NO_TABLE } }, { quarantined: 1 });
     const report = formatReport(steps, { now: NOW, host: HOST });
     const lines = report.split('\n');
-    expect(lines[0]).toBe('Проверка облака Finora, 2026-10-10 16:40 UTC');
+    expect(lines[0]).toBe('Проверка облака Sumoima, 2026-10-10 16:40 UTC');
     expect(lines[1]).toBe('Итог: есть ошибки');
     expect(lines[2]).toBe(`Сервер: ${HOST}`);
     expect(report).toMatch(/^✔ Связь с сервером: /m);
