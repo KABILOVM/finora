@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ParsedItem } from '@/domain/shoppingAi';
 import type { AiListResult } from './aiList';
 import type { ActiveRecorder, Recording, StartRecorder } from './recorder';
+import { priceKey } from '@/domain/shopping';
 import { act, render, screen, user, waitFor } from '@/components/testUtils';
 import { ListTextSheet } from './ListTextSheet';
 
@@ -9,11 +10,31 @@ const MILK: ParsedItem = { name: 'Молоко', qtyMilli: 2000, unit: 'l' };
 const BREAD: ParsedItem = { name: 'Хлеб', qtyMilli: 3000, unit: 'pcs' };
 const FLOUR: ParsedItem = { name: 'Мука', qtyMilli: 1000, unit: 'pcs' };
 
+/** Каталог: молоко берут литрами, мука — штуками; молоко раньше покупали по 13 с. за литр. */
+const CATALOG = [
+  { name: 'Молоко', unit: 'l' as const },
+  { name: 'Мука', unit: 'pcs' as const },
+  { name: 'Масло сливочное', unit: 'pcs' as const },
+];
+const MEMORY = new Map([[priceKey('Молоко', 'l'), 1300]]);
+
 const REC: Recording = { blob: new Blob(['x'], { type: 'audio/mp4' }), mime: 'audio/mp4' };
 
 function setup(parse: (t: string, k: readonly string[]) => Promise<ParsedItem[]>, onAdd = vi.fn(async () => {})) {
   const onClose = vi.fn();
-  render(<ListTextSheet known={['Хлеб']} parse={parse} listen={vi.fn()} canRecord={false} onAdd={onAdd} onClose={onClose} />);
+  render(
+    <ListTextSheet
+      known={['Хлеб']}
+      catalog={CATALOG}
+      memory={MEMORY}
+      currency="TJS"
+      parse={parse}
+      listen={vi.fn()}
+      canRecord={false}
+      onAdd={onAdd}
+      onClose={onClose}
+    />,
+  );
   return { onAdd, onClose };
 }
 
@@ -25,11 +46,23 @@ function setupVoice(opts: { listen?: (r: Recording, k: readonly string[]) => Pro
   const onAdd = vi.fn(async () => {});
   const onClose = vi.fn();
   const ui = render(
-    <ListTextSheet known={['Хлеб']} parse={vi.fn()} listen={listen} startRecording={start} canRecord onAdd={onAdd} onClose={onClose} />,
+    <ListTextSheet
+      known={['Хлеб']}
+      catalog={CATALOG}
+      memory={MEMORY}
+      currency="TJS"
+      parse={vi.fn()}
+      listen={listen}
+      startRecording={start}
+      canRecord
+      onAdd={onAdd}
+      onClose={onClose}
+    />,
   );
   return { rec, start, listen, onAdd, onClose, ui };
 }
 const panel = () => document.querySelector('[data-testid="record-panel"]') as HTMLElement | null;
+const editor = () => document.querySelector('[data-testid="row-editor"]') as HTMLElement | null;
 const field = () => screen.getByRole('textbox', { name: 'Что купить' });
 const btn = (name: string | RegExp) => screen.getByRole('button', { name });
 
@@ -40,7 +73,7 @@ describe('«Добавить списком» с ИИ', () => {
     expect((btn('Разобрать') as HTMLButtonElement).disabled).toBe(true);
     await user.type(field(), 'молоко два литра');
     expect(parse).not.toHaveBeenCalled();
-    expect(screen.queryByText('Будет добавлено · проверьте')).toBeNull();
+    expect(screen.queryByText('Будет добавлено · нажмите позицию, чтобы поправить')).toBeNull();
   });
 
   it('разобрать → показать → добавить; известные названия уходят на разбор', async () => {
@@ -48,7 +81,7 @@ describe('«Добавить списком» с ИИ', () => {
     const { onAdd, onClose } = setup(parse);
     await user.type(field(), 'молоко два литра хлеб три штуки');
     await user.click(btn('Разобрать'));
-    await waitFor(() => expect(screen.getByText('Будет добавлено · проверьте')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Будет добавлено · нажмите позицию, чтобы поправить')).toBeTruthy());
     expect(parse).toHaveBeenCalledWith('молоко два литра хлеб три штуки', ['Хлеб']);
     expect(screen.getByText('Молоко')).toBeTruthy();
     expect(screen.getByText('2 л')).toBeTruthy();
@@ -136,7 +169,7 @@ describe('«Добавить списком»: микрофон', () => {
     expect(start).toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Продиктовать' })).toBeNull();
     await user.click(btn('Остановить'));
-    await waitFor(() => expect(screen.getByText('Будет добавлено · проверьте')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Будет добавлено · нажмите позицию, чтобы поправить')).toBeTruthy());
     expect(rec.stop).toHaveBeenCalled();
     expect(listen).toHaveBeenCalledWith(REC, ['Хлеб']);
     expect((field() as HTMLTextAreaElement).value).toBe('молоко два литра хлеб три штуки');
@@ -206,5 +239,97 @@ describe('«Добавить списком»: микрофон', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('«Добавить списком»: правка позиций и каталог', () => {
+  const parseTo = (items: ParsedItem[]) => async () => items;
+  async function parsed(items: ParsedItem[]) {
+    const ctx = setup(parseTo(items));
+    await user.type(field(), 'что-то');
+    await user.click(btn('Разобрать'));
+    await waitFor(() => screen.getByText('Будет добавлено · нажмите позицию, чтобы поправить'));
+    return ctx;
+  }
+
+  it('позиция из каталога: название как у вас, единица каталога, отметка и примерная цена', async () => {
+    await parsed([
+      { name: 'молока', qtyMilli: 2000, unit: 'pcs' },
+      { name: 'сыр', qtyMilli: 1000, unit: 'pcs' },
+    ]);
+    // «молока» 2 шт: количество названо, единицу не меняем, но название — из каталога
+    expect(screen.getByText('Молоко')).toBeTruthy();
+    expect(screen.getByText('сыр')).toBeTruthy();
+    expect(screen.getAllByText('в каталоге')).toHaveLength(1);
+  });
+
+  it('количество не названо — единица берётся из каталога, цена считается по памяти цен (13 с. за литр)', async () => {
+    await parsed([{ name: 'молоко', qtyMilli: 1000, unit: 'pcs' }]);
+    expect(screen.getByText('1 л')).toBeTruthy();
+    expect(screen.getByText(/≈\s*13,00/)).toBeTruthy();
+    expect(screen.getByText('в каталоге')).toBeTruthy();
+  });
+
+  it('нажали позицию — открылась правка; название, количество и единицу можно поменять, цена пересчитывается', async () => {
+    const { onAdd } = await parsed([{ name: 'молоко', qtyMilli: 1000, unit: 'pcs' }]);
+    await user.click(btn('Изменить: Молоко'));
+    expect(editor()).not.toBeNull();
+    await user.clear(screen.getByRole('textbox', { name: 'Количество, л' }));
+    await user.type(screen.getByRole('textbox', { name: 'Количество, л' }), '2,5');
+    expect(screen.getByText('2,5 л')).toBeTruthy();
+    expect(screen.getByText(/≈\s*32,50/)).toBeTruthy();
+    await user.click(screen.getByRole('radio', { name: 'кг' }));
+    expect(screen.getByText('2,5 кг')).toBeTruthy();
+    expect(screen.queryByText(/≈/)).toBeNull(); // за килограмм молока цены нет
+    await user.clear(screen.getByRole('textbox', { name: 'Название' }));
+    await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Картошка');
+    await user.click(btn('Готово'));
+    expect(editor()).toBeNull();
+    await user.click(btn('Добавить 1 позицию'));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'Картошка', qtyMilli: 2500, unit: 'kg' }]));
+  });
+
+  it('штуки — только целые: переход на «шт» округляет 1,5 вниз', async () => {
+    const { onAdd } = await parsed([{ name: 'яблоки', qtyMilli: 1500, unit: 'kg' }]);
+    await user.click(btn('Изменить: яблоки'));
+    await user.click(screen.getByRole('radio', { name: 'шт' }));
+    expect((screen.getByRole('textbox', { name: 'Количество, шт' }) as HTMLInputElement).value).toBe('1');
+    await user.click(btn('Добавить 1 позицию'));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'яблоки', qtyMilli: 1000, unit: 'pcs' }]));
+  });
+
+  it('неверное количество и пустое название: понятная ошибка, в позиции остаётся прежнее', async () => {
+    const { onAdd } = await parsed([{ name: 'хлеб', qtyMilli: 3000, unit: 'pcs' }]);
+    await user.click(btn('Изменить: хлеб'));
+    await user.clear(screen.getByRole('textbox', { name: 'Количество, шт' }));
+    await user.type(screen.getByRole('textbox', { name: 'Количество, шт' }), '1,5');
+    expect(screen.getByText('Штуки — целое число, например 3')).toBeTruthy();
+    await user.clear(screen.getByRole('textbox', { name: 'Название' }));
+    expect(screen.getByText('Впишите название товара')).toBeTruthy();
+    await user.click(btn('Добавить 1 позицию'));
+    // «1» набрано верно и сохранилось, «1,5» для штук нельзя — осталось последнее верное
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'хлеб', qtyMilli: 1000, unit: 'pcs' }]));
+  });
+
+  it('при правке названия предлагаются позиции из каталога: выбор подставляет название и единицу', async () => {
+    const { onAdd } = await parsed([{ name: 'масло', qtyMilli: 1000, unit: 'pcs' }]);
+    await user.click(btn('Изменить: масло'));
+    const chip = screen.getByRole('button', { name: 'Масло сливочное · шт' });
+    await user.click(chip);
+    expect((screen.getByRole('textbox', { name: 'Название' }) as HTMLInputElement).value).toBe('Масло сливочное');
+    await user.click(btn('Добавить 1 позицию'));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'Масло сливочное', qtyMilli: 1000, unit: 'pcs' }]));
+  });
+
+  it('«Убрать» в правке и крестик в строке убирают позицию; убрали все — снова «Разобрать»', async () => {
+    await parsed([
+      { name: 'хлеб', qtyMilli: 1000, unit: 'pcs' },
+      { name: 'соль', qtyMilli: 1000, unit: 'pcs' },
+    ]);
+    await user.click(btn('Изменить: хлеб'));
+    await user.click(btn('Убрать позицию: хлеб'));
+    expect(screen.queryByText('хлеб')).toBeNull();
+    await user.click(btn('Убрать: соль'));
+    expect(btn('Разобрать')).toBeTruthy();
   });
 });

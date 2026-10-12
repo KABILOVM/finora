@@ -220,6 +220,39 @@ describe('переводы', () => {
     expect((await liveTxs(td))[0]).toMatchObject({ kind: 'transfer', amountMinor: 200_000, toAmountMinor: 197_000 });
   });
 
+  it('на телефоне процент комиссии печатается экранной клавиатурой (системная не открывается), тап по сумме возвращает клавиши к ней', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('coarse'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    try {
+      const td = opsDeps([], { setup: withCard });
+      const { onClose } = await openAddSheet(td);
+      await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+      await tapAmount('200');
+      await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+      await user.click(screen.getByRole('radio', { name: 'Проценты' }));
+      const pct = screen.getByRole('textbox', { name: 'Комиссия в процентах' }) as HTMLInputElement;
+      expect(pct.getAttribute('inputmode')).toBe('none');
+      await tapAmount('1,5');
+      expect(pct.value).toBe('1,5');
+      expect(screen.getByText('Получит: 197 с.')).toBeInTheDocument();
+      await tapAmount('⌫⌫⌫2,,');
+      expect(pct.value).toBe('2,');
+      await user.click(screen.getByRole('textbox', { name: 'Сумма списания, Сомони' }));
+      await tapAmount('0');
+      expect(pct.value).toBe('2,');
+      expect(screen.getByText(/Получит: 1 960 с\./)).toBeInTheDocument();
+      await clickSave();
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect((await liveTxs(td))[0]).toMatchObject({ kind: 'transfer', amountMinor: 200_000, toAmountMinor: 196_000 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('комиссия не меньше суммы перевода нельзя: сообщение у поля, ничего не сохранено', async () => {
     const td = opsDeps([], { setup: withCard });
     const { onClose } = await openAddSheet(td);

@@ -1,6 +1,8 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { AmountInput } from '@/components/AmountInput';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { AmountInput, isCoarsePointer } from '@/components/AmountInput';
+import type { KeypadKey } from '@/components/Keypad';
 import { Icon } from '@/components/Icon';
+import { isOpKey } from '@/components/amountExpr';
 import { cn } from '@/lib/cn';
 import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
@@ -8,7 +10,7 @@ import { Segmented, type SegmentOption } from '@/components/Segmented';
 import type { LocalRow, TxKind, Wallet } from '@/domain/types';
 import { CategoryPicker } from './CategoryPicker';
 import { ContextRow } from './ContextRow';
-import { FeeField } from './FeeField';
+import { FeeField, applyPctKey } from './FeeField';
 import { FxNotice } from './FxNotice';
 import { ReceivedField } from './ReceivedField';
 import { NO_FEE, NOTE_MAX } from './txForm';
@@ -25,8 +27,9 @@ const KINDS: readonly SegmentOption<TxKind>[] = [
  * без прокрутки. Высота клавиш не меньше 44 px — это минимум для касания. Диапазоны высоты не пересекаются.
  */
 const COMPACT_KEYPAD =
-  '[@media(min-height:701px)_and_(max-height:800px)]:[&_button]:!min-h-[48px] ' +
-  '[@media(max-height:700px)]:[&_button]:!min-h-[44px] [@media(max-height:700px)]:!gap-1 ' +
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[46px] ' +
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-op]]:!h-8 [@media(min-height:701px)_and_(max-height:800px)]:[&_.items-baseline]:!py-1 [@media(min-height:701px)_and_(max-height:800px)]:!gap-3 ' +
+  '[@media(max-height:700px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[44px] [@media(max-height:700px)]:[&_[data-op]]:!h-8 [@media(max-height:700px)]:!gap-1 ' +
   '[@media(max-height:700px)]:[&_.items-baseline]:!py-0 [@media(max-height:700px)]:[&_.money]:!text-4xl';
 
 /**
@@ -35,10 +38,10 @@ const COMPACT_KEYPAD =
  * Селекторы те же, что в COMPACT_KEYPAD, но правила целиком заменяют его.
  */
 const FEE_KEYPAD =
-  '[&_button]:!min-h-[44px] [&_[role=group]]:!gap-1 !gap-1 [&_.items-baseline]:!py-0 [&_.money]:!text-3xl ' +
-  '[@media(min-height:701px)_and_(max-height:800px)]:[&_button]:!min-h-[46px] ' +
-  '[@media(min-height:801px)]:[&_button]:!min-h-[50px] [@media(min-height:801px)]:[&_[role=group]]:!gap-1.5 ' +
-  '[@media(max-height:700px)]:[&_button]:!min-h-[40px]';
+  '[&_button:not([data-op]):not([data-side])]:!min-h-[44px] [&_[data-amount-card]]:!min-h-[38px] [&_[data-op]]:!h-[30px] [&_[role=group]]:!gap-1 [&_[data-pad]]:!gap-1 !gap-1 [&_.items-baseline]:!py-0 [&_.money]:!text-3xl ' +
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[44px] ' +
+  '[@media(min-height:801px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[50px] [@media(min-height:801px)]:[&_[role=group]]:!gap-1.5 [@media(min-height:801px)]:[&_[data-pad]]:!gap-1.5 ' +
+  '[@media(max-height:700px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[40px]';
 
 export interface TxFormFieldsProps {
   c: TxFormController;
@@ -52,14 +55,12 @@ export interface TxFormFieldsProps {
 function SideButton({
   label,
   active,
-  side,
   dot,
   onClick,
   children,
 }: {
   label: string;
   active: boolean;
-  side: 'left' | 'right';
   dot?: boolean;
   onClick: () => void;
   children: ReactNode;
@@ -70,10 +71,10 @@ function SideButton({
       aria-label={label}
       title={label}
       aria-expanded={active}
+      data-side=""
       onClick={onClick}
       className={cn(
-        'absolute top-0.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
-        side === 'left' ? 'left-0' : 'right-0',
+        'relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
         active ? 'border-brand bg-brand/10 text-brand' : 'border-border bg-surface text-muted hover:bg-surface-2',
       )}
     >
@@ -94,6 +95,19 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
   // Комиссия: у расхода (новый) и у перевода в одной валюте; у перевода между валютами сумма зачисления задаётся курсом
   const feeAvailable = (form.kind === 'expense' && !c.editing) || (isTransfer && c.received?.mode === 'fee');
   const feeOpen = feeAvailable && (form.feeOpen || !!errors.fee);
+
+  // Процент комиссии вводится той же экранной клавиатурой, что и сумма: куда печатает клавиатура, показывает рамка поля.
+  const [target, setTarget] = useState<'amount' | 'fee'>('amount');
+  const percentOpen = feeOpen && form.feeMode === 'percent';
+  useEffect(() => setTarget(percentOpen ? 'fee' : 'amount'), [percentOpen]);
+  // На телефоне процент печатает экранная клавиатура; на компьютере остаётся физическая, а экранные клавиши — для суммы.
+  const [coarse] = useState(isCoarsePointer);
+  const pctTyping = coarse && percentOpen && target === 'fee';
+  const feeKey = (key: KeypadKey): boolean => {
+    if (!pctTyping) return false;
+    if (!isOpKey(key) && key !== '=') c.set({ feePct: applyPctKey(form.feePct, key) });
+    return true;
+  };
 
   // Высота формы без комиссии запоминается: с комиссией окно не должно становиться ни выше, ни ниже.
   const rootRef = useRef<HTMLDivElement>(null);
@@ -122,7 +136,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
         options={KINDS}
         value={form.kind}
         onChange={c.setKind}
-        className={feeOpen ? '[@media(max-height:700px)]:[&_button]:!min-h-[40px]' : undefined}
+        className={feeOpen ? '[@media(max-height:700px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[40px]' : undefined}
       />
 
       {/* Кошелёк и дата видны над клавиатурой: человек всегда знает, куда запишется операция */}
@@ -148,7 +162,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
         />
       )}
 
-      {feeOpen && <FeeField c={c} />}
+      {feeOpen && <FeeField c={c} pctActive={pctTyping} onPctActivate={() => setTarget('fee')} />}
       {showNote && (
         <TextInput
           label="Заметка"
@@ -164,38 +178,32 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
       )}
 
       {/* Комиссия и заметка скрыты за кнопками по краям суммы: так всё окно помещается без прокрутки */}
-      <div className="relative">
-        {feeAvailable && (
-          <SideButton
-            label="Комиссия"
-            active={feeOpen}
-            side="left"
-            onClick={() => c.set(form.feeOpen ? { ...NO_FEE } : { feeOpen: true })}
-          >
-            <span className="text-lg font-bold">%</span>
+      <AmountInput
+        currency={c.currency}
+        value={form.amountMinor}
+        onChange={(v) => c.set({ amountMinor: v })}
+        label={isTransfer ? 'Сумма списания' : 'Сумма'}
+        tone={form.kind === 'expense' ? 'expense' : form.kind === 'income' ? 'income' : 'neutral'}
+        error={errors.amount}
+        className={feeOpen ? FEE_KEYPAD : COMPACT_KEYPAD}
+        calculator
+        autoFocus
+        start={
+          feeAvailable ? (
+            <SideButton label="Комиссия" active={feeOpen} onClick={() => c.set(form.feeOpen ? { ...NO_FEE } : { feeOpen: true })}>
+              <span className="text-lg font-bold">%</span>
+            </SideButton>
+          ) : undefined
+        }
+        end={
+          <SideButton label="Заметка" active={showNote} onClick={() => setNoteOpen(true)} dot={form.note !== '' && !showNote}>
+            <Icon name="edit" size={20} />
           </SideButton>
-        )}
-        <SideButton
-          label="Заметка"
-          active={showNote}
-          side="right"
-          onClick={() => setNoteOpen(true)}
-          dot={form.note !== '' && !showNote}
-        >
-          <Icon name="edit" size={20} />
-        </SideButton>
-        <AmountInput
-          currency={c.currency}
-          value={form.amountMinor}
-          onChange={(v) => c.set({ amountMinor: v })}
-          label={isTransfer ? 'Сумма списания' : 'Сумма'}
-          tone={form.kind === 'expense' ? 'expense' : form.kind === 'income' ? 'income' : 'neutral'}
-          error={errors.amount}
-          className={feeOpen ? FEE_KEYPAD : COMPACT_KEYPAD}
-          calculator
-          autoFocus
-        />
-      </div>
+        }
+        active={pctTyping ? false : undefined}
+        onActivate={() => setTarget('amount')}
+        onKeyIntercept={feeKey}
+      />
 
       {isTransfer && c.received && c.received.mode === 'cross' && (
         <ReceivedField
