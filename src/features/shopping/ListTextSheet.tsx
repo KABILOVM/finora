@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/Button';
 import { TextArea } from '@/components/Field';
-import { IconButton } from '@/components/IconButton';
 import { Sheet } from '@/components/Sheet';
-import { itemTitle, UNIT_LABEL } from '@/domain/shopping';
 import { MAX_AI_TEXT, type ParsedItem } from '@/domain/shoppingAi';
+import { bindToCatalog, type CatalogEntry } from '@/domain/shoppingCatalog';
+import type { CurrencyCode, Minor } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 import type { AiListResult } from './aiList';
+import { ParsedItemsEditor, type EditableItem } from './ParsedItemsEditor';
 import { RecordPanel } from './RecordPanel';
 import { type ActiveRecorder, type Recording, type StartRecorder, recordingSupported, startRecorder } from './recorder';
 
 export interface ListTextSheetProps {
   /** Названия из списка и прошлых покупок: ИИ пишет известные товары в том же виде. */
   known: readonly string[];
+  /** Каталог (что уже вносили): название и единица подтягиваются оттуда, в правке — подсказки. */
+  catalog: readonly CatalogEntry[];
+  /** Память цен: по ней у каждой позиции видна примерная цена. */
+  memory: ReadonlyMap<string, Minor>;
+  currency: CurrencyCode;
   /** Разобрать текст на позиции (облачная функция с ИИ). Бросает Error с понятным текстом. */
   parse: (text: string, known: readonly string[]) => Promise<ParsedItem[]>;
   /** Отправить запись голоса: сервер слушает её, возвращает расшифровку и позиции. */
@@ -29,15 +35,15 @@ export interface ListTextSheetProps {
 /** Дольше запись не нужна: список из десятков товаров укладывается в минуту. */
 const MAX_SECONDS = 60;
 
-const amount = (i: ParsedItem): string =>
-  i.unit === 'pcs' && i.qtyMilli === 1000 ? '1 шт' : itemTitle('', i.qtyMilli, i.unit).trim() || UNIT_LABEL[i.unit];
-
 /**
  * «Добавить списком»: человек диктует (значок микрофона на клавиатуре телефона) или набирает весь список одним текстом,
  * ИИ разбирает его на позиции (domain/shoppingAi.ts). Результат виден ДО добавления: лишнее можно убрать, текст — поправить и разобрать заново.
  */
 export function ListTextSheet({
   known,
+  catalog,
+  memory,
+  currency,
   parse,
   listen,
   startRecording = startRecorder,
@@ -46,7 +52,10 @@ export function ListTextSheet({
   onClose,
 }: ListTextSheetProps) {
   const [text, setText] = useState('');
-  const [items, setItems] = useState<ParsedItem[] | null>(null);
+  const [items, setItems] = useState<EditableItem[] | null>(null);
+  const nextRid = useRef(1);
+  // Результат разбора: позиции привязываются к каталогу и получают номера строк.
+  const accept = (list: ParsedItem[]) => setItems(list.map((i) => ({ ...bindToCatalog(i, catalog), rid: nextRid.current++ })));
   const [error, setError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,7 +72,7 @@ export function ListTextSheet({
     setParsing(true);
     setError(null);
     try {
-      setItems(await parse(text, known));
+      accept(await parse(text, known));
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : 'Не удалось разобрать список. Попробуйте ещё раз.');
     } finally {
@@ -81,7 +90,7 @@ export function ListTextSheet({
     try {
       const r = await listen(await rec.stop(), known);
       if (r.transcript) setText(r.transcript);
-      setItems(r.items);
+      accept(r.items);
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : 'Не удалось разобрать запись. Попробуйте ещё раз.');
     } finally {
@@ -131,7 +140,7 @@ export function ListTextSheet({
     setSaving(true);
     setError(null);
     try {
-      await onAdd(items);
+      await onAdd(items.map(({ name, qtyMilli, unit }) => ({ name, qtyMilli, unit })));
       onClose();
     } catch (e) {
       console.error('Не удалось добавить список:', e);
@@ -216,27 +225,15 @@ export function ListTextSheet({
         )}
         {ready && (
           <section aria-label="Что будет добавлено" data-testid="parsed-items">
-            <h3 className="mb-1 text-sm font-semibold text-muted">Будет добавлено · проверьте</h3>
-            <ul className="divide-y divide-border rounded-2xl bg-surface-2 pl-3 pr-1">
-              {items.map((i, n) => (
-                <li key={`${i.name}-${n}`} className="flex items-center justify-between gap-2 py-0.5">
-                  <span className="min-w-0 flex-1 truncate font-medium">{i.name}</span>
-                  <span className="shrink-0 text-muted">{amount(i)}</span>
-                  <IconButton
-                    icon="close"
-                    iconSize={18}
-                    label={`Убрать: ${i.name}`}
-                    onClick={() =>
-                      setItems((cur) => {
-                        const next = cur ? cur.filter((_, k) => k !== n) : null;
-                        return next && next.length > 0 ? next : null;
-                      })
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-sm text-muted">Неверно? Поправьте текст выше и нажмите «Разобрать» снова.</p>
+            <h3 className="mb-1 text-sm font-semibold text-muted">Будет добавлено · нажмите позицию, чтобы поправить</h3>
+            <ParsedItemsEditor
+              items={items}
+              onChange={(next) => setItems(next.length > 0 ? next : null)}
+              catalog={catalog}
+              memory={memory}
+              currency={currency}
+            />
+            <p className="mt-2 text-sm text-muted">Неверно распознано? Поправьте текст выше и нажмите «Разобрать» снова.</p>
           </section>
         )}
       </div>

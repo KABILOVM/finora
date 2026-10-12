@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
 import { formatMinor } from '@/domain/money';
 import { priceKey, UNIT_LABEL, type ItemView } from '@/domain/shopping';
+import { buildCatalog } from '@/domain/shoppingCatalog';
 import type { Minor, ShoppingUnit } from '@/domain/types';
 import { useStore, ValidationError } from '@/db';
 import { ItemRow } from './ItemRow';
@@ -48,7 +49,11 @@ export default function ShoppingPage() {
     return (
       <>
         <PageHeader title="Покупки" />
-        <EmptyState icon="cloud" title="Данные ещё загружаются" text="Подождите немного: после первой загрузки здесь появится список покупок." />
+        <EmptyState
+          icon="cloud"
+          title="Данные ещё загружаются"
+          text="Подождите немного: после первой загрузки здесь появится список покупок."
+        />
       </>
     );
   }
@@ -83,7 +88,10 @@ export default function ShoppingPage() {
       try {
         await store.shopping.uncheck(id);
         toast.success(`Достали из корзины: ${v.item.name}`, {
-          action: { label: 'Отменить', onClick: () => void store.shopping.check(id, price).catch((e: unknown) => fail(e, 'Не удалось вернуть позицию в корзину')) },
+          action: {
+            label: 'Отменить',
+            onClick: () => void store.shopping.check(id, price).catch((e: unknown) => fail(e, 'Не удалось вернуть позицию в корзину')),
+          },
         });
       } catch (e) {
         fail(e, 'Не удалось убрать позицию из корзины');
@@ -103,14 +111,20 @@ export default function ShoppingPage() {
   const removeItem = (v: ItemView) => async () => {
     await store.shopping.remove(v.item.id);
     toast.success(`Удалено: ${v.item.name}`, {
-      action: { label: 'Отменить', onClick: () => void store.shopping.restore(v.item.id).catch((e: unknown) => fail(e, 'Не удалось вернуть позицию')) },
+      action: {
+        label: 'Отменить',
+        onClick: () => void store.shopping.restore(v.item.id).catch((e: unknown) => fail(e, 'Не удалось вернуть позицию')),
+      },
     });
   };
 
   // названия из прошлых покупок (без повторов), свежие первыми
   const recent: { name: string; unit: ShoppingUnit }[] = [];
   const seenKeys = new Set<string>();
-  const bought = data.all.filter((i) => i.purchasedAt !== null).sort((a, b) => ((a.purchasedAt as string) < (b.purchasedAt as string) ? 1 : -1));
+  const catalog = buildCatalog(data.all);
+  const bought = data.all
+    .filter((i) => i.purchasedAt !== null)
+    .sort((a, b) => ((a.purchasedAt as string) < (b.purchasedAt as string) ? 1 : -1));
   for (const i of bought) {
     const key = priceKey(i.name, i.unit);
     if (seenKeys.has(key)) continue;
@@ -135,7 +149,9 @@ export default function ShoppingPage() {
             <>
               {' · '}
               {budget.overMinor > 0 ? `Перерасход на «${budget.categoryName}» ` : `Осталось на «${budget.categoryName}» `}
-              <span className="money font-semibold text-text">{formatMinor(budget.overMinor > 0 ? budget.overMinor : budget.remainingMinor, base)}</span>
+              <span className="money font-semibold text-text">
+                {formatMinor(budget.overMinor > 0 ? budget.overMinor : budget.remainingMinor, base)}
+              </span>
             </>
           )}
         </>
@@ -214,6 +230,9 @@ export default function ShoppingPage() {
       {sheet?.kind === 'list' && (
         <ListTextSheet
           known={[...new Set(data.all.map((i) => i.name))]}
+          catalog={catalog}
+          memory={data.memory}
+          currency={base}
           parse={(text, known) => parseListWithAi(text, known)}
           listen={(rec, known) => listenToListWithAi(rec, known)}
           onAdd={async (parsed) => {
@@ -224,13 +243,33 @@ export default function ShoppingPage() {
         />
       )}
       {sheet?.kind === 'edit' && editView && (
-        <ItemSheet key={editView.item.id} view={editView} currency={base} recent={[]} onSave={saveItem(editView)} onRemove={removeItem(editView)} onClose={() => setSheet(null)} />
+        <ItemSheet
+          key={editView.item.id}
+          view={editView}
+          currency={base}
+          recent={[]}
+          onSave={saveItem(editView)}
+          onRemove={removeItem(editView)}
+          onClose={() => setSheet(null)}
+        />
       )}
       {sheet?.kind === 'price' && priceView && (
-        <PriceSheet key={priceView.item.id} view={priceView} currency={base} onSave={(p) => store.shopping.check(priceView.item.id, p).then(() => undefined)} onClose={() => setSheet(null)} />
+        <PriceSheet
+          key={priceView.item.id}
+          view={priceView}
+          currency={base}
+          onSave={(p) => store.shopping.check(priceView.item.id, p).then(() => undefined)}
+          onClose={() => setSheet(null)}
+        />
       )}
       {sheet?.kind === 'purchase' && totals && (
-        <PurchaseSheet totalMinor={totals.cartMinor} count={totals.cartCount} currency={base} defaultCategoryId={data.categoryId} onClose={() => setSheet(null)} />
+        <PurchaseSheet
+          totalMinor={totals.cartMinor}
+          count={totals.cartCount}
+          currency={base}
+          defaultCategoryId={data.categoryId}
+          onClose={() => setSheet(null)}
+        />
       )}
     </>
   );
