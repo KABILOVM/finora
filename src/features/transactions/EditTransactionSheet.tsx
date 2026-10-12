@@ -10,6 +10,7 @@ import { formatMinor } from '@/domain/money';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
 import { overpayAfterEdit, type EditOverpay } from '@/features/debts/editOverpay';
 import { TxLinkNotice } from '@/features/debts/TxLinkNotice';
+import { Receipt } from '@/features/shopping/Receipt';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
@@ -246,6 +247,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
       >
         <div ref={formRef}>
           <TxLinkNotice tx={orig} />
+          {tx.kind === 'expense' && <Receipt txId={tx.id} currency={wallets.find((w) => w.id === tx.walletId)?.currency ?? tx.baseCurrency} />}
           <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} />
         </div>
       </Sheet>

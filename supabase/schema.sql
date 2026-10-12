@@ -3,8 +3,8 @@
 --
 -- ЧТО ЭТО
 --   Таблицы личного учёта денег: настройки, кошельки, категории, операции (этап 1) и долги, бюджеты,
---   регулярные платежи (этап 2, раздел 8 в конце файла) плюс общие курсы валют. Итого 8 таблиц:
---   settings, wallets, categories, debts, budgets, recurring_rules, transactions, exchange_rates.
+--   регулярные платежи (этап 2, раздел 8 в конце файла), список покупок (раздел 10) плюс общие курсы валют. Итого 9 таблиц:
+--   settings, wallets, categories, debts, budgets, recurring_rules, transactions, shopping_items, exchange_rates.
 --   Правила доступа (у каждого пользователя видны и меняются только СВОИ данные)
 --   и защитный триггер, который решает конфликты между устройствами
 --   («побеждает самая поздняя правка») и выдаёт номера для синхронизации.
@@ -854,4 +854,80 @@ create policy reminder_settings_insert_own on public.reminder_settings for inser
   with check (user_id = (select auth.uid()));
 drop policy if exists reminder_settings_update_own on public.reminder_settings;
 create policy reminder_settings_update_own on public.reminder_settings for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+
+-- 10. Список покупок -------------------------------------------------------------------------
+-- Одна таблица shopping_items, как у остальных данных: user_id ставит сервер, правка принимается только если метка строго новее,
+-- удаления нет (deleted_at), курсор синхронизации — (user_id, server_seq), защита строк (RLS) — только свои.
+-- Количество — целое в тысячных долях (1400 = 1,4 кг), цены — целые минорные единицы основной валюты.
+-- Отметка «в корзине» (checked_at) и вписанная в магазине цена (price_minor) ставятся вместе. Купленная позиция (purchased_at)
+-- обязана быть отмеченной и входить в чек расхода (transaction_id); чек есть только у купленной. Внешнего ключа на transactions нет:
+-- у операций нет пары (user_id, id) — это ссылка для показа чека, удалённая операция строки не ломает.
+-- Каждое ограничение зеркалится в src/sync/memoryRules.ts под тем же именем.
+
+-- 10.1. Таблица.
+create table if not exists public.shopping_items (
+  id                uuid        not null,
+  created_at        timestamptz not null,
+  client_updated_at timestamptz not null,
+  device_id         text        not null,
+  deleted_at        timestamptz,
+  name              text        not null,
+  qty_milli         bigint      not null,
+  unit              text        not null,
+  price_minor       bigint,
+  checked_at        timestamptz,
+  purchased_at      timestamptz,
+  transaction_id    uuid,
+  user_id           uuid        not null,
+  server_seq        bigint      not null,
+  server_updated_at timestamptz not null,
+  constraint shopping_items_pkey primary key (id),
+  constraint shopping_items_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint shopping_items_name_len check (char_length(name) between 1 and 80),
+  constraint shopping_items_qty check (qty_milli between 1 and 1000000000),
+  constraint shopping_items_unit check (unit in ('pcs', 'kg', 'l')),
+  constraint shopping_items_price check (price_minor is null or price_minor between 0 and 1000000000000000),
+  constraint shopping_items_device_id_len check (char_length(device_id) between 1 and 64),
+  -- отметка и цена — вместе
+  constraint shopping_items_state_shape check ((checked_at is null) = (price_minor is null)),
+  -- купленная: отмечена и с чеком; чек — только у купленной
+  constraint shopping_items_purchase_shape check (
+    (purchased_at is null and transaction_id is null)
+    or (purchased_at is not null and checked_at is not null and transaction_id is not null)
+  ),
+  constraint shopping_items_ts_sane check (
+    created_at        between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and client_updated_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and (deleted_at   is null or deleted_at   between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (checked_at   is null or checked_at   between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (purchased_at is null or purchased_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+  )
+);
+
+-- 10.2. Служебная колонка запроса base_seq (см. 2.5) и защитный триггер синхронизации (тот же, что у остальных таблиц).
+alter table public.shopping_items add column if not exists base_seq bigint;
+
+drop trigger if exists sync_guard on public.shopping_items;
+create trigger sync_guard before insert or update on public.shopping_items
+  for each row execute function private.sync_guard();
+
+-- 10.3. Индекс курсора синхронизации.
+create index if not exists shopping_items_user_seq_idx on public.shopping_items (user_id, server_seq);
+
+-- 10.4. Права и защита строк (RLS): только select / insert / update и только свои строки.
+revoke all on table public.shopping_items from public, anon, authenticated;
+grant select, insert, update on table public.shopping_items to authenticated;
+
+alter table public.shopping_items enable row level security;
+
+drop policy if exists shopping_items_select_own on public.shopping_items;
+create policy shopping_items_select_own on public.shopping_items for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists shopping_items_insert_own on public.shopping_items;
+create policy shopping_items_insert_own on public.shopping_items for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists shopping_items_update_own on public.shopping_items;
+create policy shopping_items_update_own on public.shopping_items for update to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

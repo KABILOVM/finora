@@ -22,11 +22,11 @@ export interface NavItem {
 }
 
 /** Разделы, которые на телефоне лежат за пунктом «Ещё»: там он остаётся подсвеченным. */
-export const MORE_SECTIONS = ['/more', '/budgets', '/recurring', '/debts', '/settings', '/import'] as const;
+export const MORE_SECTIONS = ['/more', '/budgets', '/recurring', '/shopping', '/debts', '/settings', '/import'] as const;
 
 /**
  * Пункты меню. На телефоне «+» (добавить операцию) вставляется между вторым и третьим пунктом.
- * На ПК места больше: в основной группе Бюджеты, Платежи и Долги, внизу «Настройки». Пункта «Ещё» на ПК нет:
+ * На ПК места больше: в основной группе Бюджеты, Платежи, Покупки и Долги, внизу «Настройки». Пункта «Ещё» на ПК нет:
  * это меню только для телефона, где в нижней панели не хватает места. Категории и импорт лежат внутри «Настроек».
  */
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -35,6 +35,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/wallets', label: 'Кошельки', sideLabel: 'Кошельки', icon: 'wallet', phone: true, side: 'main' },
   { to: '/budgets', label: 'Бюджеты', sideLabel: 'Бюджеты', icon: 'pie', side: 'main' },
   { to: '/recurring', label: 'Регулярные платежи', sideLabel: 'Платежи', icon: 'repeat', side: 'main' },
+  { to: '/shopping', label: 'Покупки', sideLabel: 'Покупки', icon: 'cart', side: 'main' },
   { to: '/debts', label: 'Долги и кредиты', sideLabel: 'Долги', icon: 'banknote', side: 'main' },
   {
     to: '/more',

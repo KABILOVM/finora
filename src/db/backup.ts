@@ -8,6 +8,7 @@ import type {
   LocalRow,
   RecurringRule,
   Settings,
+  ShoppingItem,
   SyncFields,
   Transaction,
   Wallet,
@@ -38,9 +39,9 @@ export function toEntity<T extends Entity>(table: SyncTableName, row: LocalRow<T
  */
 export async function exportBackup(store: Store): Promise<BackupFile> {
   const { db } = store;
-  const [settings, wallets, categories, transactions, budgets, debts, rules] = await db.transaction(
+  const [settings, wallets, categories, transactions, budgets, debts, rules, shopping] = await db.transaction(
     'r',
-    [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules],
+    [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules, db.shopping_items],
     () =>
       Promise.all([
         db.settings.get(store.userId),
@@ -50,6 +51,7 @@ export async function exportBackup(store: Store): Promise<BackupFile> {
         db.budgets.toArray(),
         db.debts.toArray(),
         db.recurring_rules.toArray(),
+        db.shopping_items.toArray(),
       ]),
   );
   const byCreated = <T extends { createdAt: string; id: string }>(a: T, b: T) =>
@@ -65,6 +67,7 @@ export async function exportBackup(store: Store): Promise<BackupFile> {
     budgets: budgets.sort(byCreated).map((r) => toEntity<Budget>('budgets', r)),
     debts: debts.sort(byCreated).map((r) => toEntity<Debt>('debts', r)),
     recurringRules: rules.sort(byCreated).map((r) => toEntity<RecurringRule>('recurring_rules', r)),
+    shoppingItems: shopping.sort(byCreated).map((r) => toEntity<ShoppingItem>('shopping_items', r)),
   };
 }
 
@@ -146,13 +149,14 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
   const { db } = store;
   const tally: ImportResult = { added: 0, replaced: 0, keptLocal: 0 };
 
-  return writeTx(ctx, [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules], async () => {
+  return writeTx(ctx, [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules, db.shopping_items], async () => {
     const wallets = index(await db.wallets.toArray());
     const categories = index(await db.categories.toArray());
     const transactions = index(await db.transactions.toArray());
     const budgets = index(await db.budgets.toArray());
     const debts = index(await db.debts.toArray());
     const rules = index(await db.recurring_rules.toArray());
+    const shopping = index(await db.shopping_items.toArray());
     const settings = index(await db.settings.toArray());
 
     // До слияния: валюта кошельков (чтобы заметить, что импорт её меняет).
@@ -165,6 +169,7 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     const b = mergeTable<Budget, Row<Budget>>(budgets, file.budgets, tally);
     const dbt = mergeTable<Debt, Row<Debt>>(debts, file.debts, tally);
     const rr = mergeTable<RecurringRule, Row<RecurringRule>>(rules, file.recurringRules, tally);
+    const sh = mergeTable<ShoppingItem, Row<ShoppingItem>>(shopping, file.shoppingItems, tally);
     const s = file.settings
       ? mergeTable<Settings, Row<Settings>>(settings, [file.settings], tally)
       : { written: [] as Row<Settings>[], winners: new Set<string>() };
@@ -262,10 +267,11 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     await db.budgets.bulkPut(b.written);
     await db.debts.bulkPut(dbt.written);
     await db.recurring_rules.bulkPut(rr.written);
+    await db.shopping_items.bulkPut(sh.written);
 
     // Следующие правки этого устройства должны быть новее всего, что мы только что записали.
     // (метки файла уже проверены: не дальше «сейчас + 5 минут», поэтому берём самую большую)
-    const written = [...w.written, ...c.written, ...t.written, ...s.written, ...b.written, ...dbt.written, ...rr.written];
+    const written = [...w.written, ...c.written, ...t.written, ...s.written, ...b.written, ...dbt.written, ...rr.written, ...sh.written];
     if (written.length > 0) ctx.clock.observe(written.reduce((m, r) => (r.clientUpdatedAt > m ? r.clientUpdatedAt : m), ''));
     return tally;
   });

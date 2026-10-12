@@ -1,13 +1,16 @@
-import type { CurrencyCode, DebtDirection, Frequency, IsoDate, IsoDateTime, Minor, TxKind, UUID } from '@/domain/types';
+import { NAME_MAX as SHOPPING_NAME_MAX, QTY_MAX, QTY_MIN, SHOPPING_UNITS } from '@/domain/shopping';
+import type { CurrencyCode, DebtDirection, Frequency, IsoDate, IsoDateTime, Minor, ShoppingUnit, TxKind, UUID } from '@/domain/types';
 import { fail } from './errors';
 import {
   LIMITS,
+  MINOR_LIMIT,
   optId,
   optStamp,
   parseTxFields,
   reqCurrency,
   reqDate,
   reqEnum,
+  reqMinorInRange,
   reqPositiveMinor,
   reqSafeInt,
   reqText,
@@ -118,5 +121,39 @@ export function parseRuleData(raw: Record<string, unknown>, opts: { requireToAmo
     endOn,
     autoPost: reqSafeInt(raw['autoPost'], 'Автопроведение', 0, 1) === 1 ? 1 : 0,
     archivedAt: optStamp(raw['archivedAt'], 'Дата архивации регулярного платежа'),
+  };
+}
+
+export interface ShoppingData {
+  name: string;
+  qtyMilli: number;
+  unit: ShoppingUnit;
+  priceMinor: Minor | null;
+  checkedAt: IsoDateTime | null;
+  purchasedAt: IsoDateTime | null;
+  transactionId: UUID | null;
+}
+
+/**
+ * Проверка позиции списка покупок без базы — те же границы, что у сервера (shopping_items): название 1…80 символов,
+ * количество 0,001…1 000 000 (целое в тысячных), цена 0…1e15. Отметка и цена идут вместе; купленная позиция — отмеченная и с чеком.
+ */
+export function parseShoppingData(raw: Record<string, unknown>): ShoppingData {
+  const price = raw['priceMinor'];
+  const priceMinor = price === null || price === undefined ? null : reqMinorInRange(price, 'Цена позиции', 0, MINOR_LIMIT);
+  const checkedAt = optStamp(raw['checkedAt'], 'Время отметки позиции');
+  const purchasedAt = optStamp(raw['purchasedAt'], 'Время покупки позиции');
+  const transactionId = optId(raw['transactionId'], 'Расход покупки');
+  if ((checkedAt === null) !== (priceMinor === null)) fail('Отметка позиции и цена ставятся вместе');
+  if (purchasedAt !== null && (checkedAt === null || transactionId === null)) fail('Купленная позиция должна быть отмечена и входить в чек расхода');
+  if (purchasedAt === null && transactionId !== null) fail('Чек расхода есть только у купленной позиции');
+  return {
+    name: reqText(raw['name'], 'Название товара', SHOPPING_NAME_MAX),
+    qtyMilli: reqSafeInt(raw['qtyMilli'], 'Количество', QTY_MIN, QTY_MAX),
+    unit: reqEnum(raw['unit'], 'Единица', SHOPPING_UNITS),
+    priceMinor,
+    checkedAt,
+    purchasedAt,
+    transactionId,
   };
 }

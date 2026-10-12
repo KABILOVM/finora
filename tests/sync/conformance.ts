@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Category, Entity, Settings, Transaction, TxKind, Wallet } from '@/domain/types';
 import { SYNC_TABLES, fromWire, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
 import { TransportError, type SyncTransport } from '@/sync/transport';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
 import { HOUR, MIN, expectRejected, failure, find, iso, markerUuid, must, newId, pullAll, type ServerHarness, type Stamp } from './conformanceKit';
 import { runStage2Conformance } from './conformanceStage2';
 
@@ -36,6 +36,8 @@ function makeSubject(table: SyncTableName, userId: string, t: SyncTransport, t0:
         return makeBudget({ ...sync, id, amountMinor: n }); // маркер — лимит (от 1)
       case 'recurring_rules':
         return makeRecurringRule({ ...sync, id, walletId: parent.id, note: `m${n}` });
+      case 'shopping_items':
+        return makeShoppingItem({ ...sync, id, name: `m${n}` });
     }
   };
   return {
@@ -97,7 +99,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       };
     };
 
-    it('1. круговой обмен: push → pull возвращает ту же сущность (все 7 таблиц)', async () => {
+    it('1. круговой обмен: push → pull возвращает ту же сущность (все 8 таблиц)', async () => {
       const { userId, t } = fresh();
       const t0 = h.now().getTime();
       const sync = (k: number) => ({ createdAt: iso(t0 - HOUR + k * 1000), clientUpdatedAt: iso(t0 - HOUR + k * 1000 + 500), deviceId: 'device-a' });
@@ -121,6 +123,10 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       const repay = makeTransaction({ ...sync(16), kind: 'income', walletId: w1.id, debtId: debt.id, amountMinor: 700_00, baseAmountMinor: 700_00 });
       const scheduled = makeTransaction({ ...sync(17), walletId: w1.id, categoryId: sub.id, recurringRuleId: ruleExpense.id, occurredOn: '2026-10-01' });
       const fee = makeTransaction({ ...sync(18), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, amountMinor: 110_00, toAmountMinor: 1_000, baseAmountMinor: 1_00, recurringRuleId: ruleTransfer.id });
+      // список покупок: не отмечена, в корзине (с ценой), куплена (с чеком = расход), крайние значения количества и цены
+      const shopOpen = makeShoppingItem({ ...sync(19), name: 'Хлеб', unit: 'pcs', qtyMilli: 3000 });
+      const shopCart = makeShoppingItem({ ...sync(20), name: 'Яблоки', unit: 'kg', qtyMilli: 1400, priceMinor: 0, checkedAt: iso(t0 - MIN) });
+      const shopBought = makeShoppingItem({ ...sync(21), name: 'Молоко', unit: 'l', qtyMilli: 1_000_000_000, priceMinor: 1_000_000_000_000_000, checkedAt: iso(t0 - MIN), purchasedAt: iso(t0 - MIN / 2), transactionId: expense.id, deletedAt: iso(t0 - 1000) });
       const sent: Record<SyncTableName, Entity[]> = {
         settings: [settings],
         wallets: [w1, w2],
@@ -129,6 +135,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
         budgets: [budgetTotal, budgetCat],
         recurring_rules: [ruleExpense, ruleTransfer, ruleDebt],
         transactions: [expense, usd, income, transfer, repay, scheduled, fee],
+        shopping_items: [shopOpen, shopCart, shopBought],
       };
       for (const table of SYNC_TABLES) await t.push(table, sent[table].map((e) => toWire(table, e))); // порядок: родители раньше детей
       for (const table of SYNC_TABLES) {

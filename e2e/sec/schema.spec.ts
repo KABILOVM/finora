@@ -63,7 +63,7 @@ async function commit(who: Who, sql: string, params: unknown[] = []): Promise<vo
   });
 }
 
-const TABLES = ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions'] as const;
+const TABLES = ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items'] as const;
 const WALLET_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const NOW = '2026-10-10T10:00:00Z';
 
@@ -136,7 +136,7 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
         has_table_privilege('authenticated', c.oid, 'delete') as auth_del,
         has_table_privilege('authenticated', c.oid, 'truncate') as auth_trunc
       from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname='public' and c.relkind='r'`);
-    expect(privs.rows.length).toBe(11); // 7 таблиц синхронизации + курсы валют + подписки, настройки напоминаний, журнал отправленного
+    expect(privs.rows.length).toBe(12); // 8 таблиц синхронизации + курсы валют + подписки, настройки напоминаний, журнал отправленного
     for (const r of privs.rows) expect(r, r.t).toMatchObject({ anon_any: false, auth_del: false, auth_trunc: false });
     // anon не имеет ни одного отдельного права
     const anonAny = await db.query<{ t: string }>(`select c.relname as t from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and (${['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'].map((p) => `has_table_privilege('anon', c.oid, '${p}')`).join(' or ')})`);
@@ -242,9 +242,9 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
       expect('error' in r ? r.error : 'ok', sql.replace(/\s+/g, ' ').slice(0, 80)).toBe('ok');
     }
   });
-  test('каталог: политик ровно 28 (select / insert / update × 9 своих таблиц + 1 select у курсов), политик на delete и «для всех» нет', async () => {
+  test('каталог: политик ровно 31 (select / insert / update × 10 своих таблиц + 1 select у курсов), политик на delete и «для всех» нет', async () => {
     const pol = await db.query<{ tablename: string; cmd: string; roles: string }>(`select tablename, cmd, roles::text as roles from pg_policies where schemaname = 'public'`);
-    expect(pol.rows).toHaveLength(28);
+    expect(pol.rows).toHaveLength(31);
     for (const t of [...TABLES, 'push_subscriptions', 'reminder_settings']) expect(pol.rows.filter((p) => p.tablename === t).map((p) => p.cmd).sort(), t).toEqual(['INSERT', 'SELECT', 'UPDATE']);
     expect(pol.rows.filter((p) => p.tablename === 'push_log'), 'журнал отправленного: политик нет, доступ только у service_role').toEqual([]);
     expect(pol.rows.filter((p) => p.tablename === 'exchange_rates').map((p) => p.cmd)).toEqual(['SELECT']);
@@ -299,6 +299,53 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
     await commit(asB, debt('22222222-0000-4000-8000-000000000005', 'Свой'));
     const own = await run(asB, tx('22222222-0000-4000-8000-000000000006', '22222222-0000-4000-8000-000000000005', null));
     expect('error' in own ? own.error : 'ok').toBe('ok');
+  });
+
+  test('список покупок: чужие позиции недоступны (чтение, правка, upsert), ограничения отвергаются по имени, купленная и корзина принимаются', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    const id = (n: number) => `44444444-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const cols = `(id, created_at, client_updated_at, device_id, name, qty_milli, unit, price_minor, checked_at, purchased_at, transaction_id)`;
+    const item = (n: number, o: { name?: string; qty?: number; unit?: string; price?: number | null; checked?: boolean; bought?: boolean; tx?: boolean } = {}) =>
+      `insert into public.shopping_items ${cols} values ('${id(n)}', '${NOW}', '${NOW}', 'd', '${o.name ?? 'Молоко'}', ${o.qty ?? 2000}, '${o.unit ?? 'l'}', ${o.price === undefined ? 'null' : o.price}, ${o.checked ? `'${NOW}'` : 'null'}, ${o.bought ? `'${NOW}'` : 'null'}, ${o.tx ? `'${id(900)}'` : 'null'})`;
+    await commit(asA, item(1));
+    const seen = await run(asB, `select id from public.shopping_items`);
+    expect('rows' in seen && seen.rows, 'B читает покупки A').toEqual([]);
+    const upd = await run(asB, `update public.shopping_items set client_updated_at = now() where id = '${id(1)}'`);
+    expect('rowCount' in upd && upd.rowCount, 'B правит покупки A').toBe(0);
+    const take = await run(asB, `${item(1, { name: 'ВЗЛОМ' })} on conflict (id) do update set name = excluded.name, client_updated_at = '2099-01-01', device_id = 'zzz'`);
+    expect('error' in take, 'upsert поверх чужой позиции обязан упасть').toBe(true);
+    const still = await run(asA, `select name from public.shopping_items where id = '${id(1)}'`);
+    expect('rows' in still && still.rows).toEqual([{ name: 'Молоко' }]);
+    const del = await run(asA, `delete from public.shopping_items where id = '${id(1)}'`);
+    expect('error' in del, 'удалять позиции нельзя никому').toBe(true);
+
+    const cases: Array<[string, string]> = [
+      ['shopping_items_name_len', item(2, { name: '' })],
+      ['shopping_items_name_len', item(3, { name: 'я'.repeat(81) })],
+      ['shopping_items_qty', item(4, { qty: 0 })],
+      ['shopping_items_qty', item(5, { qty: 1_000_000_001 })],
+      ['shopping_items_unit', item(6, { unit: 'kgs' })],
+      ['shopping_items_price', item(7, { price: -1, checked: true })],
+      ['shopping_items_price', item(8, { price: 1_000_000_000_000_001, checked: true })],
+      ['shopping_items_state_shape', item(9, { price: 100 })], // цена без отметки
+      ['shopping_items_state_shape', item(10, { checked: true })], // отметка без цены
+      ['shopping_items_purchase_shape', item(11, { price: 100, checked: true, bought: true })], // куплена без чека
+      ['shopping_items_purchase_shape', item(12, { price: 100, checked: true, tx: true })], // чек без покупки
+    ];
+    for (const [name, sql] of cases) {
+      const r = await run(asA, sql);
+      expect('error' in r && r.code, name).toBe('23514');
+      expect('error' in r && r.error, name).toContain(name);
+    }
+    for (const [n, o] of [
+      [20, { price: 0, checked: true }],
+      [21, { name: 'Хлеб', qty: 3000, unit: 'pcs' }],
+      [22, { qty: 1_000_000_000, price: 1_000_000_000_000_000, checked: true, bought: true, tx: true }],
+    ] as const) {
+      const r = await run(asA, item(n, o));
+      expect('error' in r ? r.error : 'ok', `позиция ${n}`).toBe('ok');
+    }
   });
 
   test('этап 2: ограничения долгов, бюджетов и платежей отвергаются по имени; комиссия перевода принимается', async () => {

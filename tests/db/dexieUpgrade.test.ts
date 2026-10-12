@@ -153,3 +153,42 @@ describe('чтение строк без новых полей (старые д�
     }
   });
 });
+
+describe('обновление базы с версии 2 до 3 (список покупок)', () => {
+  it('данные этапа 2 на месте, таблица shopping_items появилась пустой и работает; курсор покупок = 0', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(2).stores({
+      settings: 'id, dirty, [dirty+clientUpdatedAt]',
+      wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+      categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+      transactions:
+        'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+      debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+      budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+      recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+      meta: 'key',
+    });
+    await old.open();
+    const DEBT = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa10';
+    await old.table('debts').add({
+      ...sync, dirty: 1, serverSeq: null, syncError: null, id: DEBT, direction: 'lent', counterparty: 'Алишер', principalMinor: 5000,
+      currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null,
+    });
+    await old.table('meta').put({ key: 'cursor:debts', value: 3 });
+    old.close();
+
+    const store = await open(factory);
+    try {
+      expect(await store.db.debts.get(DEBT)).toMatchObject({ counterparty: 'Алишер', dirty: 1, principalMinor: 5000 });
+      expect(await store.sync.getCursor('debts')).toBe(3);
+      expect(await store.db.shopping_items.count()).toBe(0);
+      expect(await store.sync.getCursor('shopping_items')).toBe(0);
+      const item = await store.shopping.add({ name: 'Молоко', qtyMilli: 2000, unit: 'l' });
+      expect(await store.db.shopping_items.get(item.id)).toMatchObject({ name: 'Молоко', dirty: 1 });
+      expect(await store.db.shopping_items.where('dirty').equals(1).count()).toBe(1);
+    } finally {
+      store.close();
+    }
+  });
+});

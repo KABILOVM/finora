@@ -16,6 +16,7 @@ export type { TransactionsRepo, TransactionInput, TransactionPatch, TransactionC
 export type { BudgetsRepo, BudgetInput } from './budgetsRepo';
 export type { DebtsRepo, DebtInput, DebtPatch, DebtDeleteMode, DebtDeletion } from './debtsRepo';
 export type { RecurringRepo, RecurringInput, RecurringPatch } from './recurringRepo';
+export type { ShoppingRepo, ShoppingInput, ShoppingPatch, PurchaseInput, PurchaseResult } from './shoppingRepo';
 export type { SettingsRepo, SettingsPatch } from './settingsRepo';
 export type { FromRuleOptions } from './transactionsRepo';
 export * from './validatePlans';
@@ -41,6 +42,8 @@ export {
   useBudgets,
   useDebts,
   useRecurringRules,
+  useShoppingItems,
+  useReceipt,
   useDebtState,
   useDebtView,
   useUpcoming,

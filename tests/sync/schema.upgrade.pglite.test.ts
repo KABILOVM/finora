@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SYNC_TABLES, toWire, type SyncTableName } from '@/sync/tables';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type PgliteServer } from './pglite';
 
 /**
@@ -120,7 +120,7 @@ const dumpAll = async (s: PgliteServer, tables: readonly SyncTableName[]): Promi
 async function stage1WithData(): Promise<{ s: PgliteServer; userId: string; ids: { w1: string; w2: string; c: string; transfer: string; expense: string } }> {
   const s = await createPgliteServer({ schema: STAGE1 });
   server = s;
-  const hasNew = await s.db.query(`select 1 from pg_class where relnamespace = 'public'::regnamespace and relname in ('debts', 'budgets', 'recurring_rules')`);
+  const hasNew = await s.db.query(`select 1 from pg_class where relnamespace = 'public'::regnamespace and relname in ('debts', 'budgets', 'recurring_rules', 'shopping_items')`);
   expect(hasNew.rows, 'прежняя схема не должна знать о таблицах этапа 2').toEqual([]);
   const userId = makeUserId();
   await s.addUser(userId);
@@ -161,7 +161,7 @@ describe('схема: обновление с этапа 1 на этап 2 по�
         )
       ).rows[0];
     const once = await count();
-    expect(once).toMatchObject({ policies: 28, triggers: 7 });
+    expect(once).toMatchObject({ policies: 31, triggers: 8 });
     await s.applySchema();
     await s.applySchema();
     expect(await count()).toEqual(once);
@@ -190,6 +190,7 @@ describe('схема: обновление с этапа 1 на этап 2 по�
     expect(fresh.map((r) => r.id).sort()).toEqual([repay.id, ids.transfer].sort());
     expect(fresh.find((r) => r.id === ids.transfer)).toMatchObject({ base_amount_minor: 150, debt_id: null });
     expect(fresh.find((r) => r.id === repay.id)).toMatchObject({ debt_id: debt.id, recurring_rule_id: rule.id });
+    await t.push('shopping_items', [toWire('shopping_items', makeShoppingItem(stamps()))]);
     for (const table of SYNC_TABLES) expect((await t.pull(table, 0, 100)).length, table).toBeGreaterThan(0);
   });
 

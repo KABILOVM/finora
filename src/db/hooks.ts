@@ -12,6 +12,7 @@ import type {
   Minor,
   RecurringRule,
   Settings,
+  ShoppingItem,
   Transaction,
   UUID,
   Wallet,
@@ -197,6 +198,29 @@ export function useRecurringRules(opts: { includeArchived?: boolean } = {}): Loc
         return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
       });
   }, [store, includeArchived]);
+}
+
+/** Все живые позиции списка покупок (и купленные: из них складывается память цен), по порядку добавления. undefined — читается. */
+export function useShoppingItems(): LocalRow<ShoppingItem>[] | undefined {
+  const store = useStore();
+  return useLiveQuery(async () => {
+    const rows = await store.db.shopping_items.toArray();
+    return rows
+      .filter((i) => i.deletedAt === null)
+      .sort((a, b) => (a.createdAt !== b.createdAt ? (a.createdAt < b.createdAt ? -1 : 1) : a.id < b.id ? -1 : 1));
+  }, [store]);
+}
+
+/** Чек расхода: позиции, вошедшие в покупку (по порядку добавления). Пусто — расход не из списка покупок. undefined — читается. */
+export function useReceipt(txId: UUID | null | undefined): LocalRow<ShoppingItem>[] | undefined {
+  const store = useStore();
+  return useLiveQuery(async () => {
+    if (!txId) return [];
+    const rows = await store.db.shopping_items.where('transactionId').equals(txId).toArray();
+    return rows
+      .filter((i) => i.deletedAt === null)
+      .sort((a, b) => (a.createdAt !== b.createdAt ? (a.createdAt < b.createdAt ? -1 : 1) : a.id < b.id ? -1 : 1));
+  }, [store, txId]);
 }
 
 export const DEBT_OVERFLOW_MESSAGE = 'Суммы по долгу слишком большие, проверьте данные';

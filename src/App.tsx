@@ -33,6 +33,7 @@ const MorePage = lazy(() => import('@/features/more/MorePage'));
 // Пока заглушки «Скоро»: настоящие экраны заменят содержимое этих файлов (имена и default export остаются).
 const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'));
 const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'));
+const ShoppingPage = lazy(() => import('@/features/shopping/ShoppingPage'));
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'));
 const DebtDetailPage = lazy(() => import('@/features/debts/DebtDetailPage'));
 const ImportPage = lazy(() => import('@/features/import/ImportPage'));
@@ -77,7 +78,7 @@ function historyIndex(): number {
 }
 
 /**
- * Маршруты: / /transactions /wallets /more /budgets /recurring /debts /import /settings /settings/categories внутри каркаса (вход показывает сборка src/app),
+ * Маршруты: / /transactions /wallets /more /budgets /recurring /shopping /debts /import /settings /settings/categories внутри каркаса (вход показывает сборка src/app),
  * /add и /edit/:id — шиты поверх страницы, с которой их открыли (при прямом заходе — поверх «Главной»).
  */
 export function AppRoutes() {
@@ -119,6 +120,7 @@ export function AppRoutes() {
             <Route path="/more" element={<MorePage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
+            <Route path="/shopping" element={<ShoppingPage />} />
             <Route path="/debts" element={<DebtsPage />} />
             <Route path="/debts/:id" element={<DebtDetailPage />} />
             <Route path="/import" element={<ImportPage />} />

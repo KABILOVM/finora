@@ -76,6 +76,13 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     archived: ['archivedAt'],
     deleted: ['deletedAt'],
   },
+  shopping_items: {
+    name: ['name'],
+    qty: ['qtyMilli', 'unit'],
+    /** Отметка, цена, покупка и чек — одной группой: «куплено» без отметки и цены сервер не примет. */
+    state: ['priceMinor', 'checkedAt', 'purchasedAt', 'transactionId'],
+    deleted: ['deletedAt'],
+  },
   settings: {
     baseCurrency: ['baseCurrency'],
     week: ['weekStartsOn'],

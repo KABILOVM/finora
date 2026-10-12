@@ -1,4 +1,4 @@
-import type { Budget, Category, Debt, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, RecurringRule, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
 
 /**
  * Фабрики валидных сущностей для тестов синхронизации.
@@ -6,7 +6,7 @@ import type { Budget, Category, Debt, RecurringRule, Settings, Transaction, Wall
  * Метки по умолчанию лежат в прошлом; тесты, которым важны «часы сервера», задают метки сами.
  */
 
-const counters = { user: 0, wallet: 0, category: 0, transaction: 0, budget: 0, debt: 0, rule: 0 };
+const counters = { user: 0, wallet: 0, category: 0, transaction: 0, budget: 0, debt: 0, rule: 0, shop: 0 };
 
 /** Детерминированный UUID версии 4: PPPPPPPP-0000-4000-8000-NNNNNNNNNNNN (префикс отличает вид сущности). */
 function uuid(prefix: number, n: number): string {
@@ -163,6 +163,26 @@ export function makeRecurringRule(overrides: Partial<RecurringRule> = {}): Recur
     endOn: null,
     autoPost: 0,
     archivedAt: null,
+    ...overrides,
+  };
+}
+
+/** Позиция списка покупок: «Молоко 2 л», не отмечена. */
+export function makeShoppingItem(overrides: Partial<ShoppingItem> = {}): ShoppingItem {
+  const n = ++counters.shop;
+  return {
+    id: uuid(12, n),
+    createdAt: STAMP,
+    clientUpdatedAt: STAMP,
+    deviceId: DEVICE,
+    deletedAt: null,
+    name: `Товар ${n}`,
+    qtyMilli: 2000,
+    unit: 'l',
+    priceMinor: null,
+    checkedAt: null,
+    purchasedAt: null,
+    transactionId: null,
     ...overrides,
   };
 }

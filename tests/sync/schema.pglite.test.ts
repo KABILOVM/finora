@@ -4,7 +4,7 @@ import type { Transaction } from '@electric-sql/pglite';
 import { BASE_SEQ_COLUMN, SYNC_TABLES, TABLE_SPECS, toWire } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
 import { runConformance } from './conformance';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type Actor, type PgliteServer } from './pglite';
 
 let server: PgliteServer;
@@ -106,7 +106,7 @@ describe('схема: структура', () => {
         )
       ).rows[0];
     const before = await snapshot();
-    expect(before).toMatchObject({ policies: 28, triggers: 7 }); // 3 политики × 9 таблиц (7 синхронизации + подписки и настройки напоминаний) + 1 у курсов; по триггеру на каждую из 7 таблиц синхронизации
+    expect(before).toMatchObject({ policies: 31, triggers: 8 }); // 3 политики × 10 таблиц (8 синхронизации + подписки и настройки напоминаний) + 1 у курсов; по триггеру на каждую из 8 таблиц синхронизации
     const { userId } = await userWithWallet();
     await server.applySchema();
     await server.applySchema();
@@ -114,7 +114,7 @@ describe('схема: структура', () => {
     expect(await server.transportFor(userId).pull('wallets', 0, 10)).toHaveLength(1);
   });
 
-  it('каталог: у всех 11 таблиц public включена RLS; политик 28 (select/insert/update × 9 таблиц + 1 у курсов), других нет', async () => {
+  it('каталог: у всех 12 таблиц public включена RLS; политик 31 (select/insert/update × 10 таблиц + 1 у курсов), других нет', async () => {
     const tables = await server.db.query<{ relname: string; relrowsecurity: boolean }>(
       `select relname, relrowsecurity from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' order by relname`,
     );
@@ -123,7 +123,7 @@ describe('схема: структура', () => {
     const policies = await server.db.query<{ tablename: string; cmd: string; roles: string }>(
       `select tablename, cmd, roles::text as roles from pg_policies where schemaname = 'public' order by tablename, cmd`,
     );
-    expect(policies.rows).toHaveLength(28);
+    expect(policies.rows).toHaveLength(31);
     expect(policies.rows.filter((p) => p.tablename === 'push_log'), 'журнал отправленного: политик нет').toEqual([]);
     for (const t of [...SYNC_TABLES, 'push_subscriptions', 'reminder_settings']) {
       const own = policies.rows.filter((p) => p.tablename === t);
@@ -135,7 +135,7 @@ describe('схема: структура', () => {
 
   it('каталог этапа 2: ключи, триггеры и составные внешние ключи новых таблиц на месте', async () => {
     const names = async (sql: string): Promise<string[]> => (await server.db.query<{ n: string }>(sql)).rows.map((r) => r.n);
-    // триггер sync_guard на каждой из 7 таблиц синхронизации (и больше нигде)
+    // триггер sync_guard на каждой из 8 таблиц синхронизации (и больше нигде)
     const triggers = await names(
       `select c.relname as n from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace s on s.oid = c.relnamespace
         where s.nspname = 'public' and not t.tgisinternal and t.tgname = 'sync_guard' order by 1`,
@@ -430,6 +430,7 @@ describe('поведение сервера, специфичное для Postg
       toWire('transactions', makeTransaction({ ...stamps(-HOUR), walletId: w1.id, categoryId: c.id, debtId: debt.id, recurringRuleId: rule.id })),
       toWire('transactions', makeTransaction({ ...stamps(-HOUR), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, baseAmountMinor: 100, recurringRuleId: rule.id })),
     ]);
+    await t.push('shopping_items', [toWire('shopping_items', makeShoppingItem({ ...stamps(-HOUR), priceMinor: 1_00, checkedAt: stamps(-HOUR).clientUpdatedAt }))]);
     for (const table of SYNC_TABLES) expect((await server.adminRows(table)).filter((r) => r['user_id'] === userId), table).not.toHaveLength(0);
     await server.db.query('delete from auth.users where id = $1', [userId]);
     for (const table of SYNC_TABLES) expect((await server.adminRows(table)).filter((r) => r['user_id'] === userId), table).toEqual([]);
