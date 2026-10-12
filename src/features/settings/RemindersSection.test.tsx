@@ -71,7 +71,7 @@ describe('Напоминания: состояния, в которых вклю
     const { cloud, browser: b } = await openReminders({ browser: { permission: 'denied' } });
     browser = b;
     await seeText('Напоминания выключены.');
-    expect(text(/Настройки → Уведомления → Finora/)).toBeTruthy();
+    expect(text(/Настройки → Уведомления → Sumoima/)).toBeTruthy();
     expect(maybeBtn('Включить напоминания')).toBeNull();
     expect(b!.state.permissionRequests).toBe(0);
     expect(cloud.calls.every((c) => c.op === 'select')).toBe(true);
@@ -156,7 +156,7 @@ describe('Напоминания: включение', () => {
     browser = b;
     await seeText('Напоминания выключены.');
     await click('Включить напоминания');
-    await seeText(/Настройки → Уведомления → Finora/);
+    await seeText(/Настройки → Уведомления → Sumoima/);
     expect(b!.state.subscribeCalls).toEqual([]);
     expect(cloud.calls.filter((c) => c.op !== 'select')).toEqual([]);
     expect(maybeBtn('Включить напоминания')).toBeNull();

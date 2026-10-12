@@ -389,7 +389,7 @@ export const SEND_TIMEOUT_MS = 15_000;
 export const MAX_PAYMENT_CANDIDATES = 400;
 export const MAX_DEBTS_PER_USER = 200;
 export const MIN_SECRET_LENGTH = 32;
-export const PUSH_TITLE = 'Finora';
+export const PUSH_TITLE = 'Sumoima';
 /** Записи push_log старше стольких суток чистятся (нужны только текущему дню). */
 export const LOG_KEEP_DAYS = 60;
 /** Плановый запуск не начинает новых людей позже этого срока (у платформы жёсткий предел около 150 секунд). */

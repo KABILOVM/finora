@@ -6,13 +6,13 @@ import { createWallet, dismissInstallPrompt, expect, goSection, openApp, shot, t
 /** Сценарии пошаговой настройки (мастера) нового человека. Локальный режим: облака нет. */
 
 const KEY = 'finora:onboarding:v1:10ca1de0-0000-4000-8000-000000000001';
-const wizard = (page: Page) => page.getByRole('dialog', { name: 'Настройка Finora' });
+const wizard = (page: Page) => page.getByRole('dialog', { name: 'Настройка Sumoima' });
 const noHorizontalScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1 && document.body.scrollWidth <= window.innerWidth + 1);
 /** Содержимое шага влезает без внутренней прокрутки вниз. */
 const fitsWithoutScroll = (page: Page) =>
   page.evaluate(() => {
-    const dlg = document.querySelector('[role="dialog"][aria-label="Настройка Finora"]');
+    const dlg = document.querySelector('[role="dialog"][aria-label="Настройка Sumoima"]');
     const body = dlg?.querySelector('.overflow-y-auto');
     return body ? body.scrollHeight <= body.clientHeight + 1 : true;
   });
@@ -124,7 +124,7 @@ test.describe('26. Пошаговая настройка после регист
   test('перенос из Дзен-мани ведёт на /import; после импорта мастер завершён', async ({ page }) => {
     await openApp(page, '/', { onboarding: true });
     await wizard(page).getByRole('button', { name: /Перенести из другого приложения/ }).click();
-    await expect(wizard(page).getByRole('button', { name: /Из своей копии Finora \(JSON\)/ })).toBeVisible();
+    await expect(wizard(page).getByRole('button', { name: /Из своей копии Sumoima \(JSON\)/ })).toBeVisible();
     await wizard(page).getByRole('button', { name: /Из Дзен-мани \(файл CSV\)/ }).click();
     await expect(page).toHaveURL(/#\/import$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Импорт из Дзен-мани' })).toBeVisible();
@@ -152,7 +152,7 @@ test.describe('26. Пошаговая настройка после регист
   test('перенос не состоялся: вернулись на «Главную» — мастер на месте', async ({ page }) => {
     await openApp(page, '/', { onboarding: true });
     await wizard(page).getByRole('button', { name: /Перенести из другого приложения/ }).click();
-    await wizard(page).getByRole('button', { name: /Из своей копии Finora \(JSON\)/ }).click();
+    await wizard(page).getByRole('button', { name: /Из своей копии Sumoima \(JSON\)/ }).click();
     await expect(page).toHaveURL(/#\/settings$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Настройки' })).toBeVisible();
     await page.goto('/#/');

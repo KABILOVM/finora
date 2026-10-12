@@ -21,6 +21,8 @@ export interface CategoryPickerProps {
   error?: string | null;
   /** Вид операции: новая категория создаётся для него. */
   kind: CategoryKind;
+  /** Все категории сразу, с переносом строк (во всплывающем списке); без «Ещё». */
+  expanded?: boolean;
 }
 
 const chipClass = (selected: boolean) =>
@@ -33,10 +35,11 @@ const chipClass = (selected: boolean) =>
  * Выбор категории чипами. Сразу видны основные (самые частые); «Ещё» раскрывает остальные, а «Новая» создаёт категорию
  * прямо здесь: достаточно написать название, значок и цвет подберутся сами. Касание выбранной категории снимает выбор.
  */
-export function CategoryPicker({ options, value, onChange, error, kind }: CategoryPickerProps) {
+export function CategoryPicker({ options, value, onChange, error, kind, expanded: alwaysExpanded = false }: CategoryPickerProps) {
   const store = useStore();
   const toast = useToast();
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpanded] = useState(false);
+  const expanded = alwaysExpanded || expandedState;
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
@@ -105,7 +108,13 @@ export function CategoryPicker({ options, value, onChange, error, kind }: Catego
       {shown.map((opt) => {
         const selected = opt.value === value;
         return (
-          <button key={opt.value} type="button" aria-pressed={selected} onClick={() => onChange(selected ? null : opt.value)} className={chipClass(selected)}>
+          <button
+            key={opt.value}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(selected ? null : opt.value)}
+            className={chipClass(selected)}
+          >
             {opt.icon && <Glyph value={opt.icon} color={opt.color} size={26} />}
             <span className="whitespace-nowrap">{opt.label}</span>
           </button>
@@ -150,7 +159,11 @@ export function CategoryPicker({ options, value, onChange, error, kind }: Catego
               enterKeyHint="done"
               className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 text-base outline-none focus:border-brand"
             />
-            <button type="submit" disabled={busy} className="min-h-[44px] rounded-xl bg-brand px-4 font-semibold text-brand-fg disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={busy}
+              className="min-h-[44px] rounded-xl bg-brand px-4 font-semibold text-brand-fg disabled:opacity-60"
+            >
               Добавить
             </button>
             <button
@@ -173,7 +186,9 @@ export function CategoryPicker({ options, value, onChange, error, kind }: Catego
           )}
         </form>
       )}
-      {options.length === 0 && !adding && <p className="mt-2 text-sm text-muted">Категорий пока нет — операция сохранится и без категории.</p>}
+      {options.length === 0 && !adding && (
+        <p className="mt-2 text-sm text-muted">Категорий пока нет — операция сохранится и без категории.</p>
+      )}
     </FieldGroup>
   );
 }

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventually } from '@/app/testkit';
 import { act, screen, user, waitFor } from '@/components/testUtils';
 import {
+  catBtn,
+  catQuery,
   allTxs,
   amountField,
   balancesOf,
@@ -29,7 +31,7 @@ describe('обычный расход', () => {
   it('сумма «12,5» → категория → «Сохранить»: в базе 1250, кошелёк и дата подставились сами', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('12,5');
-    await user.click(screen.getByRole('button', { name: 'Еда' }));
+    await user.click(catBtn('Еда'));
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 
@@ -66,11 +68,11 @@ describe('обычный расход', () => {
   it('категорию можно не выбирать; повторное касание выбранной категории снимает выбор', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('30');
-    const food = screen.getByRole('button', { name: 'Еда' });
+    const food = catBtn('Еда');
     await user.click(food);
-    expect(screen.getByRole('button', { name: 'Еда' })).toHaveAttribute('aria-pressed', 'true');
-    await user.click(screen.getByRole('button', { name: 'Еда' }));
-    expect(screen.getByRole('button', { name: 'Еда' })).toHaveAttribute('aria-pressed', 'false');
+    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'true');
+    await user.click(catBtn('Еда'));
+    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'false');
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]).toMatchObject({ amountMinor: 3000, categoryId: null });
@@ -115,9 +117,9 @@ describe('доход', () => {
   it('переключатель «Доход» показывает категории доходов; остаток растёт', async () => {
     const { td, onClose } = await openAddSheet();
     await user.click(screen.getByRole('radio', { name: 'Доход' }));
-    expect(screen.queryByRole('button', { name: 'Еда' })).toBeNull();
+    expect(catQuery('Еда')).toBeNull();
     await tapAmount('1000');
-    await user.click(screen.getByRole('button', { name: 'Зарплата' }));
+    await user.click(catBtn('Зарплата'));
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const salary = await categoryByName(td, 'Зарплата', 'income');
@@ -129,10 +131,10 @@ describe('доход', () => {
   it('при смене вида выбранная категория сбрасывается (расход и доход — разные категории)', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('10');
-    await user.click(screen.getByRole('button', { name: 'Еда' }));
+    await user.click(catBtn('Еда'));
     await user.click(screen.getByRole('radio', { name: 'Доход' }));
     await user.click(screen.getByRole('radio', { name: 'Расход' }));
-    expect(screen.getByRole('button', { name: 'Еда' })).toHaveAttribute('aria-pressed', 'false');
+    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'false');
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]?.categoryId).toBeNull();
@@ -200,26 +202,25 @@ describe('кошелёк по умолчанию и частые категор�
     });
     await openAddSheet(td);
     const labels = chipLabels('Категория');
-    // сразу видны «+ Новая» и 6 основных, остальные 6 — под «Ещё»; при равенстве — порядок из затравки
-    expect(labels).toEqual(['Новая', 'Транспорт', 'Здоровье', 'Покупки', 'Еда', 'Продукты', 'Жильё', 'Ещё 6']);
-    await user.click(screen.getByRole('button', { name: /^Ещё 6/ }));
-    // остальные под «Ещё» тоже в прежнем порядке (Подписки старше года — не в счёте)
-    expect(chipLabels('Категория').slice(7)).toEqual(['Связь', 'Развлечения', 'Подписки', 'Образование', 'Долги', 'Прочее']);
-    expect(chipLabels('Категория')).toHaveLength(13);
+    // в списке сразу все: «+ Новая», затем самые частые (при равенстве — порядок из затравки)
+    expect(labels.slice(0, 7)).toEqual(['Новая', 'Транспорт', 'Здоровье', 'Покупки', 'Еда', 'Продукты', 'Жильё']);
+    // остальные — в прежнем порядке (Подписки старше года — не в счёте)
+    expect(labels.slice(7)).toEqual(['Связь', 'Развлечения', 'Подписки', 'Образование', 'Долги', 'Прочее']);
+    expect(labels).toHaveLength(13);
   });
 
   it('«Новая»: название → категория создана со значком и сразу выбрана; такая же по имени просто выбирается', async () => {
     const td = await openAddSheet();
-    await user.click(screen.getByRole('button', { name: 'Новая категория' }));
+    await user.click(catBtn('Новая категория'));
     await user.type(screen.getByRole('textbox', { name: 'Название новой категории' }), 'Кофе{Enter}');
     await waitFor(() => expect(chipLabels('Категория')).toContain('Кофе'));
     const created = (await td.td.stores[0]!.db.categories.toArray()).find((c) => c.name === 'Кофе');
     expect(created).toMatchObject({ kind: 'expense', icon: 'i:cup' });
-    expect(screen.getByRole('button', { name: 'Кофе', pressed: true })).toBeInTheDocument();
+    expect(catBtn('Кофе', true)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Новая категория' }));
+    await user.click(catBtn('Новая категория'));
     await user.type(screen.getByRole('textbox', { name: 'Название новой категории' }), 'еда{Enter}');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Еда', pressed: true })).toBeInTheDocument());
+    await waitFor(() => expect(catBtn('Еда', true)).toBeInTheDocument());
     expect((await td.td.stores[0]!.db.categories.toArray()).filter((c) => c.name.toLowerCase() === 'еда')).toHaveLength(1);
   });
 });
@@ -306,12 +307,12 @@ describe('«Сохранить и добавить ещё»', () => {
   it('сохраняет, очищает сумму и категорию, оставляет шит открытым; вторая операция — отдельная', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('5');
-    await user.click(screen.getByRole('button', { name: 'Еда' }));
+    await user.click(catBtn('Еда'));
     await user.click(screen.getByRole('button', { name: 'Сохранить и добавить ещё' }));
     await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
     expect(onClose).not.toHaveBeenCalled();
     await waitFor(() => expect((amountField() as HTMLInputElement).value).toBe(''));
-    expect(screen.getByRole('button', { name: 'Еда' })).toHaveAttribute('aria-pressed', 'false');
+    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'false');
 
     await tapAmount('7');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));

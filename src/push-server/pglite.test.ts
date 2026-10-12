@@ -109,7 +109,7 @@ describe('настоящая схема: что напоминается, а ч�
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, users: 1, inWindow: 1, sent: 1, notified: 1, errors: 0 });
     // платежи: Аренда, Зарплата (сегодня) и Интернет (просрочен). Долги: сегодня, завтра, 30 суток, валюта, выдача, частично, удалённый платёж = 7
-    expect(bodies()).toEqual([{ title: 'Finora', body: 'Сегодня 2 платежа, просрочено 1. Долги: срок подошёл у 7.', url: '/', tag: 'finora-reminder' }]);
+    expect(bodies()).toEqual([{ title: 'Sumoima', body: 'Сегодня 2 платежа, просрочено 1. Долги: срок подошёл у 7.', url: '/', tag: 'finora-reminder' }]);
     expect(state.send.calls[0]!.body).not.toMatch(/777777|Аренда|Рустам/);
     const log = await logRows(USER_A);
     expect(log.map((l) => `${l.kind}:${l.ref}`).sort()).toEqual(

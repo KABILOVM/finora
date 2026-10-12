@@ -188,7 +188,7 @@ describe('«Проверить уведомление»: токен пользо
     expect(r.status).toBe(200);
     expect(await json(r)).toMatchObject({ ok: true, mode: 'test', sent: 2, failed: 0, revoked: 0 });
     expect(send.calls.map((c) => c.subId).sort()).toEqual(['a-laptop', 'a-phone']);
-    expect(send.bodies()[0]).toEqual({ title: 'Finora', body: 'Проверка связи: уведомления работают.', url: '/', tag: 'finora-test' });
+    expect(send.bodies()[0]).toEqual({ title: 'Sumoima', body: 'Проверка связи: уведомления работают.', url: '/', tag: 'finora-test' });
     expect(send.calls.every((c) => c.ttl === PUSH_TTL_SECONDS)).toBe(true);
     // журнал и настройки не трогаются: тест не требует включённых напоминаний и ничего не записывает (читаются только подписки
     // и сверка, чей это адрес)

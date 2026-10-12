@@ -178,13 +178,13 @@ function withClampedStamps(raw: Record<string, unknown>, keys: readonly string[]
 const withClampedArchivedAt = (raw: Record<string, unknown>): Record<string, unknown> => withClampedStamps(raw);
 
 export function parseBackup(data: unknown, opts: ParseBackupOptions): BackupFile {
-  if (!isPlainObject(data)) fail('Это не файл резервной копии Finora');
-  if (data['format'] !== BACKUP_FORMAT) fail('Это не файл резервной копии Finora');
+  if (!isPlainObject(data)) fail('Это не файл резервной копии Sumoima');
+  if (data['format'] !== BACKUP_FORMAT) fail('Это не файл резервной копии Sumoima');
   const version = data['version'];
   if (version !== 1 && version !== BACKUP_VERSION) {
     fail(
       typeof version === 'number' && version > BACKUP_VERSION
-        ? 'Файл создан более новой версией Finora: обновите приложение'
+        ? 'Файл создан более новой версией Sumoima: обновите приложение'
         : 'Неизвестная версия резервной копии',
     );
   }

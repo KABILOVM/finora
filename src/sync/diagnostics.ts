@@ -261,7 +261,7 @@ export async function runCloudCheck(client: CloudClientLike, context: CloudCheck
       return { status: 'fail', message: `Сервер не принимает ваш вход: сессия просрочена или отозвана. ${RELOGIN}` };
     }
     if (!ctx.hasSession) {
-      return { status: 'warn', message: 'Сессия в порядке, но приложение ещё не подтвердило вход (возможно, оно открылось без сети). Закройте Finora и откройте заново.' };
+      return { status: 'warn', message: 'Сессия в порядке, но приложение ещё не подтвердило вход (возможно, оно открылось без сети). Закройте Sumoima и откройте заново.' };
     }
     return { status: 'ok', message: 'Вход выполнен, сессия принадлежит вам.' };
   });
@@ -373,7 +373,7 @@ export function formatReport(steps: readonly CheckStep[], options: { now?: Date;
   const when = Number.isNaN(d.getTime())
     ? 'время неизвестно'
     : `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
-  const lines = [`Проверка облака Finora, ${when}`, `Итог: ${OVERALL_TEXT[overallStatus(steps)]}`];
+  const lines = [`Проверка облака Sumoima, ${when}`, `Итог: ${OVERALL_TEXT[overallStatus(steps)]}`];
   if (options.host) lines.push(`Сервер: ${options.host}`);
   lines.push('');
   for (const s of steps) lines.push(`${STATUS_MARK[s.status]} ${s.title}: ${s.message}`);

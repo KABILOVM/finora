@@ -56,7 +56,7 @@ test.describe('6. Резервная копия', () => {
     await goSection(page, 'Настройки');
     const jsonPath = testInfo.outputPath('backup.json');
     const jsonName = await saveDownload(page, 'Сохранить копию', jsonPath);
-    expect(jsonName).toMatch(/^finora-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(jsonName).toMatch(/^sumoima-backup-\d{4}-\d{2}-\d{2}\.json$/);
     const backup = JSON.parse(readFileSync(jsonPath, 'utf8'));
     expect(backup.format).toBe('finora-backup');
     expect(backup.wallets).toHaveLength(3);
@@ -66,7 +66,7 @@ test.describe('6. Резервная копия', () => {
     // Скачать CSV
     const csvPath = testInfo.outputPath('ops.csv');
     const csvName = await saveDownload(page, 'Операции в таблицу (CSV)', csvPath);
-    expect(csvName).toMatch(/^finora-transactions-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(csvName).toMatch(/^sumoima-transactions-\d{4}-\d{2}-\d{2}\.csv$/);
     const csvBytes = readFileSync(csvPath);
     expect(csvBytes.length).toBeGreaterThan(50);
     expect([...csvBytes.subarray(0, 3)], 'файл CSV должен начинаться с BOM (EF BB BF) — иначе Excel покажет кракозябры').toEqual([0xef, 0xbb, 0xbf]);

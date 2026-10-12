@@ -113,7 +113,7 @@ async function showPush(page: Page, deliver: (data: string) => Promise<void>, da
   }
 }
 
-const FALLBACK = 'Finora: есть напоминание';
+const FALLBACK = 'Sumoima: есть напоминание';
 
 /** То, что нам нужно от глобальной области сервис-воркера внутри worker.evaluate. */
 interface SwScope {

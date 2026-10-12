@@ -50,7 +50,7 @@ const contexts = new WeakMap<Store, RepoContext>();
 /** Внутренний доступ к часам и уведомлениям для backup.ts. Не часть публичного API. */
 export function internalContext(store: Store): RepoContext {
   const ctx = contexts.get(store);
-  if (!ctx) throw new Error('Это не хранилище Finora: откройте его через openStore()');
+  if (!ctx) throw new Error('Это не хранилище Sumoima: откройте его через openStore()');
   return ctx;
 }
 

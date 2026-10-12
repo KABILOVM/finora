@@ -123,7 +123,7 @@ export async function openApp(page: Page, hash = '/', opts: { onboarding?: boole
   if (!opts.onboarding) await skipOnboardingInAdvance(page);
   await page.goto(`/#${hash}`);
   if (opts.onboarding) {
-    await expect(page.getByRole('dialog', { name: 'Настройка Finora' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Настройка Sumoima' })).toBeVisible();
     return;
   }
   await waitReady(page);
@@ -153,14 +153,14 @@ export async function skipOnboardingInAdvance(page: Page): Promise<void> {
 
 /** Если мастер всё же показался — пропустить его («Пропустить, настрою сам»); если его нет, ничего не делает. */
 export async function closeOnboarding(page: Page): Promise<void> {
-  const dlg = page.getByRole('dialog', { name: 'Настройка Finora' });
+  const dlg = page.getByRole('dialog', { name: 'Настройка Sumoima' });
   if ((await dlg.count()) === 0) return;
   await dlg.getByRole('button', { name: 'Пропустить, настрою сам' }).click();
   await expect(dlg).toBeHidden();
 }
 
 /**
- * Окно «Установить Finora на экран телефона» появляется через ~1,5 с после входа (только на телефоне) и перекрывает экран.
+ * Окно «Установить Sumoima на экран телефона» появляется через ~1,5 с после входа (только на телефоне) и перекрывает экран.
  * Дождаться его и закрыть кнопкой «Не сейчас»; на ПК и если окно не появилось — ничего не делает.
  * Сценарий про само окно (25-install-prompt) этот помощник не вызывает.
  */
@@ -175,7 +175,7 @@ export async function dismissInstallPrompt(page: Page): Promise<void> {
     }
   });
   if (remembered) return;
-  const dlg = page.getByRole('dialog', { name: 'Установить Finora на экран телефона' });
+  const dlg = page.getByRole('dialog', { name: 'Установить Sumoima на экран телефона' });
   try {
     await dlg.waitFor({ state: 'visible', timeout: 4000 });
   } catch {
@@ -303,6 +303,14 @@ export interface TxInput {
 }
 
 /** Открыть шит «Новая операция» и заполнить его, не нажимая «Сохранить». */
+/** В окне операции категории лежат за плиткой «Категория»: раскрыть список, если он закрыт; возвращает группу чипов. */
+export async function openCategoryList(dlg: Locator): Promise<Locator> {
+  const group = dlg.getByRole('group', { name: 'Категория' });
+  if (!(await group.isVisible())) await dlg.getByRole('button', { name: /^Категория:/ }).click();
+  await group.getByRole('button').first().waitFor();
+  return group;
+}
+
 export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
   await addLink(page).click();
   const dlg = sheet(page, 'Новая операция');
@@ -321,14 +329,12 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
     await dlg.getByRole('button', { name: /^Дата:/ }).click();
     await dlg.getByRole('group', { name: 'Дата' }).getByRole('button', { name: 'Другая дата' }).click();
     await dlg.getByLabel('Дата операции').fill(tx.date);
+    // список даты раскрыт поверх формы: закрываем его, иначе он закрывает чипы категорий
+    await dlg.getByRole('button', { name: 'Готово', exact: true }).click();
   }
   if (tx.category) {
-    const group = dlg.getByRole('group', { name: 'Категория' });
-    const chip = group.getByRole('button', { name: tx.category, exact: true });
-    await group.getByRole('button').first().waitFor();
-    // видны только основные категории: остальные под «Ещё»
-    if ((await chip.count()) === 0) await group.getByRole('button', { name: /^Ещё/ }).click();
-    await chip.click();
+    const group = await openCategoryList(dlg);
+    await group.getByRole('button', { name: tx.category, exact: true }).click();
   }
   if (tx.rate) {
     // Курса не было — поле на месте. Курс уже вводили раньше — он подставлен сам, а поле прячется за «Изменить».

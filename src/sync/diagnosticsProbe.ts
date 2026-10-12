@@ -9,7 +9,7 @@ import type { CheckStatus, CloudCheckContext, CloudClientLike, CloudQueryResult 
 
 export type StepResult = { status: CheckStatus; message: string };
 
-export const SCHEMA_HINT = 'Выполните файл supabase/schema.sql в SQL Editor вашего проекта Finora';
+export const SCHEMA_HINT = 'Выполните файл supabase/schema.sql в SQL Editor вашего проекта Sumoima';
 export const RELOGIN = 'Выйдите (Настройки → Аккаунт → «Выйти») и войдите снова.';
 const PAUSE_HINT = 'Если проект давно не открывали, Supabase мог его приостановить: откройте панель проекта и нажмите «Restore project».';
 

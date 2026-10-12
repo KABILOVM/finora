@@ -59,7 +59,7 @@ export default function SettingsPage() {
       <RemindersSection />
 
       <p className="pb-2 text-center text-xs text-muted">
-        Finora {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Manrope (SIL OFL)
+        Sumoima {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Manrope (SIL OFL)
       </p>
     </>
   );

@@ -34,11 +34,14 @@ export function FeeField({
   c,
   active = false,
   onActivate,
+  onRemove,
 }: {
   c: TxFormController;
   /** Экранная клавиатура сейчас печатает в комиссию (рамка выделена). */
   active?: boolean;
   onActivate?: () => void;
+  /** «Убрать комиссию»: снять комиссию и закрыть панель. */
+  onRemove?: () => void;
 }) {
   const { form, errors, fee } = c;
   const isTransfer = form.kind === 'transfer';
@@ -135,7 +138,7 @@ export function FeeField({
           type="button"
           aria-label="Убрать комиссию"
           title="Убрать комиссию"
-          onClick={() => c.set({ ...NO_FEE })}
+          onClick={onRemove ?? (() => c.set({ ...NO_FEE }))}
           className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-2 hover:text-text"
         >
           <Icon name="close" size={20} />

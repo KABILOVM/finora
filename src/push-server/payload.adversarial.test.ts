@@ -68,7 +68,7 @@ describe('текст уведомления: случайные названия
     const r = rng(99);
     for (let i = 0; i < 500; i++) {
       const body = junk(r, 800) + 'я';
-      const out = fitPayload({ title: 'Finora', body, url: '/', tag: 't' }).body;
+      const out = fitPayload({ title: 'Sumoima', body, url: '/', tag: 't' }).body;
       if (out === body) continue;
       expect(out.endsWith('…') || out === '').toBe(true);
       const head = g(out.slice(0, -1));

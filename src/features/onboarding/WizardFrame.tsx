@@ -37,7 +37,7 @@ export function WizardFrame({ step, title, lead, children, footer, onBack, onNex
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Настройка Finora"
+      aria-label="Настройка Sumoima"
       className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-bg text-text"
     >
       <div className="shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">

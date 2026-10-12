@@ -39,6 +39,8 @@ export interface AmountInputProps {
   bare?: boolean;
   /** Рамка «в работе»: true — выделена, false — приглушена; без значения — по фокусу. Нужна, когда клавиатура печатает в соседнее поле. */
   active?: boolean;
+  /** Всплывающая панель над полем суммы (комиссия, заметка): рисуется поверх формы и ничего не сдвигает. */
+  overlay?: ReactNode;
   /** Нажали на поле суммы. */
   onActivate?: () => void;
   /** Перехват клавиш экранной клавиатуры: true — клавишу забрал кто-то другой (например, поле процента). */
@@ -72,6 +74,7 @@ export function AmountInput({
   end,
   bare = false,
   active,
+  overlay,
   onActivate,
   onKeyIntercept,
 }: AmountInputProps) {
@@ -217,7 +220,8 @@ export function AmountInput({
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
-      <div>
+      <div className="relative">
+        {overlay}
         <label htmlFor={id} className="sr-only">
           {label}, {info.name}
         </label>

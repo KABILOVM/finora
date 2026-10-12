@@ -40,7 +40,7 @@ export function formatRateExact(rate: number): string {
 
 export const RATE_SOURCE_LABELS: Record<string, string> = {
   nbt: 'Нацбанк Таджикистана',
-  server: 'сервер Finora',
+  server: 'сервер Sumoima',
   api: 'интернет-курс',
   manual: 'задан вручную',
   same: 'одна валюта',

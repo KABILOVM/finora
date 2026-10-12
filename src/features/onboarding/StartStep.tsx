@@ -41,7 +41,7 @@ export function StartStep({ onScratch, onZenmoney, onBackup, onSkip }: StartStep
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Настройка Finora"
+      aria-label="Настройка Sumoima"
       className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-bg text-text"
     >
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
@@ -67,7 +67,7 @@ export function StartStep({ onScratch, onZenmoney, onBackup, onSkip }: StartStep
           ) : (
             <Card className="flex flex-col gap-2" padding="md">
               <Choice icon="i:box" color="#0891b2" title="Из Дзен-мани (файл CSV)" text="Операции, счета и категории" onClick={onZenmoney} />
-              <Choice icon="i:download" color="#7c3aed" title="Из своей копии Finora (JSON)" text="Файл, который вы сохраняли в Настройках" onClick={onBackup} />
+              <Choice icon="i:download" color="#7c3aed" title="Из своей копии Sumoima (JSON)" text="Файл, который вы сохраняли в Настройках" onClick={onBackup} />
               <button
                 type="button"
                 onClick={() => setMoving(false)}

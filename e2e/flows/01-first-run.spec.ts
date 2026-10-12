@@ -1,4 +1,4 @@
-import { expect, homeTotalText, homeWallet, goSection, money, moneyExact, monthRow, norm, openApp, shot, test, tapAmount, addLink, sheet } from '../helpers';
+import { openCategoryList, expect, homeTotalText, homeWallet, goSection, money, moneyExact, monthRow, norm, openApp, shot, test, tapAmount, addLink, sheet } from '../helpers';
 
 test.describe('1. Первый запуск', () => {
   test('бейдж «Только на устройстве», расход 12,5 в «Еда» за минимум касаний, суммы верны, после перезагрузки данные на месте', async ({ page }, testInfo) => {
@@ -17,7 +17,7 @@ test.describe('1. Первый запуск', () => {
     });
 
     await openApp(page);
-    await expect(page).toHaveTitle(/Finora/);
+    await expect(page).toHaveTitle(/Sumoima/);
 
     // Честный индикатор вместо «Синхронизировано»
     const badge = page.getByRole('status', { name: /Облако не подключено/ });
@@ -31,7 +31,7 @@ test.describe('1. Первый запуск', () => {
     const dlg = sheet(page, 'Новая операция');
     await expect(dlg).toBeVisible();
     await tapAmount(page, '12,5');
-    await dlg.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Еда', exact: true }).click();
+    await (await openCategoryList(dlg)).getByRole('button', { name: 'Еда', exact: true }).click();
     await shot(page, '01-add-filled', testInfo);
     await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(dlg).toBeHidden();
@@ -41,10 +41,10 @@ test.describe('1. Первый запуск', () => {
     const digitTaps = taps.filter((t) => /^[0-9]$|^Запятая$/.test(t));
     const otherTaps = taps.filter((t) => !/^[0-9]$|^Запятая$/.test(t));
     testInfo.annotations.push({ type: 'taps', description: `все: ${taps.join(' | ')}` });
-    // «+», «Еда», «Сохранить»: кошелёк и дата подставились сами, лишних нажатий нет
-    expect(otherTaps, `касания кроме цифр: ${otherTaps.join(' | ')}`).toHaveLength(3);
+    // «+», плитка «Категория», «Еда», «Сохранить»: кошелёк и дата подставились сами, лишних нажатий нет
+    expect(otherTaps, `касания кроме цифр: ${otherTaps.join(' | ')}`).toHaveLength(4);
     expect(digitTaps).toHaveLength(4); // 1, 2, «,», 5
-    expect(taps.length).toBeLessThanOrEqual(7);
+    expect(taps.length).toBeLessThanOrEqual(8);
 
     // «Главная»: Всего, кошелёк, месяц
     await goSection(page, 'Главная');

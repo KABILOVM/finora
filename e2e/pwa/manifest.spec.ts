@@ -20,7 +20,7 @@ for (const prefix of ['/', '/finora-app/v2/']) {
       expect(res.headers()['content-type']).toMatch(/manifest\+json|application\/json/);
       const m = await res.json();
       expect(m.name).toBeTruthy();
-      expect(m.short_name).toBe('Finora');
+      expect(m.short_name).toBe('Sumoima');
       expect(m.short_name.length).toBeLessThanOrEqual(12);
       expect(m.lang).toBe('ru');
       expect(m.display).toBe('standalone');

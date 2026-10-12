@@ -75,8 +75,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Finora — учёт денег',
-        short_name: 'Finora',
+        name: 'Sumoima — учёт денег',
+        short_name: 'Sumoima',
         description: 'Личный учёт расходов и доходов. Работает без интернета.',
         lang: 'ru',
         start_url: './',

@@ -1,4 +1,4 @@
-import { addTx, dismissToasts, expect, goSection, homeTotalText, money, openApp, test, waitReady } from '../helpers';
+import { openCategoryList, addTx, dismissToasts, expect, goSection, homeTotalText, money, openApp, test, waitReady } from '../helpers';
 
 test.describe('12. Ввод с клавиатуры и две вкладки', () => {
   test('системная клавиатура: точка превращается в запятую, буквы игнорируются, ноль не сохраняется', async ({ page }) => {
@@ -18,7 +18,7 @@ test.describe('12. Ввод с клавиатуры и две вкладки', (
     await expect(dlg).toBeVisible();
 
     await amount.fill('12,56');
-    await dlg.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Еда', exact: true }).click();
+    await (await openCategoryList(dlg)).getByRole('button', { name: 'Еда', exact: true }).click();
     await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(dlg).toBeHidden();
     await goSection(page, 'Главная');

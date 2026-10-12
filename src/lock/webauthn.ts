@@ -32,9 +32,9 @@ export const LOCK_FAILURE_TEXT: Record<LockFailure, string> = {
 };
 
 export const SUPPORT_TEXT: Record<SupportReason, string> = {
-  insecure: 'Замок работает только на защищённом адресе (https). Откройте Finora по обычной ссылке.',
+  insecure: 'Замок работает только на защищённом адресе (https). Откройте Sumoima по обычной ссылке.',
   'no-webauthn': 'Этот браузер не умеет подтверждать личность по Face ID или отпечатку.',
-  'ios-browser': 'Откройте Finora с экрана «Домой»: нажмите «Поделиться» → «На экран Домой» и включите замок в установленном приложении.',
+  'ios-browser': 'Откройте Sumoima с экрана «Домой»: нажмите «Поделиться» → «На экран Домой» и включите замок в установленном приложении.',
   'no-authenticator': 'Это устройство не умеет: на нём не настроены Face ID, отпечаток или код экрана.',
   blocked: 'Замок отключён настройками сайта. Сообщите владельцу приложения.',
   'check-failed': 'Не удалось проверить, умеет ли устройство подтверждать личность. Попробуйте позже.',
@@ -197,9 +197,9 @@ async function doCreate(user: { id: string }): Promise<CreateResult> {
         publicKey: {
           challenge: randomChallenge(32),
           // rp.id не задаём: берётся адрес сайта. Сменится адрес сайта — старые ключи перестанут подходить (тогда «выйти и войти заново»)
-          rp: { name: 'Finora' },
+          rp: { name: 'Sumoima' },
           // Имя и id не содержат почту: имя видно в системных списках паролей
-          user: { id: userHandle, name: 'Finora — замок', displayName: 'Finora — замок' },
+          user: { id: userHandle, name: 'Sumoima — замок', displayName: 'Sumoima — замок' },
           pubKeyCredParams: [
             { type: 'public-key', alg: -7 },
             { type: 'public-key', alg: -257 },

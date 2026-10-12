@@ -16,7 +16,7 @@ export function StoreErrorScreen({ error, onRetry, onSignOut }: StoreErrorScreen
       <EmptyState
         icon="alert"
         title="Не удалось открыть хранилище данных"
-        text="Finora хранит записи в памяти браузера на этом устройстве, а сейчас она недоступна. Чаще всего так бывает в приватной вкладке Safari или когда в настройках запрещено хранение данных сайтов."
+        text="Sumoima хранит записи в памяти браузера на этом устройстве, а сейчас она недоступна. Чаще всего так бывает в приватной вкладке Safari или когда в настройках запрещено хранение данных сайтов."
         action={
           <div className="flex flex-col gap-2">
             <Button onClick={onRetry}>Повторить</Button>
@@ -29,10 +29,10 @@ export function StoreErrorScreen({ error, onRetry, onSignOut }: StoreErrorScreen
         }
       />
       <ul className="w-full max-w-sm list-disc space-y-1 pl-6 text-muted">
-        <li>Откройте Finora в обычной вкладке, не в приватной.</li>
+        <li>Откройте Sumoima в обычной вкладке, не в приватной.</li>
         <li>На iPhone: Настройки → Safari → не включайте «Блокировать все cookie».</li>
         <li>Проверьте, что на устройстве есть свободное место.</li>
-        <li>Лучше всего поставить Finora на экран «Домой».</li>
+        <li>Лучше всего поставить Sumoima на экран «Домой».</li>
       </ul>
       <details className="mt-4 w-full max-w-sm text-sm text-muted">
         <summary className="min-h-[44px] cursor-pointer py-2">Подробности</summary>

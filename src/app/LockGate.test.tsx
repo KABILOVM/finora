@@ -61,7 +61,7 @@ function mountLocal(children: ReactNode = <Child />) {
   );
 }
 
-const cover = () => screen.queryByRole('dialog', { name: 'Finora закрыта' });
+const cover = () => screen.queryByRole('dialog', { name: 'Sumoima закрыта' });
 const appButton = () => screen.queryByRole('button', { name: 'Кнопка приложения' });
 const appButtonHidden = () => screen.getByRole('button', { name: 'Кнопка приложения', hidden: true });
 /** Контейнер приложения: ближайший предок с inert. */
@@ -88,7 +88,7 @@ describe('замок включён: холодный старт', () => {
     // никаких await между render и проверкой: это и есть «первый кадр»
     expect(cover()).not.toBeNull();
     expect(cover()).toHaveAttribute('aria-modal', 'true');
-    expect(cover()!.querySelector('h2')?.textContent).toBe('Finora закрыта');
+    expect(cover()!.querySelector('h2')?.textContent).toBe('Sumoima закрыта');
     expect(appButton()).toBeNull(); // скринридер и клавиатура содержимое не видят
     expect(appButtonHidden()).toBeInTheDocument(); // но оно не размонтировано
     expect(inertAncestor()).not.toBeNull();
@@ -139,7 +139,7 @@ describe('замок включён: холодный старт', () => {
         </AuthProvider>
       </StrictMode>,
     );
-    expect(screen.queryAllByRole('dialog', { name: 'Finora закрыта' })).toHaveLength(1);
+    expect(screen.queryAllByRole('dialog', { name: 'Sumoima закрыта' })).toHaveLength(1);
     await settle();
     fake.mode = 'ok';
     await user.click(screen.getByRole('button', { name: 'Открыть по Face ID / отпечатку' }));
@@ -447,10 +447,10 @@ describe('«Не получается?»: запасной выход', () => {
     expect(screen.getByRole('heading', { name: 'Снять замок?' })).toBeInTheDocument();
     expect(screen.getByText(/Записи не удалятся/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Отмена' }));
-    expect(screen.getByRole('heading', { name: 'Finora закрыта' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sumoima закрыта' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Не получается? Снять замок' }));
     await user.keyboard('{Escape}');
-    expect(screen.getByRole('heading', { name: 'Finora закрыта' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sumoima закрыта' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Не получается? Снять замок' }));
     await user.click(screen.getByRole('button', { name: 'Снять замок' }));
@@ -518,7 +518,7 @@ describe('вся сборка: облако, выход через заслон�
     await enableLock(ALICE.id);
     fake.mode = 'decline';
     renderAppRoot(<Child />, { client: otp.client, deps: td.deps });
-    await findByRole('dialog', { name: 'Finora закрыта' });
+    await findByRole('dialog', { name: 'Sumoima закрыта' });
     await waitFor(() => expect(td.engines.length).toBe(1));
     await waitFor(() => expect(td.engines[0]!.calls.start).toBeGreaterThan(0));
     expect(td.engines[0]!.calls.stop).toBe(0);

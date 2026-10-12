@@ -1,4 +1,4 @@
-import { addLink, addTx, createWallet, dismissToasts, expect, goSection, openApp, sheet, test } from '../helpers';
+import { openCategoryList, addLink, addTx, createWallet, dismissToasts, expect, goSection, openApp, sheet, test } from '../helpers';
 
 /** Названия чипов группы по порядку слева направо (кроме «Новая» и «Ещё N»). */
 async function chipNames(group: ReturnType<ReturnType<typeof sheet>['getByRole']>): Promise<string[]> {
@@ -24,12 +24,9 @@ test.describe('23. Сортировка по популярности', () => {
     await addLink(page).click();
     const dlg = sheet(page, 'Новая операция');
     await expect(dlg).toBeVisible();
-    const cats = dlg.getByRole('group', { name: 'Категория' });
-    await cats.getByRole('button').first().waitFor();
+    const cats = await openCategoryList(dlg);
 
-    // Расход: сразу видны 6 самых частых; равные по счёту (Еда 1 — как Образование) идут по прежнему порядку
-    await expect.poll(() => chipNames(cats)).toEqual(['Прочее', 'Еда', 'Образование', 'Продукты', 'Транспорт', 'Жильё']);
-    await cats.getByRole('button', { name: /^Ещё/ }).click();
+    // Расход: в списке сразу все; самые частые первыми, равные по счёту (Еда 1 — как Образование) идут по прежнему порядку
     await expect.poll(() => chipNames(cats)).toEqual([
       'Прочее', 'Еда', 'Образование', 'Продукты', 'Транспорт', 'Жильё', 'Связь', 'Здоровье', 'Покупки', 'Развлечения', 'Подписки', 'Долги',
     ]);
@@ -41,8 +38,10 @@ test.describe('23. Сортировка по популярности', () => {
 
     // Доход
     await dlg.getByRole('radio', { name: 'Доход' }).click();
-    await expect.poll(() => chipNames(cats)).toEqual(['Бонус', 'Зарплата', 'Подработка', 'Подарки', 'Прочее']);
-    await page.keyboard.press('Escape');
+    const incomeCats = await openCategoryList(dlg);
+    await expect.poll(() => chipNames(incomeCats)).toEqual(['Бонус', 'Зарплата', 'Подработка', 'Подарки', 'Прочее']);
+    await page.keyboard.press('Escape'); // закрывает открытый список категорий
+    await page.keyboard.press('Escape'); // и затем само окно
     await expect(dlg).toBeHidden();
 
     // Фильтры: тот же порядок в списке кошельков и категорий

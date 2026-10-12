@@ -94,7 +94,7 @@ describe('classifySupport: что умеет устройство', () => {
     expect(explainSupport('ios-old')).toMatch(/16\.4/);
     expect(explainSupport('insecure')).toMatch(/https/);
     expect(explainSupport('unsupported')).toMatch(/браузер/);
-    expect(DENIED_HELP).toMatch(/Настройки → Уведомления → Finora/);
+    expect(DENIED_HELP).toMatch(/Настройки → Уведомления → Sumoima/);
   });
 });
 

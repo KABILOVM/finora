@@ -214,7 +214,7 @@ describe('устройство не умеет', () => {
     fake.restore();
     mount();
     await waitFor(() => expect(screen.queryByText('Проверяем…')).toBeNull());
-    expect(document.body.textContent).toMatch(/Откройте Finora с экрана «Домой»/);
+    expect(document.body.textContent).toMatch(/Откройте Sumoima с экрана «Домой»/);
     ua.mockRestore();
   });
 

@@ -46,7 +46,7 @@ describe('текст сообщения', () => {
 
   it('пример из задания: платежи и долги одним сообщением', () => {
     const p = buildPayload({ payments: pay(2), debts: [{ counterparty: 'Рустам' }], daily: false }, false)!;
-    expect(p).toEqual({ title: 'Finora', body: 'Сегодня 2 платежа. Долги: срок подошёл у 1.', url: '/', tag: 'finora-reminder' });
+    expect(p).toEqual({ title: 'Sumoima', body: 'Сегодня 2 платежа. Долги: срок подошёл у 1.', url: '/', tag: 'finora-reminder' });
   });
 
   it('ссылка и метка по смыслу', () => {
@@ -128,7 +128,7 @@ describe('обрезка по границе знака', () => {
   it('fitPayload: JSON не больше предела в байтах UTF-8 для кириллицы (2 байта) и эмодзи (4 байта)', () => {
     for (const unit of ['я', '😀', 'a', '👨‍👩‍👧‍👦', '🇹🇯']) {
       for (const max of [150, 199, 200, 201, 333, 2000]) {
-        const base = { title: 'Finora', body: unit.repeat(900), url: '/', tag: 'finora-reminder' };
+        const base = { title: 'Sumoima', body: unit.repeat(900), url: '/', tag: 'finora-reminder' };
         const r = fitPayload(base, max);
         expect(utf8Bytes(JSON.stringify(r)), `${unit} / ${max}`).toBeLessThanOrEqual(max);
         expect(r.body.length).toBeLessThanOrEqual(BODY_MAX_CHARS);
@@ -142,18 +142,18 @@ describe('обрезка по границе знака', () => {
   });
 
   it('влезает целиком — не трогается; пусто остаётся пустым', () => {
-    const p = { title: 'Finora', body: 'Привет', url: '/', tag: 't' };
+    const p = { title: 'Sumoima', body: 'Привет', url: '/', tag: 't' };
     expect(fitPayload(p)).toEqual(p);
     expect(fitPayload({ ...p, body: '' }).body).toBe('');
   });
 
   it('предел в 300 знаков действует и когда байтов ещё много', () => {
-    const r = fitPayload({ title: 'Finora', body: 'a'.repeat(1000), url: '/', tag: 't' });
+    const r = fitPayload({ title: 'Sumoima', body: 'a'.repeat(1000), url: '/', tag: 't' });
     expect(r.body).toBe(`${'a'.repeat(BODY_MAX_CHARS - 1)}…`);
   });
 
   it('совсем нет места — пусто, без исключения', () => {
-    expect(fitPayload({ title: 'Finora', body: 'текст', url: '/', tag: 't' }, 10).body).toBe('');
+    expect(fitPayload({ title: 'Sumoima', body: 'текст', url: '/', tag: 't' }, 10).body).toBe('');
   });
 
   it('экранирование JSON учитывается: кавычки и переносы раздувают размер', () => {

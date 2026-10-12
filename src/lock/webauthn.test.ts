@@ -33,7 +33,7 @@ describe('createLockCredential', () => {
     expect(pk.authenticatorSelection).toMatchObject({ authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' });
     expect(pk.attestation).toBe('none');
     expect(pk.timeout).toBe(60_000);
-    expect(pk.rp).toEqual({ name: 'Finora' }); // rp.id не задан: берётся адрес сайта
+    expect(pk.rp).toEqual({ name: 'Sumoima' }); // rp.id не задан: берётся адрес сайта
     expect(pk.pubKeyCredParams.map((p) => p.alg)).toEqual(expect.arrayContaining([-7, -257]));
     expect(new Uint8Array(pk.challenge as ArrayBuffer).byteLength).toBe(32);
     expect(new Uint8Array(pk.user.id as ArrayBuffer).byteLength).toBe(32);

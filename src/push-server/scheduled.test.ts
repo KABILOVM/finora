@@ -29,7 +29,7 @@ describe('плановый запуск: окно, дубли, сбои', () => 
     const { send, run } = setup();
     const r = await run();
     expect(r).toMatchObject({ users: 1, inWindow: 1, sent: 1, notified: 1 });
-    expect(send.bodies()).toEqual([{ title: 'Finora', body: 'Сегодня 1 платёж.', url: '/recurring', tag: 'finora-payments' }]);
+    expect(send.bodies()).toEqual([{ title: 'Sumoima', body: 'Сегодня 1 платёж.', url: '/recurring', tag: 'finora-payments' }]);
     expect(send.calls[0]!.ttl).toBe(12 * 60 * 60);
     expect(send.calls[0]!.body.length).toBeLessThanOrEqual(PUSH_PAYLOAD_MAX_BYTES);
   });
@@ -236,7 +236,7 @@ describe('плановый запуск: окно, дубли, сбои', () => 
     expect(await run()).toMatchObject({ sent: 0, skippedNothingToSend: 1 });
     store.liveTxDates.set(USER_A, new Set(['2026-10-09']));
     await run();
-    expect(send.bodies()).toEqual([{ title: 'Finora', body: 'Сегодня ещё нет записей. Внесите траты и доходы.', url: '/', tag: 'finora-daily' }]);
+    expect(send.bodies()).toEqual([{ title: 'Sumoima', body: 'Сегодня ещё нет записей. Внесите траты и доходы.', url: '/', tag: 'finora-daily' }]);
     clock.now = new Date('2026-10-10T06:00:00Z');
     expect(await run()).toMatchObject({ sent: 0, skippedAlreadySent: 1 });
   });
@@ -249,7 +249,7 @@ describe('плановый запуск: окно, дубли, сбои', () => 
     store.wallets.set('w1', 'TJS');
     store.debtTxs = [{ debtId: 'd6', kind: 'income', walletId: 'w1', amountMinor: 1000 }]; // d6 погашен
     await run();
-    expect(send.bodies()).toEqual([{ title: 'Finora', body: 'Долги: срок подошёл у 3.', url: '/debts', tag: 'finora-debts' }]);
+    expect(send.bodies()).toEqual([{ title: 'Sumoima', body: 'Долги: срок подошёл у 3.', url: '/debts', tag: 'finora-debts' }]);
   });
 });
 
@@ -278,13 +278,13 @@ describe('отправка через web-push (подменённый паке�
     const { wp, calls } = lib();
     const load = vi.fn(async () => wp);
     const send = createWebPushSender(VAPID, load);
-    expect(await send(SUB, '{"title":"Finora"}', { ttl: PUSH_TTL_SECONDS })).toEqual({ outcome: 'ok' });
+    expect(await send(SUB, '{"title":"Sumoima"}', { ttl: PUSH_TTL_SECONDS })).toEqual({ outcome: 'ok' });
     await send({ ...SUB, id: 's2' }, '{"x":1}', { ttl: 60 });
     expect(load).toHaveBeenCalledTimes(1);
     expect(wp.vapid).toEqual([[VAPID.subject, VAPID.publicKey, VAPID.privateKey]]);
     expect(calls[0]).toEqual({
       subscription: { endpoint: SUB.endpoint, keys: { p256dh: SUB.p256dh, auth: SUB.authSecret } },
-      payload: '{"title":"Finora"}',
+      payload: '{"title":"Sumoima"}',
       options: { TTL: 43_200, urgency: 'normal', timeout: 10_000 },
     });
     expect((calls[1]!.options as { TTL: number }).TTL).toBe(60);

@@ -47,7 +47,7 @@ export function BackupSection() {
     setError(null);
     try {
       const file = await exportBackup(store);
-      downloadTextFile(`finora-backup-${todayLocal()}.json`, 'application/json', JSON.stringify(file, null, 2));
+      downloadTextFile(`sumoima-backup-${todayLocal()}.json`, 'application/json', JSON.stringify(file, null, 2));
       toast.success('Копия сохранена в загрузки');
     } catch (e) {
       setError(backupErrorText(e, 'export'));
@@ -61,7 +61,7 @@ export function BackupSection() {
     setBusy('csv');
     setError(null);
     try {
-      downloadTextFile(`finora-transactions-${todayLocal()}.csv`, 'text/csv', await exportTransactionsCsv(store));
+      downloadTextFile(`sumoima-transactions-${todayLocal()}.csv`, 'text/csv', await exportTransactionsCsv(store));
       toast.success('Таблица сохранена в загрузки');
     } catch (e) {
       setError(backupErrorText(e, 'export'));
@@ -78,7 +78,7 @@ export function BackupSection() {
     setError(null);
     setResult(null);
     if (file.size > MAX_BACKUP_FILE_BYTES) {
-      setError('Файл слишком большой для копии Finora. Выберите файл, скачанный из этого приложения.');
+      setError('Файл слишком большой для копии Sumoima. Выберите файл, скачанный из этого приложения.');
       return;
     }
     try {
@@ -86,7 +86,7 @@ export function BackupSection() {
       const data = JSON.parse(text) as unknown;
       setPending({ fileName: file.name, data, foreign: isForeignBackup(data, store.userId) });
     } catch {
-      setError('Не удалось прочитать файл: это не копия Finora (нужен файл .json, скачанный из приложения).');
+      setError('Не удалось прочитать файл: это не копия Sumoima (нужен файл .json, скачанный из приложения).');
     }
   };
 

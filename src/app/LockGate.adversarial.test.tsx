@@ -79,11 +79,11 @@ async function lockedOverOpenSheet() {
       </LockGate>
     </AuthProvider>,
   );
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Finora закрыта' })).toBeNull()); // автозапрос открыл
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Sumoima закрыта' })).toBeNull()); // автозапрос открыл
   expect(screen.getByRole('dialog', { name: 'Новая операция' })).toBeInTheDocument();
   fake.mode = 'decline'; // дальше открыть нечем
   setVisibility('hidden');
-  expect(screen.getByRole('dialog', { name: 'Finora закрыта' })).toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: 'Sumoima закрыта' })).toBeInTheDocument();
   setVisibility('visible');
   return closed;
 }
@@ -91,7 +91,7 @@ async function lockedOverOpenSheet() {
 describe('ATTACK: клавиатура на заслонке не должна управлять окнами под ней', () => {
   it('Esc на закрытой заслонке НЕ закрывает окно «Новая операция» под ней (набранное не пропадает)', async () => {
     const closed = await lockedOverOpenSheet();
-    expect(screen.getByRole('dialog', { name: 'Finora закрыта' }).contains(document.activeElement)).toBe(true);
+    expect(screen.getByRole('dialog', { name: 'Sumoima закрыта' }).contains(document.activeElement)).toBe(true);
 
     await user.keyboard('{Escape}');
 
@@ -143,7 +143,7 @@ describe('HELD (регрессия): повреждённая запись не 
         </LockGate>
       </AuthProvider>,
     );
-    expect(screen.getByRole('dialog', { name: 'Finora закрыта' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Sumoima закрыта' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Кнопка приложения' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Открыть по Face ID / отпечатку' })).toBeNull();
     expect(fake.getCalls).toHaveLength(0); // система про такой ключ не спрашивалась
@@ -159,7 +159,7 @@ describe('HELD (регрессия): сессию убрал сервер, за�
     localStorage.removeItem(lockKey(LOCAL_USER_ID));
     fake.mode = 'decline'; // открыть нечем: заслонка стоит
     renderAppRoot(<button type="button">Кнопка приложения</button>, { client: otp.client, deps: td.deps });
-    await findByRole('dialog', { name: 'Finora закрыта' });
+    await findByRole('dialog', { name: 'Sumoima закрыта' });
 
     // сессию убрал сервер, пока заслонка закрыта: сами мы не выходили
     act(() => otp.emit('SIGNED_OUT', null)); // сессию убрал сервер: сами мы не выходили
@@ -173,7 +173,7 @@ describe('HELD (регрессия): сессию убрал сервер, за�
     await user.type(codeField, otp.otp.codes.get(ALICE.email)!);
     await user.click(screen.getByRole('button', { name: 'Войти' }));
 
-    await findByRole('dialog', { name: 'Finora закрыта' });
+    await findByRole('dialog', { name: 'Sumoima закрыта' });
     expect(screen.queryByRole('button', { name: 'Кнопка приложения' })).toBeNull();
     expect(fake.getCalls.length, 'ключ спрашивали у системы, а не открыли молча').toBeGreaterThan(0);
   });

@@ -12,6 +12,8 @@ export interface SheetProps {
   children?: ReactNode;
   /** Закреплённая нижняя часть (кнопки действий). */
   footer?: ReactNode;
+  /** Кнопка в шапке справа от заголовка (перед «×»), например выбор даты. */
+  headerAction?: ReactNode;
   /**
    * 'auto' — снизу на телефоне и по центру на ПК/планшете (≥768px); 'center' — всегда по центру.
    * Эталонный размер: до 92% высоты экрана, прокручивается внутри.
@@ -35,6 +37,7 @@ export function Sheet({
   title,
   children,
   footer,
+  headerAction,
   placement = 'auto',
   role = 'dialog',
   dismissible = true,
@@ -133,9 +136,7 @@ export function Sheet({
         tabIndex={-1}
         className={cn(
           'flex max-h-[92%] w-full flex-col bg-surface text-text shadow-sheet outline-none',
-          centered
-            ? 'max-w-md rounded-2xl animate-pop-in'
-            : 'rounded-t-3xl animate-sheet-up md:max-w-lg md:rounded-2xl md:animate-pop-in',
+          centered ? 'max-w-md rounded-2xl animate-pop-in' : 'rounded-t-3xl animate-sheet-up md:max-w-lg md:rounded-2xl md:animate-pop-in',
           className,
         )}
       >
@@ -144,14 +145,15 @@ export function Sheet({
           <h2 id={titleId} className="min-w-0 break-words text-lg font-bold">
             {title}
           </h2>
-          {dismissible && <IconButton icon="close" label="Закрыть" onClick={onClose} className="-mr-2" />}
+          <div className="flex shrink-0 items-center gap-1">
+            {headerAction}
+            {dismissible && <IconButton icon="close" label="Закрыть" onClick={onClose} className="-mr-2" />}
+          </div>
         </div>
         <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3">
           {children}
         </div>
-        {footer && (
-          <div className="border-t border-border px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>
-        )}
+        {footer && <div className="border-t border-border px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
         {!footer && <div className="pb-[env(safe-area-inset-bottom)]" />}
       </div>
     </div>,
