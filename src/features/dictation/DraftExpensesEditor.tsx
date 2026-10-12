@@ -266,7 +266,7 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                 </div>
                 {/* у поля-календаря на iPhone своя минимальная ширина: без ограничений оно вылезает за край окна */}
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="min-w-0 [&_input]:w-full [&_input]:min-w-0 [&_input]:max-w-full">
+                  <div className="min-w-0 overflow-hidden [&_input]:w-full [&_input]:min-w-0 [&_input]:max-w-full [&_input]:appearance-none">
                     <TextInput
                       label="Дата"
                       type="date"

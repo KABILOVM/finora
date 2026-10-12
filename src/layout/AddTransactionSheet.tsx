@@ -122,7 +122,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   // Номера операций и новые категории из диктовки живут, пока открыт шит: повтор после сбоя не создаёт дублей.
   const dictation = useRef({ txIds: new Map<number, string>(), categories: [] as DictCategory[] });
   const expenseCategories = useMemo(
-    () => categories.filter((x) => x.kind === 'expense').map((x) => ({ id: x.id, name: x.name })),
+    () => categories.filter((x) => x.kind === 'expense').map((x) => ({ id: x.id, name: x.name, icon: x.icon, color: x.color })),
     [categories],
   );
   const c = useTxFormController({ mode: 'add', initial, wallets, allWallets: wallets, base: settings.baseCurrency });
