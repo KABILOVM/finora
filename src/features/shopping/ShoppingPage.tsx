@@ -10,7 +10,7 @@ import type { Minor, ShoppingUnit } from '@/domain/types';
 import { useStore, ValidationError } from '@/db';
 import { ItemRow } from './ItemRow';
 import { ItemSheet, type ItemFormValue } from './ItemSheet';
-import { parseListWithAi } from './aiList';
+import { listenToListWithAi, parseListWithAi } from './aiList';
 import { ListTextSheet } from './ListTextSheet';
 import { PriceSheet } from './PriceSheet';
 import { PurchaseSheet } from './PurchaseSheet';
@@ -215,6 +215,7 @@ export default function ShoppingPage() {
         <ListTextSheet
           known={[...new Set(data.all.map((i) => i.name))]}
           parse={(text, known) => parseListWithAi(text, known)}
+          listen={(rec, known) => listenToListWithAi(rec, known)}
           onAdd={async (parsed) => {
             for (const it of parsed) await store.shopping.add({ name: it.name, qtyMilli: it.qtyMilli, unit: it.unit });
             toast.success(`Добавлено: ${parsed.length}`);
