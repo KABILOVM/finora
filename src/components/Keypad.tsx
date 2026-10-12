@@ -90,7 +90,7 @@ export function Keypad({ onKey, ops = false, canEqual = false, allowComma = true
 
   if (ops) {
     return (
-      <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-4 gap-2.5', className)}>
+      <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-4 gap-2', className)}>
         {backspace('col-span-3')}
         {opButton('÷')}
         {CALC_ROWS.flatMap((row, r) => [...row.map((d) => digit(d)), opButton(CALC_OPS[r]!)])}
@@ -111,7 +111,7 @@ export function Keypad({ onKey, ops = false, canEqual = false, allowComma = true
   }
 
   return (
-    <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-3 gap-2.5', className)}>
+    <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-3 gap-2', className)}>
       {DIGIT_ROWS.flatMap((row) => row.map((d) => digit(d)))}
       {allowComma ? (
         <button

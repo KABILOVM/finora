@@ -48,7 +48,7 @@ export function FeeField({ c }: { c: TxFormController }) {
           options={MODES}
           value={form.feeMode}
           onChange={(feeMode) => c.set({ feeMode })}
-          className="w-[108px] shrink-0"
+          className="w-[120px] shrink-0"
         />
         {percent ? (
           <div className="flex h-11 w-[68px] shrink-0 items-center rounded-xl border border-border bg-surface pl-2 pr-1.5 focus-within:border-brand">

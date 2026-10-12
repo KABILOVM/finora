@@ -72,7 +72,7 @@ function SideButton({
       aria-expanded={active}
       onClick={onClick}
       className={cn(
-        'absolute top-0 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors',
+        'absolute top-0.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
         side === 'left' ? 'left-0' : 'right-0',
         active ? 'border-brand bg-brand/10 text-brand' : 'border-border bg-surface text-muted hover:bg-surface-2',
       )}
