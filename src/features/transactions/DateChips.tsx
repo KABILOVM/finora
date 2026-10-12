@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@/components/Button';
 import { ChipPicker } from '@/components/ChipPicker';
 import { inputClasses } from '@/components/Field';
 import { addDays, formatDayLabel, isValidIsoDate, todayLocal } from '@/lib/dates';
@@ -11,19 +12,19 @@ export interface DateChipsProps {
   /** «Сегодня»/«Вчера» выбраны — выбор даты закончен (панель можно свернуть). Для «Другой даты» не вызывается. */
   onDone?: () => void;
   error?: string | null;
+  hideLabel?: boolean;
 }
 
 type Key = 'today' | 'yesterday' | 'other';
 
 /** Дата операции: «Сегодня» / «Вчера» одним касанием, для другой даты — поле-календарь. */
-export function DateChips({ value, onChange, onDone, error }: DateChipsProps) {
+export function DateChips({ value, onChange, onDone, error, hideLabel }: DateChipsProps) {
   const today = todayLocal();
   const yesterday = addDays(today, -1);
   const resolved = resolveDate(value);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const selected: Key =
-    value.mode === 'today' || resolved === today ? 'today' : resolved === yesterday ? 'yesterday' : 'other';
+  const selected: Key = value.mode === 'today' || resolved === today ? 'today' : resolved === yesterday ? 'yesterday' : 'other';
   const showPicker = pickerOpen || selected === 'other';
   const otherLabel = selected === 'other' && isValidIsoDate(resolved) ? formatDayLabel(resolved, today) : 'Другая дата';
 
@@ -43,7 +44,7 @@ export function DateChips({ value, onChange, onDone, error }: DateChipsProps) {
   };
 
   return (
-    <FieldGroup label="Дата" error={error}>
+    <FieldGroup label="Дата" error={error} hideLabel={hideLabel}>
       <ChipPicker
         ariaLabel="Дата"
         value={selected}
@@ -65,6 +66,11 @@ export function DateChips({ value, onChange, onDone, error }: DateChipsProps) {
           onChange={(e) => onChange({ mode: 'date', value: e.target.value })}
           className={`${inputClasses(!!error)} min-h-[48px]`}
         />
+      )}
+      {showPicker && onDone && (
+        <Button size="md" fullWidth onClick={onDone}>
+          Готово
+        </Button>
       )}
     </FieldGroup>
   );

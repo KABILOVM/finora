@@ -20,6 +20,8 @@ test.describe('5. Правка и удаление', () => {
     await expect(edit).toBeVisible();
     const amount = edit.getByRole('textbox', { name: /^Сумма/ });
     await expect(amount).toHaveValue('100');
+    // заметка спрятана за кнопкой-карандашом (на ней точка: заметка есть)
+    await edit.getByRole('button', { name: 'Заметка', exact: true }).click();
     await expect(edit.getByRole('textbox', { name: 'Заметка' })).toHaveValue('обед');
     await shot(page, '05-edit-open', testInfo);
     await amount.fill('60');

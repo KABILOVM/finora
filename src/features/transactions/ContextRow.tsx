@@ -1,6 +1,7 @@
 import { Glyph } from '@/components/Glyph';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChipPicker, type ChipOption } from '@/components/ChipPicker';
+import { Floating, useDismiss } from '@/components/Floating';
 import { Icon } from '@/components/Icon';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { cn } from '@/lib/cn';
@@ -43,7 +44,11 @@ function ContextChip({
       onClick={onClick}
       className={cn(
         'inline-flex min-h-[44px] max-w-full items-center gap-1 rounded-full border px-3 text-base font-medium transition-colors',
-        invalid ? 'border-danger text-danger' : open ? 'border-brand bg-brand/10 text-brand' : 'border-border bg-surface text-text hover:bg-surface-2',
+        invalid
+          ? 'border-danger text-danger'
+          : open
+            ? 'border-brand bg-brand/10 text-brand'
+            : 'border-border bg-surface text-text hover:bg-surface-2',
       )}
     >
       <Glyph value={icon} color={color} size={26} />
@@ -77,12 +82,14 @@ export function ContextRow({ c, wallets }: ContextRowProps) {
   // Ошибка у скрытого списка не должна теряться: панель с ошибкой раскрыта сама
   const show: Panel = errors.date ? 'date' : errors.wallet ? 'wallet' : errors.toWallet ? 'toWallet' : panel;
   const toggle = (p: Exclude<Panel, null>) => setPanel((cur) => (cur === p ? null : p));
+  const boxRef = useRef<HTMLDivElement>(null);
+  useDismiss(panel !== null, () => setPanel(null), boxRef);
 
   const walletName = label(form.walletId) ?? 'не выбран';
   const noTarget = isTransfer && toOptions.length === 0;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={boxRef} className="relative flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
         <ContextChip
           icon={wallets.find((w) => w.id === form.walletId)?.icon ?? '👛'}
@@ -104,46 +111,59 @@ export function ContextRow({ c, wallets }: ContextRowProps) {
             onClick={() => toggle('toWallet')}
           />
         )}
-        <ContextChip icon="📅" label={dateText} ariaLabel={`Дата: ${dateText}`} open={show === 'date'} invalid={!!errors.date} onClick={() => toggle('date')} />
+        <ContextChip
+          icon="📅"
+          label={dateText}
+          ariaLabel={`Дата: ${dateText}`}
+          open={show === 'date'}
+          invalid={!!errors.date}
+          onClick={() => toggle('date')}
+        />
       </div>
 
       {noTarget && (
         <p className="text-sm font-medium text-warning">Для перевода нужен второй кошелёк. Создайте его на экране «Кошельки».</p>
       )}
 
-      {show === 'wallet' && (
-        <FieldGroup label={isTransfer ? 'Откуда' : 'Кошелёк'} error={errors.wallet}>
-          <ChipPicker
-            ariaLabel={isTransfer ? 'Откуда' : 'Кошелёк'}
-            options={options}
-            value={form.walletId}
-            onChange={(id) => {
-              c.setWallet(id);
-              setPanel(null);
-            }}
-          />
-        </FieldGroup>
-      )}
-      {show === 'toWallet' && (
-        <FieldGroup label="Куда" error={errors.toWallet}>
-          <ChipPicker
-            ariaLabel="Куда"
-            options={toOptions}
-            value={form.toWalletId}
-            onChange={(id) => {
-              c.setToWallet(id);
-              setPanel(null);
-            }}
-          />
-        </FieldGroup>
-      )}
       {isTransfer && errors.toWallet && show !== 'toWallet' && (
         <p role="alert" className="text-sm font-medium text-danger">
           {errors.toWallet}
         </p>
       )}
-      {show === 'date' && (
-        <DateChips value={form.date} onChange={(date) => c.set({ date })} onDone={() => setPanel(null)} error={errors.date} />
+
+      {/* Списки открываются поверх формы, а не раздвигают её: окно не прыгает */}
+      {show !== null && (
+        <Floating>
+          {show === 'wallet' && (
+            <FieldGroup label={isTransfer ? 'Откуда' : 'Кошелёк'} error={errors.wallet} hideLabel>
+              <ChipPicker
+                ariaLabel={isTransfer ? 'Откуда' : 'Кошелёк'}
+                options={options}
+                value={form.walletId}
+                onChange={(id) => {
+                  c.setWallet(id);
+                  setPanel(null);
+                }}
+              />
+            </FieldGroup>
+          )}
+          {show === 'toWallet' && (
+            <FieldGroup label="Куда" error={errors.toWallet} hideLabel>
+              <ChipPicker
+                ariaLabel="Куда"
+                options={toOptions}
+                value={form.toWalletId}
+                onChange={(id) => {
+                  c.setToWallet(id);
+                  setPanel(null);
+                }}
+              />
+            </FieldGroup>
+          )}
+          {show === 'date' && (
+            <DateChips value={form.date} onChange={(date) => c.set({ date })} onDone={() => setPanel(null)} error={errors.date} hideLabel />
+          )}
+        </Floating>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
@@ -240,12 +241,22 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       }
     >
       <div ref={formRef}>
-        {kind === 'expense' && (
-          <Button variant="secondary" icon="mic" fullWidth className="mb-3" onClick={() => setDictating(true)}>
-            Продиктовать расходы
-          </Button>
-        )}
-        <TxFormFields c={c} wallets={walletsRanked} categories={categoryOptions} />
+        <TxFormFields
+          c={c}
+          wallets={walletsRanked}
+          categories={categoryOptions}
+          kindAction={
+            kind === 'expense' ? (
+              <IconButton
+                icon="mic"
+                variant="secondary"
+                label="Продиктовать расходы"
+                className="shrink-0"
+                onClick={() => setDictating(true)}
+              />
+            ) : undefined
+          }
+        />
       </div>
     </Sheet>
   );

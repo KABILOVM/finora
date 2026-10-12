@@ -321,6 +321,8 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
     await dlg.getByRole('button', { name: /^Дата:/ }).click();
     await dlg.getByRole('group', { name: 'Дата' }).getByRole('button', { name: 'Другая дата' }).click();
     await dlg.getByLabel('Дата операции').fill(tx.date);
+    // список даты раскрыт поверх формы: закрываем его, иначе он закрывает чипы категорий
+    await dlg.getByRole('button', { name: 'Готово', exact: true }).click();
   }
   if (tx.category) {
     const group = dlg.getByRole('group', { name: 'Категория' });
