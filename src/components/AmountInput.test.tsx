@@ -398,3 +398,18 @@ describe('AmountInput: калькулятор', () => {
     expect(input().value).toBe('2,5');
   });
 });
+
+describe('Keypad: раскладка калькулятора', () => {
+  it('кнопка «=» неактивна без выражения и считает по нажатию', async () => {
+    const Calc = () => {
+      const [v, setV] = useState<Minor | null>(null);
+      return <AmountInput currency="TJS" value={v} calculator onChange={setV} />;
+    };
+    render(<Calc />);
+    expect((key('Равно') as HTMLButtonElement).disabled).toBe(true);
+    for (const k of ['9', 'Минус', '4']) await user.click(key(k));
+    expect((key('Равно') as HTMLButtonElement).disabled).toBe(false);
+    await user.click(key('Равно'));
+    expect(input().value).toBe('5');
+  });
+});

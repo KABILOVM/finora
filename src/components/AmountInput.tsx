@@ -147,6 +147,7 @@ export function AmountInput({
   };
 
   const onKey = (key: KeypadKey) => {
+    if (key === '=') return equals();
     if (isOpKey(key)) {
       const base = expr ?? text;
       if (base === '') return;
@@ -251,7 +252,7 @@ export function AmountInput({
           </p>
         )}
       </div>
-      {showKeypad && <Keypad ops={calculator} allowComma={exp > 0} onKey={onKey} />}
+      {showKeypad && <Keypad ops={calculator} canEqual={calc?.kind === 'ok'} allowComma={exp > 0} onKey={onKey} />}
     </div>
   );
 }
