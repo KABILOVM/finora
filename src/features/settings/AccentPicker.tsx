@@ -41,7 +41,8 @@ export function AccentPicker({ value, onChange }: AccentPickerProps) {
       <span id={labelId} className="text-sm font-semibold text-text">
         Цвет акцента
       </span>
-      <div role="radiogroup" aria-labelledby={labelId} className="grid grid-cols-3 gap-1 sm:grid-cols-6">
+      {/* Семь образцов: на телефоне 4 + 3, в один ряд — только от lg (с боковой панелью карточка уже, и подписи не помещаются). */}
+      <div role="radiogroup" aria-labelledby={labelId} className="grid grid-cols-4 gap-1 lg:grid-cols-7">
         {ACCENTS.map((accent, i) => {
           const selected = accent.id === value;
           return (
@@ -58,7 +59,7 @@ export function AccentPicker({ value, onChange }: AccentPickerProps) {
               onClick={() => onChange(accent.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
               className={cn(
-                'flex min-h-[44px] flex-col items-center gap-1.5 rounded-2xl px-1 py-2 transition duration-200 ease-spring active:scale-95',
+                'flex min-h-[44px] flex-col items-center gap-1.5 rounded-2xl px-0 py-2 transition duration-200 ease-spring active:scale-95',
                 selected ? 'bg-brand/10' : 'hover:bg-surface-2',
               )}
             >
@@ -72,7 +73,7 @@ export function AccentPicker({ value, onChange }: AccentPickerProps) {
               >
                 {selected && <Icon name="check" size={20} />}
               </span>
-              <span className={cn('text-xs font-semibold', selected ? 'text-text' : 'text-muted')}>{accent.label}</span>
+              <span className={cn('text-[11px] font-semibold sm:text-xs', selected ? 'text-text' : 'text-muted')}>{accent.label}</span>
             </button>
           );
         })}

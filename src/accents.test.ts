@@ -37,10 +37,11 @@ for (const [selector, decls] of rules) {
   if (m?.[1]) BLOCKS.set(m[1], decls);
 }
 
-/** Какие переменные должен задавать каждый акцент: «-l» — светлая тема, «-d» — тёмная (см. комментарий в index.css). */
+/** Какие переменные должен задавать каждый акцент: «-l» — светлая тема, «-d» — тёмная, ac-logo-* — цвета знака «$», общие для тем (см. комментарий в index.css). */
 const LIGHT_KEYS = ['bg', 'surface-2', 'text', 'muted', 'border', 'border-strong', 'brand', 'brand-hover', 'accent', 'hero', 'orb-1', 'orb-2', 'orb-3', 'glass-shadow'];
 const DARK_KEYS = ['bg', 'surface', 'surface-2', 'text', 'muted', 'border', 'border-strong', 'brand', 'brand-hover', 'on-brand', 'accent', 'hero-from', 'hero', 'orb-1', 'orb-2', 'orb-3'];
-const REQUIRED = [...LIGHT_KEYS.map((k) => `ac-${k}-l`), ...DARK_KEYS.map((k) => `ac-${k}-d`)];
+const LOGO_KEYS = ['logo-from', 'logo-to', 'logo-glyph'];
+const REQUIRED = [...LIGHT_KEYS.map((k) => `ac-${k}-l`), ...DARK_KEYS.map((k) => `ac-${k}-d`), ...LOGO_KEYS.map((k) => `ac-${k}`)];
 
 const WHITE: Rgb = [255, 255, 255];
 
@@ -131,6 +132,14 @@ describe('цвета акцентов (src/index.css)', () => {
       expect(accent.bar.dark).toBe(hex(rgb(block['ac-bg-d'], '--ac-bg-d')));
     });
 
+    it('знак «$»: белый значок и его светлый низ различимы на плитке (≥ 3:1, как у фиолетового знака)', () => {
+      const [from, to, glyph] = LOGO_KEYS.map((k) => rgb(block[`ac-${k}`], `--ac-${k}`));
+      for (const [what, tile] of [['начало градиента', from], ['конец градиента', to]] as const) {
+        expect(contrast(WHITE, tile as Rgb), `белый на плитке (${what})`).toBeGreaterThanOrEqual(3);
+        expect(contrast(glyph as Rgb, tile as Rgb), `низ значка на плитке (${what})`).toBeGreaterThanOrEqual(3);
+      }
+    });
+
     describe.each([
       ['светлая', LIGHT],
       ['тёмная', DARK],
@@ -178,6 +187,25 @@ describe('цвета акцентов (src/index.css)', () => {
         expect(contrast(WHITE, color('hero')), 'hero').toBeGreaterThanOrEqual(4.5);
       });
     });
+  });
+});
+
+describe('знак «$»', () => {
+  const css = read('./index.css');
+
+  it('классы logo-* берут цвета из переменных акцента (их использует Logo.tsx)', () => {
+    for (const k of LOGO_KEYS) {
+      expect(css, `.${k}`).toMatch(new RegExp(`\\.${k}\\s*\\{\\s*stop-color:\\s*rgb\\(var\\(--ac-${k}\\)\\);`));
+    }
+  });
+
+  it('у фиолетового акцента знак — те же цвета, что в статическом значке public/icon.svg (вид по умолчанию не меняется)', () => {
+    const svg = read('../public/icon.svg');
+    const stops = [...svg.matchAll(/stop-color="(#[0-9a-f]{6})"/g)].map((m) => m[1]);
+    const violet = BLOCKS.get('violet') ?? {};
+    const [from, to, glyph] = LOGO_KEYS.map((k) => hex(rgb(violet[`ac-${k}`], `--ac-${k}`)));
+    // шестизначных цветов в значке три: начало и конец градиента плитки, низ самого значка (белые записаны как #fff)
+    expect(stops).toEqual([from, to, glyph]);
   });
 });
 

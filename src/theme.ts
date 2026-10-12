@@ -10,7 +10,7 @@ export type ThemePref = 'light' | 'dark' | 'system';
  * Цвет акцента: одна из готовых палитр (src/index.css, блоки data-accent). Хранится так же, как тема, — на устройстве.
  * Фиолетовый — прежняя палитра приложения; она действует, пока ничего не выбрано.
  */
-export type AccentId = 'violet' | 'blue' | 'teal' | 'green' | 'orange' | 'pink';
+export type AccentId = 'violet' | 'blue' | 'teal' | 'green' | 'orange' | 'red' | 'pink';
 
 export interface AccentOption {
   id: AccentId;
@@ -29,6 +29,7 @@ export const ACCENTS: readonly AccentOption[] = [
   { id: 'teal', label: 'Бирюзовый', bar: { light: '#e1f2f2', dark: '#000e0e' } },
   { id: 'green', label: 'Зелёный', bar: { light: '#e7f2e8', dark: '#030d04' } },
   { id: 'orange', label: 'Оранжевый', bar: { light: '#faebe6', dark: '#160703' } },
+  { id: 'red', label: 'Красный', bar: { light: '#fbebe8', dark: '#170705' } },
   { id: 'pink', label: 'Розовый', bar: { light: '#faebf0', dark: '#15070e' } },
 ];
 

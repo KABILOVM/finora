@@ -13,7 +13,7 @@ const reset = () => {
 beforeEach(reset);
 afterEach(reset);
 
-const radios = () => screen.getAllByRole('radio', { name: /^(Фиолетовый|Синий|Бирюзовый|Зелёный|Оранжевый|Розовый)$/ });
+const radios = () => screen.getAllByRole('radio', { name: new RegExp(`^(${ACCENTS.map((a) => a.label).join('|')})$`) });
 const checkedName = () => screen.getAllByRole('radio', { checked: true }).map((r) => r.textContent?.trim());
 
 /** Управляемая обёртка: выбор хранится в состоянии, как в настройках. */

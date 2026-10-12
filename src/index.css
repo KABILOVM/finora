@@ -43,6 +43,8 @@
  * нужный набор. Не путать с токеном --accent: он лишь второй цвет градиента кнопок.
  * Оттенки у акцентов разные, а светимость каждого токена подобрана по фиолетовому, поэтому все контрасты из комментария выше
  * сохраняются для любого акцента (и с цветами дохода/расхода тоже); src/accents.test.ts проверяет это по этому файлу.
+ * Три переменные --ac-logo-* — цвета знака «$» (src/components/Logo.tsx): начало и конец градиента плитки и низ самого значка;
+ * они одни для обеих тем. Файлы public/ (значок приложения, иконка вкладки) от акцента не зависят, их из приложения не перекрасить.
  * Селектор без :root нужен, чтобы образец цвета в настройках (<span class="accent-swatch" data-accent="…">) показывал
  * палитру своего акцента, а не выбранного. Новый акцент: скопировать блок, сменить оттенок, подобрать яркость под те же контрасты
  * и добавить его в ACCENTS (src/theme.ts) — тест подскажет, если что-то не сошлось.
@@ -80,6 +82,9 @@
   --ac-orb-1-d: 59 63 201;
   --ac-orb-2-d: 122 63 201;
   --ac-orb-3-d: 28 111 168;
+  --ac-logo-from: 106 108 255;
+  --ac-logo-to: 154 92 247;
+  --ac-logo-glyph: 228 222 253;
 }
 
 /* Синий */
@@ -114,6 +119,9 @@
   --ac-orb-1-d: 0 83 161;
   --ac-orb-2-d: 86 76 213;
   --ac-orb-3-d: 13 115 146;
+  --ac-logo-from: 25 121 253;
+  --ac-logo-to: 111 108 255;
+  --ac-logo-glyph: 218 224 255;
 }
 
 /* Бирюзовый */
@@ -148,6 +156,9 @@
   --ac-orb-1-d: 9 93 93;
   --ac-orb-2-d: 8 106 128;
   --ac-orb-3-d: 11 120 88;
+  --ac-logo-from: 6 141 145;
+  --ac-logo-to: 1 139 167;
+  --ac-logo-glyph: 194 233 243;
 }
 
 /* Зелёный */
@@ -182,6 +193,9 @@
   --ac-orb-1-d: 3 97 3;
   --ac-orb-2-d: 2 110 82;
   --ac-orb-3-d: 56 120 55;
+  --ac-logo-from: 0 147 49;
+  --ac-logo-to: 20 145 109;
+  --ac-logo-glyph: 200 234 216;
 }
 
 /* Оранжевый */
@@ -216,6 +230,46 @@
   --ac-orb-1-d: 150 49 7;
   --ac-orb-2-d: 142 83 9;
   --ac-orb-3-d: 167 78 96;
+  --ac-logo-from: 216 84 6;
+  --ac-logo-to: 185 108 9;
+  --ac-logo-glyph: 249 221 199;
+}
+
+/* Красный */
+[data-accent='red'] {
+  --ac-bg-l: 251 235 232;
+  --ac-surface-2-l: 252 237 235;
+  --ac-text-l: 51 18 15;
+  --ac-muted-l: 128 82 77;
+  --ac-border-l: 240 214 209;
+  --ac-border-strong-l: 163 118 113;
+  --ac-brand-l: 193 16 12;
+  --ac-brand-hover-l: 165 12 8;
+  --ac-accent-l: 236 61 22;
+  --ac-hero-l: 208 51 14;
+  --ac-orb-1-l: 246 129 114;
+  --ac-orb-2-l: 248 156 70;
+  --ac-orb-3-l: 253 184 229;
+  --ac-glass-shadow-l: 137 29 24;
+  --ac-bg-d: 23 7 5;
+  --ac-surface-d: 55 18 14;
+  --ac-surface-2-d: 78 31 26;
+  --ac-text-d: 254 237 234;
+  --ac-muted-d: 203 160 152;
+  --ac-border-d: 95 41 36;
+  --ac-border-strong-d: 172 116 108;
+  --ac-brand-d: 247 161 152;
+  --ac-brand-hover-d: 252 199 193;
+  --ac-on-brand-d: 69 13 4;
+  --ac-accent-d: 252 157 125;
+  --ac-hero-from-d: 168 7 21;
+  --ac-hero-d: 170 70 9;
+  --ac-orb-1-d: 168 10 26;
+  --ac-orb-2-d: 156 74 6;
+  --ac-orb-3-d: 163 79 112;
+  --ac-logo-from: 235 60 45;
+  --ac-logo-to: 226 76 15;
+  --ac-logo-glyph: 252 219 204;
 }
 
 /* Розовый */
@@ -250,6 +304,9 @@
   --ac-orb-1-d: 158 12 112;
   --ac-orb-2-d: 192 11 73;
   --ac-orb-3-d: 138 86 155;
+  --ac-logo-from: 222 60 151;
+  --ac-logo-to: 237 49 102;
+  --ac-logo-glyph: 254 216 222;
 }
 
 :root {
@@ -483,6 +540,17 @@
     :root:not([data-theme]) .accent-swatch {
       background-image: linear-gradient(135deg, rgb(var(--ac-brand-d)), rgb(var(--ac-accent-d)));
     }
+  }
+
+  /* Цвета знака «$» (Logo.tsx) из палитры выбранного акцента. */
+  .logo-from {
+    stop-color: rgb(var(--ac-logo-from));
+  }
+  .logo-to {
+    stop-color: rgb(var(--ac-logo-to));
+  }
+  .logo-glyph {
+    stop-color: rgb(var(--ac-logo-glyph));
   }
 }
 

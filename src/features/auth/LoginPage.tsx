@@ -40,8 +40,7 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center px-4 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
       <div className="flex w-full animate-rise flex-col items-center rounded-[2rem] border border-border/70 bg-surface/70 p-6 shadow-card backdrop-blur-xl">
-        {/* Знак не меняет цвет с акцентом (как значок приложения), поэтому и тень у него постоянная: цвет начала градиента знака. */}
-        <Logo size={72} className="drop-shadow-[0_14px_18px_rgb(106_108_255/0.4)]" />
+        <Logo size={72} className="drop-shadow-[0_14px_18px_rgb(var(--brand)/0.4)]" />
         <Wordmark className="mt-3 text-3xl" />
         <h1 className="mt-4 text-2xl font-bold tracking-tight">{signUp ? 'Регистрация' : 'Вход'}</h1>
         <p className="mt-1 text-center text-muted">Личный учёт денег</p>
