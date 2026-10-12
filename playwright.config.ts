@@ -8,7 +8,9 @@ import { existsSync } from 'node:fs';
 const PORT = Number(process.env.E2E_PORT ?? 4173);
 const DIST = process.env.E2E_DIST ?? 'dist';
 const CHROMIUM = process.env.PW_CHROMIUM_PATH ?? ['/opt/pw-browsers/chromium'].find((p) => existsSync(p));
-const launchOptions = CHROMIUM ? { executablePath: CHROMIUM } : {};
+// Поддельный микрофон без запроса разрешения: сценарий «Покупки → Продиктовать» записывает настоящий (тестовый) звук.
+const MIC_FLAGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'];
+const launchOptions = { args: MIC_FLAGS, ...(CHROMIUM ? { executablePath: CHROMIUM } : {}) };
 
 export default defineConfig({
   testDir: './e2e',

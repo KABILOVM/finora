@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AiListError, parseListWithAi } from './aiList';
+import { AiListError, listenToListWithAi, MAX_AUDIO_BYTES, parseListWithAi } from './aiList';
 
 const client = (result: { data: unknown; error: unknown } | Error) => {
   const invoke = vi.fn(async () => {
@@ -49,5 +49,32 @@ describe('parseListWithAi', () => {
   it('ответ без ok:true — ошибка, а не пустой список', async () => {
     const { c } = client({ data: { ok: false }, error: null });
     await expect(parseListWithAi('м', [], c)).rejects.toBeInstanceOf(AiListError);
+  });
+});
+
+describe('listenToListWithAi (голос)', () => {
+  const rec = (size = 4, mime = 'audio/mp4') => ({ blob: new Blob([new Uint8Array(size)], { type: mime }), mime });
+
+  it('шлёт запись в base64 с форматом и известными названиями, возвращает расшифровку и позиции', async () => {
+    const { invoke, c } = client({
+      data: { ok: true, items: [{ name: 'молоко', qty: 2, unit: 'l' }], transcript: ' молоко два литра ' },
+      error: null,
+    });
+    const r = await listenToListWithAi(rec(), ['Хлеб'], c);
+    expect(r).toEqual({ items: [{ name: 'Молоко', qtyMilli: 2000, unit: 'l' }], transcript: 'молоко два литра' });
+    expect(invoke).toHaveBeenCalledWith('parse-shopping', { body: { audio: 'AAAAAA==', mime: 'audio/mp4', known: ['Хлеб'] } });
+  });
+
+  it('без облака и со слишком длинной записью — понятный отказ, на сервер ничего не уходит', async () => {
+    await expect(listenToListWithAi(rec(), [], null)).rejects.toThrow(/после входа/);
+    const { invoke, c } = client({ data: { ok: true, items: [] }, error: null });
+    await expect(listenToListWithAi(rec(MAX_AUDIO_BYTES + 1), [], c)).rejects.toThrow(/слишком длинная/);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('ошибка сервера превращается в понятный текст', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { c } = client({ data: null, error: httpError(429) });
+    await expect(listenToListWithAi(rec(), [], c)).rejects.toThrow(/Слишком часто/);
   });
 });

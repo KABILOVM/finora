@@ -25,7 +25,7 @@ const DUO = {
   video: 'video-library', ball: 'football', gym: 'dumbbell-small', book: 'book-2', diploma: 'diploma', gift: 'gift',
   party: 'balloon', star: 'star', invest: 'graph-up', money: 'money-bag', salary: 'wallet-money', cash: 'banknote-2',
   card: 'card', safe: 'safe-circle', briefcase: 'case-round', tool: 'settings-minimalistic', box: 'box', tag: 'tag',
-  repeat: 'repeat', debt: 'hand-money', stars: 'stars', question: 'question-circle', sale: 'sale',
+  mic: 'microphone-3', repeat: 'repeat', debt: 'hand-money', stars: 'stars', question: 'question-circle', sale: 'sale',
 };
 // Линейные иконки (Lucide).
 const LINE = { plus: 'plus', check: 'check', close: 'x', chevron: 'chevron-right', eye: 'eye', 'eye-off': 'eye-off' };

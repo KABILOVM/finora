@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/Button';
 import { TextArea } from '@/components/Field';
 import { IconButton } from '@/components/IconButton';
@@ -6,16 +6,28 @@ import { Sheet } from '@/components/Sheet';
 import { itemTitle, UNIT_LABEL } from '@/domain/shopping';
 import { MAX_AI_TEXT, type ParsedItem } from '@/domain/shoppingAi';
 import { pluralRu } from '@/lib/plural';
+import type { AiListResult } from './aiList';
+import { RecordPanel } from './RecordPanel';
+import { type ActiveRecorder, type Recording, type StartRecorder, recordingSupported, startRecorder } from './recorder';
 
 export interface ListTextSheetProps {
   /** Названия из списка и прошлых покупок: ИИ пишет известные товары в том же виде. */
   known: readonly string[];
   /** Разобрать текст на позиции (облачная функция с ИИ). Бросает Error с понятным текстом. */
   parse: (text: string, known: readonly string[]) => Promise<ParsedItem[]>;
+  /** Отправить запись голоса: сервер слушает её, возвращает расшифровку и позиции. */
+  listen: (rec: Recording, known: readonly string[]) => Promise<AiListResult>;
+  /** Запись с микрофона (в тестах подменяется). */
+  startRecording?: StartRecorder;
+  /** Есть ли у браузера запись голоса (в тестах подменяется). */
+  canRecord?: boolean;
   /** Добавить позиции по порядку. Бросает — окно остаётся и показывает ошибку. */
   onAdd: (items: ParsedItem[]) => Promise<void>;
   onClose: () => void;
 }
+
+/** Дольше запись не нужна: список из десятков товаров укладывается в минуту. */
+const MAX_SECONDS = 60;
 
 const amount = (i: ParsedItem): string =>
   i.unit === 'pcs' && i.qtyMilli === 1000 ? '1 шт' : itemTitle('', i.qtyMilli, i.unit).trim() || UNIT_LABEL[i.unit];
@@ -24,13 +36,25 @@ const amount = (i: ParsedItem): string =>
  * «Добавить списком»: человек диктует (значок микрофона на клавиатуре телефона) или набирает весь список одним текстом,
  * ИИ разбирает его на позиции (domain/shoppingAi.ts). Результат виден ДО добавления: лишнее можно убрать, текст — поправить и разобрать заново.
  */
-export function ListTextSheet({ known, parse, onAdd, onClose }: ListTextSheetProps) {
+export function ListTextSheet({
+  known,
+  parse,
+  listen,
+  startRecording = startRecorder,
+  canRecord = recordingSupported(),
+  onAdd,
+  onClose,
+}: ListTextSheetProps) {
   const [text, setText] = useState('');
   const [items, setItems] = useState<ParsedItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
+  const [phase, setPhase] = useState<'idle' | 'starting' | 'recording' | 'listening'>('idle');
+  const [level, setLevel] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+  const recorder = useRef<ActiveRecorder | null>(null);
   const tooLong = text.length > MAX_AI_TEXT;
 
   const run = async () => {
@@ -47,6 +71,59 @@ export function ListTextSheet({ known, parse, onAdd, onClose }: ListTextSheetPro
       setParsing(false);
     }
   };
+
+  const stopRecording = async () => {
+    const rec = recorder.current;
+    if (!rec || phase !== 'recording') return;
+    recorder.current = null;
+    setPhase('listening');
+    setError(null);
+    try {
+      const r = await listen(await rec.stop(), known);
+      if (r.transcript) setText(r.transcript);
+      setItems(r.items);
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : 'Не удалось разобрать запись. Попробуйте ещё раз.');
+    } finally {
+      setPhase('idle');
+    }
+  };
+
+  const startMic = async () => {
+    if (busy.current || phase !== 'idle') return;
+    // Клавиатура на время записи не нужна: она закрывала бы таймер и кнопку «Остановить».
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    setPhase('starting');
+    setError(null);
+    try {
+      recorder.current = await startRecording(setLevel);
+      setSeconds(0);
+      setItems(null);
+      setPhase('recording');
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : 'Не удалось включить микрофон.');
+      setPhase('idle');
+    }
+  };
+
+  const cancelRecording = () => {
+    recorder.current?.cancel();
+    recorder.current = null;
+    setPhase('idle');
+  };
+
+  // Таймер записи; на пределе запись сама останавливается и уходит на разбор.
+  useEffect(() => {
+    if (phase !== 'recording') return;
+    const t = setInterval(() => setSeconds((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+  useEffect(() => {
+    if (phase === 'recording' && seconds >= MAX_SECONDS) void stopRecording();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seconds, phase]);
+  // Окно закрыли во время записи — микрофон выключаем.
+  useEffect(() => () => recorder.current?.cancel(), []);
 
   const add = async () => {
     if (busy.current || !items || items.length === 0) return;
@@ -71,7 +148,7 @@ export function ListTextSheet({ known, parse, onAdd, onClose }: ListTextSheetPro
     <Sheet
       open
       onClose={onClose}
-      dismissible={!saving && !parsing}
+      dismissible={!saving && !parsing && phase !== 'listening'}
       title="Добавить списком"
       footer={
         <div className="flex flex-col gap-2">
@@ -80,7 +157,11 @@ export function ListTextSheet({ known, parse, onAdd, onClose }: ListTextSheetPro
               {error}
             </p>
           )}
-          {ready ? (
+          {phase === 'recording' || phase === 'listening' ? (
+            <Button size="lg" fullWidth loading={phase === 'listening'} onClick={() => void stopRecording()}>
+              {phase === 'listening' ? 'Слушаю и разбираю…' : 'Остановить'}
+            </Button>
+          ) : ready ? (
             <Button size="lg" fullWidth loading={saving} onClick={() => void add()}>
               {`Добавить ${items.length} ${pluralRu(items.length, 'позицию', 'позиции', 'позиций')}`}
             </Button>
@@ -93,20 +174,41 @@ export function ListTextSheet({ known, parse, onAdd, onClose }: ListTextSheetPro
       }
     >
       <div className="flex flex-col gap-4">
-        <TextArea
-          label="Что купить"
-          hint="Нажмите значок микрофона на клавиатуре и скажите список как удобно, без запятых: «молоко два литра хлеб три булки яблоки полтора кило»"
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setItems(null);
-            setError(null);
-          }}
-          error={tooLong ? `Слишком длинно: не больше ${MAX_AI_TEXT} символов` : undefined}
-          rows={4}
-          autoComplete="off"
-          data-autofocus
-        />
+        {phase === 'recording' && (
+          <>
+            <RecordPanel level={level} seconds={seconds} maxSeconds={MAX_SECONDS} />
+            <Button variant="ghost" onClick={cancelRecording}>
+              Отмена
+            </Button>
+          </>
+        )}
+        <div className={phase === 'recording' ? 'hidden' : undefined}>
+          <TextArea
+            label="Что купить"
+            hint="Нажмите «Продиктовать» и скажите список как удобно, без запятых: «молоко два литра хлеб три булки яблоки полтора кило». Или наберите текст"
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setItems(null);
+              setError(null);
+            }}
+            error={tooLong ? `Слишком длинно: не больше ${MAX_AI_TEXT} символов` : undefined}
+            rows={4}
+            autoComplete="off"
+            data-autofocus
+          />
+        </div>
+        {canRecord && phase !== 'recording' && (
+          <Button
+            variant="secondary"
+            icon="mic"
+            loading={phase === 'starting'}
+            disabled={phase === 'listening' || parsing}
+            onClick={() => void startMic()}
+          >
+            Продиктовать
+          </Button>
+        )}
         {items !== null && items.length === 0 && (
           <p role="status" className="text-sm text-muted">
             Не нашёл товаров. Назовите товар и, если нужно, количество: «молоко два литра».
