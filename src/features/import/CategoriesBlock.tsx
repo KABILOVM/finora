@@ -10,7 +10,7 @@ function CategoryState({ c }: { c: PlanCategory }) {
   return <Badge tone="warning">без категории</Badge>;
 }
 
-/** Категории Zenmoney: сколько нашлось у вас и сколько будет создано; список можно развернуть. */
+/** Категории Дзен-мани: сколько нашлось у вас и сколько будет создано; список можно развернуть. */
 export function CategoriesBlock({ categories }: { categories: readonly PlanCategory[] }) {
   const [open, setOpen] = useState(false);
   if (categories.length === 0) return null;

@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
+import { cn } from '@/lib/cn';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
 import { useCategories, useStore } from '@/db';
@@ -20,6 +22,36 @@ import { budgetLabel, excludedText } from './budgetText';
 import { ForecastCard } from './ForecastCard';
 import { useBudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
+
+const CHIP: Record<'ok' | 'warn' | 'over', { label: string; dot: string }> = {
+  ok: { label: 'В норме', dot: 'bg-brand' },
+  warn: { label: 'Внимание', dot: 'bg-warning' },
+  over: { label: 'Исчерпано', dot: 'bg-danger' },
+};
+
+/** Сводка по уровням: сколько лимитов в норме, сколько на грани и сколько исчерпано. Нули не показываем. */
+function LevelChips({ items }: { items: readonly BudgetProgress[] }) {
+  const n = { ok: 0, warn: 0, over: 0 };
+  for (const p of items) {
+    if (!p.comparable) continue;
+    if (p.level === 'ok') n.ok++;
+    else if (p.level === 'warn' || p.level === 'danger') n.warn++;
+    else n.over++;
+  }
+  const shown = (['ok', 'warn', 'over'] as const).filter((k) => n[k] > 0);
+  if (shown.length === 0) return null;
+  return (
+    <ul aria-label="Сводка по лимитам" className="mb-3 flex flex-wrap gap-2">
+      {shown.map((k) => (
+        <li key={k} className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-surface/75 px-3 py-1.5 text-sm font-semibold">
+          <span aria-hidden="true" className={cn('h-2.5 w-2.5 rounded-full', CHIP[k].dot)} />
+          {CHIP[k].label}
+          <span className="money tabular-nums text-muted">{n[k]}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 type SheetState = { kind: 'new' } | { kind: 'edit'; budget: LocalRow<Budget> };
 
@@ -86,6 +118,7 @@ export default function BudgetsPage() {
     content = (
       <>
         <MonthSwitcher month={month} max={currentMonth} onChange={(m) => setPicked(m === currentMonth ? null : m)} />
+        <LevelChips items={progress.ok ? progress.items : []} />
         {active.length === 0 ? (
           <EmptyState
             icon="pie"
@@ -106,19 +139,18 @@ export default function BudgetsPage() {
                 const label = budgetLabel(b.categoryId, categories);
                 return (
                   <li key={b.id}>
-                    <BudgetRow progress={p} name={label.name} icon={label.icon} base={base} onOpen={() => setSheet({ kind: 'edit', budget: b })} />
+                    <BudgetRow progress={p} name={label.name} icon={label.icon} color={label.color} base={base} onOpen={() => setSheet({ kind: 'edit', budget: b })} />
                   </li>
                 );
               })}
               {progress.hasCategoryBudgets && progress.unlimitedMinor > 0 && (
-                <li className="px-4 py-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span className="font-semibold">
-                      <span aria-hidden="true">➖ </span>Без лимита
-                    </span>
-                    <span className="money text-sm text-muted">{formatMinor(progress.unlimitedMinor, base)}</span>
+                <li className="px-4 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <Glyph value="➖" size={44} />
+                    <span className="min-w-0 flex-1 font-semibold">Без лимита</span>
+                    <span className="money shrink-0 text-lg font-bold tabular-nums">{formatMinor(progress.unlimitedMinor, base)}</span>
                   </div>
-                  <p className="mt-0.5 text-sm text-muted">Расходы месяца вне лимитов по категориям, в том числе комиссии и «Без категории».</p>
+                  <p className="mt-1.5 text-sm text-muted">Расходы месяца вне лимитов по категориям, в том числе комиссии и «Без категории».</p>
                 </li>
               )}
             </ul>
@@ -146,12 +178,10 @@ export default function BudgetsPage() {
                   {archived.map((b) => {
                     const label = budgetLabel(b.categoryId, categories);
                     return (
-                      <li key={b.id} className="flex items-center justify-between gap-2 py-1 pl-4 pr-2">
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">
-                            <span aria-hidden="true">{label.icon} </span>
-                            {label.name}
-                          </p>
+                      <li key={b.id} className="flex items-center gap-3 py-2 pl-4 pr-2">
+                        <Glyph value={label.icon} color={label.color ?? undefined} size={36} className="opacity-70" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{label.name}</p>
                           <p className="money text-sm text-muted">{formatMinor(b.amountMinor, b.currency)}</p>
                         </div>
                         <Button variant="secondary" aria-label={`Вернуть: ${label.name}`} disabled={busy} onClick={() => void restore(b, label.name)}>

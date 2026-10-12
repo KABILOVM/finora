@@ -32,18 +32,18 @@ async function countTx(page: Page): Promise<{ live: number; total: number }> {
   );
 }
 
-const heading1 = (page: Page) => page.getByRole('heading', { level: 1, name: 'Импорт из Zenmoney' });
+const heading1 = (page: Page) => page.getByRole('heading', { level: 1, name: 'Импорт из Дзен-мани' });
 const count = (page: Page, id: string): Locator => page.getByTestId(`count-${id}`);
 const report = (page: Page, id: string): Locator => page.getByTestId(`report-${id}`);
-const fileInput = (page: Page): Locator => page.getByLabel('Файл Zenmoney');
+const fileInput = (page: Page): Locator => page.getByLabel('Файл Дзен-мани');
 const rateField = (page: Page, cur: string): Locator => page.getByRole('textbox', { name: new RegExp(`^Курс для пересчёта в TJS \\(${cur}\\)`) });
 const walletSelect = (page: Page, account: string): Locator => page.getByRole('combobox', { name: `Кошелёк для счёта «${account}»` });
 const selectedText = (select: Locator): Promise<string> => select.evaluate((el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent ?? '');
 
-/** Импорт лежит внутри «Настроек» (и на телефоне, и на ПК): Настройки → строка «Импорт из Zenmoney». */
+/** Импорт лежит внутри «Настроек» (и на телефоне, и на ПК): Настройки → строка «Импорт из Дзен-мани». */
 async function openImport(page: Page): Promise<void> {
   await goSection(page, 'Настройки');
-  await page.getByRole('main').getByRole('link', { name: 'Импорт из Zenmoney', exact: true }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Импорт из Дзен-мани', exact: true }).click();
   await expect(heading1(page)).toBeVisible();
 }
 
@@ -62,14 +62,14 @@ async function confirmImport(page: Page, n: number): Promise<void> {
 
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
 
-test.describe('19. Импорт из Zenmoney (CSV)', () => {
+test.describe('19. Импорт из Дзен-мани (CSV)', () => {
   test('файл → предпросмотр → курс → подтверждение → итог; повторная загрузка ничего не меняет', async ({ page }, testInfo) => {
     await openApp(page);
     await openImport(page);
 
     // Шаг 1: инструкция, честная оговорка, приватность, подсказка про копию
-    await expect(page.getByText('Как выгрузить из Zenmoney')).toBeVisible();
-    await expect(page.getByText('Выгрузите операции в CSV на сайте или в приложении Zenmoney', { exact: false })).toBeVisible();
+    await expect(page.getByText('Как выгрузить из Дзен-мани')).toBeVisible();
+    await expect(page.getByText('Выгрузите операции в CSV на сайте или в приложении Дзен-мани', { exact: false })).toBeVisible();
     await expect(page.getByText('Формат мы проверяли на образце', { exact: false })).toBeVisible();
     await expect(page.getByText('никуда не отправляется', { exact: false })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Настройки → Резервная копия' })).toBeVisible();
@@ -169,7 +169,7 @@ test.describe('19. Импорт из Zenmoney (CSV)', () => {
 
     await fileInput(page).setInputFiles(fixture('not-zenmoney.csv'));
     const alert = page.getByRole('alert');
-    await expect(alert).toContainText('Не похоже на файл Zenmoney. Нашли столбцы: Имя, Телефон, Почта');
+    await expect(alert).toContainText('Не похоже на файл Дзен-мани. Нашли столбцы: Имя, Телефон, Почта');
     await expect(page.getByRole('region', { name: 'Итоги разбора файла' })).toHaveCount(0);
 
     await fileInput(page).setInputFiles(csvBuffer('empty.csv', ''));

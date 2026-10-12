@@ -45,7 +45,7 @@ describe('подсветка нижней панели: «Ещё» горит н
     ['/budgets', 'Бюджеты'],
     ['/recurring', 'Регулярные платежи'],
     ['/debts', 'Долги и кредиты'],
-    ['/import', 'Импорт из Zenmoney'],
+    ['/import', 'Импорт из Дзен-мани'],
     ['/settings', 'Настройки'],
     ['/settings/categories', 'Категории'],
   ])('%s', async (path, title) => {
@@ -70,7 +70,7 @@ describe('подсветка боковой панели', () => {
     ['/budgets', 'Бюджеты', 'Бюджеты'],
     ['/recurring', 'Регулярные платежи', 'Платежи'],
     ['/debts', 'Долги и кредиты', 'Долги'],
-    ['/import', 'Импорт из Zenmoney', 'Настройки'],
+    ['/import', 'Импорт из Дзен-мани', 'Настройки'],
     ['/settings/categories', 'Категории', 'Настройки'],
     ['/settings', 'Настройки', 'Настройки'],
   ])('%s: горит один пункт «%s»', async (path, title, label) => {
@@ -110,7 +110,7 @@ describe('переходы из страницы «Ещё»', () => {
     await findByRole('heading', { name: 'Настройки', level: 1 });
     const main = screen.getByRole('main');
     expect(linkIn(main, 'Категории').getAttribute('href')).toMatch(/\/settings\/categories$/);
-    expect(linkIn(main, 'Импорт из Zenmoney').getAttribute('href')).toMatch(/\/import$/);
+    expect(linkIn(main, 'Импорт из Дзен-мани').getAttribute('href')).toMatch(/\/import$/);
   });
 });
 
@@ -119,7 +119,7 @@ describe('новые разделы', () => {
     ['/budgets', 'Бюджеты'],
     ['/recurring', 'Регулярные платежи'],
     ['/debts', 'Долги и кредиты'],
-    ['/import', 'Импорт из Zenmoney'],
+    ['/import', 'Импорт из Дзен-мани'],
   ])('%s: заголовок и каркас на месте', async (path, title) => {
     renderAt(path);
     await findByRole('heading', { name: title, level: 1 });

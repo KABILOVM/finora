@@ -84,7 +84,7 @@ const isQuota = (e: unknown): boolean => /quota/i.test(`${(e as { name?: string 
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-/** Порядок записи: старые даты раньше; внутри дня — как в файле (так день в списке выглядит как в Zenmoney). */
+/** Порядок записи: старые даты раньше; внутри дня — как в файле (так день в списке выглядит как в Дзен-мани). */
 export function writeOrder(ops: readonly PlanOp[]): PlanOp[] {
   return ops.filter((o) => o.status === 'add').sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : a.row.line - b.row.line));
 }

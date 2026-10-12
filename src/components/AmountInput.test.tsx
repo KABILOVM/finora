@@ -334,3 +334,82 @@ describe('AmountInput: внешнее значение и валюта', () => {
     expect(input()).toHaveFocus();
   });
 });
+
+describe('AmountInput: калькулятор', () => {
+  const Calc = ({ onValue }: { onValue?: (m: Minor | null) => void }) => {
+    const [v, setV] = useState<Minor | null>(null);
+    return (
+      <AmountInput
+        currency="TJS"
+        value={v}
+        calculator
+        onChange={(m) => {
+          setV(m);
+          onValue?.(m);
+        }}
+      />
+    );
+  };
+
+  it('без calculator кнопок знаков нет', () => {
+    render(<Harness />);
+    expect(screen.queryByRole('button', { name: 'Плюс' })).toBeNull();
+  });
+
+  it('экранная клавиатура: 12 × 3 → результат сразу, «=» заменяет выражение суммой', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    for (const k of ['1', '2', 'Умножить', '3']) await user.click(key(k));
+    expect(onValue).toHaveBeenLastCalledWith(3600);
+    await user.click(screen.getByRole('button', { name: /^= 36/ }));
+    expect(input().value).toBe('36');
+    expect(onValue).toHaveBeenLastCalledWith(3600);
+  });
+
+  it('пока выражение не дописано, суммы нет (null)', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    for (const k of ['5', 'Плюс']) await user.click(key(k));
+    expect(onValue).toHaveBeenLastCalledWith(null);
+  });
+
+  it('деление на ноль — сообщение и null', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    for (const k of ['5', 'Разделить', '0']) await user.click(key(k));
+    expect(screen.getByRole('alert').textContent).toContain('На ноль делить нельзя');
+    expect(onValue).toHaveBeenLastCalledWith(null);
+  });
+
+  it('стёрли знак — обычное число', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    for (const k of ['7', 'Плюс', 'Стереть']) await user.click(key(k));
+    expect(input().value).toBe('7');
+    expect(onValue).toHaveBeenLastCalledWith(700);
+  });
+
+  it('клавиатура ПК: «10/4» и Enter → 2,5', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '10/4');
+    expect(onValue).toHaveBeenLastCalledWith(250);
+    await user.keyboard('{Enter}');
+    expect(input().value).toBe('2,5');
+  });
+});
+
+describe('Keypad: раскладка калькулятора', () => {
+  it('кнопка «=» неактивна без выражения и считает по нажатию', async () => {
+    const Calc = () => {
+      const [v, setV] = useState<Minor | null>(null);
+      return <AmountInput currency="TJS" value={v} calculator onChange={setV} />;
+    };
+    render(<Calc />);
+    expect((key('Равно') as HTMLButtonElement).disabled).toBe(true);
+    for (const k of ['9', 'Минус', '4']) await user.click(key(k));
+    expect((key('Равно') as HTMLButtonElement).disabled).toBe(false);
+    await user.click(key('Равно'));
+    expect(input().value).toBe('5');
+  });
+});

@@ -47,7 +47,7 @@ test.describe('15. Меню «Ещё»', () => {
       ['/budgets', 'Бюджеты', (p: Page) => p.getByRole('heading', { level: 2, name: 'Лимиты на месяц' })],
       ['/recurring', 'Регулярные платежи', (p: Page) => p.getByRole('button', { name: 'Добавить платёж' })],
       ['/debts', 'Долги и кредиты', (p: Page) => p.getByRole('button', { name: 'Новый долг' })],
-      ['/import', 'Импорт из Zenmoney', (p: Page) => p.getByLabel('Файл Zenmoney')],
+      ['/import', 'Импорт из Дзен-мани', (p: Page) => p.getByLabel('Файл Дзен-мани')],
     ] as const) {
       await openApp(page, hash);
       await expect(h1(page, title)).toBeVisible();
@@ -104,8 +104,8 @@ test.describe('15. Меню «Ещё»', () => {
     await expect(h1(page, 'Категории')).toBeVisible();
     expect(await lit(page)).toEqual(['Настройки']);
     await goSection(page, 'Настройки');
-    await page.getByRole('main').getByRole('link', { name: 'Импорт из Zenmoney', exact: true }).click();
-    await expect(h1(page, 'Импорт из Zenmoney')).toBeVisible();
+    await page.getByRole('main').getByRole('link', { name: 'Импорт из Дзен-мани', exact: true }).click();
+    await expect(h1(page, 'Импорт из Дзен-мани')).toBeVisible();
     expect(await lit(page)).toEqual(['Настройки']);
   });
 

@@ -33,7 +33,7 @@ test('офлайн: /more, /budgets, /recurring, /debts, /import, /settings/cate
     ['#/budgets', 'Бюджеты'],
     ['#/recurring', 'Регулярные платежи'],
     ['#/debts', 'Долги и кредиты'],
-    ['#/import', 'Импорт из Zenmoney'],
+    ['#/import', 'Импорт из Дзен-мани'],
     ['#/settings/categories', 'Категории'],
     ['#/settings', 'Настройки'],
   ] as const) {

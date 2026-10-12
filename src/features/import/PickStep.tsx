@@ -32,8 +32,8 @@ export function PickStep({ onFile, error, disabled = false }: PickStepProps) {
   return (
     <div className="flex flex-col gap-4">
       <Card className="flex flex-col gap-2">
-        <h2 className="text-lg font-bold">Как выгрузить из Zenmoney</h2>
-        <p>Выгрузите операции в CSV на сайте или в приложении Zenmoney, затем выберите файл ниже.</p>
+        <h2 className="text-lg font-bold">Как выгрузить из Дзен-мани</h2>
+        <p>Выгрузите операции в CSV на сайте или в приложении Дзен-мани, затем выберите файл ниже.</p>
         <p className="text-sm text-muted">
           Формат мы проверяли на образце. Если не получилось — напишите нам и пришлите файл, в котором суммы заменены вымышленными.
         </p>
@@ -62,7 +62,7 @@ export function PickStep({ onFile, error, disabled = false }: PickStepProps) {
           // не display:none: на iPhone вызов click() у полностью скрытого поля выбора файла срабатывает не всегда
           className="sr-only"
           tabIndex={-1}
-          aria-label="Файл Zenmoney"
+          aria-label="Файл Дзен-мани"
           onChange={onChange}
         />
       </Card>

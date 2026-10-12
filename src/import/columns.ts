@@ -1,5 +1,5 @@
 /**
- * Поиск столбцов по названиям заголовков. Формат Zenmoney по памяти: date, categoryName, payee, comment,
+ * Поиск столбцов по названиям заголовков. Формат Дзен-мани по памяти: date, categoryName, payee, comment,
  * outcomeAccountName, outcome, outcomeCurrencyShortTitle, incomeAccountName, income, incomeCurrencyShortTitle,
  * createdDate, changedDate, qrCode. Названия ищутся с вариантами (английские и русские), регистр, пробелы,
  * подчёркивания и «ё/е» не важны. Если нужного не нашли — не гадаем, а говорим словами (см. notZenmoneyMessage).
@@ -59,7 +59,7 @@ export function headerKey(raw: string): string {
 export const ZENMONEY_NEEDS =
   'Нужны столбцы: дата, а также счёт, сумма и валюта списания или зачисления (например, date, outcomeAccountName, outcome, outcomeCurrencyShortTitle).';
 
-/** «Не похоже на файл Zenmoney. Нашли столбцы: …» */
+/** «Не похоже на файл Дзен-мани. Нашли столбцы: …» */
 export function notZenmoneyMessage(headers: readonly string[]): string {
   const shown = headers
     .map((h) => h.replace(/\s+/g, ' ').trim())
@@ -68,7 +68,7 @@ export function notZenmoneyMessage(headers: readonly string[]): string {
     .map((h) => (h.length > 40 ? `${h.slice(0, 39)}…` : h));
   const more = headers.length > shown.length && shown.length === 15 ? ' и другие' : '';
   const found = shown.length > 0 ? `${shown.join(', ')}${more}` : 'ни одного';
-  return `Не похоже на файл Zenmoney. Нашли столбцы: ${found}. ${ZENMONEY_NEEDS}`;
+  return `Не похоже на файл Дзен-мани. Нашли столбцы: ${found}. ${ZENMONEY_NEEDS}`;
 }
 
 export type ColumnsResult = { ok: true; index: ColumnIndex } | { ok: false; message: string };

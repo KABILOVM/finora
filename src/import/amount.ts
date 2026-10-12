@@ -33,7 +33,7 @@ export function scanAmount(raw: string): AmountScan {
   let s = raw.replace(SPACES, '');
   if (s === '') return { kind: 'zero' };
   if (s.startsWith('-') || s.startsWith('−')) {
-    // «-» без числа — пустая ячейка; «-0» — ноль; «-12» — отрицательная сумма (в Zenmoney суммы без знака)
+    // «-» без числа — пустая ячейка; «-0» — ноль; «-12» — отрицательная сумма (в Дзен-мани суммы без знака)
     const rest = scanAmount(s.slice(1));
     return rest.kind === 'number' ? { kind: 'bad', code: 'negative' } : rest;
   }

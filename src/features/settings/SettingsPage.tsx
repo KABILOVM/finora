@@ -44,7 +44,7 @@ export default function SettingsPage() {
             <NavRow to="/settings/categories" icon="i:tag" color="#4f46e5" title="Категории" />
           </li>
           <li>
-            <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Zenmoney" />
+            <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Дзен-мани" />
           </li>
         </ul>
       </Card>

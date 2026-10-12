@@ -192,6 +192,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
           tone={form.kind === 'expense' ? 'expense' : form.kind === 'income' ? 'income' : 'neutral'}
           error={errors.amount}
           className={feeOpen ? FEE_KEYPAD : COMPACT_KEYPAD}
+          calculator
           autoFocus
         />
       </div>

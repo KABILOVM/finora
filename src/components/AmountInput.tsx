@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { currencyInfo, exponentOf } from '@/domain/currency';
+import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import {
@@ -9,9 +10,9 @@ import {
   formatDraft,
   minorToDraft,
   sanitizeAmountText,
-  type AmountKey,
 } from './amountText';
-import { Keypad } from './Keypad';
+import { acceptExpr, applyExprKey, evalExpr, formatExpr, hasOperator, isOpKey, normalizeExprText } from './amountExpr';
+import { Keypad, type KeypadKey } from './Keypad';
 
 export interface AmountInputProps {
   currency: CurrencyCode;
@@ -29,6 +30,11 @@ export interface AmountInputProps {
   tone?: 'neutral' | 'income' | 'expense';
   /** Показывать экранную цифровую клавиатуру (по умолчанию да). */
   showKeypad?: boolean;
+  /**
+   * Калькулятор: знаки + − × ÷ на экранной клавиатуре и с клавиатуры ПК, «=» или Enter — посчитать.
+   * Пока в поле выражение, родителю отдаётся его результат (null, если выражение не дописано или не считается).
+   */
+  calculator?: boolean;
   autoFocus?: boolean;
   className?: string;
 }
@@ -52,6 +58,7 @@ export function AmountInput({
   error,
   tone = 'neutral',
   showKeypad = true,
+  calculator = false,
   autoFocus = false,
   className,
 }: AmountInputProps) {
@@ -63,6 +70,10 @@ export function AmountInput({
   const [text, setText] = useState(() => minorToDraft(value, currency));
   const [seen, setSeen] = useState({ value, currency });
   const [notice, setNotice] = useState<string | null>(null);
+  // Выражение калькулятора ('12,5+3×2'); null — обычный ввод числа в text.
+  const [expr, setExpr] = useState<string | null>(null);
+  const exprEmitted = useRef<Minor | null>(null);
+  const calc = expr === null ? null : evalExpr(expr, currency);
   // На телефоне цифры вводятся экранной клавиатурой: системную не показываем (inputmode="none").
   const [coarse] = useState(isCoarsePointer);
 
@@ -75,8 +86,13 @@ export function AmountInput({
   if (seen.value !== value || seen.currency !== currency) {
     setSeen({ value, currency });
     const clamped = clampToCurrency(text, currency); // новая валюта могла сократить число знаков
-    if (seen.value !== value && draftToMinor(clamped, currency) !== value) setText(minorToDraft(value, currency));
-    else if (clamped !== text) setText(clamped);
+    if (expr !== null && seen.value !== value && value !== exprEmitted.current) {
+      setExpr(null); // сумму сменили снаружи (сброс формы): выражение больше не про неё
+      setText(minorToDraft(value, currency));
+    } else if (expr === null) {
+      if (seen.value !== value && draftToMinor(clamped, currency) !== value) setText(minorToDraft(value, currency));
+      else if (clamped !== text) setText(clamped);
+    }
   }
 
   // Сменилась валюта, а значение осталось — сообщаем родителю пересчитанную сумму (например, 12,5 → 12 для иены).
@@ -84,7 +100,8 @@ export function AmountInput({
   useEffect(() => {
     if (lastCurrency.current === currency) return;
     lastCurrency.current = currency;
-    const m = draftToMinor(text, currency);
+    const m = expr !== null ? (calc?.kind === 'ok' ? calc.minor : null) : draftToMinor(text, currency);
+    if (expr !== null) exprEmitted.current = m;
     if (m !== valueRef.current) onChangeRef.current(m);
   }, [currency]);
 
@@ -92,7 +109,7 @@ export function AmountInput({
     if (autoFocus) inputRef.current?.focus({ preventScroll: true });
   }, [autoFocus]);
 
-  const shown = formatDraft(text);
+  const shown = expr !== null ? formatExpr(expr) : formatDraft(text);
 
   const commit = (next: string) => {
     setNotice(null);
@@ -101,10 +118,64 @@ export function AmountInput({
     onChange(draftToMinor(next, currency));
   };
 
+  // Выражение: сумма наружу — результат, пока он считается.
+  const commitExpr = (next: string) => {
+    setNotice(null);
+    setExpr(next);
+    const r = evalExpr(next, currency);
+    const minor = r.kind === 'ok' ? r.minor : null;
+    exprEmitted.current = minor;
+    onChange(minor);
+  };
+
+  // Из выражения обратно к обычному числу (стёрли последний знак).
+  const leaveExpr = (plain: string) => {
+    setExpr(null);
+    setNotice(null);
+    setText(plain);
+    onChange(draftToMinor(plain, currency));
+  };
+
+  // «=»: выражение заменяется результатом.
+  const equals = () => {
+    if (calc?.kind !== 'ok') return;
+    const plain = minorToDraft(calc.minor, currency);
+    setExpr(null);
+    setNotice(null);
+    setText(plain);
+    onChange(calc.minor);
+  };
+
+  const onKey = (key: KeypadKey) => {
+    if (key === '=') return equals();
+    if (isOpKey(key)) {
+      const base = expr ?? text;
+      if (base === '') return;
+      commitExpr(applyExprKey(base, key));
+      return;
+    }
+    if (expr === null) return commit(applyKey(text, key, currency));
+    const next = applyExprKey(expr, key);
+    if (!hasOperator(next)) leaveExpr(next);
+    else commitExpr(next);
+  };
+
   // Набор и вставка с системной клавиатуры. Строку, которую нельзя прочитать однозначно («1.234», лишние знаки,
   // два числа), не принимаем целиком — прежняя сумма остаётся. Нажатие лишней цифры молча игнорируется, как на
   // экранной клавиатуре, а вставка чужого текста объясняется сообщением.
   const onType = (raw: string) => {
+    if (calculator && (expr !== null || hasOperator(normalizeExprText(raw)))) {
+      const next = acceptExpr(raw);
+      if (next === null) return; // так выражение не записать: прежнее остаётся
+      if (hasOperator(next)) return commitExpr(next);
+      if (expr !== null) leaveExpr(sanitizeAmountText(next, currency));
+      else onTypePlain(next);
+      return;
+    }
+    onTypePlain(raw);
+  };
+
+  const onTypePlain = (raw: string) => {
     const next = sanitizeAmountText(raw, currency);
     if (next === '' && /\d/.test(raw)) {
       if (raw.length > shown.length + 1) setNotice('Не удалось прочитать сумму. Введите её вручную.');
@@ -113,9 +184,9 @@ export function AmountInput({
     commit(next);
   };
 
-  const message = error || notice;
+  const message = error || notice || (calc?.kind === 'error' ? calc.message : null);
   // Чем длиннее число, тем мельче шрифт: самая длинная сумма («9 999 999 999 999,99») помещается на iPhone SE.
-  const size = shown.length <= 8 ? 'text-5xl' : shown.length <= 11 ? 'text-4xl' : shown.length <= 15 ? 'text-3xl' : 'text-2xl';
+  const size = expr !== null ? (shown.length <= 10 ? 'text-3xl' : shown.length <= 16 ? 'text-2xl' : 'text-xl') : shown.length <= 8 ? 'text-5xl' : shown.length <= 11 ? 'text-4xl' : shown.length <= 15 ? 'text-3xl' : 'text-2xl';
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
@@ -147,6 +218,12 @@ export function AmountInput({
               placeholder="0"
               value={shown}
               onChange={(e) => onType(e.target.value)}
+              onKeyDown={(e) => {
+                if (calculator && expr !== null && (e.key === '=' || e.key === 'Enter') && calc?.kind === 'ok') {
+                  e.preventDefault();
+                  equals();
+                }
+              }}
               aria-invalid={message ? true : undefined}
               aria-describedby={message ? `${id}-error` : undefined}
               className={cn(
@@ -159,13 +236,23 @@ export function AmountInput({
             {info.symbol}
           </span>
         </div>
+        {calc?.kind === 'ok' && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={equals}
+            className="mx-auto mt-1 block rounded-full bg-surface-2 px-4 py-1 text-lg font-semibold text-brand"
+          >
+            = {formatMinor(calc.minor, currency)}
+          </button>
+        )}
         {message && (
           <p id={`${id}-error`} role="alert" className="text-center text-sm font-medium text-danger">
             {message}
           </p>
         )}
       </div>
-      {showKeypad && <Keypad allowComma={exp > 0} onKey={(k: AmountKey) => commit(applyKey(text, k, currency))} />}
+      {showKeypad && <Keypad ops={calculator} canEqual={calc?.kind === 'ok'} allowComma={exp > 0} onKey={onKey} />}
     </div>
   );
 }
