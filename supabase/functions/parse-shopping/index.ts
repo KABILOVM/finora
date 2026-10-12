@@ -1,6 +1,6 @@
 /**
  * Edge Function «parse-shopping»: превращает продиктованный (или набранный) текст в список покупок через Gemini.
- * Приложение шлёт {text, known?}, получает {items: [{name, qty, unit}]}. Файл САМОДОСТАТОЧЕН: его целиком вставляют в редактор
+ * Приложение шлёт {text, known?} или {audio (base64), mime, known?} (запись голоса), получает {items: [{name, qty, unit}], transcript?}. Файл САМОДОСТАТОЧЕН: его целиком вставляют в редактор
  * Edge Functions (Supabase → Edge Functions → Create function → parse-shopping), относительных импортов нет.
  *
  * КАК РАЗВЕРНУТЬ
@@ -10,7 +10,7 @@
  *     (по умолчанию gemini-3.8-flash). SUPABASE_URL и SUPABASE_ANON_KEY платформа подставляет сама. Ключей в коде нет и быть не должно.
  *  3. Проверка: войти в приложение → Покупки → «Добавить списком» → продиктовать «мука масло два литра молока» → «Разобрать».
  *
- * БЕЗОПАСНОСТЬ: нужен вход (токен проверяется на сервере авторизации); текст не длиннее 2000 символов; не больше 20 запросов
+ * БЕЗОПАСНОСТЬ: нужен вход (токен проверяется на сервере авторизации); текст не длиннее 2000 символов, запись не больше ~3 МБ; не больше 20 запросов
  * в минуту на человека; в ответ уходит только разобранный список, ошибки Gemini наружу не пробрасываются.
  */
 
@@ -18,6 +18,17 @@
 declare const Deno: any;
 
 const MAX_TEXT = 2000;
+/** Запись голоса в base64: около 3 МБ, это минуты речи в AAC/Opus. */
+const MAX_AUDIO = 4_000_000;
+const AUDIO_MIME: Record<string, string> = {
+  'audio/mp4': 'audio/mp4',
+  'audio/x-m4a': 'audio/mp4',
+  'audio/aac': 'audio/aac',
+  'audio/webm': 'audio/webm',
+  'audio/ogg': 'audio/ogg',
+  'audio/mpeg': 'audio/mpeg',
+  'audio/wav': 'audio/wav',
+};
 const MAX_KNOWN = 200;
 const MAX_ITEMS = 100;
 const PER_MINUTE = 20;
@@ -40,11 +51,14 @@ const PROMPT = `Ты разбираешь список покупок, кото�
 - qty: число в единице unit. «2 литра» → 2, «полтора кило» → 1.5, «300 грамм» → 0.3 (unit kg), «500 мл» → 0.5 (unit l), «пара» → 2, «дюжина» → 12. Если количество не названо — 1.
 - unit: «kg» для веса, «l» для жидкости в литрах, «pcs» для штук, пачек, бутылок, банок и когда единица не названа.
 - Если название похоже на одно из известных человеку (список known), пиши его в том же виде.
-- Если в тексте нет товаров, верни пустой список.`;
+- Если в тексте нет товаров, верни пустой список.
+- Если вместо текста дана аудиозапись, прослушай её и в transcript запиши дословную расшифровку по-русски (со знаками препинания), затем разбери её по тем же правилам. Для текста transcript не нужен.`;
 
 const SCHEMA = {
   type: 'OBJECT',
+  propertyOrdering: ['transcript', 'items'],
   properties: {
+    transcript: { type: 'STRING' },
     items: {
       type: 'ARRAY',
       items: {
@@ -104,28 +118,38 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (limited(user, Date.now())) return json(429, { ok: false, error: 'rate_limited' });
 
   let text = '';
+  let audio = '';
+  let mime = '';
   let known: string[] = [];
   try {
-    const body = (await req.json()) as { text?: unknown; known?: unknown };
+    const body = (await req.json()) as { text?: unknown; audio?: unknown; mime?: unknown; known?: unknown };
     if (typeof body.text === 'string') text = body.text.trim();
+    if (typeof body.audio === 'string') audio = body.audio;
+    if (typeof body.mime === 'string') mime = AUDIO_MIME[body.mime.split(';')[0]!.trim().toLowerCase()] ?? '';
     if (Array.isArray(body.known)) known = body.known.filter((k): k is string => typeof k === 'string').map((k) => k.slice(0, 80)).slice(0, MAX_KNOWN);
   } catch {
     return json(400, { ok: false, error: 'bad_request' });
   }
-  if (text === '') return json(200, { ok: true, items: [] });
-  if (text.length > MAX_TEXT) return json(400, { ok: false, error: 'too_long' });
+  if (audio !== '') {
+    if (audio.length > MAX_AUDIO) return json(400, { ok: false, error: 'too_long' });
+    if (mime === '' || !/^[A-Za-z0-9+/=]+$/.test(audio)) return json(400, { ok: false, error: 'bad_request' });
+  } else {
+    if (text === '') return json(200, { ok: true, items: [] });
+    if (text.length > MAX_TEXT) return json(400, { ok: false, error: 'too_long' });
+  }
 
   const model = Deno.env.get('GEMINI_MODEL') || DEFAULT_MODEL;
-  const prompt = `${PROMPT}\n\nknown: ${JSON.stringify(known)}\n\nТекст:\n${text}`;
+  const head = `${PROMPT}\n\nknown: ${JSON.stringify(known)}\n\n`;
+  const parts = audio !== '' ? [{ text: `${head}Аудиозапись:` }, { inlineData: { mimeType: mime, data: audio } }] : [{ text: `${head}Текст:\n${text}` }];
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts }],
         generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
       }),
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(40_000),
     });
     if (!res.ok) {
       console.error('parse-shopping: Gemini ответил', res.status, (await res.text()).slice(0, 300));
@@ -133,9 +157,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
     const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
     const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-    const parsed = JSON.parse(raw) as { items?: unknown };
+    const parsed = JSON.parse(raw) as { items?: unknown; transcript?: unknown };
     const items = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, MAX_ITEMS);
-    return json(200, { ok: true, items });
+    const transcript = audio !== '' && typeof parsed.transcript === 'string' ? parsed.transcript.trim().slice(0, MAX_TEXT) : undefined;
+    return json(200, { ok: true, items, transcript });
   } catch (e) {
     console.error('parse-shopping: сбой', e instanceof Error ? e.message : e);
     return json(502, { ok: false, error: 'upstream' });

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { MAX_AI_TEXT, normalizeAiItems, type ParsedItem } from '@/domain/shoppingAi';
+import type { Recording } from './recorder';
 
 export const PARSE_FUNCTION = 'parse-shopping';
 
@@ -14,18 +15,20 @@ const statusOf = (e: unknown): number | undefined => {
   return typeof ctx?.status === 'number' ? ctx.status : undefined;
 };
 
-/**
- * Отправляет текст в облачную функцию parse-shopping (Gemini) и возвращает позиции списка.
- * Нужен вход в аккаунт: без облака (локальный режим) ИИ недоступен.
- */
-export async function parseListWithAi(text: string, known: readonly string[], client: Invoker | null = getDefaultClient()): Promise<ParsedItem[]> {
+/** Запись длиннее этого сервер не примет (4 000 000 знаков base64 ≈ 3 МБ). */
+export const MAX_AUDIO_BYTES = 2_900_000;
+
+export interface AiListResult {
+  items: ParsedItem[];
+  /** Расшифровка записи (только для голоса). */
+  transcript: string;
+}
+
+async function call(client: Invoker | null, body: Record<string, unknown>): Promise<AiListResult> {
   if (!client) throw new AiListError('Разбор списка работает после входа в аккаунт: облако в этом приложении не подключено.');
-  const body = text.trim();
-  if (body === '') return [];
-  if (body.length > MAX_AI_TEXT) throw new AiListError(`Слишком длинный текст: не больше ${MAX_AI_TEXT} символов за раз. Разбейте список на части.`);
   let res: { data: unknown; error: unknown };
   try {
-    res = (await client.functions.invoke(PARSE_FUNCTION, { body: { text: body, known: known.slice(0, 200) } })) as { data: unknown; error: unknown };
+    res = (await client.functions.invoke(PARSE_FUNCTION, { body })) as { data: unknown; error: unknown };
   } catch (e) {
     console.error('Разбор списка: сбой запроса', e);
     throw new AiListError('Нет связи с сервером. Проверьте интернет и повторите.');
@@ -41,7 +44,49 @@ export async function parseListWithAi(text: string, known: readonly string[], cl
     if (st === 500) throw new AiListError('Разбор списка не настроен на сервере (нет ключа ИИ).');
     throw new AiListError('Не получилось разобрать список. Попробуйте ещё раз.');
   }
-  const data = res.data as { ok?: unknown; items?: unknown } | null;
+  const data = res.data as { ok?: unknown; items?: unknown; transcript?: unknown } | null;
   if (!data || data.ok !== true) throw new AiListError('Не получилось разобрать список. Попробуйте ещё раз.');
-  return normalizeAiItems(data.items);
+  return { items: normalizeAiItems(data.items), transcript: typeof data.transcript === 'string' ? data.transcript.trim() : '' };
+}
+
+/**
+ * Отправляет текст в облачную функцию parse-shopping (Gemini) и возвращает позиции списка.
+ * Нужен вход в аккаунт: без облака (локальный режим) ИИ недоступен.
+ */
+export async function parseListWithAi(
+  text: string,
+  known: readonly string[],
+  client: Invoker | null = getDefaultClient(),
+): Promise<ParsedItem[]> {
+  if (!client) throw new AiListError('Разбор списка работает после входа в аккаунт: облако в этом приложении не подключено.');
+  const body = text.trim();
+  if (body === '') return [];
+  if (body.length > MAX_AI_TEXT)
+    throw new AiListError(`Слишком длинный текст: не больше ${MAX_AI_TEXT} символов за раз. Разбейте список на части.`);
+  return (await call(client, { text: body, known: known.slice(0, 200) })).items;
+}
+
+const toBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(r.error ?? new Error('read'));
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ''));
+    r.readAsDataURL(blob);
+  });
+
+/** Отправляет запись голоса: функция сама слушает её, возвращает расшифровку и позиции. */
+export async function listenToListWithAi(
+  rec: Recording,
+  known: readonly string[],
+  client: Invoker | null = getDefaultClient(),
+): Promise<AiListResult> {
+  if (!client) throw new AiListError('Разбор списка работает после входа в аккаунт: облако в этом приложении не подключено.');
+  if (rec.blob.size > MAX_AUDIO_BYTES) throw new AiListError('Запись слишком длинная. Продиктуйте список частями.');
+  let audio: string;
+  try {
+    audio = await toBase64(rec.blob);
+  } catch {
+    throw new AiListError('Не удалось прочитать запись. Повторите.');
+  }
+  return call(client, { audio, mime: rec.mime, known: known.slice(0, 200) });
 }

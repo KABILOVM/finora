@@ -212,4 +212,32 @@ test.describe('27. Покупки', () => {
     await expect(dlg.getByRole('textbox', { name: 'Что купить' })).toHaveValue('мука масло два литра молока');
     await shot(page, '27-shopping-list-text', testInfo);
   });
+  test('«Продиктовать»: микрофон включается, идёт запись с таймером, «Остановить» отправляет её; без облака понятная ошибка', async ({ page, context }, testInfo) => {
+    await context.grantPermissions(['microphone']);
+    await openApp(page, '/shopping');
+    await page.getByRole('button', { name: 'Добавить списком' }).first().click();
+    const dlg = sheet(page, 'Добавить списком');
+    await dlg.getByRole('button', { name: 'Продиктовать' }).click();
+    const panel = dlg.getByTestId('record-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('0:01', { timeout: 5000 });
+    await shot(page, '27-shopping-recording', testInfo);
+    if (isPhone(page)) expect(await noHorizontalScroll(page), 'запись без горизонтальной прокрутки').toBe(true);
+    await dlg.getByRole('button', { name: 'Остановить' }).click();
+    await expect(dlg.getByRole('alert')).toContainText('после входа в аккаунт');
+    await expect(panel).toBeHidden();
+    await expect(dlg.getByRole('button', { name: 'Продиктовать' })).toBeVisible();
+  });
+
+  test('«Продиктовать»: «Отмена» выключает запись', async ({ page, context }) => {
+    await context.grantPermissions(['microphone']);
+    await openApp(page, '/shopping');
+    await page.getByRole('button', { name: 'Добавить списком' }).first().click();
+    const dlg = sheet(page, 'Добавить списком');
+    await dlg.getByRole('button', { name: 'Продиктовать' }).click();
+    await expect(dlg.getByTestId('record-panel')).toBeVisible();
+    await dlg.getByRole('button', { name: 'Отмена' }).click();
+    await expect(dlg.getByTestId('record-panel')).toBeHidden();
+    await expect(dlg.getByRole('alert')).toHaveCount(0);
+  });
 });
