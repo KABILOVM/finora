@@ -133,6 +133,38 @@ export function dayTotal(
   return { netMinor: net, excluded };
 }
 
+export interface CurrencyTotal {
+  currency: CurrencyCode;
+  incomeMinor: Minor;
+  expenseMinor: Minor;
+}
+
+/**
+ * Доходы и расходы за период по валютам СЧЕТОВ (в родных суммах, без пересчёта). Операции по долгам и переводы не входят.
+ * Валюты идут в порядке первого появления; слишком большая сумма (RangeError) — null, экран покажет прочерк.
+ */
+export function totalsByCurrency(
+  items: readonly (Pick<Transaction, 'kind' | 'walletId' | 'amountMinor'> & { debtId?: Transaction['debtId'] | undefined })[],
+  currencyOf: (walletId: string) => CurrencyCode | undefined,
+): CurrencyTotal[] | null {
+  const by = new Map<CurrencyCode, CurrencyTotal>();
+  try {
+    for (const t of items) {
+      if (t.kind === 'transfer' || t.debtId != null) continue;
+      const currency = currencyOf(t.walletId);
+      if (!currency) continue;
+      const cur = by.get(currency) ?? { currency, incomeMinor: 0, expenseMinor: 0 };
+      if (t.kind === 'income') cur.incomeMinor = addMinor(cur.incomeMinor, t.amountMinor);
+      else cur.expenseMinor = addMinor(cur.expenseMinor, t.amountMinor);
+      by.set(currency, cur);
+    }
+  } catch (e) {
+    if (e instanceof RangeError) return null;
+    throw e;
+  }
+  return [...by.values()];
+}
+
 /** Значение, которое «догоняет» входное с задержкой: поиск не гоняет запросы на каждую букву. */
 export function useDebounced<T>(value: T, ms: number): T {
   const [shown, setShown] = useState(value);

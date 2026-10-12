@@ -14,7 +14,7 @@ import { useSyncEnabled } from '@/sync/syncContext';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionRow } from './TransactionRow';
 import { useCategoryIndex, useWalletIndex } from './txData';
-import { dayTotal, toTxFilter, useDebounced, type ListFilters } from './txFilters';
+import { dayTotal, toTxFilter, totalsByCurrency, useDebounced, type ListFilters } from './txFilters';
 
 /** Сколько операций показываем сразу (целыми днями) и сколько добавляет «Показать ещё». */
 export const PAGE_SIZE = 200;
@@ -69,6 +69,11 @@ export default function TransactionsPage() {
     return { groups: out, shown: count };
   }, [rows, limit]);
 
+  const periodTotals = useMemo(
+    () => (rows && walletIndex ? totalsByCurrency(rows, (id) => walletIndex.get(id)?.currency) : []),
+    [rows, walletIndex],
+  );
+
   const open = (id: string) => navigate(`/edit/${id}`, { state: { background: location } });
 
   const loading = !rows || !anyRow || !settings || !walletIndex || !categoryIndex || !wallets || !categories;
@@ -116,6 +121,19 @@ export default function TransactionsPage() {
             />
           ) : (
             <>
+              {periodTotals && periodTotals.length > 0 && (
+                <Card className="mb-4 flex flex-col gap-1" data-testid="period-totals" aria-label="Итого за период по валютам">
+                  {periodTotals.map((t) => (
+                    <div key={t.currency} className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="font-semibold text-muted">{t.currency}</span>
+                      <span className="flex gap-3">
+                        {t.incomeMinor > 0 && <MoneyText minor={t.incomeMinor} currency={t.currency} tone="income" sign="always" />}
+                        {t.expenseMinor > 0 && <MoneyText minor={-t.expenseMinor} currency={t.currency} tone="expense" />}
+                      </span>
+                    </div>
+                  ))}
+                </Card>
+              )}
               {groups.map((g) => {
                 const total = dayTotal(g.items, settings.baseCurrency);
                 const label = formatDayLabel(g.date, today);

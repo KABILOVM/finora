@@ -3,6 +3,7 @@ import { AmountInput, isCoarsePointer } from '@/components/AmountInput';
 import type { KeypadKey } from '@/components/Keypad';
 import { Icon } from '@/components/Icon';
 import { isOpKey } from '@/components/amountExpr';
+import { applyKey, draftToMinor, minorToDraft, type AmountKey } from '@/components/amountText';
 import { cn } from '@/lib/cn';
 import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
@@ -99,13 +100,19 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
   // Процент комиссии вводится той же экранной клавиатурой, что и сумма: куда печатает клавиатура, показывает рамка поля.
   const [target, setTarget] = useState<'amount' | 'fee'>('amount');
   const percentOpen = feeOpen && form.feeMode === 'percent';
-  useEffect(() => setTarget(percentOpen ? 'fee' : 'amount'), [percentOpen]);
+  // Поле комиссии (и сумма, и процент) при открытии получает экранную клавиатуру; к основной сумме возвращает нажатие на неё.
+  useEffect(() => setTarget(feeOpen ? 'fee' : 'amount'), [feeOpen, form.feeMode]);
   // На телефоне процент печатает экранная клавиатура; на компьютере остаётся физическая, а экранные клавиши — для суммы.
   const [coarse] = useState(isCoarsePointer);
-  const pctTyping = coarse && percentOpen && target === 'fee';
+  const feeTyping = coarse && feeOpen && target === 'fee';
   const feeKey = (key: KeypadKey): boolean => {
-    if (!pctTyping) return false;
-    if (!isOpKey(key) && key !== '=') c.set({ feePct: applyPctKey(form.feePct, key) });
+    if (!feeTyping) return false;
+    if (isOpKey(key) || key === '=') return true;
+    if (percentOpen) c.set({ feePct: applyPctKey(form.feePct, key) });
+    else {
+      const next = applyKey(minorToDraft(form.feeAmount, c.currency), key as AmountKey, c.currency);
+      c.set({ feeAmount: draftToMinor(next, c.currency) });
+    }
     return true;
   };
 
@@ -162,7 +169,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
         />
       )}
 
-      {feeOpen && <FeeField c={c} pctActive={pctTyping} onPctActivate={() => setTarget('fee')} />}
+      {feeOpen && <FeeField c={c} active={feeTyping} onActivate={() => setTarget('fee')} />}
       {showNote && (
         <TextInput
           label="Заметка"
@@ -200,7 +207,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
             <Icon name="edit" size={20} />
           </SideButton>
         }
-        active={pctTyping ? false : undefined}
+        active={feeTyping ? false : undefined}
         onActivate={() => setTarget('amount')}
         onKeyIntercept={feeKey}
       />

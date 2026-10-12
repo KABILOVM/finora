@@ -23,6 +23,8 @@ export interface AmountInputProps {
   tone?: 'neutral' | 'income' | 'expense';
   /** Показывать экранную цифровую клавиатуру (по умолчанию да). */
   showKeypad?: boolean;
+  /** Системную клавиатуру на телефоне не показывать, даже если своей клавиатуры в этом поле нет (печатает чужая, например в комиссию). */
+  noSystemKeyboard?: boolean;
   /**
    * Калькулятор: знаки + − × ÷ на экранной клавиатуре и с клавиатуры ПК, «=» или Enter — посчитать.
    * Пока в поле выражение, родителю отдаётся его результат (null, если выражение не дописано или не считается).
@@ -62,6 +64,7 @@ export function AmountInput({
   error,
   tone = 'neutral',
   showKeypad = true,
+  noSystemKeyboard = false,
   calculator = false,
   autoFocus = false,
   className,
@@ -230,7 +233,7 @@ export function AmountInput({
                   ref={inputRef}
                   id={id}
                   type="text"
-                  inputMode={showKeypad && coarse ? 'none' : exp > 0 ? 'decimal' : 'numeric'}
+                  inputMode={(showKeypad || noSystemKeyboard) && coarse ? 'none' : exp > 0 ? 'decimal' : 'numeric'}
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}
