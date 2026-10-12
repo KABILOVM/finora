@@ -23,7 +23,7 @@ describe('маршруты', () => {
     ['/budgets', 'Бюджеты'],
     ['/recurring', 'Регулярные платежи'],
     ['/debts', 'Долги и кредиты'],
-    ['/import', 'Импорт из Zenmoney'],
+    ['/import', 'Импорт из Дзен-мани'],
     ['/settings', 'Настройки'],
     ['/settings/categories', 'Категории'],
   ])('%s показывает страницу «%s»', async (path, title) => {

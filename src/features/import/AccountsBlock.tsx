@@ -58,7 +58,7 @@ function AccountRow({ w, onChoose }: { w: PlanWallet; onChoose: (key: string, ch
   );
 }
 
-/** Сопоставление счетов Zenmoney с кошельками: автоподбор по названию и валюте, можно выбрать свой или создать новый. */
+/** Сопоставление счетов Дзен-мани с кошельками: автоподбор по названию и валюте, можно выбрать свой или создать новый. */
 export function AccountsBlock({ wallets, onChoose }: { wallets: readonly PlanWallet[]; onChoose: (key: string, choice: WalletChoice) => void }) {
   if (wallets.length === 0) return null;
   return (

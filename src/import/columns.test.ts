@@ -11,7 +11,7 @@ const RU = [
 ];
 
 describe('mapColumns', () => {
-  it('английские заголовки Zenmoney', () => {
+  it('английские заголовки Дзен-мани', () => {
     const r = mapColumns(EN);
     expect(r).toEqual({
       ok: true,
@@ -48,7 +48,7 @@ describe('mapColumns', () => {
     const r = mapColumns(['Имя', 'Телефон', 'Почта']);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.message).toMatch(/^Не похоже на файл Zenmoney\. Нашли столбцы: Имя, Телефон, Почта\./);
+      expect(r.message).toMatch(/^Не похоже на файл Дзен-мани\. Нашли столбцы: Имя, Телефон, Почта\./);
     }
   });
 

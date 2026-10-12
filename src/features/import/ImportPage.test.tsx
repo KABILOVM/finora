@@ -24,7 +24,7 @@ afterEach(() => {
 async function openImport(strict = false) {
   const td = makeTestDeps();
   renderAppRoot(<ImportPage />, { deps: td.deps, path: '/import', strict });
-  await findByRole('heading', { name: 'Импорт из Zenmoney', level: 1 });
+  await findByRole('heading', { name: 'Импорт из Дзен-мани', level: 1 });
   await findByRole('button', { name: 'Выбрать файл' });
   return td;
 }
@@ -46,15 +46,15 @@ const text = (id: string) => document.querySelector(`[data-testid="${id}"]`)?.te
 // в StrictMode хранилище открывается дважды (первое закрывается): нужно последнее
 const store = (td: TestDeps) => td.stores[td.stores.length - 1]!;
 
-describe('Импорт из Zenmoney: экран', () => {
+describe('Импорт из Дзен-мани: экран', () => {
   it('первый шаг: как выгрузить, оговорка про формат, приватность, ссылка на копию', async () => {
     await openImport();
-    expect(screen.getByText('Как выгрузить из Zenmoney')).toBeTruthy();
-    expect(screen.getByText(/Выгрузите операции в CSV на сайте или в приложении Zenmoney/)).toBeTruthy();
+    expect(screen.getByText('Как выгрузить из Дзен-мани')).toBeTruthy();
+    expect(screen.getByText(/Выгрузите операции в CSV на сайте или в приложении Дзен-мани/)).toBeTruthy();
     expect(screen.getByText(/Формат мы проверяли на образце/)).toBeTruthy();
     expect(screen.getByText(/никуда не отправляется/)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Настройки → Резервная копия' }).getAttribute('href')).toBe('/settings');
-    expect(fileInput().getAttribute('aria-label')).toBe('Файл Zenmoney');
+    expect(fileInput().getAttribute('aria-label')).toBe('Файл Дзен-мани');
     expect(fileInput().getAttribute('accept')).toContain('.csv');
   });
 
@@ -62,7 +62,7 @@ describe('Импорт из Zenmoney: экран', () => {
     await openImport();
     chooseFile(fixtureText('not-zenmoney.csv'));
     const alert = await findByRole('alert');
-    expect(alert.textContent).toContain('Не похоже на файл Zenmoney. Нашли столбцы: Имя, Телефон, Почта');
+    expect(alert.textContent).toContain('Не похоже на файл Дзен-мани. Нашли столбцы: Имя, Телефон, Почта');
     expect(screen.queryByRole('region', { name: 'Итоги разбора файла' })).toBeNull();
   });
 
@@ -122,7 +122,7 @@ describe('Импорт из Zenmoney: экран', () => {
   });
 });
 
-describe('Импорт из Zenmoney: курс по умолчанию', () => {
+describe('Импорт из Дзен-мани: курс по умолчанию', () => {
   it('текущий курс из сервиса курсов подставляется в поле, и операции в валюте сразу готовы к добавлению', async () => {
     const td = makeTestDeps();
     const service = createRateService({ providers: [], storage: createMemoryRateStorage() });

@@ -15,7 +15,7 @@ export function amountMessage(code: AmountBadCode, raw: string, label: 'спис
     case 'unreadable':
       return `Не удалось прочитать сумму ${label}: ${q}`;
     case 'negative':
-      return `Сумма ${label} отрицательная: ${q} (в файле Zenmoney суммы идут без минуса)`;
+      return `Сумма ${label} отрицательная: ${q} (в файле Дзен-мани суммы идут без минуса)`;
     case 'ambiguous':
       return `Сумма ${label} ${q} неоднозначна: неясно, знак «,» или «.» отделяет тысячи или доли. Допишите доли в файле (например, 1000,00)`;
     case 'precision':

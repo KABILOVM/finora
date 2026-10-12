@@ -2,7 +2,7 @@ import type { TransactionInput } from '@/db';
 import type { CategoryKind, CurrencyCode, IsoDate, Minor, TxKind, UUID } from '@/domain/types';
 
 /**
- * Типы импорта из Zenmoney (CSV). Формат файла пока НЕ проверен на настоящей выгрузке, поэтому разбор написан
+ * Типы импорта из Дзен-мани (CSV). Формат файла пока НЕ проверен на настоящей выгрузке, поэтому разбор написан
  * «с запасом» и честно отказывается, если что-то непонятно (см. parse.ts).
  */
 
@@ -19,7 +19,7 @@ export class ImportFileError extends Error {
   }
 }
 
-/** Счёт Zenmoney. key = «название в нижнем регистре|ВАЛЮТА» — по нему счёт узнаётся при повторном импорте. */
+/** Счёт Дзен-мани. key = «название в нижнем регистре|ВАЛЮТА» — по нему счёт узнаётся при повторном импорте. */
 export interface AccountRef {
   key: string;
   name: string;

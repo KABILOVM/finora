@@ -36,7 +36,7 @@ function ratesOf(texts: Readonly<Record<string, string>>): Record<string, number
 }
 
 /**
- * Импорт из Zenmoney (CSV): 1) выбор файла, 2) предпросмотр (счётчики, курсы, сопоставление), 3) подтверждение, 4) итог.
+ * Импорт из Дзен-мани (CSV): 1) выбор файла, 2) предпросмотр (счётчики, курсы, сопоставление), 3) подтверждение, 4) итог.
  * Всё считается на устройстве. Запись идемпотентна (id операций выводятся из строк файла): повторная загрузка того же файла
  * ничего не дублирует и не затирает. Закрытие экрана во время записи останавливает её на границе порции.
  */
@@ -165,7 +165,7 @@ export default function ImportPage() {
 
   return (
     <>
-      <PageHeader title="Импорт из Zenmoney" subtitle={SUBTITLE[stage.name]} />
+      <PageHeader title="Импорт из Дзен-мани" subtitle={SUBTITLE[stage.name]} />
       {(settings === undefined || dbRows === undefined) && (
         <p role="status" className="py-10 text-center text-muted">
           Загрузка…

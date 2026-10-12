@@ -66,7 +66,7 @@ export function StartStep({ onScratch, onZenmoney, onBackup, onSkip }: StartStep
             </div>
           ) : (
             <Card className="flex flex-col gap-2" padding="md">
-              <Choice icon="i:box" color="#0891b2" title="Из Zenmoney (файл CSV)" text="Операции, счета и категории" onClick={onZenmoney} />
+              <Choice icon="i:box" color="#0891b2" title="Из Дзен-мани (файл CSV)" text="Операции, счета и категории" onClick={onZenmoney} />
               <Choice icon="i:download" color="#7c3aed" title="Из своей копии Finora (JSON)" text="Файл, который вы сохраняли в Настройках" onClick={onBackup} />
               <button
                 type="button"

@@ -174,8 +174,8 @@ function amountCode(code: AmountBadCode): IssueCode {
 }
 
 /**
- * Файл Zenmoney (текст CSV) → пригодные строки, строки «нужно проверить» и «пропущено».
- * Бросает ImportFileError с готовым человеческим текстом, если файл не похож на выгрузку Zenmoney или слишком велик.
+ * Файл Дзен-мани (текст CSV) → пригодные строки, строки «нужно проверить» и «пропущено».
+ * Бросает ImportFileError с готовым человеческим текстом, если файл не похож на выгрузку Дзен-мани или слишком велик.
  */
 export function parseZenmoney(text: string, encoding = 'utf-8'): ParsedFile {
   if (text.length > MAX_FILE_BYTES) {

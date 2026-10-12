@@ -121,18 +121,18 @@ test.describe('26. Пошаговая настройка после регист
     await expect(wizard(page)).toHaveCount(0);
   });
 
-  test('перенос из Zenmoney ведёт на /import; после импорта мастер завершён', async ({ page }) => {
+  test('перенос из Дзен-мани ведёт на /import; после импорта мастер завершён', async ({ page }) => {
     await openApp(page, '/', { onboarding: true });
     await wizard(page).getByRole('button', { name: /Перенести из другого приложения/ }).click();
     await expect(wizard(page).getByRole('button', { name: /Из своей копии Finora \(JSON\)/ })).toBeVisible();
-    await wizard(page).getByRole('button', { name: /Из Zenmoney \(файл CSV\)/ }).click();
+    await wizard(page).getByRole('button', { name: /Из Дзен-мани \(файл CSV\)/ }).click();
     await expect(page).toHaveURL(/#\/import$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Импорт из Zenmoney' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Импорт из Дзен-мани' })).toBeVisible();
     await expect(wizard(page)).toHaveCount(0);
 
     // Загружаем файл и подтверждаем
     const csv = readFileSync(join(process.cwd(), 'src', 'import', '__fixtures__', 'basic.csv'));
-    await page.getByLabel('Файл Zenmoney').setInputFiles({ name: 'basic.csv', mimeType: 'text/csv', buffer: csv });
+    await page.getByLabel('Файл Дзен-мани').setInputFiles({ name: 'basic.csv', mimeType: 'text/csv', buffer: csv });
     await expect(page.getByRole('region', { name: 'Итоги разбора файла' })).toBeVisible();
     await page.getByRole('textbox', { name: /^Курс для пересчёта в TJS \(USD\)/ }).fill('10,9');
     await page.getByRole('button', { name: /^Импортировать \d+ операци/ }).click();

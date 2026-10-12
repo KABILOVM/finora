@@ -123,8 +123,8 @@ describe('parseZenmoney: образец semicolon-ru.csv (BOM, CRLF, точка 
 });
 
 describe('parseZenmoney: отказ и пределы', () => {
-  it('не Zenmoney: говорим словами и перечисляем столбцы', () => {
-    expect(() => parseZenmoney(fixture('not-zenmoney.csv'))).toThrow(/Не похоже на файл Zenmoney\. Нашли столбцы: Имя, Телефон, Почта/);
+  it('не Дзен-мани: говорим словами и перечисляем столбцы', () => {
+    expect(() => parseZenmoney(fixture('not-zenmoney.csv'))).toThrow(/Не похоже на файл Дзен-мани\. Нашли столбцы: Имя, Телефон, Почта/);
     expect(() => parseZenmoney(fixture('not-zenmoney.csv'))).toThrow(ImportFileError);
   });
 

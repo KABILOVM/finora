@@ -87,7 +87,7 @@ describe('идемпотентность импорта: ручной выбор
     const before = (await live(store)).filter((t) => t.walletId === mine.id).length;
     expect(before).toBeGreaterThan(0);
 
-    // в Zenmoney появилась ещё одна операция по той же карте; человек снова загружает свежую выгрузку, ничего не меняя вручную
+    // в Дзен-мани появилась ещё одна операция по той же карте; человек снова загружает свежую выгрузку, ничего не меняя вручную
     const text2 = text.trimEnd() + '\n2026-09-20,Продукты,Корвон,Новая покупка,Карта Алиф,77.00,TJS,,0,,2026-09-20 10:00:00,2026-09-20 10:00:00,\n';
     const second = await planFor(store, text2);
     await runImport(store, second);
