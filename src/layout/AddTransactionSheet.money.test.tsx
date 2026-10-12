@@ -220,6 +220,32 @@ describe('переводы', () => {
     expect((await liveTxs(td))[0]).toMatchObject({ kind: 'transfer', amountMinor: 200_000, toAmountMinor: 197_000 });
   });
 
+  it('на телефоне комиссия суммой тоже печатается экранной клавиатурой (системная не открывается)', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('coarse'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    try {
+      const td = opsDeps([], { setup: withCard });
+      await openAddSheet(td);
+      await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+      await tapAmount('200');
+      await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+      const fee = screen.getByRole('textbox', { name: /^Комиссия/ }) as HTMLInputElement;
+      expect(fee.getAttribute('inputmode')).toBe('none');
+      await tapAmount('5');
+      expect(fee.value).toBe('5');
+      expect(screen.getByText('Получит: 195 с.')).toBeInTheDocument();
+      await user.click(screen.getByRole('textbox', { name: 'Сумма списания, Сомони' }));
+      await tapAmount('0');
+      expect(fee.value).toBe('5');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('на телефоне процент комиссии печатается экранной клавиатурой (системная не открывается), тап по сумме возвращает клавиши к ней', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({
       matches: q.includes('coarse'),

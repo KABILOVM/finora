@@ -228,11 +228,13 @@ export function DictateExpensesSheet({
             error={tooLong ? `Слишком длинно: не больше ${MAX_EXPENSES_TEXT} символов` : undefined}
             rows={4}
             autoComplete="off"
-            data-autofocus
+            // На телефоне при записи голосом системная клавиатура не нужна: фокус на кнопку «Продиктовать».
+            data-autofocus={canRecord ? undefined : true}
           />
         </div>
         {canRecord && phase !== 'recording' && (
-          <Button variant="secondary" icon="mic" loading={phase === 'starting'} disabled={phase === 'listening' || parsing || saving} onClick={() => void startMic()}>
+          <Button variant="secondary" icon="mic"
+            data-autofocus loading={phase === 'starting'} disabled={phase === 'listening' || parsing || saving} onClick={() => void startMic()}>
             Продиктовать
           </Button>
         )}

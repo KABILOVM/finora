@@ -32,12 +32,13 @@ export function applyPctKey(text: string, key: KeypadKey): string {
 
 export function FeeField({
   c,
-  pctActive = false,
-  onPctActivate,
+  active = false,
+  onActivate,
 }: {
   c: TxFormController;
-  pctActive?: boolean;
-  onPctActivate?: () => void;
+  /** Экранная клавиатура сейчас печатает в комиссию (рамка выделена). */
+  active?: boolean;
+  onActivate?: () => void;
 }) {
   const { form, errors, fee } = c;
   const isTransfer = form.kind === 'transfer';
@@ -70,15 +71,15 @@ export function FeeField({
         />
         {percent ? (
           <div
-            className={`flex h-11 w-[68px] shrink-0 items-center rounded-xl border bg-surface pl-2 pr-1.5 focus-within:border-brand ${pctActive ? 'border-brand ring-2 ring-brand/15' : 'border-border'}`}
-            onClick={onPctActivate}
+            className={`flex h-11 w-[68px] shrink-0 items-center rounded-xl border bg-surface pl-2 pr-1.5 focus-within:border-brand ${active ? 'border-brand ring-2 ring-brand/15' : 'border-border'}`}
+            onClick={onActivate}
           >
             <input
               ref={pctRef}
               aria-label="Комиссия в процентах"
               // На телефоне вводим экранной клавиатурой: системная закрывала бы её и окно.
               inputMode={isCoarsePointer() ? 'none' : 'decimal'}
-              onFocus={onPctActivate}
+              onFocus={onActivate}
               autoComplete="off"
               placeholder="1,5"
               value={form.feePct}
@@ -90,13 +91,18 @@ export function FeeField({
             </span>
           </div>
         ) : (
-          <div className="flex h-11 w-[96px] shrink-0 items-center overflow-hidden rounded-xl border border-border bg-surface px-2 focus-within:border-brand">
+          <div
+            className={`flex h-11 w-[96px] shrink-0 items-center overflow-hidden rounded-xl border bg-surface px-2 focus-within:border-brand ${active ? 'border-brand ring-2 ring-brand/15' : 'border-border'}`}
+            onClick={onActivate}
+          >
             <AmountInput
               currency={c.currency}
               value={form.feeAmount}
               onChange={(feeAmount) => c.set({ feeAmount })}
               label="Комиссия"
               showKeypad={false}
+              noSystemKeyboard
+              onActivate={onActivate}
               bare
               className={`w-full ${AMOUNT_BOX}`}
             />
