@@ -7,6 +7,8 @@ import { parseShoppingText, MAX_PARSED_ITEMS, type ParsedItem } from '@/domain/s
 import { pluralRu } from '@/lib/plural';
 
 export interface ListTextSheetProps {
+  /** Названия из списка и прошлых покупок: многословные названия («сыр моцарелла») не разрезаются на товары. */
+  known: readonly string[];
   /** Добавить позиции по порядку. Бросает — окно остаётся и показывает ошибку. */
   onAdd: (items: ParsedItem[]) => Promise<void>;
   onClose: () => void;
@@ -16,12 +18,12 @@ export interface ListTextSheetProps {
  * «Добавить списком»: человек диктует (значок микрофона на клавиатуре телефона) или набирает весь список одним текстом, приложение
  * разбирает его на позиции (domain/shoppingText.ts) и показывает результат ДО добавления: ошибки видно и правятся прямо в тексте.
  */
-export function ListTextSheet({ onAdd, onClose }: ListTextSheetProps) {
+export function ListTextSheet({ known, onAdd, onClose }: ListTextSheetProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
-  const items = useMemo(() => parseShoppingText(text), [text]);
+  const items = useMemo(() => parseShoppingText(text, known), [text, known]);
 
   const add = async () => {
     if (busy.current || items.length === 0) return;
@@ -62,7 +64,7 @@ export function ListTextSheet({ onAdd, onClose }: ListTextSheetProps) {
       <div className="flex flex-col gap-4">
         <TextArea
           label="Что купить"
-          hint="Нажмите значок микрофона на клавиатуре телефона и скажите, например: «молоко два литра, хлеб три штуки, яблоки полтора килограмма»"
+          hint="Нажмите значок микрофона на клавиатуре телефона и скажите, например: «молоко два литра, хлеб три штуки, яблоки полтора килограмма». Между товарами можно говорить «запятая» или «новая строка»"
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={4}

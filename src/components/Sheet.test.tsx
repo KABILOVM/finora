@@ -276,3 +276,28 @@ describe('Sheet и экранная клавиатура (visualViewport)', () =
     expect(removed).toHaveBeenCalled();
   });
 });
+
+describe('Sheet: клавиатура выехала позже события (iPhone)', () => {
+  it('фокус на поле запускает повторный пересчёт: окно ужимается, даже если visualViewport.resize не пришёл', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+      const vv = { height: 800, offsetTop: 0, addEventListener: () => undefined, removeEventListener: () => undefined };
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+      render(<Harness />);
+      await open();
+      const overlay = (dialog() as HTMLElement).parentElement as HTMLElement;
+      expect(overlay.style.height).toBe('');
+      vv.height = 470; // клавиатура встала, но событий не было
+      act(() => {
+        screen.getByRole('textbox', { name: 'Заметка' }).dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      expect(overlay.style.height).toBe('470px');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
