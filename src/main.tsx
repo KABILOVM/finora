@@ -4,10 +4,11 @@ import App from './App';
 import { UpdatePromptHost } from './components/UpdatePrompt';
 import { startInstallCapture } from './install/installEvent';
 import './index.css';
-import { applyTheme, readThemePref } from './theme';
+import { applyAccent, applyTheme, readAccentPref, readThemePref } from './theme';
 
-// Тема применяется до первой отрисовки: страница не мигает не той темой.
+// Тема и цвет акцента применяются до первой отрисовки: страница не мигает не той темой.
 applyTheme(readThemePref());
+applyAccent(readAccentPref());
 // Событие «можно установить» приходит рано и один раз — ловим его при старте, а показываем окно позже.
 startInstallCapture();
 

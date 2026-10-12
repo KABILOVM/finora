@@ -30,88 +30,362 @@
 
 /* Дизайн-токены. Значения — «R G B» (для модификаторов прозрачности: bg-brand/10). Тема выбирается вручную (см. src/theme.ts). */
 /*
- * Палитра: сине-фиолетовая «стеклянная» тема. Контраст проверен по парам «цвет текста на фоне»:
- * текст и приглушённый текст ≥ 4.5:1 (WCAG AA) на bg / surface / surface-2, brand и on-brand — ≥ 4.5:1,
+ * Палитра: «стеклянная» тема с выбираемым цветовым акцентом (по умолчанию сине-фиолетовая). Контраст проверен по парам
+ * «цвет текста на фоне»: текст и приглушённый текст ≥ 4.5:1 (WCAG AA) на bg / surface / surface-2, brand и on-brand — ≥ 4.5:1,
  * --border-strong (рамки полей ввода) — ≥ 3:1. Прозрачность «стекла» добавляется только в классах (bg-surface/80),
  * сами токены непрозрачны, поэтому расчёт контраста не меняется.
  */
+
+/*
+ * Цветовые акценты: Настройки → Оформление. Выбор хранит src/theme.ts и ставит атрибут data-accent на <html>; без атрибута
+ * действует фиолетовый — это прежняя палитра приложения. Акцент — не один цвет, а вся подкрашенная палитра (фон, поверхности,
+ * рамки, текст, brand, пятна фона), поэтому у каждого два набора: «-l» для светлой и «-d» для тёмной темы. Блоки тем ниже берут
+ * нужный набор. Не путать с токеном --accent: он лишь второй цвет градиента кнопок.
+ * Оттенки у акцентов разные, а светимость каждого токена подобрана по фиолетовому, поэтому все контрасты из комментария выше
+ * сохраняются для любого акцента (и с цветами дохода/расхода тоже); src/accents.test.ts проверяет это по этому файлу.
+ * Три переменные --ac-logo-* — цвета знака «$» (src/components/Logo.tsx): начало и конец градиента плитки и низ самого значка;
+ * они одни для обеих тем. Файлы public/ (значок приложения, иконка вкладки) от акцента не зависят, их из приложения не перекрасить.
+ * Селектор без :root нужен, чтобы образец цвета в настройках (<span class="accent-swatch" data-accent="…">) показывал
+ * палитру своего акцента, а не выбранного. Новый акцент: скопировать блок, сменить оттенок, подобрать яркость под те же контрасты
+ * и добавить его в ACCENTS (src/theme.ts) — тест подскажет, если что-то не сошлось.
+ */
+/* Фиолетовый */
+:root,
+[data-accent='violet'] {
+  --ac-bg-l: 236 238 251;
+  --ac-surface-2-l: 238 240 252;
+  --ac-text-l: 22 26 54;
+  --ac-muted-l: 84 92 130;
+  --ac-border-l: 214 218 240;
+  --ac-border-strong-l: 120 128 165;
+  --ac-brand-l: 79 70 229;
+  --ac-brand-hover-l: 67 56 202;
+  --ac-accent-l: 144 97 249;
+  --ac-hero-l: 112 82 240;
+  --ac-orb-1-l: 143 155 255;
+  --ac-orb-2-l: 209 155 255;
+  --ac-orb-3-l: 127 216 255;
+  --ac-glass-shadow-l: 56 60 150;
+  --ac-bg-d: 8 10 24;
+  --ac-surface-d: 24 27 58;
+  --ac-surface-2-d: 38 42 82;
+  --ac-text-d: 238 240 255;
+  --ac-muted-d: 162 168 204;
+  --ac-border-d: 48 54 100;
+  --ac-border-strong-d: 120 128 175;
+  --ac-brand-d: 165 180 252;
+  --ac-brand-hover-d: 199 210 254;
+  --ac-on-brand-d: 30 27 75;
+  --ac-accent-d: 196 167 253;
+  --ac-hero-from-d: 61 63 196;
+  --ac-hero-d: 122 69 208;
+  --ac-orb-1-d: 59 63 201;
+  --ac-orb-2-d: 122 63 201;
+  --ac-orb-3-d: 28 111 168;
+  --ac-logo-from: 106 108 255;
+  --ac-logo-to: 154 92 247;
+  --ac-logo-glyph: 228 222 253;
+}
+
+/* Синий */
+[data-accent='blue'] {
+  --ac-bg-l: 232 239 251;
+  --ac-surface-2-l: 235 241 252;
+  --ac-text-l: 10 29 53;
+  --ac-muted-l: 70 95 129;
+  --ac-border-l: 207 220 239;
+  --ac-border-strong-l: 108 132 164;
+  --ac-brand-l: 4 92 197;
+  --ac-brand-hover-l: 3 77 169;
+  --ac-accent-l: 98 112 253;
+  --ac-hero-l: 54 96 243;
+  --ac-orb-1-l: 103 164 253;
+  --ac-orb-2-l: 179 167 253;
+  --ac-orb-3-l: 113 220 238;
+  --ac-glass-shadow-l: 3 68 144;
+  --ac-bg-d: 4 12 24;
+  --ac-surface-d: 10 29 57;
+  --ac-surface-2-d: 21 45 81;
+  --ac-text-d: 234 241 255;
+  --ac-muted-d: 150 172 204;
+  --ac-border-d: 28 58 99;
+  --ac-border-strong-d: 104 133 174;
+  --ac-brand-d: 139 187 250;
+  --ac-brand-hover-d: 184 214 252;
+  --ac-on-brand-d: 10 31 75;
+  --ac-accent-d: 170 176 252;
+  --ac-hero-from-d: 5 82 161;
+  --ac-hero-d: 83 82 218;
+  --ac-orb-1-d: 0 83 161;
+  --ac-orb-2-d: 86 76 213;
+  --ac-orb-3-d: 13 115 146;
+  --ac-logo-from: 25 121 253;
+  --ac-logo-to: 111 108 255;
+  --ac-logo-glyph: 218 224 255;
+}
+
+/* Бирюзовый */
+[data-accent='teal'] {
+  --ac-bg-l: 225 242 242;
+  --ac-surface-2-l: 228 244 244;
+  --ac-text-l: 0 32 33;
+  --ac-muted-l: 42 103 103;
+  --ac-border-l: 196 224 225;
+  --ac-border-strong-l: 85 139 139;
+  --ac-brand-l: 10 107 110;
+  --ac-brand-hover-l: 4 91 93;
+  --ac-accent-l: 21 139 161;
+  --ac-hero-l: 15 123 134;
+  --ac-orb-1-l: 6 181 185;
+  --ac-orb-2-l: 3 192 250;
+  --ac-orb-3-l: 154 221 166;
+  --ac-glass-shadow-l: 7 79 81;
+  --ac-bg-d: 0 14 14;
+  --ac-surface-d: 0 35 36;
+  --ac-surface-2-d: 0 51 53;
+  --ac-text-d: 225 244 246;
+  --ac-muted-d: 129 178 180;
+  --ac-border-d: 1 65 67;
+  --ac-border-strong-d: 70 141 143;
+  --ac-brand-d: 84 201 201;
+  --ac-brand-hover-d: 161 222 222;
+  --ac-on-brand-d: 1 38 41;
+  --ac-accent-d: 62 197 233;
+  --ac-hero-from-d: 4 93 93;
+  --ac-hero-d: 13 111 131;
+  --ac-orb-1-d: 9 93 93;
+  --ac-orb-2-d: 8 106 128;
+  --ac-orb-3-d: 11 120 88;
+  --ac-logo-from: 6 141 145;
+  --ac-logo-to: 1 139 167;
+  --ac-logo-glyph: 194 233 243;
+}
+
+/* Зелёный */
+[data-accent='green'] {
+  --ac-bg-l: 231 242 232;
+  --ac-surface-2-l: 234 243 234;
+  --ac-text-l: 8 33 10;
+  --ac-muted-l: 71 101 70;
+  --ac-border-l: 205 223 206;
+  --ac-border-strong-l: 108 138 107;
+  --ac-brand-l: 9 111 35;
+  --ac-brand-hover-l: 4 94 28;
+  --ac-accent-l: 20 144 100;
+  --ac-hero-l: 16 127 72;
+  --ac-orb-1-l: 91 181 100;
+  --ac-orb-2-l: 8 199 171;
+  --ac-orb-3-l: 185 215 143;
+  --ac-glass-shadow-l: 5 83 20;
+  --ac-bg-d: 3 13 4;
+  --ac-surface-d: 6 35 10;
+  --ac-surface-2-d: 14 52 20;
+  --ac-text-d: 232 244 233;
+  --ac-muted-d: 147 177 149;
+  --ac-border-d: 24 66 28;
+  --ac-border-strong-d: 101 140 103;
+  --ac-brand-d: 139 198 137;
+  --ac-brand-hover-d: 186 220 183;
+  --ac-on-brand-d: 1 41 15;
+  --ac-accent-d: 81 201 162;
+  --ac-hero-from-d: 2 97 12;
+  --ac-hero-d: 8 115 83;
+  --ac-orb-1-d: 3 97 3;
+  --ac-orb-2-d: 2 110 82;
+  --ac-orb-3-d: 56 120 55;
+  --ac-logo-from: 0 147 49;
+  --ac-logo-to: 20 145 109;
+  --ac-logo-glyph: 200 234 216;
+}
+
+/* Оранжевый */
+[data-accent='orange'] {
+  --ac-bg-l: 250 235 230;
+  --ac-surface-2-l: 251 238 232;
+  --ac-text-l: 50 20 8;
+  --ac-muted-l: 126 83 69;
+  --ac-border-l: 239 214 204;
+  --ac-border-strong-l: 162 120 105;
+  --ac-brand-l: 174 67 10;
+  --ac-brand-hover-l: 149 56 6;
+  --ac-accent-l: 192 104 4;
+  --ac-hero-l: 178 84 5;
+  --ac-orb-1-l: 242 133 90;
+  --ac-orb-2-l: 236 163 48;
+  --ac-orb-3-l: 254 185 213;
+  --ac-glass-shadow-l: 126 44 4;
+  --ac-bg-d: 22 7 3;
+  --ac-surface-d: 53 20 6;
+  --ac-surface-2-d: 76 33 15;
+  --ac-text-d: 254 238 230;
+  --ac-muted-d: 201 161 146;
+  --ac-border-d: 94 43 24;
+  --ac-border-strong-d: 170 119 99;
+  --ac-brand-d: 253 174 148;
+  --ac-brand-hover-d: 254 214 200;
+  --ac-on-brand-d: 61 22 1;
+  --ac-accent-d: 239 167 95;
+  --ac-hero-from-d: 155 53 8;
+  --ac-hero-d: 151 84 0;
+  --ac-orb-1-d: 150 49 7;
+  --ac-orb-2-d: 142 83 9;
+  --ac-orb-3-d: 167 78 96;
+  --ac-logo-from: 216 84 6;
+  --ac-logo-to: 185 108 9;
+  --ac-logo-glyph: 249 221 199;
+}
+
+/* Красный */
+[data-accent='red'] {
+  --ac-bg-l: 251 235 232;
+  --ac-surface-2-l: 252 237 235;
+  --ac-text-l: 51 18 15;
+  --ac-muted-l: 128 82 77;
+  --ac-border-l: 240 214 209;
+  --ac-border-strong-l: 163 118 113;
+  --ac-brand-l: 193 16 12;
+  --ac-brand-hover-l: 165 12 8;
+  --ac-accent-l: 236 61 22;
+  --ac-hero-l: 208 51 14;
+  --ac-orb-1-l: 246 129 114;
+  --ac-orb-2-l: 248 156 70;
+  --ac-orb-3-l: 253 184 229;
+  --ac-glass-shadow-l: 137 29 24;
+  --ac-bg-d: 23 7 5;
+  --ac-surface-d: 55 18 14;
+  --ac-surface-2-d: 78 31 26;
+  --ac-text-d: 254 237 234;
+  --ac-muted-d: 203 160 152;
+  --ac-border-d: 95 41 36;
+  --ac-border-strong-d: 172 116 108;
+  --ac-brand-d: 247 161 152;
+  --ac-brand-hover-d: 252 199 193;
+  --ac-on-brand-d: 69 13 4;
+  --ac-accent-d: 252 157 125;
+  --ac-hero-from-d: 168 7 21;
+  --ac-hero-d: 170 70 9;
+  --ac-orb-1-d: 168 10 26;
+  --ac-orb-2-d: 156 74 6;
+  --ac-orb-3-d: 163 79 112;
+  --ac-logo-from: 235 60 45;
+  --ac-logo-to: 226 76 15;
+  --ac-logo-glyph: 252 219 204;
+}
+
+/* Розовый */
+[data-accent='pink'] {
+  --ac-bg-l: 250 235 240;
+  --ac-surface-2-l: 251 237 242;
+  --ac-text-l: 48 18 34;
+  --ac-muted-l: 122 82 102;
+  --ac-border-l: 237 213 223;
+  --ac-border-strong-l: 159 118 138;
+  --ac-brand-l: 184 9 121;
+  --ac-brand-hover-l: 157 5 103;
+  --ac-accent-l: 234 54 115;
+  --ac-hero-l: 212 19 118;
+  --ac-orb-1-l: 236 128 182;
+  --ac-orb-2-l: 253 148 147;
+  --ac-orb-3-l: 217 195 254;
+  --ac-glass-shadow-l: 128 30 88;
+  --ac-bg-d: 21 7 14;
+  --ac-surface-d: 51 18 36;
+  --ac-surface-2-d: 73 31 53;
+  --ac-text-d: 254 236 243;
+  --ac-muted-d: 199 159 176;
+  --ac-border-d: 90 41 67;
+  --ac-border-strong-d: 167 116 140;
+  --ac-brand-d: 238 161 200;
+  --ac-brand-hover-d: 246 199 222;
+  --ac-on-brand-d: 66 12 39;
+  --ac-accent-d: 255 152 165;
+  --ac-hero-from-d: 159 6 109;
+  --ac-hero-d: 197 22 83;
+  --ac-orb-1-d: 158 12 112;
+  --ac-orb-2-d: 192 11 73;
+  --ac-orb-3-d: 138 86 155;
+  --ac-logo-from: 222 60 151;
+  --ac-logo-to: 237 49 102;
+  --ac-logo-glyph: 254 216 222;
+}
+
 :root {
   color-scheme: light dark;
 
-  --bg: 236 238 251;
+  --bg: var(--ac-bg-l);
   --surface: 255 255 255;
-  --surface-2: 238 240 252;
-  --text: 22 26 54;
-  --muted: 84 92 130;
-  --border: 214 218 240;
-  --border-strong: 120 128 165;
-  --brand: 79 70 229;
-  --brand-hover: 67 56 202;
+  --surface-2: var(--ac-surface-2-l);
+  --text: var(--ac-text-l);
+  --muted: var(--ac-muted-l);
+  --border: var(--ac-border-l);
+  --border-strong: var(--ac-border-strong-l);
+  --brand: var(--ac-brand-l);
+  --brand-hover: var(--ac-brand-hover-l);
   --on-brand: 255 255 255;
   --on-danger: 255 255 255;
-  --accent: 144 97 249;
-  --hero-from: 79 70 229;
-  --hero: 112 82 240;
+  --accent: var(--ac-accent-l);
+  --hero-from: var(--ac-brand-l);
+  --hero: var(--ac-hero-l);
   --danger: 185 28 28;
   --income: 4 110 80;
   --expense: 190 18 60;
   --warning: 146 64 14;
   /* пятна фона и тень «стекла» */
-  --orb-1: 143 155 255;
-  --orb-2: 209 155 255;
-  --orb-3: 127 216 255;
-  --glass-shadow: 56 60 150;
+  --orb-1: var(--ac-orb-1-l);
+  --orb-2: var(--ac-orb-2-l);
+  --orb-3: var(--ac-orb-3-l);
+  --glass-shadow: var(--ac-glass-shadow-l);
 }
 
 /* Тёмная тема: выбрана вручную (data-theme="dark") или «как в системе» (атрибута нет, а у устройства тёмная тема). */
 :root[data-theme='dark'] {
-  --bg: 8 10 24;
-  --surface: 24 27 58;
-  --surface-2: 38 42 82;
-  --text: 238 240 255;
-  --muted: 162 168 204;
-  --border: 48 54 100;
-  --border-strong: 120 128 175;
-  --brand: 165 180 252;
-  --brand-hover: 199 210 254;
-  --on-brand: 30 27 75;
+  --bg: var(--ac-bg-d);
+  --surface: var(--ac-surface-d);
+  --surface-2: var(--ac-surface-2-d);
+  --text: var(--ac-text-d);
+  --muted: var(--ac-muted-d);
+  --border: var(--ac-border-d);
+  --border-strong: var(--ac-border-strong-d);
+  --brand: var(--ac-brand-d);
+  --brand-hover: var(--ac-brand-hover-d);
+  --on-brand: var(--ac-on-brand-d);
   --on-danger: 8 10 24;
-  --accent: 196 167 253;
-  --hero-from: 61 63 196;
-  --hero: 122 69 208;
+  --accent: var(--ac-accent-d);
+  --hero-from: var(--ac-hero-from-d);
+  --hero: var(--ac-hero-d);
   --danger: 248 113 113;
   --income: 74 222 128;
   --expense: 251 113 133;
   --warning: 251 191 36;
-  --orb-1: 59 63 201;
-  --orb-2: 122 63 201;
-  --orb-3: 28 111 168;
+  --orb-1: var(--ac-orb-1-d);
+  --orb-2: var(--ac-orb-2-d);
+  --orb-3: var(--ac-orb-3-d);
   --glass-shadow: 0 0 0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: 8 10 24;
-    --surface: 24 27 58;
-    --surface-2: 38 42 82;
-    --text: 238 240 255;
-    --muted: 162 168 204;
-    --border: 48 54 100;
-    --border-strong: 120 128 175;
-    --brand: 165 180 252;
-    --brand-hover: 199 210 254;
-    --on-brand: 30 27 75;
+    --bg: var(--ac-bg-d);
+    --surface: var(--ac-surface-d);
+    --surface-2: var(--ac-surface-2-d);
+    --text: var(--ac-text-d);
+    --muted: var(--ac-muted-d);
+    --border: var(--ac-border-d);
+    --border-strong: var(--ac-border-strong-d);
+    --brand: var(--ac-brand-d);
+    --brand-hover: var(--ac-brand-hover-d);
+    --on-brand: var(--ac-on-brand-d);
     --on-danger: 8 10 24;
-    --accent: 196 167 253;
-    --hero-from: 61 63 196;
-    --hero: 122 69 208;
+    --accent: var(--ac-accent-d);
+    --hero-from: var(--ac-hero-from-d);
+    --hero: var(--ac-hero-d);
     --danger: 248 113 113;
     --income: 74 222 128;
     --expense: 251 113 133;
     --warning: 251 191 36;
-    --orb-1: 59 63 201;
-    --orb-2: 122 63 201;
-    --orb-3: 28 111 168;
+    --orb-1: var(--ac-orb-1-d);
+    --orb-2: var(--ac-orb-2-d);
+    --orb-3: var(--ac-orb-3-d);
     --glass-shadow: 0 0 0;
   }
 }
@@ -250,6 +524,33 @@
   }
   .scroll-x-quiet::-webkit-scrollbar {
     display: none;
+  }
+
+  /*
+   * Образец цвета акцента в настройках (с атрибутом data-accent): так выглядит кнопка этого акцента в текущей теме,
+   * то есть градиент brand → accent. Темы выбираются теми же селекторами, что и токены выше.
+   */
+  .accent-swatch {
+    background-image: linear-gradient(135deg, rgb(var(--ac-brand-l)), rgb(var(--ac-accent-l)));
+  }
+  :root[data-theme='dark'] .accent-swatch {
+    background-image: linear-gradient(135deg, rgb(var(--ac-brand-d)), rgb(var(--ac-accent-d)));
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .accent-swatch {
+      background-image: linear-gradient(135deg, rgb(var(--ac-brand-d)), rgb(var(--ac-accent-d)));
+    }
+  }
+
+  /* Цвета знака «$» (Logo.tsx) из палитры выбранного акцента. */
+  .logo-from {
+    stop-color: rgb(var(--ac-logo-from));
+  }
+  .logo-to {
+    stop-color: rgb(var(--ac-logo-to));
+  }
+  .logo-glyph {
+    stop-color: rgb(var(--ac-logo-glyph));
   }
 }
 
