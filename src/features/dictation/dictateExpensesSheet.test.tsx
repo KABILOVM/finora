@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fire, findByRole, render, screen, user, waitFor } from '@/components/testUtils';
+import { findByRole, render, screen, user, waitFor } from '@/components/testUtils';
 import type { DraftExpense } from '@/domain/expensesAi';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { DictateExpensesSheet } from './DictateExpensesSheet';
@@ -11,7 +11,17 @@ const wallets = [
 const categories = [{ id: 'c1', name: 'Продукты' }];
 
 const row = (rid: number, over: Partial<DraftExpense> = {}): DraftExpense => ({
-  rid, title: 'Такси', amountText: '25', feeText: '', walletId: 'w1', categoryId: '', newCategory: '', date: '2026-10-12', note: '', walletGuessed: true, ...over,
+  rid,
+  title: 'Такси',
+  amountText: '25',
+  feeText: '',
+  walletId: 'w1',
+  categoryId: '',
+  newCategory: '',
+  date: '2026-10-12',
+  note: '',
+  walletGuessed: true,
+  ...over,
 });
 
 function setup(drafts: DraftExpense[], save = vi.fn(async (d: readonly DraftExpense[]) => ({ saved: d.map((x) => x.rid) }))) {
@@ -48,9 +58,11 @@ describe('«Продиктовать расходы»', () => {
     const amount = screen.getByRole('textbox', { name: /Сумма/ });
     await user.clear(amount);
     await user.type(amount, '30');
-    const sel = screen.getByRole('combobox', { name: 'Категория' }) as HTMLSelectElement;
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'c1');
-    fire(sel, new Event('change', { bubbles: true }));
+    // категория выбирается значком-чипом
+    const chip = Array.from(screen.getByRole('group', { name: 'Категория' }).querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Продукты'),
+    );
+    await user.click(chip!);
     await user.click(screen.getByRole('button', { name: 'Сохранить 2 расхода' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(2));
     expect(save.mock.calls[0]![0]![0]).toMatchObject({ rid: 1, amountText: '30', categoryId: 'c1' });

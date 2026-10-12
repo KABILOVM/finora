@@ -16,6 +16,9 @@ export interface DictWallet {
 export interface DictCategory {
   id: string;
   name: string;
+  /** Значок и цвет категории (для показа в списке); сервер и разбор их не используют. */
+  icon?: string;
+  color?: string;
 }
 export interface DictContext {
   wallets: readonly DictWallet[];
