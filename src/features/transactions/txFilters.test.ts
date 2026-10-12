@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, activeFilterLabels, withKind } from './txFilters';
+import { activeFilterCount, activeFilterLabels, totalsByCurrency, withKind } from './txFilters';
 
 describe('фильтры из шита «Фильтры»: чистая логика', () => {
   it('activeFilterCount: считает только то, что лежит в шите (кошелёк, вид, категория)', () => {
@@ -25,5 +25,26 @@ describe('фильтры из шита «Фильтры»: чистая логи
     expect(activeFilterLabels({ walletId: '', kind: '', categoryId: '' }, wallets, categories)).toEqual([]);
     expect(activeFilterLabels({ walletId: 'w1', kind: 'expense', categoryId: 'c1' }, wallets, categories)).toEqual(['Карта', 'Расходы', 'Еда']);
     expect(activeFilterLabels({ walletId: '', kind: '', categoryId: '__none__' }, wallets, categories)).toEqual(['Без категории']);
+  });
+});
+
+describe('totalsByCurrency', () => {
+  const cur = (id: string) => ({ a: 'TJS', b: 'USD' })[id as 'a' | 'b'];
+  it('суммирует доходы и расходы по валютам счетов, пропуская переводы и долги', () => {
+    const r = totalsByCurrency(
+      [
+        { kind: 'expense', walletId: 'a', amountMinor: 500 },
+        { kind: 'expense', walletId: 'a', amountMinor: 250 },
+        { kind: 'expense', walletId: 'b', amountMinor: 2000 },
+        { kind: 'income', walletId: 'b', amountMinor: 9000 },
+        { kind: 'transfer', walletId: 'a', amountMinor: 100 },
+        { kind: 'expense', walletId: 'a', amountMinor: 700, debtId: 'd' },
+      ],
+      cur,
+    );
+    expect(r).toEqual([
+      { currency: 'TJS', incomeMinor: 0, expenseMinor: 750 },
+      { currency: 'USD', incomeMinor: 9000, expenseMinor: 2000 },
+    ]);
   });
 });
