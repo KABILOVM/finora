@@ -234,3 +234,45 @@ describe('вложенные окна и ConfirmDialog', () => {
     act(() => {});
   });
 });
+
+describe('Sheet и экранная клавиатура (visualViewport)', () => {
+  type Listener = () => void;
+  function fakeViewport(height: number, offsetTop = 0) {
+    const listeners = new Map<string, Set<Listener>>();
+    const vv = {
+      height,
+      offsetTop,
+      addEventListener: (t: string, l: Listener) => void (listeners.get(t) ?? listeners.set(t, new Set()).get(t)!).add(l),
+      removeEventListener: (t: string, l: Listener) => void listeners.get(t)?.delete(l),
+    };
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+    return { vv, fire: (t: string) => listeners.get(t)?.forEach((l) => l()) };
+  }
+  const overlay = () => (dialog() as HTMLElement).parentElement as HTMLElement;
+
+  it('клавиатура закрыла низ экрана: подложка сжимается до видимой части, потом возвращается', async () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    const { vv, fire: emit } = fakeViewport(800);
+    render(<Harness />);
+    await open();
+    expect(overlay().style.height).toBe('');
+    vv.height = 480; // клавиатура ~320px
+    act(() => emit('resize'));
+    expect(overlay().style.height).toBe('480px');
+    expect(overlay().style.top).toBe('0px');
+    vv.height = 800;
+    act(() => emit('resize'));
+    expect(overlay().style.height).toBe('');
+  });
+
+  it('при закрытии окна слушатели снимаются', async () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    const removed = vi.fn();
+    const { vv } = fakeViewport(800);
+    vv.removeEventListener = removed;
+    render(<Harness />);
+    await open();
+    await user.click(screen.getByRole('button', { name: 'Закрыть' }));
+    expect(removed).toHaveBeenCalled();
+  });
+});
