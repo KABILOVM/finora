@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { ChipPicker, type ChipOption } from '@/components/ChipPicker';
+import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
 import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
+import { IconSelect } from '@/components/IconSelect';
 import { MoneyText } from '@/components/MoneyText';
-import { checkDraft, type DictCategory, type DraftExpense } from '@/domain/expensesAi';
+import { CATEGORY_NAME_MAX, checkDraft, type DictCategory, type DraftExpense } from '@/domain/expensesAi';
 import { currencyInfo } from '@/domain/currency';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { suggestGlyph } from '@/features/categories/suggestGlyph';
@@ -42,6 +43,89 @@ function Pill({ children, dashed, tone }: { children: React.ReactNode; dashed?: 
     >
       {children}
     </span>
+  );
+}
+
+/**
+ * «+ Новая категория» внутри списка категорий: пишете название — значок подберётся сам. Такая уже есть — выбирается она.
+ * Категория создаётся при сохранении расходов, поэтому здесь запоминается только название.
+ */
+function NewCategory({
+  existing,
+  onPick,
+  onCreate,
+}: {
+  existing: readonly DictCategory[];
+  onPick: (id: string) => void;
+  onCreate: (name: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const submit = () => {
+    const clean = name.replace(/\s+/g, ' ').trim();
+    if (clean === '') return setProblem('Введите название');
+    if ([...clean].length > CATEGORY_NAME_MAX) return setProblem(`Не длиннее ${CATEGORY_NAME_MAX} символов`);
+    const twin = existing.find((c) => c.name.trim().toLocaleLowerCase('ru') === clean.toLocaleLowerCase('ru'));
+    if (twin) return onPick(twin.id);
+    onCreate(clean);
+  };
+
+  if (!adding) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAdding(true)}
+        className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-2 text-left font-semibold text-brand active:bg-surface-2"
+      >
+        <span className="grid h-[30px] w-[30px] place-items-center rounded-lg border border-dashed border-brand/50">
+          <Icon name="plus" size={18} />
+        </span>
+        Новая категория
+      </button>
+    );
+  }
+  return (
+    <form
+      className="flex flex-col gap-1 p-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <div className="flex gap-2">
+        <input
+          autoFocus
+          value={name}
+          maxLength={CATEGORY_NAME_MAX}
+          onChange={(e) => {
+            setName(e.target.value);
+            setProblem(null);
+          }}
+          placeholder="Название"
+          aria-label="Название новой категории"
+          onKeyDown={(e) => {
+            // Enter добавляет категорию, а не сохраняет все расходы
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          autoComplete="off"
+          enterKeyHint="done"
+          className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 text-base outline-none focus:border-brand"
+        />
+        <button type="submit" className="min-h-[44px] rounded-xl bg-brand px-4 font-semibold text-brand-fg">
+          Добавить
+        </button>
+      </div>
+      {problem && (
+        <p role="alert" className="text-sm font-medium text-danger">
+          {problem}
+        </p>
+      )}
+    </form>
   );
 }
 
@@ -138,8 +222,8 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm font-semibold">Счёт</span>
-                  <ChipPicker
-                    ariaLabel="Счёт"
+                  <IconSelect
+                    label="Счёт"
                     options={walletChoices}
                     value={d.walletId}
                     onChange={(id) => patch(d.rid, { walletId: id, walletGuessed: false })}
@@ -147,8 +231,8 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm font-semibold">Категория</span>
-                  <ChipPicker
-                    ariaLabel="Категория"
+                  <IconSelect
+                    label="Категория"
                     options={[
                       ...(d.newCategory
                         ? [{ value: NEW_PREFIX, label: `Новая: ${d.newCategory}`, icon: suggestGlyph(d.newCategory) }]
@@ -160,6 +244,19 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                       if (v === NEW_PREFIX) return patch(d.rid, { categoryId: '' });
                       patch(d.rid, v === NO_CATEGORY ? { categoryId: '', newCategory: '' } : { categoryId: v, newCategory: '' });
                     }}
+                    footer={(close) => (
+                      <NewCategory
+                        existing={categories}
+                        onPick={(id) => {
+                          patch(d.rid, { categoryId: id, newCategory: '' });
+                          close();
+                        }}
+                        onCreate={(name) => {
+                          patch(d.rid, { categoryId: '', newCategory: name });
+                          close();
+                        }}
+                      />
+                    )}
                   />
                 </div>
                 <TextInput
