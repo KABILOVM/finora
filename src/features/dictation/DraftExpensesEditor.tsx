@@ -203,9 +203,9 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
               <IconButton icon="close" iconSize={18} label={`Убрать: ${label}`} onClick={() => remove(d.rid)} />
             </div>
             {isOpen && (
-              <div className="flex flex-col gap-3 border-t border-border/60 px-3 pb-3 pt-3">
+              <div className="flex flex-col gap-2 border-t border-border/60 px-3 pb-3 pt-2">
                 <TextInput label="Название" value={d.title} maxLength={80} onChange={(e) => patch(d.rid, { title: e.target.value })} />
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <TextInput
                     label={`Сумма, ${currencyInfo(wallet?.currency ?? 'TJS').symbol}`}
                     inputMode="decimal"
@@ -220,55 +220,62 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                     onChange={(e) => patch(d.rid, { feeText: e.target.value.replace('.', ',') })}
                   />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-semibold">Счёт</span>
-                  <IconSelect
-                    label="Счёт"
-                    options={walletChoices}
-                    value={d.walletId}
-                    onChange={(id) => patch(d.rid, { walletId: id, walletGuessed: false })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-semibold">Категория</span>
-                  <IconSelect
-                    label="Категория"
-                    options={[
-                      ...(d.newCategory
-                        ? [{ value: NEW_PREFIX, label: `Новая: ${d.newCategory}`, icon: suggestGlyph(d.newCategory) }]
-                        : []),
-                      ...categoryChoices,
-                    ]}
-                    value={d.categoryId || (d.newCategory ? NEW_PREFIX : NO_CATEGORY)}
-                    onChange={(v) => {
-                      if (v === NEW_PREFIX) return patch(d.rid, { categoryId: '' });
-                      patch(d.rid, v === NO_CATEGORY ? { categoryId: '', newCategory: '' } : { categoryId: v, newCategory: '' });
-                    }}
-                    footer={(close) => (
-                      <NewCategory
-                        existing={categories}
-                        onPick={(id) => {
-                          patch(d.rid, { categoryId: id, newCategory: '' });
-                          close();
-                        }}
-                        onCreate={(name) => {
-                          patch(d.rid, { categoryId: '', newCategory: name });
-                          close();
-                        }}
-                      />
-                    )}
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-sm font-semibold">Счёт</span>
+                    <IconSelect
+                      size="sm"
+                      label="Счёт"
+                      options={walletChoices}
+                      value={d.walletId}
+                      onChange={(id) => patch(d.rid, { walletId: id, walletGuessed: false })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-sm font-semibold">Категория</span>
+                    <IconSelect
+                      size="sm"
+                      align="right"
+                      label="Категория"
+                      options={[
+                        ...(d.newCategory
+                          ? [{ value: NEW_PREFIX, label: `Новая: ${d.newCategory}`, icon: suggestGlyph(d.newCategory) }]
+                          : []),
+                        ...categoryChoices,
+                      ]}
+                      value={d.categoryId || (d.newCategory ? NEW_PREFIX : NO_CATEGORY)}
+                      onChange={(v) => {
+                        if (v === NEW_PREFIX) return patch(d.rid, { categoryId: '' });
+                        patch(d.rid, v === NO_CATEGORY ? { categoryId: '', newCategory: '' } : { categoryId: v, newCategory: '' });
+                      }}
+                      footer={(close) => (
+                        <NewCategory
+                          existing={categories}
+                          onPick={(id) => {
+                            patch(d.rid, { categoryId: id, newCategory: '' });
+                            close();
+                          }}
+                          onCreate={(name) => {
+                            patch(d.rid, { categoryId: '', newCategory: name });
+                            close();
+                          }}
+                        />
+                      )}
+                    />
+                  </div>
                 </div>
                 {/* у поля-календаря на iPhone своя минимальная ширина: без ограничений оно вылезает за край окна */}
-                <div className="min-w-0 [&_input]:w-full [&_input]:min-w-0 [&_input]:max-w-full">
-                  <TextInput
-                    label="Дата"
-                    type="date"
-                    value={d.date}
-                    onChange={(e) => patch(d.rid, { date: e.target.value as DraftExpense['date'] })}
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="min-w-0 [&_input]:w-full [&_input]:min-w-0 [&_input]:max-w-full">
+                    <TextInput
+                      label="Дата"
+                      type="date"
+                      value={d.date}
+                      onChange={(e) => patch(d.rid, { date: e.target.value as DraftExpense['date'] })}
+                    />
+                  </div>
+                  <TextInput label="Заметка" value={d.note} maxLength={200} onChange={(e) => patch(d.rid, { note: e.target.value })} />
                 </div>
-                <TextInput label="Заметка" value={d.note} maxLength={200} onChange={(e) => patch(d.rid, { note: e.target.value })} />
               </div>
             )}
           </li>

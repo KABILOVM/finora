@@ -15,6 +15,10 @@ export interface IconSelectProps {
   placeholder?: string;
   /** Нижняя часть списка (например, «Новая категория»); получает функцию закрытия списка. */
   footer?: (close: () => void) => ReactNode;
+  /** 'sm' — компактная кнопка (44 px) для узких мест, например двух полей в строке. */
+  size?: 'md' | 'sm';
+  /** К какому краю кнопки прижат список; в правой колонке — 'right', чтобы не уходил за экран. */
+  align?: 'left' | 'right';
   className?: string;
 }
 
@@ -22,7 +26,18 @@ export interface IconSelectProps {
  * Свой выпадающий список со значками: кнопка с выбранным вариантом (значок, название, стрелка), список открывается под ней поверх формы.
  * Вместо системного <select>, где значков нет. Закрывается выбором, тапом мимо и Esc.
  */
-export function IconSelect({ label, options, value, onChange, placeholder = 'Выбрать', footer, className }: IconSelectProps) {
+export function IconSelect({
+  label,
+  options,
+  value,
+  onChange,
+  placeholder = 'Выбрать',
+  footer,
+  size = 'md',
+  align = 'left',
+  className,
+}: IconSelectProps) {
+  const glyph = size === 'sm' ? 26 : 30;
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -40,14 +55,15 @@ export function IconSelect({ label, options, value, onChange, placeholder = 'В�
         aria-controls={open ? listId : undefined}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex min-h-[52px] w-full items-center gap-3 rounded-xl border bg-surface px-3 text-left transition-colors',
+          size === 'sm' ? 'min-h-[44px] gap-2 px-2' : 'min-h-[52px] gap-3 px-3',
+          'flex w-full items-center rounded-xl border bg-surface text-left transition-colors',
           open ? 'border-brand ring-2 ring-brand/15' : 'border-border',
         )}
       >
         {current?.icon ? (
-          <Glyph value={current.icon} color={current.color} size={30} />
+          <Glyph value={current.icon} color={current.color} size={glyph} />
         ) : (
-          <span className="h-[30px] w-[30px] shrink-0" aria-hidden="true" />
+          <span style={{ width: glyph, height: glyph }} className="shrink-0" aria-hidden="true" />
         )}
         <span className={cn('min-w-0 flex-1 truncate text-base font-semibold', !current && 'text-muted')}>
           {current?.label ?? placeholder}
@@ -55,7 +71,12 @@ export function IconSelect({ label, options, value, onChange, placeholder = 'В�
         <Icon name="chevron" size={14} className={cn('shrink-0 text-muted transition-transform', open ? '-rotate-90' : 'rotate-90')} />
       </button>
       {open && (
-        <Floating className="max-h-[min(20rem,50vh)] overflow-y-auto p-1">
+        <Floating
+          className={cn(
+            'inset-x-auto w-max min-w-full max-w-[calc(100vw-3rem)] max-h-[min(20rem,50vh)] overflow-y-auto p-1',
+            align === 'right' ? 'right-0' : 'left-0',
+          )}
+        >
           <div id={listId} role="listbox" aria-label={label} className="flex flex-col">
             {options.map((o) => {
               const selected = o.value === value;
