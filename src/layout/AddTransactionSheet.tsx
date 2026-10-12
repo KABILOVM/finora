@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
+import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
+import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
+import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
+import { useRates } from '@/rates/hooks';
+import { todayLocal } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
@@ -110,6 +115,14 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       presetKind === 'income' || presetKind === 'transfer' ? presetKind : 'expense',
     ),
   );
+  const { getRate } = useRates();
+  const [dictating, setDictating] = useState(false);
+  // Номера операций и новые категории из диктовки живут, пока открыт шит: повтор после сбоя не создаёт дублей.
+  const dictation = useRef({ txIds: new Map<number, string>(), categories: [] as { id: string; name: string }[] });
+  const expenseCategories = useMemo(
+    () => categories.filter((x) => x.kind === 'expense').map((x) => ({ id: x.id, name: x.name })),
+    [categories],
+  );
   const c = useTxFormController({ mode: 'add', initial, wallets, allWallets: wallets, base: settings.baseCurrency });
 
   // Номер операции выдаётся при открытии: повторное нажатие или повтор после сбоя не создаст дубль.
@@ -161,6 +174,40 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     }
   };
 
+  if (dictating) {
+    // один общий список: категории, созданные при сохранении, попадают в него и не дублируются при повторе
+    const known = dictation.current.categories;
+    for (const x of expenseCategories) if (!known.some((k) => k.id === x.id)) known.push(x);
+    const ctx = () => ({
+      store,
+      wallets,
+      categories: known,
+      base: settings.baseCurrency,
+      getRate,
+      txIds: dictation.current.txIds,
+    });
+    return (
+      <DictateExpensesSheet
+        wallets={wallets}
+        categories={[...known]}
+        defaultWalletId={c.form.walletId ?? ''}
+        today={todayLocal()}
+        parse={(text, dctx, rid) => parseExpensesWithAi(text, dctx, rid)}
+        listen={(rec, dctx, rid) => listenToExpensesWithAi(rec, dctx, rid)}
+        validate={(drafts) => validateAll(drafts, ctx())}
+        save={(drafts) => saveExpenses(drafts, ctx())}
+        onClose={(saved) => {
+          if (saved > 0) {
+            toast.success(`Сохранено расходов: ${saved}`);
+            onSaved();
+            setFinished(true);
+            onClose();
+          } else setDictating(false);
+        }}
+      />
+    );
+  }
+
   return (
     <Sheet
       open={!finished}
@@ -193,6 +240,11 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       }
     >
       <div ref={formRef}>
+        {kind === 'expense' && (
+          <Button variant="secondary" icon="mic" fullWidth className="mb-3" onClick={() => setDictating(true)}>
+            Продиктовать расходы
+          </Button>
+        )}
         <TxFormFields c={c} wallets={walletsRanked} categories={categoryOptions} />
       </div>
     </Sheet>

@@ -196,6 +196,8 @@ E2E_PORT=4200 E2E_DIST=/tmp/finora-dist-a npx playwright test e2e/sec --output=/
 2. Supabase → Edge Functions → создайте функцию `parse-shopping`, вставьте файл `supabase/functions/parse-shopping/index.ts` целиком («Verify JWT» можно отключить: токен функция проверяет сама).
 3. Edge Functions → Secrets: добавьте `GEMINI_API_KEY` (необязательно `GEMINI_MODEL`, по умолчанию `gemini-3.8-flash`). Ключ хранится только там, в приложение и в репозиторий он не попадает.
 
+**Расходы голосом (ИИ).** «+» → «Расход» → «Продиктовать расходы»: рассказываете о расходах за день (или набираете текст), облачная функция `parse-expenses` через Gemini собирает список: название, сумма, счёт, категория, дата, заметка и комиссия. Счёт и категория выбираются только из ваших; если категории нет, предлагается новая (создаётся при сохранении). Не назван счёт — берётся счёт по умолчанию, это видно в строке. Каждую строку можно открыть и поправить, потом «Сохранить»: каждая строка становится обычным расходом, комиссия прибавляется к сумме (и видна в заметке). Для валютного счёта курс берётся автоматически, как в обычной форме; нет курса — строка подсвечивается. Запись до ~4 минут. Настройка та же, что для покупок: Edge Functions → создайте функцию `parse-expenses`, вставьте `supabase/functions/parse-expenses/index.ts` целиком; секрет `GEMINI_API_KEY` общий.
+
 ## Установка на iPhone и Android
 
 - **iPhone (Safari):** откройте сайт → «Поделиться» (квадрат со стрелкой) → «На экран Домой» → «Добавить».
@@ -240,6 +242,6 @@ Safari на iPhone может очистить данные сайта, кото
 - `src/domain/shopping.ts` и `src/features/shopping` — «Покупки» (расчёты цен и итогов, экран);
 - `src/recurring` — расписание и автопроведение регулярных платежей; `src/import` — разбор и план импорта из Дзен-мани
 - `src/lock` — замок Face ID (WebAuthn); `src/push` и `public/push-handler.js` — напоминания в приложении; `supabase/functions/send-reminders` — серверная часть напоминаний
-- `supabase/schema.sql` — таблицы и правила доступа; `supabase/functions/fetch-rates` — загрузка курсов на сервере; `supabase/functions/parse-shopping` — разбор списка покупок через ИИ
+- `supabase/schema.sql` — таблицы и правила доступа; `supabase/functions/fetch-rates` — загрузка курсов на сервере; `supabase/functions/parse-shopping` — разбор списка покупок через ИИ; `supabase/functions/parse-expenses` — расходы из диктовки через ИИ
 - `vite.config.ts` — сборка, PWA и подстановка адреса Supabase в политику безопасности страницы (`index.html`); `vercel.json` — заголовки ответа
 - `e2e` — проверки в настоящем браузере (Playwright)
