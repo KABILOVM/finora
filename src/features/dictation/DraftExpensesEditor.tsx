@@ -259,12 +259,15 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                     )}
                   />
                 </div>
-                <TextInput
-                  label="Дата"
-                  type="date"
-                  value={d.date}
-                  onChange={(e) => patch(d.rid, { date: e.target.value as DraftExpense['date'] })}
-                />
+                {/* у поля-календаря на iPhone своя минимальная ширина: без ограничений оно вылезает за край окна */}
+                <div className="min-w-0 [&_input]:w-full [&_input]:min-w-0 [&_input]:max-w-full">
+                  <TextInput
+                    label="Дата"
+                    type="date"
+                    value={d.date}
+                    onChange={(e) => patch(d.rid, { date: e.target.value as DraftExpense['date'] })}
+                  />
+                </div>
                 <TextInput label="Заметка" value={d.note} maxLength={200} onChange={(e) => patch(d.rid, { note: e.target.value })} />
               </div>
             )}
