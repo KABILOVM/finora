@@ -219,4 +219,21 @@ test.describe('27. Покупки', () => {
     await expect(row(page, 'Яблоки')).toContainText('Яблоки 1,5 кг');
     await expect(row(page, 'Соль')).toBeVisible();
   });
+
+  test('«Добавить списком»: слова без запятых и количества — отдельные товары («мука масло»)', async ({ page }) => {
+    await openApp(page, '/shopping');
+    await page.getByRole('button', { name: 'Добавить списком' }).first().click();
+    const dlg = sheet(page, 'Добавить списком');
+    await dlg.getByRole('textbox', { name: 'Что купить' }).fill('Мука масло сливочное сахар');
+    const preview = dlg.getByTestId('parsed-items');
+    await expect(preview.getByRole('listitem')).toHaveCount(3);
+    await expect(preview).toContainText('Мука');
+    await expect(preview).toContainText('Масло сливочное');
+    await expect(preview).toContainText('Сахар');
+    await dlg.getByRole('button', { name: 'Добавить 3 позиции' }).click();
+    await expect(dlg).toBeHidden();
+    await expect(row(page, 'Мука')).toBeVisible();
+    await expect(row(page, 'Масло сливочное')).toBeVisible();
+    await expect(row(page, 'Сахар')).toBeVisible();
+  });
 });

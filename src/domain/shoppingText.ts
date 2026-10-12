@@ -116,10 +116,65 @@ interface Draft {
   unit: Unit | null;
 }
 
-function finish(d: Draft): ParsedItem | null {
-  const name = d.name.join(' ').trim();
-  if (name === '') return null;
-  const cased = (name.charAt(0).toLocaleUpperCase('ru') + name.slice(1)).slice(0, NAME_MAX).trim();
+/** Прилагательное (по окончанию): «белый», «сливочное», «стиральный» — относится к соседнему существительному, а не к отдельному товару. */
+const isAdjective = (w: string): boolean => w.length >= 5 && /(ый|ий|ой|ая|яя|ое|ее|ые|ие)$/.test(w);
+type Gender = 'm' | 'f' | 'n' | 'p';
+const adjGender = (w: string): Gender => (/(ая|яя)$/.test(w) ? 'f' : /(ое|ее)$/.test(w) ? 'n' : /(ые|ие)$/.test(w) ? 'p' : 'm');
+/** Грубо, по окончанию: мука, каша → ж; масло, молоко → ср; сыры, яйца → мн; остальное — муж. Хватает, чтобы выбрать, к какому соседу относится прилагательное. */
+const nounGender = (w: string): Gender => (/[ая]$/.test(w) ? 'f' : /[оеё]$/.test(w) ? 'n' : /[ыи]$/.test(w) ? 'p' : 'm');
+const agrees = (adj: string, noun: string): boolean => adjGender(adj) === nounGender(noun);
+const PREPOSITIONS = new Set(['в', 'на', 'с', 'со', 'из', 'для', 'без', 'по', 'к', 'от', 'за', 'под']);
+
+/**
+ * Несколько названий подряд без запятых и количества («мука масло») — это несколько товаров. Границы по словам:
+ *  - название из прошлых покупок (known) остаётся целым: «сыр моцарелла»;
+ *  - прилагательное липнет к существительному («сливочное масло», «хлеб белый»), предлог — к соседним словам («кофе в зёрнах»);
+ *  - остальные слова — каждое отдельный товар.
+ */
+function splitNames(words: string[], known: readonly string[]): string[] {
+  const knownWords = known.map((k) => norm(k).split(/\s+/).filter((w) => w !== '')).filter((k) => k.length > 1);
+  const groups: string[][] = [];
+  let pending: string[] = [];
+  const attachBack = (w: string) => {
+    const last = groups[groups.length - 1];
+    if (last) last.push(w);
+    else groups.push([w]);
+  };
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]!;
+    let len = 0;
+    for (const k of knownWords) {
+      if (k.length > len && k.every((kw, j) => words[i + j] === kw)) len = k.length;
+    }
+    if (len > 0) {
+      if (pending.length > 0) {
+        attachBack(pending.join(' '));
+        pending = [];
+      }
+      groups.push(words.slice(i, i + len));
+      i += len - 1;
+      continue;
+    }
+    const nextIsNoun = i + 1 < words.length;
+    if (PREPOSITIONS.has(w) && groups.length > 0 && nextIsNoun) {
+      groups[groups.length - 1]!.push(w, words[i + 1]!);
+      i++;
+    } else if (isAdjective(w) && nextIsNoun && pending.length === 0 && groups.length > 0 && agrees(w, groups[groups.length - 1]!.at(-1)!) && !agrees(w, words[i + 1]!)) {
+      attachBack(w); // «хлеб белый молоко»: «белый» подходит к «хлеб», а не к «молоко»
+    } else if ((isAdjective(w) || PREPOSITIONS.has(w)) && nextIsNoun) {
+      pending.push(w); // прилагательное перед существительным: «сливочное» + «масло»
+    } else if (isAdjective(w) && pending.length === 0) {
+      attachBack(w); // прилагательное в конце: «хлеб белый»
+    } else {
+      groups.push([...pending, w]);
+      pending = [];
+    }
+  }
+  if (pending.length > 0) groups.push(pending);
+  return groups.map((g) => g.join(' ').trim()).filter((g) => g !== '');
+}
+
+function qtyOf(d: Draft): { qtyMilli: number; unit: ShoppingUnit } {
   let unit: Unit = d.unit ?? 'pcs';
   let milli = d.num ?? 1000;
   if (milli <= 0) milli = 1000;
@@ -129,15 +184,26 @@ function finish(d: Draft): ParsedItem | null {
   } else if (unit === 'pcs' && milli % 1000 !== 0) {
     unit = 'kg'; // «полтора» без единицы — штуками быть не может
   }
-  return { name: cased, qtyMilli: Math.min(milli, QTY_MAX), unit: unit as ShoppingUnit };
+  return { qtyMilli: Math.min(milli, QTY_MAX), unit: unit as ShoppingUnit };
 }
 
-function parseChunk(chunk: string): ParsedItem[] {
+const casedName = (name: string): string => (name.charAt(0).toLocaleUpperCase('ru') + name.slice(1)).slice(0, NAME_MAX).trim();
+
+function finish(d: Draft, known: readonly string[]): ParsedItem[] {
+  if (d.name.length === 0) return [];
+  const names = splitNames(d.name, known);
+  if (names.length === 0) return [];
+  // количество относится к тому товару, рядом с которым названо: «мука масло два литра» → масло; «два литра молока масла» → молока
+  const at = qtyFirst.has(d) ? 0 : names.length - 1;
+  const q = qtyOf(d);
+  return names.map((n, i) => (i === at ? { name: casedName(n), ...q } : { name: casedName(n), qtyMilli: 1000, unit: 'pcs' as ShoppingUnit }));
+}
+
+function parseChunk(chunk: string, known: readonly string[]): ParsedItem[] {
   const items: ParsedItem[] = [];
   let cur: Draft = { name: [], num: null, unit: null };
   const flush = () => {
-    const it = finish(cur);
-    if (it) items.push(it);
+    items.push(...finish(cur, known));
     cur = { name: [], num: null, unit: null };
   };
   const hasQty = () => cur.num !== null || cur.unit !== null;
@@ -162,8 +228,8 @@ function parseChunk(chunk: string): ParsedItem[] {
 }
 const qtyFirst = new WeakSet<Draft>();
 
-/** Текст → позиции (не больше MAX_PARSED_ITEMS). Пустой или непонятный текст — пустой список. */
-export function parseShoppingText(text: string): ParsedItem[] {
+/** Текст → позиции (не больше MAX_PARSED_ITEMS). known — названия из прошлых покупок: они не разрезаются. Пустой или непонятный текст — пустой список. */
+export function parseShoppingText(text: string, known: readonly string[] = []): ParsedItem[] {
   const chunks = text
     .replace(/(\d),(\d)/g, '$1.$2') // десятичная запятая «1,5» — не разделитель позиций
     .split(/[,;\n]+|[.!?]+(?=\s|$)|\s+(?:и|еще|ещё|потом|плюс)\s+/i)
@@ -171,7 +237,7 @@ export function parseShoppingText(text: string): ParsedItem[] {
     .filter((c) => c !== '');
   const out: ParsedItem[] = [];
   for (const c of chunks) {
-    for (const it of parseChunk(c)) {
+    for (const it of parseChunk(c, known)) {
       out.push(it);
       if (out.length >= MAX_PARSED_ITEMS) return out;
     }

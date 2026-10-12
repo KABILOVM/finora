@@ -212,6 +212,7 @@ export default function ShoppingPage() {
       )}
       {sheet?.kind === 'list' && (
         <ListTextSheet
+          known={[...new Set(data.all.map((i) => i.name))]}
           onAdd={async (parsed) => {
             for (const it of parsed) await store.shopping.add({ name: it.name, qtyMilli: it.qtyMilli, unit: it.unit });
             toast.success(`Добавлено: ${parsed.length}`);
