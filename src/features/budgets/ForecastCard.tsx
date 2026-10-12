@@ -152,6 +152,24 @@ function Unavailable({ forecast }: { forecast: Exclude<DailyForecast, DailyForec
   );
 }
 
+/** Полоса «сегодня потрачено от дневной нормы»: красная, если норма превышена. Только картинка: те же цифры написаны словами ниже. */
+function TodayBar({ f }: { f: DailyForecastOk }) {
+  if (f.todayLimitMinor <= 0) return null;
+  const ratio = f.spentTodayMinor / f.todayLimitMinor;
+  const shown = Math.min(100, Math.max(0, ratio * 100));
+  return (
+    <div
+      aria-hidden="true"
+      className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-surface-2 shadow-inner"
+    >
+      <div
+        className={`h-full rounded-full transition-[width] duration-500 ease-out ${ratio > 1 ? 'bg-danger' : ratio > 0.8 ? 'bg-warning' : 'bg-gradient-to-r from-brand/70 to-brand'}`}
+        style={{ width: `${shown > 0 ? Math.max(shown, 2) : 0}%` }}
+      />
+    </div>
+  );
+}
+
 /** Верх экрана «Бюджеты»: «Осталось на день» крупно, из чего оно сложилось и «Как это считается». */
 export function ForecastCard({ forecast }: { forecast: DailyForecast | null | undefined }) {
   if (forecast === undefined) {
@@ -172,8 +190,15 @@ export function ForecastCard({ forecast }: { forecast: DailyForecast | null | un
   if (forecast.status !== 'ok') return <Unavailable forecast={forecast} />;
 
   return (
-    <section aria-labelledby="forecast-title" data-testid="forecast-card" className="rounded-2xl border border-border bg-surface p-4 shadow-card md:p-5">
-      <h2 id="forecast-title" className="text-base font-semibold text-muted">
+    <section
+      aria-labelledby="forecast-title"
+      data-testid="forecast-card"
+      className="relative overflow-hidden rounded-3xl border border-border/70 bg-surface p-4 shadow-card md:p-5"
+    >
+      <span aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-accent/20 blur-3xl" />
+      <span aria-hidden="true" className="pointer-events-none absolute -left-20 top-10 h-40 w-40 rounded-full bg-brand/15 blur-3xl" />
+      <h2 id="forecast-title" className="relative flex items-center gap-2 text-base font-semibold text-muted">
+        <Icon name="pie" size={18} className="text-brand" />
         Осталось на день
       </h2>
       <p
@@ -183,7 +208,8 @@ export function ForecastCard({ forecast }: { forecast: DailyForecast | null | un
       >
         <PerDay f={forecast} />
       </p>
-      <p className="mt-0.5 text-sm text-muted">
+      <TodayBar f={forecast} />
+      <p className="mt-2 text-sm text-muted">
         Считаем до {longDate(forecast.horizonEnd)}: {daysText(forecast.daysLeft)} включая сегодня.
         {forecast.incomeDate !== null && ` ${longDate(forecast.incomeDate)} ждём доход — дальше деньги пополнятся.`}
       </p>

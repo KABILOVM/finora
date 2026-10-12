@@ -55,7 +55,7 @@ function BudgetsPart({ data }: { data: BudgetsData }) {
         const label = budgetLabel(p.categoryId, data.categories);
         return (
           <li key={p.id}>
-            <BudgetRow progress={p} name={label.name} icon={label.icon} base={data.base} compact />
+            <BudgetRow progress={p} name={label.name} icon={label.icon} color={label.color} base={data.base} compact />
           </li>
         );
       })}

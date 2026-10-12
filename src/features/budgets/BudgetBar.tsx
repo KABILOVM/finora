@@ -3,9 +3,9 @@ import { cn } from '@/lib/cn';
 
 /** Цвета уровней. Цвет — не единственный признак: рядом всегда слова («Потрачено 78%», «Превышен на …»). */
 const FILL: Record<BudgetLevel, string> = {
-  ok: 'bg-brand',
-  warn: 'bg-warning',
-  danger: 'bg-danger',
+  ok: 'bg-gradient-to-r from-brand/70 to-brand',
+  warn: 'bg-gradient-to-r from-warning/70 to-warning',
+  danger: 'bg-gradient-to-r from-danger/70 to-danger',
   over: 'bg-danger',
 };
 
@@ -38,12 +38,15 @@ export function BudgetBar({ percent, level, label, className }: BudgetBarProps) 
       aria-valuemax={100}
       aria-valuenow={shown}
       aria-valuetext={`${percent > 999 ? 'более 999' : percent}%`}
-      className={cn('h-2.5 overflow-hidden rounded-full bg-surface-2', className)}
+      className={cn('relative h-3 overflow-hidden rounded-full bg-surface-2 shadow-inner', className)}
     >
       <div
-        className={cn('h-full rounded-full', FILL[level])}
+        className={cn('h-full rounded-full transition-[width] duration-500 ease-out', FILL[level])}
         style={{ width: `${percent > 0 ? Math.max(shown, 2) : 0}%`, ...(level === 'over' ? { backgroundImage: OVER_STRIPES } : {}) }}
       />
+      {/* Отметки 70% и 90%: с них начинаются предупреждения. */}
+      <span aria-hidden="true" className="absolute inset-y-0 left-[70%] w-px bg-text/20" />
+      <span aria-hidden="true" className="absolute inset-y-0 left-[90%] w-px bg-text/20" />
     </div>
   );
 }

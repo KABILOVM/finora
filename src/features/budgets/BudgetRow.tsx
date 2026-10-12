@@ -1,4 +1,5 @@
 import { Badge, type BadgeTone } from '@/components/Badge';
+import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
 import type { BudgetLevel, BudgetProgress } from '@/domain/budgetProgress';
 import { formatMinor } from '@/domain/money';
@@ -13,6 +14,8 @@ export interface BudgetRowProps {
   progress: BudgetProgress;
   name: string;
   icon: string;
+  /** Цвет категории (#rrggbb): плитка значка подкрашивается им. */
+  color?: string | null;
   /** Основная валюта сейчас: в ней посчитаны траты. */
   base: CurrencyCode;
   /** Нажатие на строку (правка лимита). Нет — строка без кнопки (виджет «Главной»). */
@@ -21,31 +24,57 @@ export interface BudgetRowProps {
   compact?: boolean;
 }
 
-function Head({ icon, name, right }: { icon: string; name: string; right?: string }) {
+function Head({
+  icon,
+  color,
+  name,
+  sub,
+  right,
+  rightClass,
+  size,
+}: {
+  icon: string;
+  color?: string | null;
+  name: string;
+  sub?: string;
+  right?: string;
+  rightClass?: string;
+  size: number;
+}) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-      <span className="min-w-0 truncate font-semibold">
-        <span aria-hidden="true">{icon} </span>
-        {name}
-      </span>
-      {right && <span className="money shrink-0 text-sm text-muted">{right}</span>}
+    <div className="flex items-center gap-3">
+      <Glyph value={icon} color={color ?? undefined} size={size} />
+      <div className="min-w-0 flex-1">
+        <span className="block truncate font-semibold">{name}</span>
+        {sub && <span className="money block truncate text-sm text-muted">{sub}</span>}
+      </div>
+      {right && <span className={cn('money shrink-0 text-lg font-bold tabular-nums', rightClass)}>{right}</span>}
     </div>
   );
 }
 
 /** Строка бюджета: название, полоса, «Потрачено N%», остаток или превышение, слово уровня. */
-export function BudgetRow({ progress, name, icon, base, onOpen, compact = false }: BudgetRowProps) {
+export function BudgetRow({ progress, name, icon, color, base, onOpen, compact = false }: BudgetRowProps) {
+  const size = compact ? 36 : 44;
   const body = !progress.comparable ? (
     <>
-      <Head icon={icon} name={name} right={formatMinor(progress.limitMinor, progress.currency)} />
+      <Head icon={icon} color={color} size={size} name={name} right={formatMinor(progress.limitMinor, progress.currency)} rightClass="!text-sm !font-medium text-muted" />
       <p className="mt-1 text-sm font-medium text-warning">
         Лимит задан в {progress.currency}, а основная валюта сейчас {base}. Укажите сумму заново.
       </p>
     </>
   ) : (
     <>
-      <Head icon={icon} name={name} right={compact ? undefined : `${formatMinor(progress.spentMinor, base)} из ${formatMinor(progress.limitMinor, base)}`} />
-      <BudgetBar percent={progress.percent} level={progress.level} label={`${name}: ${spentWord(progress.percent)}`} className="mt-2" />
+      <Head
+        icon={icon}
+        color={color}
+        size={size}
+        name={name}
+        sub={compact ? undefined : `${formatMinor(progress.spentMinor, base)} из ${formatMinor(progress.limitMinor, base)}`}
+        right={compact ? undefined : progress.percent > 999 ? '999%+' : `${progress.percent}%`}
+        rightClass={LEVEL_TEXT[progress.level]}
+      />
+      <BudgetBar percent={progress.percent} level={progress.level} label={`${name}: ${spentWord(progress.percent)}`} className="mt-3" />
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
         <span className="flex flex-wrap items-center gap-2">
           <span className={cn('font-semibold', LEVEL_TEXT[progress.level])}>{spentWord(progress.percent)}</span>
@@ -68,7 +97,7 @@ export function BudgetRow({ progress, name, icon, base, onOpen, compact = false 
       type="button"
       onClick={onOpen}
       aria-label={label}
-      className="block min-h-[56px] w-full px-4 py-3 text-left transition-colors hover:bg-surface-2 active:bg-border/60"
+      className="block min-h-[64px] w-full px-4 py-3.5 text-left transition-colors hover:bg-surface-2/70 active:bg-surface-2"
     >
       {body}
     </button>

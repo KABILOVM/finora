@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/Button';
 import { Field, inputClasses } from '@/components/Field';
+import { Glyph } from '@/components/Glyph';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { ValidationError, useStore } from '@/db';
@@ -142,6 +143,12 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
       }
     >
       <div className="flex flex-col gap-5">
+        {editing && label && (
+          <div className="flex items-center gap-3 rounded-2xl bg-surface-2 p-3">
+            <Glyph value={label.icon} color={label.color ?? undefined} size={48} />
+            <p className="text-sm text-muted">Лимит действует на каждый месяц. Изменить сумму можно ниже.</p>
+          </div>
+        )}
         {!editing && (
           <div className="flex flex-col gap-1.5">
             <Field id="budget-scope" label="На что лимит" error={scopeError}>
