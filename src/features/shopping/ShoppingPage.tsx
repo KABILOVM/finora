@@ -10,12 +10,13 @@ import type { Minor, ShoppingUnit } from '@/domain/types';
 import { useStore, ValidationError } from '@/db';
 import { ItemRow } from './ItemRow';
 import { ItemSheet, type ItemFormValue } from './ItemSheet';
+import { ListTextSheet } from './ListTextSheet';
 import { PriceSheet } from './PriceSheet';
 import { PurchaseSheet } from './PurchaseSheet';
 import { approxText, priceText } from './shoppingText';
 import { useShoppingData } from './useShoppingData';
 
-type Sheet = { kind: 'new' } | { kind: 'edit'; id: string } | { kind: 'price'; id: string } | { kind: 'purchase' };
+type Sheet = { kind: 'new' } | { kind: 'list' } | { kind: 'edit'; id: string } | { kind: 'price'; id: string } | { kind: 'purchase' };
 
 /** Сколько прошлых названий предлагаем при добавлении позиции. */
 const RECENT_MAX = 8;
@@ -146,9 +147,14 @@ export default function ShoppingPage() {
       <PageHeader
         title="Покупки"
         actions={
-          <Button icon="plus" aria-label="Добавить позицию" onClick={() => setSheet({ kind: 'new' })}>
-            <span className="hidden sm:inline">Добавить</span>
-          </Button>
+          <>
+            <Button variant="secondary" icon="list" aria-label="Добавить списком" onClick={() => setSheet({ kind: 'list' })}>
+              <span className="hidden sm:inline">Списком</span>
+            </Button>
+            <Button icon="plus" aria-label="Добавить позицию" onClick={() => setSheet({ kind: 'new' })}>
+              <span className="hidden sm:inline">Добавить</span>
+            </Button>
+          </>
         }
       />
 
@@ -157,7 +163,14 @@ export default function ShoppingPage() {
           icon="cart"
           title="Список покупок пуст"
           text="Добавьте, что нужно купить. Приложение запомнит цены и подскажет, сколько выйдет в следующий раз."
-          action={<Button onClick={() => setSheet({ kind: 'new' })}>Добавить позицию</Button>}
+          action={
+            <div className="flex flex-col gap-2">
+              <Button onClick={() => setSheet({ kind: 'new' })}>Добавить позицию</Button>
+              <Button variant="secondary" icon="list" onClick={() => setSheet({ kind: 'list' })}>
+                Продиктовать списком
+              </Button>
+            </div>
+          }
         />
       ) : (
         <>
@@ -196,6 +209,15 @@ export default function ShoppingPage() {
 
       {sheet?.kind === 'new' && (
         <ItemSheet view={null} currency={base} recent={recent} onSave={saveItem(null)} onClose={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'list' && (
+        <ListTextSheet
+          onAdd={async (parsed) => {
+            for (const it of parsed) await store.shopping.add({ name: it.name, qtyMilli: it.qtyMilli, unit: it.unit });
+            toast.success(`Добавлено: ${parsed.length}`);
+          }}
+          onClose={() => setSheet(null)}
+        />
       )}
       {sheet?.kind === 'edit' && editView && (
         <ItemSheet key={editView.item.id} view={editView} currency={base} recent={[]} onSave={saveItem(editView)} onRemove={removeItem(editView)} onClose={() => setSheet(null)} />

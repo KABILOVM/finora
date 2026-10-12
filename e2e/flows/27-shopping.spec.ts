@@ -196,4 +196,27 @@ test.describe('27. Покупки', () => {
       await buy.getByRole('button', { name: 'Закрыть' }).click();
     }
   });
+
+  test('«Добавить списком»: текст (диктовка) разбирается на позиции, их видно до добавления', async ({ page }, testInfo) => {
+    await openApp(page, '/shopping');
+    await page.getByRole('button', { name: 'Добавить списком' }).first().click();
+    const dlg = sheet(page, 'Добавить списком');
+    await expect(dlg).toBeVisible();
+    await expect(dlg.getByRole('button', { name: 'Добавить', exact: true })).toBeDisabled();
+    await dlg.getByRole('textbox', { name: 'Что купить' }).fill('молоко два литра, хлеб три штуки, яблоки полтора килограмма и соль');
+    const preview = dlg.getByTestId('parsed-items');
+    await expect(preview).toContainText('Молоко');
+    await expect(preview).toContainText('2 л');
+    await expect(preview).toContainText('× 3');
+    await expect(preview).toContainText('1,5 кг');
+    await expect(dlg.getByRole('button', { name: 'Добавить 4 позиции' })).toBeVisible();
+    if (isPhone(page)) expect(await noHorizontalScroll(page), 'окно списком без горизонтальной прокрутки').toBe(true);
+    await shot(page, '27-shopping-list-text', testInfo);
+    await dlg.getByRole('button', { name: 'Добавить 4 позиции' }).click();
+    await expect(dlg).toBeHidden();
+    await expect(row(page, 'Молоко')).toContainText('Молоко 2 л');
+    await expect(row(page, 'Хлеб')).toContainText('Хлеб × 3');
+    await expect(row(page, 'Яблоки')).toContainText('Яблоки 1,5 кг');
+    await expect(row(page, 'Соль')).toBeVisible();
+  });
 });
