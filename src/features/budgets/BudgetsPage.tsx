@@ -123,7 +123,8 @@ export default function BudgetsPage() {
           <EmptyState
             icon="pie"
             title="Лимитов пока нет"
-            text="Поставьте лимит на месяц — на все расходы или на одну категорию. Приложение покажет, сколько уже потрачено, и предупредит заранее."
+            text="Поставьте лимит на месяц: приложение покажет, сколько уже потрачено."
+            className="py-6"
             action={
               <Button size="lg" icon="plus" onClick={() => setSheet({ kind: 'new' })}>
                 Поставить первый лимит

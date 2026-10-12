@@ -148,6 +148,8 @@ test.describe('16-adv. Заголовок и карточка прогноза �
       const box = root.getBoundingClientRect();
       const out: string[] = [];
       for (const el of Array.from(root.querySelectorAll('*'))) {
+        // декоративные размытые «пятна» фона карточки (пустые, aria-hidden) обрезаются самой карточкой и текста не несут
+        if (el.getAttribute('aria-hidden') === 'true' && (el.textContent ?? '').trim() === '') continue;
         const r = el.getBoundingClientRect();
         if (r.width > 0 && r.right > box.right - 1) out.push(`${el.tagName.toLowerCase()}[${(el.textContent ?? '').trim().slice(0, 50)}] right=${Math.round(r.right)} card=${Math.round(box.right)}`);
       }

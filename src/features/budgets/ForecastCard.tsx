@@ -30,12 +30,25 @@ export function PerDay({ f, className }: { f: DailyForecastOk; className?: strin
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+/** Плитка с одним числом: подпись мелко, значение крупнее. Подпись и значение — dt / dd (так их читают скринридеры и тесты). */
+function Tile({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-      <dt className="text-muted">{label}</dt>
-      <dd className="font-semibold">{children}</dd>
+    <div className={`min-w-0 rounded-2xl bg-surface-2/70 px-3 py-2.5 ${wide ? 'col-span-full' : ''}`}>
+      <dt className="text-xs leading-tight text-muted">{label}</dt>
+      <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[15px] font-semibold leading-snug">{children}</dd>
     </div>
+  );
+}
+
+/** Короткая отметка со значком: предупреждение (жёлтая) или тревога (красная). */
+function Notice({ tone, children }: { tone: 'warning' | 'danger'; children: ReactNode }) {
+  return (
+    <p
+      className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm font-medium ${tone === 'danger' ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'}`}
+    >
+      <Icon name="alert" size={16} className="mt-0.5 shrink-0" />
+      <span className="min-w-0">{children}</span>
+    </p>
   );
 }
 
@@ -47,27 +60,13 @@ const EXPLAIN = [
   'Деньги и платежи в валюте без курса в расчёт не входят — об этом написано под числом, а само число помечено «≈».',
 ] as const;
 
-function Explain() {
-  const [open, setOpen] = useState(false);
+function ExplainPanel() {
   return (
-    <div className="mt-3 border-t border-border pt-1">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl text-left font-semibold text-brand"
-      >
-        <span>Как это считается</span>
-        <Icon name="chevron" size={18} className={open ? 'rotate-90' : ''} />
-      </button>
-      {open && (
-        <ol className="mb-1 mt-1 list-decimal space-y-1.5 pl-5 text-sm text-muted">
-          {EXPLAIN.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ol>
-      )}
-    </div>
+    <ol className="relative mt-3 list-decimal space-y-1.5 rounded-2xl bg-surface-2/70 py-3 pl-8 pr-3 text-sm text-muted">
+      {EXPLAIN.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ol>
   );
 }
 
@@ -76,56 +75,45 @@ function Details({ f }: { f: DailyForecastOk }) {
   const b = f.budget;
   return (
     <>
-      <dl className="mt-4 flex flex-col gap-1.5 border-t border-border pt-3">
-        <Row label="Деньги на руках">
+      <dl className="relative mt-4 grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-2">
+        <Tile label="Деньги на руках">
           <MoneyText minor={f.moneyMinor} currency={f.base} tone={f.moneyMinor < 0 ? 'expense' : 'none'} />
-        </Row>
-        <Row label={`Платежи и долги до ${longDate(f.horizonEnd)}`}>
+        </Tile>
+        <Tile label={`Платежи и долги до ${longDate(f.horizonEnd)}`}>
           <MoneyText minor={-f.obligationsMinor} currency={f.base} tone="none" />
-        </Row>
-        <Row label="Сегодня потрачено">
-          {/* Две отдельные суммы (каждая не рвётся), а не одна длинная строка: на узком экране со многозначными суммами (сум, тенге) «из …» переносится. */}
-          <span className="money">{formatMinor(f.spentTodayMinor, f.base)}</span>{' '}
-          <span className="font-normal text-muted">
-            из <span className="money">{formatMinor(f.todayLimitMinor, f.base)}</span>
-          </span>
-        </Row>
-        <Row label="Обычно вы тратите">
-          {f.usualPerDayMinor === null ? (
-            <span className="font-normal text-muted">пока мало данных</span>
-          ) : (
+        </Tile>
+        {f.usualPerDayMinor !== null && (
+          <Tile label="Обычно вы тратите">
             <span className="money">{formatMinor(f.usualPerDayMinor, f.base)} в день</span>
-          )}
-        </Row>
+          </Tile>
+        )}
         {b && (
-          <Row label="По бюджету на месяц">
+          <Tile label="По бюджету на месяц">
             <span className="money">{formatMinor(b.perDayMinor, f.base)} в день</span>
-          </Row>
+          </Tile>
         )}
       </dl>
 
-      {over && (
-        <p className="mt-2 text-sm font-medium text-warning">Сегодня потрачено больше, чем можно на день: завтра придётся тратить меньше.</p>
-      )}
-      {f.usualPerDayMinor !== null && f.usualPerDayMinor > f.perDayMinor && !f.notEnough && (
-        <p className="mt-2 text-sm font-medium text-warning">Обычно вы тратите больше, чем можно в день: деньги закончатся раньше срока.</p>
-      )}
-      {b && (
-        <p className="mt-2 text-sm text-muted">
-          {b.overMinor > 0
-            ? `Общий лимит месяца превышен на ${endSentence(formatMinor(b.overMinor, f.base))}`
-            : `Общий лимит месяца ${formatMinor(b.limitMinor, f.base)}: осталось ${endSentence(formatMinor(b.leftMinor, f.base))}`}
-          {b.partial && ' Часть операций не учтена, поэтому цифра может быть выше настоящей.'}
-        </p>
-      )}
-      {f.skipped.length > 0 && (
-        <p className="mt-2 text-sm font-medium text-warning">Не вошло в расчёт — нет курса: {endSentence(skippedText(f.skipped))}</p>
-      )}
-      {f.unknownWalletPayments > 0 && (
-        <p className="mt-2 text-sm font-medium text-warning">
-          Не удалось учесть {f.unknownWalletPayments} {pluralRu(f.unknownWalletPayments, 'платёж', 'платежа', 'платежей')}: кошелёк не найден.
-        </p>
-      )}
+      <div className="relative mt-3 flex flex-col gap-2 empty:hidden">
+        {over && <Notice tone="warning">Сегодня потрачено больше нормы</Notice>}
+        {f.usualPerDayMinor !== null && f.usualPerDayMinor > f.perDayMinor && !f.notEnough && (
+          <Notice tone="warning">Обычно тратите больше, чем можно в день</Notice>
+        )}
+        {b && (
+          <p className="px-1 text-sm text-muted">
+            {b.overMinor > 0
+              ? `Лимит месяца превышен на ${endSentence(formatMinor(b.overMinor, f.base))}`
+              : `Лимит месяца ${formatMinor(b.limitMinor, f.base)} · осталось ${endSentence(formatMinor(b.leftMinor, f.base))}`}
+            {b.partial && ' Часть операций не учтена.'}
+          </p>
+        )}
+        {f.skipped.length > 0 && <Notice tone="warning">Не вошло в расчёт — нет курса: {endSentence(skippedText(f.skipped))}</Notice>}
+        {f.unknownWalletPayments > 0 && (
+          <Notice tone="warning">
+            Не удалось учесть {f.unknownWalletPayments} {pluralRu(f.unknownWalletPayments, 'платёж', 'платежа', 'платежей')}: кошелёк не найден.
+          </Notice>
+        )}
+      </div>
     </>
   );
 }
@@ -170,6 +158,21 @@ function TodayBar({ f }: { f: DailyForecastOk }) {
   );
 }
 
+/** Под полосой: «Сегодня потрачено 400 с. из 176,47 с.» — одной строкой, суммы не рвутся (на узком экране «из …» переносится целиком). */
+function TodayRow({ f }: { f: DailyForecastOk }) {
+  return (
+    <dl className="relative mt-2 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+      <dt className="text-muted">Сегодня потрачено</dt>
+      <dd className="flex flex-wrap items-baseline gap-x-1.5 font-semibold">
+        <span className="money">{formatMinor(f.spentTodayMinor, f.base)}</span>{' '}
+        <span className="font-normal text-muted">
+          из <span className="money">{formatMinor(f.todayLimitMinor, f.base)}</span>
+        </span>
+      </dd>
+    </dl>
+  );
+}
+
 /** Верх экрана «Бюджеты»: «Осталось на день» крупно, из чего оно сложилось и «Как это считается». */
 export function ForecastCard({ forecast }: { forecast: DailyForecast | null | undefined }) {
   if (forecast === undefined) {
@@ -189,40 +192,65 @@ export function ForecastCard({ forecast }: { forecast: DailyForecast | null | un
   }
   if (forecast.status !== 'ok') return <Unavailable forecast={forecast} />;
 
+  return <ForecastOk forecast={forecast} />;
+}
+
+function ForecastOk({ forecast }: { forecast: DailyForecastOk }) {
+  const [explainOpen, setExplainOpen] = useState(false);
   return (
     <section
       aria-labelledby="forecast-title"
       data-testid="forecast-card"
-      className="relative overflow-hidden rounded-3xl border border-border/70 bg-surface p-4 shadow-card md:p-5"
+      className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-brand/10 via-surface to-accent/10 p-4 shadow-card md:p-5"
     >
       <span aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-accent/20 blur-3xl" />
       <span aria-hidden="true" className="pointer-events-none absolute -left-20 top-10 h-40 w-40 rounded-full bg-brand/15 blur-3xl" />
-      <h2 id="forecast-title" className="relative flex items-center gap-2 text-base font-semibold text-muted">
-        <Icon name="pie" size={18} className="text-brand" />
-        Осталось на день
-      </h2>
+      <div className="relative flex items-center justify-between gap-2">
+        <h2 id="forecast-title" className="flex items-center gap-2 text-base font-semibold text-muted">
+          <Icon name="pie" size={18} className="text-brand" />
+          Осталось на день
+        </h2>
+        <button
+          type="button"
+          aria-label="Как это считается"
+          title="Как это считается"
+          aria-expanded={explainOpen}
+          onClick={() => setExplainOpen((v) => !v)}
+          className={`-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors ${explainOpen ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-surface-2'}`}
+        >
+          <Icon name="info" size={20} />
+        </button>
+      </div>
       <p
         data-testid="forecast-per-day"
-        className="mt-0.5 font-bold leading-tight tracking-tight"
-        style={{ fontSize: fitFontSize(perDayChars(forecast), '2rem', '10vw', '2.75rem') }}
+        className="relative -mt-1 font-bold leading-tight tracking-tight"
+        style={{ fontSize: fitFontSize(perDayChars(forecast), '2.25rem', '11vw', '3rem') }}
       >
         <PerDay f={forecast} />
       </p>
       <TodayBar f={forecast} />
-      <p className="mt-2 text-sm text-muted">
-        Считаем до {longDate(forecast.horizonEnd)}: {daysText(forecast.daysLeft)} включая сегодня.
-        {forecast.incomeDate !== null && ` ${longDate(forecast.incomeDate)} ждём доход — дальше деньги пополнятся.`}
+      <TodayRow f={forecast} />
+      <p className="relative mt-3 flex flex-wrap gap-1.5 text-sm">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/80 px-3 py-1 font-medium text-text ring-1 ring-border/60">
+          <Icon name="calendar" size={14} className="text-brand" />
+          До {longDate(forecast.horizonEnd)} · {daysText(forecast.daysLeft)}
+        </span>
+        {forecast.incomeDate !== null && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-income/10 px-3 py-1 font-medium text-income">
+            <Icon name="income" size={14} />
+            {longDate(forecast.incomeDate)} ждём доход
+          </span>
+        )}
       </p>
       {forecast.notEnough && (
-        <p className="mt-2 flex items-start gap-2 text-sm font-semibold text-danger">
-          <Icon name="alert" size={18} className="mt-0.5 shrink-0" />
-          <span>
+        <div className="relative mt-3">
+          <Notice tone="danger">
             Денег не хватает до {longDate(forecast.horizonEnd)}: нужно ещё {endSentence(formatMinor(forecast.shortfallMinor, forecast.base))}
-          </span>
-        </p>
+          </Notice>
+        </div>
       )}
       <Details f={forecast} />
-      <Explain />
+      {explainOpen && <ExplainPanel />}
     </section>
   );
 }
