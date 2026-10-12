@@ -33,12 +33,18 @@ const CALC_OPS: OpKey[] = ['×', '−', '+'];
 
 const OP_LABEL: Record<OpKey, string> = { '+': 'Плюс', '−': 'Минус', '×': 'Умножить', '÷': 'Разделить' };
 
+// Клавиши «приподняты»: тонкая рамка, светлая кромка сверху и мягкая тень; при нажатии уменьшаются и темнеют.
+// Клавиши не ниже 56px: так требует проект (удобно попадать пальцем).
 const BASE_KEY =
-  'flex min-h-[56px] select-none items-center justify-center rounded-2xl text-2xl font-semibold ' +
-  'transition-colors disabled:opacity-40';
-const KEY_CLASS = `${BASE_KEY} bg-surface-2 text-text active:bg-border`;
-const OP_CLASS = `${BASE_KEY} bg-brand/10 text-brand active:bg-brand/20`;
-const EQUAL_CLASS = `${BASE_KEY} bg-brand text-brand-fg active:bg-brand-dark`;
+  'flex min-h-[56px] select-none items-center justify-center rounded-[1.1rem] border text-[1.75rem] font-semibold leading-none ' +
+  'tracking-tight transition duration-150 ease-spring active:scale-[0.93] disabled:opacity-40 disabled:active:scale-100 ' +
+  'shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_6px_14px_-9px_rgb(var(--brand)/0.55)]';
+const KEY_CLASS = `${BASE_KEY} border-border/80 bg-surface text-text active:bg-brand/10`;
+const SERVICE_CLASS = `${BASE_KEY} border-border/60 bg-surface-2 text-muted active:bg-border`;
+const OP_CLASS = `${BASE_KEY} border-brand/25 bg-brand/10 text-[2rem] font-medium text-brand active:bg-brand/25`;
+const EQUAL_CLASS =
+  `${BASE_KEY} border-transparent bg-gradient-to-br from-brand to-accent text-[2rem] text-brand-fg ` +
+  'active:brightness-90 disabled:bg-none disabled:bg-brand/30';
 
 /** Цифровая клавиатура 0–9, «,» и «⌫». Только сообщает о нажатиях — состояние хранит AmountInput. */
 export function Keypad({ onKey, ops = false, canEqual = false, allowComma = true, disabled = false, className }: KeypadProps) {
@@ -73,18 +79,18 @@ export function Keypad({ onKey, ops = false, canEqual = false, allowComma = true
     <button
       type="button"
       aria-label="Стереть"
-      className={cn(KEY_CLASS, extra)}
+      className={cn(SERVICE_CLASS, extra)}
       disabled={disabled}
       onMouseDown={keep}
       onClick={press('backspace')}
     >
-      <Icon name="backspace" size={28} />
+      <Icon name="backspace" size={26} />
     </button>
   );
 
   if (ops) {
     return (
-      <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-4 gap-2', className)}>
+      <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-4 gap-2.5', className)}>
         {backspace('col-span-3')}
         {opButton('÷')}
         {CALC_ROWS.flatMap((row, r) => [...row.map((d) => digit(d)), opButton(CALC_OPS[r]!)])}
@@ -105,7 +111,7 @@ export function Keypad({ onKey, ops = false, canEqual = false, allowComma = true
   }
 
   return (
-    <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-3 gap-2', className)}>
+    <div role="group" aria-label="Цифровая клавиатура" className={cn('grid grid-cols-3 gap-2.5', className)}>
       {DIGIT_ROWS.flatMap((row) => row.map((d) => digit(d)))}
       {allowComma ? (
         <button
@@ -127,12 +133,12 @@ export function Keypad({ onKey, ops = false, canEqual = false, allowComma = true
       <button
         type="button"
         aria-label="Стереть"
-        className={KEY_CLASS}
+        className={SERVICE_CLASS}
         disabled={disabled}
         onMouseDown={keep}
         onClick={press('backspace')}
       >
-        <Icon name="backspace" size={28} />
+        <Icon name="backspace" size={26} />
       </button>
     </div>
   );
