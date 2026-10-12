@@ -68,11 +68,31 @@ export function Sheet({
       }
     };
     fit();
+    // На iPhone клавиатура выезжает с анимацией, а события visualViewport приходят не всегда вовремя (особенно в приложении
+    // «на экране Домой»): пересчитываем ещё и при фокусе поля и чуть позже, когда клавиатура уже встала на место.
+    const timers = new Set<number>();
+    const refit = () => {
+      fit();
+      for (const ms of [120, 350, 700]) {
+        const id = window.setTimeout(() => {
+          timers.delete(id);
+          fit();
+        }, ms);
+        timers.add(id);
+      }
+    };
     vv.addEventListener('resize', fit);
     vv.addEventListener('scroll', fit);
+    window.addEventListener('resize', fit);
+    el.addEventListener('focusin', refit);
+    el.addEventListener('focusout', refit);
     return () => {
       vv.removeEventListener('resize', fit);
       vv.removeEventListener('scroll', fit);
+      window.removeEventListener('resize', fit);
+      el.removeEventListener('focusin', refit);
+      el.removeEventListener('focusout', refit);
+      timers.forEach((id) => window.clearTimeout(id));
     };
   }, [open]);
 
