@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
-import { IconButton } from '@/components/IconButton';
 import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
@@ -9,6 +8,7 @@ import { useRates } from '@/rates/hooks';
 import { todayLocal } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
+import { DateChip } from '@/features/transactions/DateChip';
 import { useToast } from '@/components/Toast';
 import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
@@ -215,6 +215,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       onClose={onClose}
       dismissible={saving === null}
       title={TITLE}
+      headerAction={<DateChip c={c} />}
       footer={
         <div className="flex flex-col gap-2">
           {c.errors.form && (
@@ -241,22 +242,12 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       }
     >
       <div ref={formRef}>
-        <TxFormFields
-          c={c}
-          wallets={walletsRanked}
-          categories={categoryOptions}
-          kindAction={
-            kind === 'expense' ? (
-              <IconButton
-                icon="mic"
-                variant="secondary"
-                label="Продиктовать расходы"
-                className="shrink-0"
-                onClick={() => setDictating(true)}
-              />
-            ) : undefined
-          }
-        />
+        <TxFormFields c={c} wallets={walletsRanked} categories={categoryOptions} />
+        {kind === 'expense' && (
+          <Button variant="ghost" icon="mic" fullWidth className="mt-2" onClick={() => setDictating(true)}>
+            Продиктовать расходы
+          </Button>
+        )}
       </div>
     </Sheet>
   );

@@ -158,7 +158,9 @@ export async function addExpense(page: Page, digits: string, category = 'Еда'
   const amount = dialog.locator('input.money').first();
   await amount.click();
   await amount.fill(digits);
-  await dialog.getByRole('button', { name: category, exact: false }).first().click();
+  // категории лежат за плиткой «Категория»
+  await dialog.getByRole('button', { name: /^Категория:/ }).click();
+  await dialog.getByRole('group', { name: 'Категория' }).getByRole('button', { name: category, exact: false }).first().click();
   await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
 }

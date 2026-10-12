@@ -3,7 +3,7 @@
  * курсами из памяти и без сети; ввод суммы кнопками экранной клавиатуры.
  */
 import { makeTestDeps, renderAppRoot, type TestDeps } from '@/app/testkit';
-import { findByRole, fire, screen, user, waitFor } from '@/components/testUtils';
+import { act, findByRole, fire, screen, user, waitFor } from '@/components/testUtils';
 import { ensureSeeded, type Store } from '@/db';
 import type { RateTable } from '@/domain/types';
 import { createRateService } from '@/rates/service';
@@ -141,14 +141,35 @@ export const backgroundPath = (): string => document.querySelector('[data-testid
 
 export const currentPath = (): string => document.querySelector('[data-testid="location"]')?.textContent ?? '';
 
+/** Категории лежат за плиткой «Категория»: если список закрыт, раскрываем его (как это сделал бы человек). */
+function openCategories(groupName: string): void {
+  if (groupName !== 'Категория' || screen.queryByRole('group', { name: groupName })) return;
+  const tile = screen.queryByRole('button', { name: /^Категория:/ });
+  if (tile) act(() => tile.click());
+}
+
+/** Кнопка категории из раскрытого списка (список раскрывается сам). */
+export function catBtn(name: string, pressed?: boolean): HTMLElement {
+  openCategories('Категория');
+  return screen.getByRole('button', pressed === undefined ? { name } : { name, pressed });
+}
+
+/** То же, но без ошибки, если такой категории нет в списке. */
+export function catQuery(name: string): HTMLElement | null {
+  openCategories('Категория');
+  return screen.queryByRole('button', { name });
+}
+
 /** Названия чипов группы (например, всех категорий) в том порядке, как они на экране; значок не входит. */
 export function chipLabels(groupName: string): string[] {
+  openCategories(groupName);
   const group = screen.getByRole('group', { name: groupName });
   return Array.from(group.querySelectorAll('button')).map((b) => (b.querySelector('span:not([aria-hidden])')?.textContent ?? '').trim());
 }
 
 /** Чип с названием label внутри группы (одни и те же кошельки есть и в «Откуда», и в «Куда»). */
 export function chip(groupName: string, label: string): HTMLElement {
+  openCategories(groupName);
   const group = screen.getByRole('group', { name: groupName });
   const hit = Array.from(group.querySelectorAll('button')).find(
     (b) => (b.querySelector('span:not([aria-hidden])')?.textContent ?? '').trim() === label,
@@ -220,18 +241,50 @@ export interface History {
 export async function seedHistory(s: Store): Promise<History> {
   const wallets = await s.db.wallets.toArray();
   const cash = wallets.find((w) => w.name === 'Наличные')?.id ?? '';
-  const card = (await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' })).id;
-  const usd = (await s.wallets.create({ name: 'Доллары', currency: 'USD', kind: 'cash', openingBalanceMinor: 0, color: '#7c3aed', icon: '💲' })).id;
+  const card = (
+    await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' })
+  ).id;
+  const usd = (
+    await s.wallets.create({ name: 'Доллары', currency: 'USD', kind: 'cash', openingBalanceMinor: 0, color: '#7c3aed', icon: '💲' })
+  ).id;
   const cats = await s.db.categories.toArray();
   const cat = (name: string, kind: 'expense' | 'income' = 'expense') => cats.find((c) => c.name === name && c.kind === kind)?.id ?? '';
   const txs: Record<string, string> = {};
   const add = async (key: string, input: Parameters<Store['transactions']['create']>[0]) => {
     txs[key] = (await s.transactions.create(input)).id;
   };
-  await add('lunch', { kind: 'expense', walletId: cash, amountMinor: 1250, categoryId: cat('Еда'), occurredOn: '2026-10-15', note: 'обед' });
-  await add('advance', { kind: 'income', walletId: cash, amountMinor: 500_000, categoryId: cat('Зарплата', 'income'), occurredOn: '2026-10-15', note: 'аванс' });
-  await add('taxi', { kind: 'expense', walletId: card, amountMinor: 300, categoryId: cat('Транспорт'), occurredOn: '2026-10-14', note: 'такси' });
-  await add('move', { kind: 'transfer', walletId: cash, toWalletId: card, amountMinor: 10_000, toAmountMinor: 10_000, occurredOn: '2026-10-14' });
+  await add('lunch', {
+    kind: 'expense',
+    walletId: cash,
+    amountMinor: 1250,
+    categoryId: cat('Еда'),
+    occurredOn: '2026-10-15',
+    note: 'обед',
+  });
+  await add('advance', {
+    kind: 'income',
+    walletId: cash,
+    amountMinor: 500_000,
+    categoryId: cat('Зарплата', 'income'),
+    occurredOn: '2026-10-15',
+    note: 'аванс',
+  });
+  await add('taxi', {
+    kind: 'expense',
+    walletId: card,
+    amountMinor: 300,
+    categoryId: cat('Транспорт'),
+    occurredOn: '2026-10-14',
+    note: 'такси',
+  });
+  await add('move', {
+    kind: 'transfer',
+    walletId: cash,
+    toWalletId: card,
+    amountMinor: 10_000,
+    toAmountMinor: 10_000,
+    occurredOn: '2026-10-14',
+  });
   await add('coffee', {
     kind: 'expense',
     walletId: usd,
@@ -241,15 +294,31 @@ export async function seedHistory(s: Store): Promise<History> {
     note: 'coffee',
     fx: { rate: 10.9, source: 'nbt' },
   });
-  await add('market', { kind: 'expense', walletId: cash, amountMinor: 4500, categoryId: cat('Продукты'), occurredOn: '2026-09-20', note: 'рынок' });
+  await add('market', {
+    kind: 'expense',
+    walletId: cash,
+    amountMinor: 4500,
+    categoryId: cat('Продукты'),
+    occurredOn: '2026-09-20',
+    note: 'рынок',
+  });
   await add('nocat', { kind: 'expense', walletId: card, amountMinor: 200, occurredOn: '2026-09-03' });
-  await add('side', { kind: 'income', walletId: card, amountMinor: 7000, categoryId: cat('Подработка', 'income'), occurredOn: '2026-07-10', note: 'Работа' });
+  await add('side', {
+    kind: 'income',
+    walletId: card,
+    amountMinor: 7000,
+    categoryId: cat('Подработка', 'income'),
+    occurredOn: '2026-07-10',
+    note: 'Работа',
+  });
   return { cash, card, usd, txs };
 }
 
 /** Тексты строк операций на экране (в порядке следования). */
 export function rowTexts(): string[] {
-  return Array.from(document.querySelectorAll('section[aria-label] button')).map((b) => (b.textContent ?? '').replace(/[ \t\r\n]+/g, ' ').trim());
+  return Array.from(document.querySelectorAll('section[aria-label] button')).map((b) =>
+    (b.textContent ?? '').replace(/[ \t\r\n]+/g, ' ').trim(),
+  );
 }
 
 type WalletRole = 'Кошелёк' | 'Откуда' | 'Куда';

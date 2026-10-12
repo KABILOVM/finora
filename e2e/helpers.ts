@@ -303,6 +303,14 @@ export interface TxInput {
 }
 
 /** Открыть шит «Новая операция» и заполнить его, не нажимая «Сохранить». */
+/** В окне операции категории лежат за плиткой «Категория»: раскрыть список, если он закрыт; возвращает группу чипов. */
+export async function openCategoryList(dlg: Locator): Promise<Locator> {
+  const group = dlg.getByRole('group', { name: 'Категория' });
+  if (!(await group.isVisible())) await dlg.getByRole('button', { name: /^Категория:/ }).click();
+  await group.getByRole('button').first().waitFor();
+  return group;
+}
+
 export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
   await addLink(page).click();
   const dlg = sheet(page, 'Новая операция');
@@ -325,12 +333,8 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
     await dlg.getByRole('button', { name: 'Готово', exact: true }).click();
   }
   if (tx.category) {
-    const group = dlg.getByRole('group', { name: 'Категория' });
-    const chip = group.getByRole('button', { name: tx.category, exact: true });
-    await group.getByRole('button').first().waitFor();
-    // видны только основные категории: остальные под «Ещё»
-    if ((await chip.count()) === 0) await group.getByRole('button', { name: /^Ещё/ }).click();
-    await chip.click();
+    const group = await openCategoryList(dlg);
+    await group.getByRole('button', { name: tx.category, exact: true }).click();
   }
   if (tx.rate) {
     // Курса не было — поле на месте. Курс уже вводили раньше — он подставлен сам, а поле прячется за «Изменить».

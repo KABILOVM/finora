@@ -1,4 +1,4 @@
-import { addTx, openCategories, createWallet, dismissToasts, expect, fillTx, goSection, openApp, shot, sheet, test } from '../helpers';
+import { addTx, openCategories, openCategoryList, createWallet, dismissToasts, expect, fillTx, goSection, openApp, shot, sheet, test } from '../helpers';
 
 test.describe('8. Категории и настройки', () => {
   test('добавить категорию, она доступна при внесении; архивировать — пропадает из выбора, возвращается из архива', async ({ page }, testInfo) => {
@@ -47,6 +47,7 @@ test.describe('8. Категории и настройки', () => {
 
     // В архиве — не предлагается при новой операции
     const add2 = await fillTx(page, { amount: '1' });
+    await openCategoryList(add2);
     await expect(add2.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Кафе', exact: true })).toHaveCount(0);
     await expect(add2.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Еда', exact: true })).toBeVisible();
     await add2.getByRole('button', { name: 'Закрыть' }).click();

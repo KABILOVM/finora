@@ -11,7 +11,6 @@ import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import type { LocalRow, TxKind, Wallet } from '@/domain/types';
-import { CategoryPicker } from './CategoryPicker';
 import { ContextRow } from './ContextRow';
 import { FeeField, applyPctKey } from './FeeField';
 import { FxNotice } from './FxNotice';
@@ -41,8 +40,6 @@ export interface TxFormFieldsProps {
   wallets: readonly LocalRow<Wallet>[];
   /** Категории нужного вида, уже упорядоченные: самые частые первыми. */
   categories: readonly ChipOption[];
-  /** Кнопка справа от переключателя вида (например, «Продиктовать расходы»). */
-  kindAction?: ReactNode;
 }
 
 /** Круглая кнопка у края суммы (комиссия слева, заметка справа). */
@@ -79,7 +76,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -138,14 +135,11 @@ export function TxFormFields({ c, wallets, categories, kindAction }: TxFormField
 
   return (
     <div className="flex flex-col gap-3 md:gap-5">
-      <div className="flex items-center gap-2">
-        <Segmented ariaLabel="Вид операции" options={KINDS} value={form.kind} onChange={c.setKind} className="min-w-0 flex-1" />
-        {kindAction}
-      </div>
+      <Segmented ariaLabel="Вид операции" options={KINDS} value={form.kind} onChange={c.setKind} />
 
       {/* Кошелёк и дата видны над клавиатурой: человек всегда знает, куда запишется операция */}
       <div className="flex flex-col gap-3">
-        <ContextRow c={c} wallets={wallets} />
+        <ContextRow c={c} wallets={wallets} categories={isTransfer ? [] : categories} />
         <FxNotice
           fx={c.fx}
           amountMinor={form.amountMinor}
@@ -154,17 +148,6 @@ export function TxFormFields({ c, wallets, categories, kindAction }: TxFormField
           error={errors.rate}
         />
       </div>
-
-      {/* Категории — тоже над клавиатурой: чипы и цифры помещаются на одном экране телефона */}
-      {!isTransfer && (
-        <CategoryPicker
-          options={categories}
-          kind={form.kind === 'income' ? 'income' : 'expense'}
-          value={form.categoryId}
-          onChange={(categoryId) => c.set({ categoryId })}
-          error={errors.category}
-        />
-      )}
 
       {/* Комиссия и заметка — за кнопками по краям суммы и всплывают поверх формы */}
       <div ref={amountBoxRef}>

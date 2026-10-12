@@ -4,6 +4,7 @@ import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { addDays, todayLocal } from '@/lib/dates';
 import {
+  catBtn,
   allTxs,
   balancesOf,
   chip,
@@ -38,8 +39,12 @@ interface Ids {
 async function baseSetup(s: Store, ids: Ids): Promise<void> {
   const wallets = await s.db.wallets.toArray();
   ids.cash = wallets.find((w) => w.name === 'Наличные')?.id ?? '';
-  ids.card = (await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' })).id;
-  ids.usd = (await s.wallets.create({ name: 'Доллары', currency: 'USD', kind: 'cash', openingBalanceMinor: 100_000, color: '#2563eb', icon: '💲' })).id;
+  ids.card = (
+    await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' })
+  ).id;
+  ids.usd = (
+    await s.wallets.create({ name: 'Доллары', currency: 'USD', kind: 'cash', openingBalanceMinor: 100_000, color: '#2563eb', icon: '💲' })
+  ).id;
   const cats = await s.db.categories.toArray();
   ids.food = cats.find((c) => c.name === 'Еда' && c.kind === 'expense')?.id ?? '';
   ids.transport = cats.find((c) => c.name === 'Транспорт' && c.kind === 'expense')?.id ?? '';
@@ -101,7 +106,7 @@ describe('шит правки: поля заполнены', () => {
   it('сумма, категория, кошелёк, дата и заметка — как в операции', async () => {
     await openEdit(food12());
     expect(amountField().value).toBe('12,5');
-    expect(screen.getByRole('button', { name: 'Еда' })).toHaveAttribute('aria-pressed', 'true');
+    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'true');
     expect(contextChip('Кошелёк').getAttribute('aria-label')).toBe('Кошелёк: Наличные · TJS');
     expect(contextChip('Дата').getAttribute('aria-label')).toBe('Дата: Вчера');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
@@ -109,17 +114,18 @@ describe('шит правки: поля заполнены', () => {
   });
 
   it('перевод: показаны «Откуда», «Куда» и «Получено»', async () => {
-    await openEdit(async (s, ids) =>
-      (
-        await s.transactions.create({
-          kind: 'transfer',
-          walletId: ids.cash,
-          toWalletId: ids.usd,
-          amountMinor: 10_900,
-          toAmountMinor: 1000,
-          occurredOn: todayLocal(),
-        })
-      ).id,
+    await openEdit(
+      async (s, ids) =>
+        (
+          await s.transactions.create({
+            kind: 'transfer',
+            walletId: ids.cash,
+            toWalletId: ids.usd,
+            amountMinor: 10_900,
+            toAmountMinor: 1000,
+            occurredOn: todayLocal(),
+          })
+        ).id,
     );
     expect(screen.getByRole('radio', { name: 'Перевод' })).toHaveAttribute('aria-checked', 'true');
     expect(amountField().value).toBe('109');
@@ -151,7 +157,7 @@ describe('сохранение правки', () => {
 
   it('меняет категорию, заметку, кошелёк и дату', async () => {
     const { td, ids, onClose } = await openEdit(food12());
-    await user.click(screen.getByRole('button', { name: 'Транспорт' }));
+    await user.click(catBtn('Транспорт'));
     await pickWallet('Карта · TJS');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
     const note = screen.getByRole('textbox', { name: /^Заметка/ });
@@ -208,7 +214,7 @@ describe('сохранение правки', () => {
   it('вид можно сменить: расход → доход, категория сбрасывается и выбирается заново', async () => {
     const { td, ids, onClose } = await openEdit(food12());
     await user.click(screen.getByRole('radio', { name: 'Доход' }));
-    await user.click(screen.getByRole('button', { name: 'Зарплата' }));
+    await user.click(catBtn('Зарплата'));
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const salary = (await storeOf(td).db.categories.toArray()).find((c) => c.name === 'Зарплата');
@@ -261,7 +267,13 @@ describe('правка не переоценивает курс', () => {
     await tapAmount('20');
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(await row(td, ids.tx)).toMatchObject({ amountMinor: 2000, baseAmountMinor: 21_800, fxRate: 10.9, fxSource: 'nbt', baseCurrency: 'TJS' });
+    expect(await row(td, ids.tx)).toMatchObject({
+      amountMinor: 2000,
+      baseAmountMinor: 21_800,
+      fxRate: 10.9,
+      fxSource: 'nbt',
+      baseCurrency: 'TJS',
+    });
   });
 
   it('правится только заметка — снимок суммы в сомони не меняется', async () => {
@@ -294,7 +306,13 @@ describe('правка не переоценивает курс', () => {
     await user.type(screen.getByRole('textbox', { name: /^Курс/ }), '10,8');
     await save();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(await row(td, ids.tx)).toMatchObject({ walletId: ids.usd, amountMinor: 1250, baseAmountMinor: 13_500, fxRate: 10.8, fxSource: 'manual' });
+    expect(await row(td, ids.tx)).toMatchObject({
+      walletId: ids.usd,
+      amountMinor: 1250,
+      baseAmountMinor: 13_500,
+      fxRate: 10.8,
+      fxSource: 'manual',
+    });
     // курс записан в операцию и запомнен как «введённый» (запасной слой): это не «Свой курс» из Настроек
     expect(td.rates.getRate('USD', 'TJS')).toMatchObject({ rate: 10.8, entered: true, manual: false });
     expect(td.rates.listEnteredRates()).toMatchObject([{ from: 'USD', to: 'TJS', rate: 10.8 }]);
@@ -397,22 +415,25 @@ describe('операции нет', () => {
 
 describe('архивный кошелёк и категория', () => {
   it('операция в архивном кошельке правится; кошелёк остаётся выбранным, а другие архивные не предлагаются', async () => {
-    const { td, ids, onClose } = await openEdit(
-      async (s, ids) => {
-        const t = await s.transactions.create({ kind: 'expense', walletId: ids.card, amountMinor: 700, categoryId: ids.food, occurredOn: todayLocal() });
-        await s.wallets.archive(ids.card);
-        await s.wallets.archive(ids.usd);
-        await s.categories.archive(ids.food);
-        return t.id;
-      },
-      [],
-    );
+    const { td, ids, onClose } = await openEdit(async (s, ids) => {
+      const t = await s.transactions.create({
+        kind: 'expense',
+        walletId: ids.card,
+        amountMinor: 700,
+        categoryId: ids.food,
+        occurredOn: todayLocal(),
+      });
+      await s.wallets.archive(ids.card);
+      await s.wallets.archive(ids.usd);
+      await s.categories.archive(ids.food);
+      return t.id;
+    }, []);
     expect(contextChip('Кошелёк').getAttribute('aria-label')).toBe('Кошелёк: Карта');
     // в списке кошельков — только он и неархивные; архивные «Доллары» не предлагаются
     await user.click(contextChip('Кошелёк'));
     expect(chipLabels('Кошелёк')).toEqual(['Карта', 'Наличные']);
     await user.click(contextChip('Кошелёк'));
-    expect(screen.getByRole('button', { name: 'Еда (в архиве)' })).toHaveAttribute('aria-pressed', 'true');
+    expect(catBtn('Еда (в архиве)')).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'ок');
     await save();

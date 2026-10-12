@@ -100,7 +100,8 @@ test('A открыта, выложена B: подсказка «Доступн�
   await page.getByRole('button', { name: 'Обновить' }).click({ trial: true });
 
   // продолжаем работу в A: сохраняем ввод и открываем ЛЕНИВУЮ страницу, чанк которой в этом сеансе не грузился
-  await dialog.getByRole('button', { name: 'Еда' }).first().click();
+  await dialog.getByRole('button', { name: /^Категория:/ }).click();
+  await dialog.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Еда' }).first().click();
   await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
   await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();

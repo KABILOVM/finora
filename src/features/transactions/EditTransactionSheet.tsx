@@ -4,6 +4,7 @@ import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
+import { DateChip } from './DateChip';
 import { useToast } from '@/components/Toast';
 import { useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
@@ -219,6 +220,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
         onClose={onClose}
         dismissible={!busy}
         title={TITLE}
+        headerAction={<DateChip c={c} />}
         footer={
           <div className="flex flex-col gap-2">
             {c.errors.form && (
@@ -247,7 +249,9 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
       >
         <div ref={formRef}>
           <TxLinkNotice tx={orig} />
-          {tx.kind === 'expense' && <Receipt txId={tx.id} currency={wallets.find((w) => w.id === tx.walletId)?.currency ?? tx.baseCurrency} />}
+          {tx.kind === 'expense' && (
+            <Receipt txId={tx.id} currency={wallets.find((w) => w.id === tx.walletId)?.currency ?? tx.baseCurrency} />
+          )}
           <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} />
         </div>
       </Sheet>
