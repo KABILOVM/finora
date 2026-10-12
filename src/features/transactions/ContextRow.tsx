@@ -19,6 +19,7 @@ export function walletOptions(wallets: readonly LocalRow<Wallet>[]): ChipOption[
 
 type Panel = 'wallet' | 'toWallet' | 'date' | null;
 
+/** Одно из полей «куда и когда» в общей полосе: значок, название и стрелка; открытое подсвечено. */
 function ContextChip({
   icon,
   color,
@@ -43,15 +44,15 @@ function ContextChip({
       aria-expanded={open}
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-[44px] max-w-full items-center gap-1 rounded-full border px-3 text-base font-medium transition-colors',
-        invalid
-          ? 'border-danger text-danger'
-          : open
-            ? 'border-brand bg-brand/10 text-brand'
-            : 'border-border bg-surface text-text hover:bg-surface-2',
+        'inline-flex min-h-[48px] min-w-0 flex-1 items-center justify-center gap-2 px-3 text-base font-semibold transition-colors',
+        invalid ? 'text-danger' : open ? 'bg-brand/10 text-brand' : 'text-text active:bg-surface-2',
       )}
     >
-      <Glyph value={icon} color={color} size={26} />
+      {icon === 'calendar' ? (
+        <Icon name="calendar" size={22} className="shrink-0 text-muted" />
+      ) : (
+        <Glyph value={icon} color={color} size={26} />
+      )}
       <span className="truncate">{label}</span>
       <Icon name="chevron" size={14} className={cn('shrink-0 text-muted transition-transform', open ? '-rotate-90' : 'rotate-90')} />
     </button>
@@ -90,7 +91,7 @@ export function ContextRow({ c, wallets }: ContextRowProps) {
 
   return (
     <div ref={boxRef} className="relative flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex divide-x divide-border overflow-hidden rounded-2xl border border-border bg-surface shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_8px_18px_-14px_rgb(var(--brand)/0.5)]">
         <ContextChip
           icon={wallets.find((w) => w.id === form.walletId)?.icon ?? '👛'}
           color={wallets.find((w) => w.id === form.walletId)?.color}
