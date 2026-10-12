@@ -197,43 +197,19 @@ test.describe('27. Покупки', () => {
     }
   });
 
-  test('«Добавить списком»: текст (диктовка) разбирается на позиции, их видно до добавления', async ({ page }, testInfo) => {
+  test('«Добавить списком»: окно открывается, «Разобрать» ждёт текст; без облака ИИ недоступен и это сказано понятно', async ({ page }, testInfo) => {
     await openApp(page, '/shopping');
     await page.getByRole('button', { name: 'Добавить списком' }).first().click();
     const dlg = sheet(page, 'Добавить списком');
     await expect(dlg).toBeVisible();
-    await expect(dlg.getByRole('button', { name: 'Добавить', exact: true })).toBeDisabled();
-    await dlg.getByRole('textbox', { name: 'Что купить' }).fill('молоко два литра, хлеб три штуки, яблоки полтора килограмма и соль');
-    const preview = dlg.getByTestId('parsed-items');
-    await expect(preview).toContainText('Молоко');
-    await expect(preview).toContainText('2 л');
-    await expect(preview).toContainText('× 3');
-    await expect(preview).toContainText('1,5 кг');
-    await expect(dlg.getByRole('button', { name: 'Добавить 4 позиции' })).toBeVisible();
+    const go = dlg.getByRole('button', { name: 'Разобрать', exact: true });
+    await expect(go).toBeDisabled();
+    await dlg.getByRole('textbox', { name: 'Что купить' }).fill('мука масло два литра молока');
+    await expect(go).toBeEnabled();
     if (isPhone(page)) expect(await noHorizontalScroll(page), 'окно списком без горизонтальной прокрутки').toBe(true);
+    await go.click();
+    await expect(dlg.getByRole('alert')).toContainText('после входа в аккаунт');
+    await expect(dlg.getByRole('textbox', { name: 'Что купить' })).toHaveValue('мука масло два литра молока');
     await shot(page, '27-shopping-list-text', testInfo);
-    await dlg.getByRole('button', { name: 'Добавить 4 позиции' }).click();
-    await expect(dlg).toBeHidden();
-    await expect(row(page, 'Молоко')).toContainText('Молоко 2 л');
-    await expect(row(page, 'Хлеб')).toContainText('Хлеб × 3');
-    await expect(row(page, 'Яблоки')).toContainText('Яблоки 1,5 кг');
-    await expect(row(page, 'Соль')).toBeVisible();
-  });
-
-  test('«Добавить списком»: слова без запятых и количества — отдельные товары («мука масло»)', async ({ page }) => {
-    await openApp(page, '/shopping');
-    await page.getByRole('button', { name: 'Добавить списком' }).first().click();
-    const dlg = sheet(page, 'Добавить списком');
-    await dlg.getByRole('textbox', { name: 'Что купить' }).fill('Мука масло сливочное сахар');
-    const preview = dlg.getByTestId('parsed-items');
-    await expect(preview.getByRole('listitem')).toHaveCount(3);
-    await expect(preview).toContainText('Мука');
-    await expect(preview).toContainText('Масло сливочное');
-    await expect(preview).toContainText('Сахар');
-    await dlg.getByRole('button', { name: 'Добавить 3 позиции' }).click();
-    await expect(dlg).toBeHidden();
-    await expect(row(page, 'Мука')).toBeVisible();
-    await expect(row(page, 'Масло сливочное')).toBeVisible();
-    await expect(row(page, 'Сахар')).toBeVisible();
   });
 });
