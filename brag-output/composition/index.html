@@ -28,9 +28,9 @@
       .caption { position: absolute; left: 60px; width: 960px; top: 150px; text-align: center; font-weight: 800; font-size: 76px; letter-spacing: -0.025em; line-height: 1.1; }
       .caption small { display: block; margin-top: 18px; font-size: 38px; font-weight: 600; color: #a2a8cc; letter-spacing: 0; }
 
-      #phone { position: absolute; left: 210px; top: 430px; width: 660px; height: 1428px; border-radius: 64px; padding: 10px; background: #14173a; box-shadow: 0 40px 120px rgba(79,70,229,0.55), 0 0 0 2px rgba(165,180,252,0.35); overflow: hidden; }
+      #phone { position: absolute; left: 210px; top: 430px; transform-origin: 50% 70%; width: 660px; height: 1428px; border-radius: 64px; padding: 10px; background: #14173a; box-shadow: 0 40px 120px rgba(79,70,229,0.55), 0 0 0 2px rgba(165,180,252,0.35); overflow: hidden; }
       #screen { position: relative; width: 640px; height: 1408px; border-radius: 54px; overflow: hidden; background: #eceefb; }
-      #screen img { position: absolute; left: 0; top: 0; width: 640px; height: 1385px; display: block; }
+      #screen video { position: absolute; left: 0; top: 0; width: 640px; height: 1385px; display: block; }
 
       #callout { position: absolute; left: 90px; width: 900px; top: 1180px; padding: 40px 50px; border-radius: 44px; background: rgba(8,10,24,0.92); box-shadow: 0 30px 90px rgba(144,97,249,0.55), 0 0 0 3px #9061f9; text-align: center; }
       #callout .l { font-size: 44px; font-weight: 700; color: #a2a8cc; }
@@ -44,59 +44,47 @@
       #word { position: absolute; left: 0; width: 1080px; top: 860px; text-align: center; font-weight: 800; font-size: 120px; letter-spacing: 0.12em; }
       #offline { position: absolute; left: 70px; width: 940px; top: 1090px; text-align: center; font-weight: 800; font-size: 76px; letter-spacing: -0.02em; line-height: 1.12; }
       #offline small { display: block; margin-top: 22px; font-size: 44px; font-weight: 600; color: #a2a8cc; letter-spacing: 0; }
+          .bigcap { position: absolute; left: 60px; width: 960px; top: 120px; text-align: center; }
+      .bigcap .l { font-size: 56px; font-weight: 700; color: #a2a8cc; }
+      .bigcap .n { font-size: 190px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; margin-top: 4px; background: linear-gradient(90deg, #c7d2fe, #c4a7fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="21" data-width="1080" data-height="1920">
+    <div id="root" data-composition-id="main" data-start="0" data-duration="23" data-width="1080" data-height="1920">
       <div class="bg"></div>
       <div class="orb" id="orb1"></div>
       <div class="orb" id="orb2"></div>
 
-      <!-- Scene 1: hook -->
-      <div class="scene clip" data-start="0" data-duration="3.5">
+      <div class="scene clip" data-start="0" data-duration="3.2">
         <div class="inner" id="s1">
           <div class="big" id="h1">Куда ушла зарплата?</div>
           <div class="big" id="h2">Finora знает.</div>
         </div>
       </div>
 
-      <!-- Captions for the phone scenes -->
-      <div class="scene clip" data-start="3.5" data-duration="3.5">
+      <div class="scene clip" data-start="3" data-duration="2.3">
         <div class="inner" id="cap2"><div class="caption">Личный учёт денег<small>Работает без интернета</small></div></div>
       </div>
-      <div class="scene clip" data-start="7" data-duration="5">
+      <div class="scene clip" data-start="5.3" data-duration="5.7">
         <div class="inner" id="cap3"><div class="caption">Расход — за три касания<small>«+» → «Еда» → «Сохранить»</small></div></div>
       </div>
-      <div class="scene clip" data-start="12" data-duration="4">
-        <div class="inner" id="cap4"><div class="caption" style="font-size:64px">Сколько можно тратить в день</div></div>
+      <div class="scene clip" data-start="11" data-duration="3">
+        <div class="inner" id="cap4"><div class="caption">Операции — по дням<small>Сразу видно, куда уходят деньги</small></div></div>
+      </div>
+      <div class="scene clip" data-start="14" data-duration="2.5">
+        <div class="inner" id="cap5"><div class="bigcap"><div class="l">Осталось на день</div><div class="n">≈ 794,08 с.</div></div></div>
+      </div>
+      <div class="scene clip" data-start="16.5" data-duration="2.8">
+        <div class="inner" id="cap6"><div class="caption">Все кошельки — вместе<small>Остаток считается из операций</small></div></div>
       </div>
 
-      <!-- Phone (scenes 2-4) -->
-      <div class="scene clip" data-start="3.5" data-duration="12.5">
-        <div id="phone">
-          <div id="screen">
-            <img id="im-home" src="assets/shots/home.png" alt="Главная" />
-            <img id="im-add" src="assets/shots/add.png" alt="Новая операция" />
-            <img id="im-ops" src="assets/shots/ops.png" alt="Операции" />
-            <img id="im-bud" src="assets/shots/budgets.png" alt="Бюджеты" />
-          </div>
-        </div>
-      </div>
-      <div class="scene clip" data-start="12.4" data-duration="3.6">
-        <div id="callout"><div class="l">Осталось на день</div><div class="n">≈ 796,76 с.</div></div>
-      </div>
-
-      <!-- Scene 5: chips -->
-      <div class="scene clip" data-start="16" data-duration="2.7">
-        <div class="inner" id="s5">
-          <div class="chip" id="c1"><span>◆</span> Кошельки в разных валютах</div>
-          <div class="chip" id="c2"><span>◆</span> Бюджеты, долги, платежи</div>
-          <div class="chip" id="c3"><span>◆</span> Импорт из Zenmoney</div>
+      <div id="phone">
+        <div id="screen">
+          <video id="flow" src="assets/flow.mp4" width="640" height="1385" style="width:640px;height:1385px;object-fit:cover" muted playsinline data-start="3" data-duration="16.5"></video>
         </div>
       </div>
 
-      <!-- Scene 6: outro -->
-      <div class="scene clip" data-start="18.7" data-duration="2.3">
+      <div class="scene clip" data-start="19.5" data-duration="3.5">
         <div class="inner" id="s6">
           <img id="logo" src="assets/icon.svg" alt="Finora" />
           <div id="word">FINORA</div>
@@ -104,63 +92,46 @@
         </div>
       </div>
 
-      <audio id="bed" src="assets/music/bed.mp3" data-start="0" data-duration="21" data-volume="0.4" data-fade-in="1" data-fade-out="2.2" data-track-index="10"></audio>
-      <audio id="sfx1" src="assets/sfx/select.ogg" data-start="1.9" data-duration="1" data-volume="0.7" data-track-index="11"></audio>
-      <audio id="sfx2" src="assets/sfx/drop.ogg" data-start="3.55" data-duration="1" data-volume="0.7" data-track-index="12"></audio>
-      <audio id="sfx3" src="assets/sfx/drop.ogg" data-start="7.5" data-duration="1" data-volume="0.7" data-track-index="13"></audio>
-      <audio id="sfx4" src="assets/sfx/tick.ogg" data-start="9.5" data-duration="1" data-volume="0.8" data-track-index="14"></audio>
-      <audio id="sfx5" src="assets/sfx/select.ogg" data-start="12.45" data-duration="1" data-volume="0.7" data-track-index="15"></audio>
-      <audio id="sfx6" src="assets/sfx/tick.ogg" data-start="16.1" data-duration="1" data-volume="0.7" data-track-index="16"></audio>
-      <audio id="sfx7" src="assets/sfx/tick.ogg" data-start="16.7" data-duration="1" data-volume="0.7" data-track-index="17"></audio>
-      <audio id="sfx8" src="assets/sfx/tick.ogg" data-start="17.3" data-duration="1" data-volume="0.7" data-track-index="18"></audio>
-      <audio id="sfx9" src="assets/sfx/bong.ogg" data-start="19.0" data-duration="2" data-volume="0.55" data-track-index="19"></audio>
+      <audio id="bed" src="assets/music/bed.mp3" data-start="0" data-duration="23" data-volume="0.4" data-fade-in="1" data-fade-out="2.6" data-track-index="10"></audio>
+      <audio id="a1" src="assets/sfx/select.ogg" data-start="1.9" data-duration="1" data-volume="0.7" data-track-index="11"></audio>
+      <audio id="a2" src="assets/sfx/drop.ogg" data-start="3.05" data-duration="1" data-volume="0.7" data-track-index="12"></audio>
+      <audio id="a3" src="assets/sfx/drop.ogg" data-start="5.3" data-duration="1" data-volume="0.7" data-track-index="13"></audio>
+      <audio id="k1" src="assets/sfx/tick.ogg" data-start="6.2" data-duration="1" data-volume="0.9" data-track-index="14"></audio>
+      <audio id="k2" src="assets/sfx/tick.ogg" data-start="6.8" data-duration="1" data-volume="0.9" data-track-index="15"></audio>
+      <audio id="k3" src="assets/sfx/tick.ogg" data-start="7.3" data-duration="1" data-volume="0.9" data-track-index="16"></audio>
+      <audio id="k4" src="assets/sfx/tick.ogg" data-start="7.8" data-duration="1" data-volume="0.9" data-track-index="17"></audio>
+      <audio id="k5" src="assets/sfx/select.ogg" data-start="8.5" data-duration="1" data-volume="0.7" data-track-index="18"></audio>
+      <audio id="k6" src="assets/sfx/drop.ogg" data-start="9.3" data-duration="1" data-volume="0.7" data-track-index="19"></audio>
+      <audio id="a4" src="assets/sfx/select.ogg" data-start="14.05" data-duration="1" data-volume="0.7" data-track-index="20"></audio>
+      <audio id="a5" src="assets/sfx/bong.ogg" data-start="20.1" data-duration="1" data-volume="0.55" data-track-index="21"></audio>
     </div>
 
     <script>
       const tl = gsap.timeline({ paused: true });
       const E = 'expo.out';
+      tl.fromTo('#orb1', { x: 0, y: 0 }, { x: 140, y: -120, duration: 23, ease: 'none' }, 0);
+      tl.fromTo('#orb2', { x: 0, y: 0 }, { x: -120, y: 140, duration: 23, ease: 'none' }, 0);
 
-      // ambient drift
-      tl.fromTo('#orb1', { x: 0, y: 0 }, { x: 140, y: -120, duration: 21, ease: 'none' }, 0);
-      tl.fromTo('#orb2', { x: 0, y: 0 }, { x: -120, y: 140, duration: 21, ease: 'none' }, 0);
-
-      // Scene 1 — hook
       tl.fromTo('#h1', { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 0.15);
       tl.fromTo('#h2', { opacity: 0, y: 70, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: E }, 1.9);
-      tl.to('#s1', { opacity: 0, duration: 0.3, ease: 'power2.in' }, 3.2);
+      tl.to('#s1', { opacity: 0, duration: 0.3, ease: 'power2.in' }, 2.9);
 
-      // Phone scenes
-      tl.fromTo('#phone', { y: 1500 }, { y: 0, duration: 0.9, ease: E }, 3.5);
-      tl.fromTo('#cap2 .caption', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 3.6);
-      tl.to('#cap2', { opacity: 0, duration: 0.3 }, 6.7);
+      tl.set('#phone', { y: 1600 }, 0);
+      tl.to('#phone', { y: 0, duration: 0.9, ease: E }, 3.0);
+      // лёгкий наезд на клавиатуру, пока набирается сумма
+      tl.to('#phone', { scale: 1.07, duration: 0.8, ease: 'power2.inOut' }, 5.4);
+      tl.to('#phone', { scale: 1, duration: 0.8, ease: 'power2.inOut' }, 10.3);
+      tl.to('#phone', { y: 1600, duration: 0.5, ease: 'power3.in' }, 19.1);
 
-      // add sheet slides up over home (screens stacked, later ones start hidden)
-      tl.set('#im-add', { y: 1408 }, 0);
-      tl.set('#im-ops', { opacity: 0 }, 0);
-      tl.set('#im-bud', { opacity: 0 }, 0);
-      tl.fromTo('#cap3 .caption', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 7.1);
-      tl.to('#im-add', { y: 0, duration: 0.7, ease: E }, 7.5);
-      tl.to('#cap3', { opacity: 0, duration: 0.3 }, 11.7);
-      tl.to('#im-ops', { opacity: 1, duration: 0.4, ease: 'power2.out' }, 9.9);
-      tl.to('#im-add', { opacity: 0, duration: 0.01 }, 10.3);
-      // budgets
-      tl.to('#im-bud', { opacity: 1, duration: 0.4, ease: 'power2.out' }, 12.0);
-      tl.fromTo('#cap4 .caption', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 12.1);
-      tl.fromTo('#callout', { opacity: 0, y: 80, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: E }, 12.45);
-      tl.to('#cap4', { opacity: 0, duration: 0.3 }, 15.7);
-      tl.to('#callout', { opacity: 0, duration: 0.3 }, 15.7);
-      tl.to('#phone', { y: 1500, duration: 0.45, ease: 'power3.in' }, 15.55);
-
-      // Scene 5 — chips
-      ['#c1', '#c2', '#c3'].forEach((id, i) => {
-        tl.fromTo(id, { opacity: 0, x: 120 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 16.1 + i * 0.6);
+      const caps = [['#cap2', 3.1, 5.0], ['#cap3', 5.4, 10.7], ['#cap4', 11.1, 13.7], ['#cap5', 14.1, 16.2], ['#cap6', 16.6, 19.0]];
+      caps.forEach(([id, a, b]) => {
+        tl.fromTo(id + ' > *', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: E }, a);
+        tl.to(id, { opacity: 0, duration: 0.25 }, b);
       });
-      tl.to('#s5', { opacity: 0, duration: 0.3, ease: 'power2.in' }, 18.4);
 
-      // Scene 6 — outro
-      tl.fromTo('#logo', { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.7, ease: 'back.out(1.6)' }, 18.9);
-      tl.fromTo('#word', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 19.1);
-      tl.fromTo('#offline', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 19.4);
+      tl.fromTo('#logo', { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.7, ease: 'back.out(1.6)' }, 20.0);
+      tl.fromTo('#word', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 20.2);
+      tl.fromTo('#offline', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 20.5);
 
       window.__timelines = window.__timelines || {};
       window.__timelines['main'] = tl;
