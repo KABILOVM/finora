@@ -86,11 +86,11 @@ describe('атака: приложение простояло через пол�
     await showApp(<BudgetsPage />, td, '/budgets');
     await findByRole('heading', { name: 'Бюджеты', level: 1 });
     await waitFor(() => expect(card()).not.toBeNull());
-    expect(text(card())).toContain('Считаем до 31 октября: 1 день включая сегодня');
+    expect(text(card())).toContain('До 31 октября · 1 день');
 
     await wakeUpAt(new Date(2026, 10, 1, 7, 30, 0)); // 1 ноября, 07:30
 
-    await eventually(() => expect(text(card())).toContain('Считаем до 30 ноября: 30 дней включая сегодня'), 3000);
+    await eventually(() => expect(text(card())).toContain('До 30 ноября · 30 дней'), 3000);
   });
 
   it('экран «Бюджеты»: «текущий» месяц переезжает на новый сам, а вручную выбранный прошлый остаётся на месте', async () => {
@@ -165,7 +165,7 @@ describe('атака: деньги уходят из тех, что «на ру�
       // проценты по вкладу: 20-го +50 с. в копилку; на руках они не окажутся
       await s.recurring.create({ kind: 'income', walletId: box.id, amountMinor: 5_000, frequency: 'monthly', startOn: '2026-10-20' });
     });
-    expect(text(card())).toContain('Считаем до 31 октября: 17 дней включая сегодня');
+    expect(text(card())).toContain('До 31 октября · 17 дней');
     expect(text(card())).not.toContain('ждём доход');
     expect(perDay()).toBe(fmt(14_705)); // а не 250 000 ÷ 5 = 500 с. в день
   });

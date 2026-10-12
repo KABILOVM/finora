@@ -113,7 +113,7 @@ describe('экран «Бюджеты»: прогноз', () => {
     await openPage(baseSetup);
     expect(perDay()).toBe(fmt(14_705)); // 250 000 ÷ 17 = 14 705,88
     const c = text(card());
-    expect(c).toContain('Считаем до 31 октября: 17 дней включая сегодня');
+    expect(c).toContain('До 31 октября · 17 дней');
     expect(detail('Деньги на руках')).toBe(fmt(250_000));
     expect(detail('Платежи и долги до 31 октября')).toBe(fmt(0));
     expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(14_705)}`);
@@ -158,7 +158,7 @@ describe('экран «Бюджеты»: прогноз', () => {
       await s.recurring.create({ kind: 'income', walletId: i.cash, amountMinor: 100_000, categoryId: salary?.id ?? null, frequency: 'monthly', startOn: '2026-10-20' });
     });
     const c = text(card());
-    expect(c).toContain('Считаем до 19 октября: 5 дней включая сегодня');
+    expect(c).toContain('До 19 октября · 5 дней');
     expect(c).toContain('20 октября ждём доход');
     expect(perDay()).toBe(fmt(50_000)); // 250 000 ÷ 5
   });
@@ -199,7 +199,7 @@ describe('экран «Бюджеты»: прогноз', () => {
       const i = await baseSetup(s);
       await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 120_000, categoryId: i.cats['Покупки'] ?? null, occurredOn: '2026-10-15' });
     });
-    expect(text(card())).toContain('Сегодня потрачено больше, чем можно на день');
+    expect(text(card())).toContain('Сегодня потрачено больше нормы');
   });
 
   it('по общему бюджету — вторая цифра «в день»', async () => {

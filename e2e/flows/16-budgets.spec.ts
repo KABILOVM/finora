@@ -44,7 +44,7 @@ test.describe('16. Бюджеты и «сколько можно тратить 
     await expect(perDay(page)).not.toContainText('≈');
     const card = page.getByTestId('forecast-card');
     await expect(card).toContainText('Осталось на день');
-    await expect(card).toContainText('Считаем до 31 октября: 17 дней включая сегодня');
+    await expect(card).toContainText('До 31 октября · 17 дней');
     await expect(card).toContainText('Деньги на руках');
 
     // «Как это считается» раскрывается простыми словами
