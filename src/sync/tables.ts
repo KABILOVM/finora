@@ -1,4 +1,4 @@
-import type { Budget, Category, Debt, Entity, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, Entity, RecurringRule, Settings, ShoppingList, Transaction, Wallet } from '@/domain/types';
 
 /**
  * ДОГОВОР между клиентом и базой: какие таблицы синхронизируются и как поля сущностей
@@ -15,6 +15,7 @@ export const SYNC_TABLES = [
   'budgets',
   'recurring_rules',
   'transactions',
+  'shopping_lists',
 ] as const;
 export type SyncTableName = (typeof SYNC_TABLES)[number];
 
@@ -137,6 +138,21 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
     ],
   },
+  shopping_lists: {
+    remote: 'shopping_lists',
+    columns: [
+      ...COMMON,
+      { field: 'name', column: 'name', type: 'text' },
+      { field: 'itemsJson', column: 'items_json', type: 'text' },
+      { field: 'status', column: 'status', type: 'text' },
+      { field: 'currency', column: 'currency', type: 'text' },
+      { field: 'categoryId', column: 'category_id', type: 'uuid', nullable: true },
+      { field: 'transactionId', column: 'transaction_id', type: 'uuid', nullable: true },
+      { field: 'totalMinor', column: 'total_minor', type: 'int', nullable: true },
+      { field: 'doneOn', column: 'done_on', type: 'date', nullable: true },
+      { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
+    ],
+  },
   recurring_rules: {
     remote: 'recurring_rules',
     columns: [
@@ -171,7 +187,9 @@ export type EntityOf<T extends SyncTableName> = T extends 'settings'
           ? Budget
           : T extends 'recurring_rules'
             ? RecurringRule
-            : Transaction;
+            : T extends 'shopping_lists'
+              ? ShoppingList
+              : Transaction;
 
 export class WireError extends Error {
   constructor(message: string) {

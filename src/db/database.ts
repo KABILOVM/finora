@@ -1,5 +1,5 @@
 import Dexie, { type DexieOptions, type EntityTable, type Table } from 'dexie';
-import type { Budget, Category, Debt, LocalRow, RecurringRule, Settings, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, LocalRow, RecurringRule, Settings, ShoppingList, Transaction, Wallet } from '@/domain/types';
 import { SYNC_TABLES, type EntityOf, type SyncTableName } from '@/sync/tables';
 
 /** Служебное значение в таблице meta: курсоры синхронизации, lastSyncedAt, последняя метка часов. */
@@ -32,7 +32,8 @@ export function dbNameFor(userId: string): string {
  * Версии схемы (имя базы не меняется — данные остаются на месте):
  *  - 1: настройки, кошельки, категории, операции;
  *  - 2: + budgets, debts, recurring_rules, индексы debtId и recurringRuleId у операций. Старым операциям в upgrade()
- *    проставляется debtId = null и recurringRuleId = null (новые поля договора обязательны, а не «может не быть»).
+ *    проставляется debtId = null и recurringRuleId = null (новые поля договора обязательны, а не «может не быть»);
+ *  - 3: + shopping_lists (списки покупок).
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -42,6 +43,7 @@ export class FinoraDB extends Dexie {
   declare debts: EntityTable<LocalRow<Debt>, 'id'>;
   declare budgets: EntityTable<LocalRow<Budget>, 'id'>;
   declare recurring_rules: EntityTable<LocalRow<RecurringRule>, 'id'>;
+  declare shopping_lists: EntityTable<LocalRow<ShoppingList>, 'id'>;
   declare meta: EntityTable<MetaRow, 'key'>;
 
   constructor(userId: string, options?: DexieOptions) {
@@ -71,6 +73,10 @@ export class FinoraDB extends Dexie {
             if (t['recurringRuleId'] === undefined) t['recurringRuleId'] = null;
           }),
       );
+    // v3: списки покупок (новая таблица, существующие данные не меняются)
+    this.version(3).stores({
+      shopping_lists: 'id, dirty, status, archivedAt, [dirty+clientUpdatedAt]',
+    });
   }
 
   /** Таблица синхронизируемой сущности по имени. */

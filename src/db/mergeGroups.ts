@@ -59,6 +59,14 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     archived: ['archivedAt'],
     deleted: ['deletedAt'],
   },
+  shopping_lists: {
+    /** Название, товары, категория и валюта цен — одной группой: товары и цены правятся списком целиком. */
+    content: ['name', 'itemsJson', 'categoryId', 'currency'],
+    /** Подтверждение покупки: итог, дата, созданный расход и статус едут вместе. */
+    done: ['status', 'totalMinor', 'doneOn', 'transactionId'],
+    archived: ['archivedAt'],
+    deleted: ['deletedAt'],
+  },
   debts: {
     party: ['direction', 'counterparty'],
     amount: ['principalMinor', 'currency'],

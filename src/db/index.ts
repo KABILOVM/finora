@@ -16,9 +16,11 @@ export type { TransactionsRepo, TransactionInput, TransactionPatch, TransactionC
 export type { BudgetsRepo, BudgetInput } from './budgetsRepo';
 export type { DebtsRepo, DebtInput, DebtPatch, DebtDeleteMode, DebtDeletion } from './debtsRepo';
 export type { RecurringRepo, RecurringInput, RecurringPatch } from './recurringRepo';
+export type { ShoppingListsRepo, ShoppingListInput, ShoppingListPatch, ShoppingConfirm } from './shoppingRepo';
 export type { SettingsRepo, SettingsPatch } from './settingsRepo';
 export type { FromRuleOptions } from './transactionsRepo';
 export * from './validatePlans';
+export * from './validateShopping';
 
 export {
   filterTransactions,
@@ -39,6 +41,8 @@ export {
   useSettings,
   useMonthSummary,
   useBudgets,
+  useShoppingLists,
+  useShoppingList,
   useDebts,
   useRecurringRules,
   useDebtState,
