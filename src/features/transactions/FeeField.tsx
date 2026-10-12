@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { AmountInput } from '@/components/AmountInput';
+import { AmountInput, isCoarsePointer } from '@/components/AmountInput';
+import type { KeypadKey } from '@/components/Keypad';
 import { Icon } from '@/components/Icon';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import { formatMinor } from '@/domain/money';
@@ -13,14 +14,31 @@ const MODES: readonly SegmentOption<FeeMode>[] = [
 ];
 
 /** Поле суммы комиссии: тот же AmountInput (те же правила денег), только без крупной подписи и клавиш. */
-const AMOUNT_BOX = '!gap-0 [&_.items-baseline]:!justify-start [&_.items-baseline]:!py-0 [&_.money]:!text-lg [&_span[aria-hidden]:last-child]:!text-base';
+const AMOUNT_BOX =
+  '!gap-0 [&_.items-baseline]:!justify-start [&_.items-baseline]:!py-0 [&_.money]:!text-lg [&_span[aria-hidden]:last-child]:!text-base';
 
 /**
  * Комиссия одной узкой строкой (≤ 48 px): [Сумма | %] [поле] [мелкая подсказка] [×].
  * Процент пересчитывается сам, пока человек меняет сумму операции.
  * Расход: комиссия добавляется к списанию. Перевод между своими кошельками: вычитается из зачисления.
  */
-export function FeeField({ c }: { c: TxFormController }) {
+/** Клавиша экранной клавиатуры в поле процента: цифры, одна запятая, не длиннее 8 знаков, «стереть». */
+export function applyPctKey(text: string, key: KeypadKey): string {
+  if (key === 'backspace') return text.slice(0, -1);
+  if (key === ',') return text.includes(',') || text.includes('.') ? text : `${text === '' ? '0' : text},`;
+  if (/^\d$/.test(key) && text.length < 8) return text + key;
+  return text;
+}
+
+export function FeeField({
+  c,
+  pctActive = false,
+  onPctActivate,
+}: {
+  c: TxFormController;
+  pctActive?: boolean;
+  onPctActivate?: () => void;
+}) {
   const { form, errors, fee } = c;
   const isTransfer = form.kind === 'transfer';
   const percent = form.feeMode === 'percent';
@@ -51,11 +69,16 @@ export function FeeField({ c }: { c: TxFormController }) {
           className="w-[120px] shrink-0"
         />
         {percent ? (
-          <div className="flex h-11 w-[68px] shrink-0 items-center rounded-xl border border-border bg-surface pl-2 pr-1.5 focus-within:border-brand">
+          <div
+            className={`flex h-11 w-[68px] shrink-0 items-center rounded-xl border bg-surface pl-2 pr-1.5 focus-within:border-brand ${pctActive ? 'border-brand ring-2 ring-brand/15' : 'border-border'}`}
+            onClick={onPctActivate}
+          >
             <input
               ref={pctRef}
               aria-label="Комиссия в процентах"
-              inputMode="decimal"
+              // На телефоне вводим экранной клавиатурой: системная закрывала бы её и окно.
+              inputMode={isCoarsePointer() ? 'none' : 'decimal'}
+              onFocus={onPctActivate}
               autoComplete="off"
               placeholder="1,5"
               value={form.feePct}
@@ -74,6 +97,7 @@ export function FeeField({ c }: { c: TxFormController }) {
               onChange={(feeAmount) => c.set({ feeAmount })}
               label="Комиссия"
               showKeypad={false}
+              bare
               className={`w-full ${AMOUNT_BOX}`}
             />
           </div>
@@ -86,13 +110,17 @@ export function FeeField({ c }: { c: TxFormController }) {
           {percent && feeText && <span className="sr-only">Комиссия: {feeText}</span>}
           {totalText && (
             <>
-              <span aria-hidden="true" className="font-semibold text-text">{totalText.replace('Итого спишется:', 'Итого')}</span>
+              <span aria-hidden="true" className="font-semibold text-text">
+                {totalText.replace('Итого спишется:', 'Итого')}
+              </span>
               <span className="sr-only">{totalText}</span>
             </>
           )}
           {receivedText && (
             <>
-              <span aria-hidden="true" className="font-semibold text-text">{receivedText.replace('Получит:', 'Получит')}</span>
+              <span aria-hidden="true" className="font-semibold text-text">
+                {receivedText.replace('Получит:', 'Получит')}
+              </span>
               <span className="sr-only">{receivedText}</span>
             </>
           )}

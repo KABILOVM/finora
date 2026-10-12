@@ -1,16 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { currencyInfo, exponentOf } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { cn } from '@/lib/cn';
-import {
-  applyKey,
-  clampToCurrency,
-  draftToMinor,
-  formatDraft,
-  minorToDraft,
-  sanitizeAmountText,
-} from './amountText';
+import { applyKey, clampToCurrency, draftToMinor, formatDraft, minorToDraft, sanitizeAmountText } from './amountText';
 import { acceptExpr, applyExprKey, evalExpr, formatExpr, hasOperator, isOpKey, normalizeExprText } from './amountExpr';
 import { Keypad, type KeypadKey } from './Keypad';
 
@@ -37,11 +30,22 @@ export interface AmountInputProps {
   calculator?: boolean;
   autoFocus?: boolean;
   className?: string;
+  /** Кнопки по краям поля суммы (комиссия слева, заметка справа): внутри рамки, сумма остаётся по центру. */
+  start?: ReactNode;
+  end?: ReactNode;
+  /** Без рамки поля (узкие места вроде строки комиссии рисуют свою). */
+  bare?: boolean;
+  /** Рамка «в работе»: true — выделена, false — приглушена; без значения — по фокусу. Нужна, когда клавиатура печатает в соседнее поле. */
+  active?: boolean;
+  /** Нажали на поле суммы. */
+  onActivate?: () => void;
+  /** Перехват клавиш экранной клавиатуры: true — клавишу забрал кто-то другой (например, поле процента). */
+  onKeyIntercept?: (key: KeypadKey) => boolean;
 }
 
 const TONE = { neutral: 'text-text', income: 'text-income', expense: 'text-expense' } as const;
 
-function isCoarsePointer(): boolean {
+export function isCoarsePointer(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 }
 
@@ -61,6 +65,12 @@ export function AmountInput({
   calculator = false,
   autoFocus = false,
   className,
+  start,
+  end,
+  bare = false,
+  active,
+  onActivate,
+  onKeyIntercept,
 }: AmountInputProps) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +157,7 @@ export function AmountInput({
   };
 
   const onKey = (key: KeypadKey) => {
+    if (onKeyIntercept?.(key)) return;
     if (key === '=') return equals();
     if (isOpKey(key)) {
       const base = expr ?? text;
@@ -186,7 +197,20 @@ export function AmountInput({
 
   const message = error || notice || (calc?.kind === 'error' ? calc.message : null);
   // Чем длиннее число, тем мельче шрифт: самая длинная сумма («9 999 999 999 999,99») помещается на iPhone SE.
-  const size = expr !== null ? (shown.length <= 10 ? 'text-3xl' : shown.length <= 16 ? 'text-2xl' : 'text-xl') : shown.length <= 8 ? 'text-5xl' : shown.length <= 11 ? 'text-4xl' : shown.length <= 15 ? 'text-3xl' : 'text-2xl';
+  const size =
+    expr !== null
+      ? shown.length <= 10
+        ? 'text-3xl'
+        : shown.length <= 16
+          ? 'text-2xl'
+          : 'text-xl'
+      : shown.length <= 8
+        ? 'text-5xl'
+        : shown.length <= 11
+          ? 'text-4xl'
+          : shown.length <= 15
+            ? 'text-3xl'
+            : 'text-2xl';
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
@@ -194,48 +218,69 @@ export function AmountInput({
         <label htmlFor={id} className="sr-only">
           {label}, {info.name}
         </label>
-        <div
-          className={cn('flex items-baseline justify-center gap-2 py-2', TONE[tone])}
-          onClick={() => inputRef.current?.focus()}
-        >
-          {/* Невидимая копия текста задаёт ширину поля: символ валюты стоит вплотную к цифрам. */}
-          <span className="inline-grid">
-            <span
-              aria-hidden="true"
-              className={cn('money invisible col-start-1 row-start-1 whitespace-pre px-0.5 font-bold', size)}
-            >
-              {shown || '0'}
-            </span>
-            <input
-              ref={inputRef}
-              id={id}
-              type="text"
-              inputMode={showKeypad && coarse ? 'none' : exp > 0 ? 'decimal' : 'numeric'}
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              enterKeyHint="done"
-              placeholder="0"
-              value={shown}
-              onChange={(e) => onType(e.target.value)}
-              onKeyDown={(e) => {
-                if (calculator && expr !== null && (e.key === '=' || e.key === 'Enter') && calc?.kind === 'ok') {
-                  e.preventDefault();
-                  equals();
-                }
-              }}
-              aria-invalid={message ? true : undefined}
-              aria-describedby={message ? `${id}-error` : undefined}
+        {(() => {
+          const amountRow = (
+            <div className={cn('flex items-baseline justify-center gap-2 py-2', TONE[tone])} onClick={() => inputRef.current?.focus()}>
+              {/* Невидимая копия текста задаёт ширину поля: символ валюты стоит вплотную к цифрам. */}
+              <span className="inline-grid">
+                <span aria-hidden="true" className={cn('money invisible col-start-1 row-start-1 whitespace-pre px-0.5 font-bold', size)}>
+                  {shown || '0'}
+                </span>
+                <input
+                  ref={inputRef}
+                  id={id}
+                  type="text"
+                  inputMode={showKeypad && coarse ? 'none' : exp > 0 ? 'decimal' : 'numeric'}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
+                  placeholder="0"
+                  value={shown}
+                  onChange={(e) => onType(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (calculator && expr !== null && (e.key === '=' || e.key === 'Enter') && calc?.kind === 'ok') {
+                      e.preventDefault();
+                      equals();
+                    }
+                  }}
+                  aria-invalid={message ? true : undefined}
+                  aria-describedby={message ? `${id}-error` : undefined}
+                  className={cn(
+                    'money col-start-1 row-start-1 w-0 min-w-full bg-transparent px-0.5 text-center font-bold caret-brand outline-none placeholder:text-muted/60',
+                    size,
+                  )}
+                />
+              </span>
+              <span className={cn('font-semibold opacity-70', size === 'text-5xl' ? 'text-2xl' : 'text-xl')} aria-hidden="true">
+                {info.symbol}
+              </span>
+            </div>
+          );
+          if (bare) return amountRow;
+          // Поле суммы: рамка с мягкой тенью; кнопки по краям занимают места поровну, чтобы цифры стояли по центру.
+          const side = start || end ? 'w-10 shrink-0' : null;
+          return (
+            <div
+              data-amount-card=""
+              onFocusCapture={onActivate}
+              onClick={onActivate}
               className={cn(
-                'money col-start-1 row-start-1 w-0 min-w-full bg-transparent px-0.5 text-center font-bold caret-brand outline-none placeholder:text-muted/60',
-                size,
+                'flex items-center gap-1 rounded-2xl border bg-surface px-2 shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_8px_18px_-14px_rgb(var(--brand)/0.5)] transition-colors',
+                active === undefined
+                  ? 'border-border/70 focus-within:border-brand/60 focus-within:ring-2 focus-within:ring-brand/15'
+                  : active
+                    ? 'border-brand/60 ring-2 ring-brand/15'
+                    : 'border-border/70',
+                message && 'border-danger/60',
               )}
-            />
-          </span>
-          <span className={cn('font-semibold opacity-70', size === 'text-5xl' ? 'text-2xl' : 'text-xl')} aria-hidden="true">
-            {info.symbol}
-          </span>
-        </div>
+            >
+              {side && <div className={cn(side, 'flex justify-start')}>{start}</div>}
+              <div className="min-w-0 flex-1">{amountRow}</div>
+              {side && <div className={cn(side, 'flex justify-end')}>{end}</div>}
+            </div>
+          );
+        })()}
         {calc?.kind === 'ok' && (
           <button
             type="button"

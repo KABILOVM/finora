@@ -47,6 +47,21 @@ describe('Keypad', () => {
     expect(key('5').className).toContain('min-h-[56px]');
   });
 
+  it('калькулятор: узкая строка ÷ × − + = над цифрами, «стереть» рядом с нулём, значки нарисованы (не буквами шрифта)', () => {
+    render(<Keypad ops canEqual onKey={() => {}} />);
+    const buttons = screen.getAllByRole('button');
+    const names = buttons.map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(names.slice(0, 5)).toEqual(['Разделить', 'Умножить', 'Минус', 'Плюс', 'Равно']);
+    expect(names.slice(5)).toEqual(['7', '8', '9', '4', '5', '6', '1', '2', '3', 'Запятая', '0', 'Стереть']);
+    for (const n of ['Разделить', 'Умножить', 'Минус', 'Плюс', 'Равно']) {
+      const b = key(n);
+      expect(b.textContent, `${n}: значок, а не символ шрифта`).toBe('');
+      expect(b.querySelector('svg')).not.toBeNull();
+      expect(b.className).toContain('h-10');
+    }
+    expect(key('5').className).toContain('min-h-[56px]');
+  });
+
   it('сообщает о нажатиях', async () => {
     const onKey = vi.fn();
     render(<Keypad onKey={onKey} />);
@@ -175,13 +190,23 @@ describe('AmountInput: системная клавиатура (ПК)', () => {
   });
 
   it('на телефоне (грубый указатель) системная клавиатура не выскакивает: inputmode=none', () => {
-    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('coarse'), media: q, addEventListener() {}, removeEventListener() {} }));
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('coarse'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     render(<AmountInput currency="TJS" value={null} onChange={() => {}} />);
     expect(input()).toHaveAttribute('inputmode', 'none');
   });
 
   it('без экранной клавиатуры на телефоне остаётся inputmode=decimal', () => {
-    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('coarse'), media: q, addEventListener() {}, removeEventListener() {} }));
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('coarse'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     render(<AmountInput currency="TJS" value={null} onChange={() => {}} showKeypad={false} />);
     expect(input()).toHaveAttribute('inputmode', 'decimal');
     expect(screen.queryByRole('group', { name: 'Цифровая клавиатура' })).toBeNull();
