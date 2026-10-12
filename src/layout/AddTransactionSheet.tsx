@@ -8,6 +8,7 @@ import { useRates } from '@/rates/hooks';
 import { todayLocal } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
+import type { DictCategory } from '@/domain/expensesAi';
 import { DateChip } from '@/features/transactions/DateChip';
 import { useToast } from '@/components/Toast';
 import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
@@ -119,7 +120,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const { getRate } = useRates();
   const [dictating, setDictating] = useState(false);
   // Номера операций и новые категории из диктовки живут, пока открыт шит: повтор после сбоя не создаёт дублей.
-  const dictation = useRef({ txIds: new Map<number, string>(), categories: [] as { id: string; name: string }[] });
+  const dictation = useRef({ txIds: new Map<number, string>(), categories: [] as DictCategory[] });
   const expenseCategories = useMemo(
     () => categories.filter((x) => x.kind === 'expense').map((x) => ({ id: x.id, name: x.name })),
     [categories],

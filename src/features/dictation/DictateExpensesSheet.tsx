@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/Button';
 import { TextArea } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
-import { MAX_EXPENSES_TEXT, type DictContext, type DraftExpense } from '@/domain/expensesAi';
+import { MAX_EXPENSES_TEXT, type DictCategory, type DictContext, type DraftExpense } from '@/domain/expensesAi';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 import { RecordPanel } from '@/features/shopping/RecordPanel';
@@ -13,7 +13,7 @@ import type { SaveResult } from './saveExpenses';
 
 export interface DictateExpensesSheetProps {
   wallets: readonly LocalRow<Wallet>[];
-  categories: readonly { id: string; name: string }[];
+  categories: readonly DictCategory[];
   defaultWalletId: string;
   today: string;
   /** Разобрать набранный текст (облачная функция с ИИ). Бросает Error с понятным текстом. */
