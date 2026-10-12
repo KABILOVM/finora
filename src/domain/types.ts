@@ -128,6 +128,44 @@ export interface Budget extends SyncFields {
   archivedAt: IsoDateTime | null;
 }
 
+/** Единица товара в списке покупок. */
+export type ShoppingUnit = 'шт' | 'кг' | 'г' | 'л' | 'мл';
+export type ShoppingStatus = 'open' | 'done';
+
+/**
+ * Товар списка покупок (лежит ВНУТРИ ShoppingList.itemsJson, отдельной таблицы нет). priceMinor — цена всей строки
+ * (с учётом количества) в валюте списка; null — цену ещё не вписали.
+ */
+export interface ShoppingItem {
+  id: string;
+  title: string;
+  /** Количество: больше нуля, до трёх знаков после точки (1,5 кг). */
+  qty: number;
+  unit: ShoppingUnit;
+  priceMinor: Minor | null;
+  /** Отмечен «куплено». */
+  checked: boolean;
+}
+
+/**
+ * Список покупок. Товары хранятся одной JSON-строкой (itemsJson): так список — одна запись и одна строка в облаке,
+ * а правка двух устройств объединяется целым списком (см. mergeGroups.ts). После подтверждения (status 'done') список —
+ * «чек»: transactionId указывает на созданный расход, totalMinor — итог, doneOn — дата покупки.
+ * categoryId и transactionId без внешнего ключа в облаке: записи мягко удаляются, а порядок отправки не должен от них зависеть.
+ */
+export interface ShoppingList extends SyncFields {
+  name: string;
+  itemsJson: string;
+  status: ShoppingStatus;
+  /** Валюта цен списка = основная валюта на момент создания. */
+  currency: CurrencyCode;
+  categoryId: UUID | null;
+  transactionId: UUID | null;
+  totalMinor: Minor | null;
+  doneOn: IsoDate | null;
+  archivedAt: IsoDateTime | null;
+}
+
 export type DebtDirection = 'lent' | 'borrowed';
 
 /**
@@ -180,7 +218,7 @@ export interface Settings extends SyncFields {
 
 export type LocalRow<T> = T & LocalFields;
 
-export type Entity = Wallet | Category | Transaction | Settings | Budget | Debt | RecurringRule;
+export type Entity = Wallet | Category | Transaction | Settings | Budget | Debt | RecurringRule | ShoppingList;
 
 /**
  * Таблица курсов относительно «опорной» валюты (pivot): 1 единица X стоит perUnit[X] единиц pivot.

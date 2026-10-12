@@ -185,6 +185,15 @@ export const WRITE_PROBES: readonly WriteProbe[] = [
     rule: 'budgets_amount',
     build: (id, stamp) => ({ ...common(id, stamp), category_id: null, amount_minor: 0, currency: 'TJS', period: 'month', archived_at: null }),
   },
+  // пустое название списка покупок (допустимо от 1 до 80 символов)
+  {
+    table: 'shopping_lists',
+    rule: 'shopping_lists_name_len',
+    build: (id, stamp) => ({
+      ...common(id, stamp), name: '', items_json: '[]', status: 'open', currency: 'TJS', category_id: null, transaction_id: null,
+      total_minor: null, done_on: null, archived_at: null,
+    }),
+  },
   // сумма 0; кошелёк выдуман, но до ключей дело не доходит: правило суммы срабатывает раньше
   {
     table: 'recurring_rules',

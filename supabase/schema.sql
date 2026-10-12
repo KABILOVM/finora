@@ -855,3 +855,65 @@ create policy reminder_settings_insert_own on public.reminder_settings for inser
 drop policy if exists reminder_settings_update_own on public.reminder_settings;
 create policy reminder_settings_update_own on public.reminder_settings for update to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+
+-- 10. Списки покупок ----------------------------------------------------------------------------
+-- Одна таблица синхронизации, как budgets: товары лежат внутри строки (items_json — JSON-массив), поэтому список — одна запись.
+-- category_id и transaction_id — обычные uuid без внешнего ключа: записи мягко удаляются, а порядок отправки не должен от них зависеть.
+create table if not exists public.shopping_lists (
+  id                uuid        not null,
+  created_at        timestamptz not null,
+  client_updated_at timestamptz not null,
+  device_id         text        not null,
+  deleted_at        timestamptz,
+  name              text        not null,
+  items_json        text        not null,
+  status            text        not null,
+  currency          text        not null,
+  category_id       uuid,
+  transaction_id    uuid,
+  total_minor       bigint,
+  done_on           date,
+  archived_at       timestamptz,
+  user_id           uuid        not null,
+  server_seq        bigint      not null,
+  server_updated_at timestamptz not null,
+  constraint shopping_lists_pkey primary key (id),
+  constraint shopping_lists_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint shopping_lists_name_len check (char_length(name) between 1 and 80),
+  constraint shopping_lists_items_len check (char_length(items_json) <= 30000),
+  constraint shopping_lists_status check (status in ('open', 'done')),
+  constraint shopping_lists_currency_fmt check (currency ~ '^[A-Z]{3}$'),
+  constraint shopping_lists_total check (total_minor is null or total_minor between 0 and 1000000000000000),
+  constraint shopping_lists_done_on check (done_on is null or done_on between date '2000-01-01' and date '2100-01-01'),
+  constraint shopping_lists_device_id_len check (char_length(device_id) between 1 and 64),
+  constraint shopping_lists_ts_sane check (
+    created_at        between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and client_updated_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and (deleted_at  is null or deleted_at  between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (archived_at is null or archived_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+  )
+);
+
+alter table public.shopping_lists add column if not exists base_seq bigint;
+
+drop trigger if exists sync_guard on public.shopping_lists;
+create trigger sync_guard before insert or update on public.shopping_lists
+  for each row execute function private.sync_guard();
+
+create index if not exists shopping_lists_user_seq_idx on public.shopping_lists (user_id, server_seq);
+
+revoke all on table public.shopping_lists from public, anon, authenticated;
+grant select, insert, update on table public.shopping_lists to authenticated;
+
+alter table public.shopping_lists enable row level security;
+
+drop policy if exists shopping_lists_select_own on public.shopping_lists;
+create policy shopping_lists_select_own on public.shopping_lists for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists shopping_lists_insert_own on public.shopping_lists;
+create policy shopping_lists_insert_own on public.shopping_lists for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists shopping_lists_update_own on public.shopping_lists;
+create policy shopping_lists_update_own on public.shopping_lists for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

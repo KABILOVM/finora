@@ -12,6 +12,7 @@ import type {
   Minor,
   RecurringRule,
   Settings,
+  ShoppingList,
   Transaction,
   UUID,
   Wallet,
@@ -160,6 +161,37 @@ export function useBudgets(opts: { includeArchived?: boolean } = {}): LocalRow<B
         return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
       });
   }, [store, includeArchived]);
+}
+
+/**
+ * Списки покупок: открытые первыми (новые сверху), затем подтверждённые (по дате покупки, новые сверху).
+ * Архивные — только с includeArchived. Удалённые не показываются.
+ */
+export function useShoppingLists(opts: { includeArchived?: boolean } = {}): LocalRow<ShoppingList>[] | undefined {
+  const store = useStore();
+  const includeArchived = opts.includeArchived === true;
+  return useLiveQuery(async () => {
+    const rows = await store.db.shopping_lists.toArray();
+    return rows
+      .filter((l) => l.deletedAt === null && (includeArchived || l.archivedAt === null))
+      .sort((a, b) => {
+        if ((a.status === 'open') !== (b.status === 'open')) return a.status === 'open' ? -1 : 1;
+        const ka = a.status === 'open' ? a.createdAt : (a.doneOn ?? a.createdAt);
+        const kb = b.status === 'open' ? b.createdAt : (b.doneOn ?? b.createdAt);
+        if (ka !== kb) return ka < kb ? 1 : -1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+  }, [store, includeArchived]);
+}
+
+/** Один список покупок по id: undefined — читается; null — нет такого или удалён. */
+export function useShoppingList(id: string | undefined): LocalRow<ShoppingList> | null | undefined {
+  const store = useStore();
+  return useLiveQuery(async () => {
+    if (!id) return null;
+    const l = await store.db.shopping_lists.get(id);
+    return l && l.deletedAt === null ? l : null;
+  }, [store, id]);
 }
 
 /**

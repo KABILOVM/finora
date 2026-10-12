@@ -247,6 +247,18 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (r['period'] !== 'month') fail('period');
       break;
     }
+    case 'shopping_lists': {
+      if (!tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');
+      const n = charLength(String(r['name']));
+      if (n < 1 || n > 80) fail('name_len');
+      if (charLength(String(r['items_json'])) > 30000) fail('items_len');
+      if (r['status'] !== 'open' && r['status'] !== 'done') fail('status');
+      if (!CURRENCY_RE.test(String(r['currency']))) fail('currency_fmt');
+      const total = r['total_minor'] ?? null;
+      if (total !== null && !inBound(total, 0)) fail('total');
+      if (!dayOkOrNull(r['done_on'] ?? null)) fail('done_on');
+      break;
+    }
     case 'recurring_rules': {
       if (!tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');
       const kind = String(r['kind']);
