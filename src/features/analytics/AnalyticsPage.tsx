@@ -4,6 +4,7 @@ import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
+import { Segmented } from '@/components/Segmented';
 import { pluralRu } from '@/lib/plural';
 import { addMinor } from '@/domain/money';
 import { filtersFromParams } from '@/features/transactions/txFilters';
@@ -11,6 +12,7 @@ import { useCategoryIndex } from '@/features/transactions/txData';
 import { MonthSwitcher } from '@/features/transactions/MonthSwitcher';
 import { monthKey, monthTitle, todayLocal } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
+import { CashCalendarView } from './CashCalendarView';
 import { CategoryCompare } from './CategoryCompare';
 import { MonthlyBars } from './charts/MonthlyBars';
 import { WeekdayBars } from './charts/WeekdayBars';
@@ -82,12 +84,20 @@ function Summary({ data }: { data: AnalyticsData }) {
   );
 }
 
+type Tab = 'overview' | 'calendar';
+const TABS = [
+  { value: 'overview', label: 'Обзор' },
+  { value: 'calendar', label: 'Календарь' },
+] as const;
+
 /**
- * «Аналитика»: расходы выбранного месяца против прошлого, доходы и расходы по месяцам, категории с изменением, средний расход по
- * дням недели и самые крупные траты. Цифры считаются из операций (analytics.ts), по тем же правилам, что «Итоги месяца» на главной.
+ * «Аналитика». Вкладка «Обзор»: расходы выбранного месяца против прошлого, доходы и расходы по месяцам, категории с изменением,
+ * средний расход по дням недели и самые крупные траты. Цифры считаются из операций (analytics.ts), по тем же правилам, что «Итоги
+ * месяца» на главной. Вкладка «Календарь»: что будет с деньгами в ближайшие 30 дней (CashCalendarView).
  */
 export default function AnalyticsPage() {
   const today = useToday();
+  const [tab, setTab] = useState<Tab>('overview');
   const currentMonth = monthKey(today);
   const [params] = useSearchParams();
   const [month, setMonth] = useState(() => {
@@ -99,12 +109,25 @@ export default function AnalyticsPage() {
   const netWorth = useNetWorth(today);
 
   const header = <PageHeader title="Аналитика" />;
+  const tabs = <Segmented ariaLabel="Раздел аналитики" options={TABS} value={tab} onChange={setTab} className="mb-3" />;
   const switcher = <MonthSwitcher month={month} max={currentMonth} onChange={setMonth} className="mb-3" />;
+
+  // Календарь не зависит от выбранного месяца и читает всё сам, поэтому не ждёт данных «Обзора»
+  if (tab === 'calendar') {
+    return (
+      <>
+        {header}
+        {tabs}
+        <CashCalendarView />
+      </>
+    );
+  }
 
   if (data === undefined || categories === undefined) {
     return (
       <>
         {header}
+        {tabs}
         {switcher}
         <p role="status" className="py-10 text-center text-muted">
           Считаем…
@@ -116,6 +139,7 @@ export default function AnalyticsPage() {
     return (
       <>
         {header}
+        {tabs}
         <p role="status" className="py-10 text-center text-muted">
           Настройки ещё не загружены
         </p>
@@ -126,6 +150,7 @@ export default function AnalyticsPage() {
     return (
       <>
         {header}
+        {tabs}
         {switcher}
         <EmptyState icon="alert" title="Суммы слишком большие" text="Их не получилось сложить без потери точности. Проверьте данные." />
       </>
@@ -136,6 +161,7 @@ export default function AnalyticsPage() {
   return (
     <>
       {header}
+      {tabs}
       {switcher}
       {empty ? (
         <EmptyState icon="chart" title="Пока нечего анализировать" text="Внесите несколько расходов и доходов: здесь появятся сравнение месяцев, категории и дни недели." />
