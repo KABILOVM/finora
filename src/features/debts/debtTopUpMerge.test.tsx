@@ -211,7 +211,8 @@ describe('«Объединить» на странице долга', () => {
     await s.debts.create({ direction: 'lent', counterparty: 'Бобур', principalMinor: 10_000, currency: 'TJS', openedOn: '2026-10-04' });
   };
   const openMerge = async () => {
-    await user.click(button('Объединить…'));
+    // кнопка появляется, когда прочитаны все долги (для списка кандидатов): сразу после показа страницы её ещё может не быть
+    await user.click(await waitFor(() => button('Объединить…')));
     return findByRole('dialog', { name: 'Объединить долги' });
   };
 
