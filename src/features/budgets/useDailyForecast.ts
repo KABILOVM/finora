@@ -15,28 +15,29 @@ import {
   type ForecastInput,
 } from '@/domain/forecast';
 import { occurrencesBetween } from '@/domain/schedule';
-import type { IsoDate, LocalRow, Transaction } from '@/domain/types';
+import type { IsoDate, LocalRow, Transaction, UUID } from '@/domain/types';
 import { useRates } from '@/rates/hooks';
 import { useToday } from '@/recurring/useToday';
 
-type ForecastData = Omit<ForecastInput, 'getRate'>;
-type Loaded = { overflow: true } | { overflow: false; data: ForecastData };
+export type ForecastData = Omit<ForecastInput, 'getRate'>;
+export type LoadedForecast = { overflow: true } | { overflow: false; data: ForecastData; labels: ReadonlyMap<UUID, string> };
 
 /**
  * Читает из локальной базы всё, что нужно прогнозу, ОДНИМ чтением (иначе экран на миг показал бы цифры из разных моментов).
  * null — настройки ещё не созданы. После последнего обращения к базе идёт только ожидание crypto (v5-идентификаторы) —
  * вне транзакции Dexie это безопасно (так же сделано в useUpcoming).
  */
-async function loadForecastData(store: Store, today: IsoDate): Promise<Loaded | null> {
+export async function loadForecastData(store: Store, today: IsoDate, horizonEnd: IsoDate = endOfMonth(today)): Promise<LoadedForecast | null> {
   const settings = await store.settings.get();
   if (!settings) return null;
   const { db } = store;
-  const [walletRows, txs, ruleRows, debtRows, budgetRows] = await Promise.all([
+  const [walletRows, txs, ruleRows, debtRows, budgetRows, categoryRows] = await Promise.all([
     db.wallets.toArray(),
     db.transactions.toArray(),
     db.recurring_rules.toArray(),
     db.debts.toArray(),
     db.budgets.toArray(),
+    db.categories.toArray(),
   ]);
   const base = settings.baseCurrency;
   const wallets = walletRows.filter((w) => w.deletedAt === null);
@@ -60,8 +61,9 @@ async function loadForecastData(store: Store, today: IsoDate): Promise<Loaded | 
   try {
     const balances = computeBalances(wallets, txs);
     const walletById = new Map(walletRows.map((w) => [w.id, w] as const));
+    // Долги обоих направлений: прогноз «в день» сам берёт только «я должен», календарь по желанию учитывает и «мне должны»
     const debts: ForecastDebt[] = debtRows
-      .filter((d) => d.deletedAt === null && d.direction === 'borrowed')
+      .filter((d) => d.deletedAt === null)
       .map((d) => ({
         id: d.id,
         direction: d.direction,
@@ -111,14 +113,21 @@ async function loadForecastData(store: Store, today: IsoDate): Promise<Loaded | 
   }
 
   // Какие даты правил уже проведены или пропущены: id операции = v5(правило, дата).
-  const monthEnd = endOfMonth(today);
   const doneOccurrences = new Set<string>();
   for (const r of rules) {
-    for (const date of occurrencesBetween(r, today, monthEnd)) {
+    for (const date of occurrencesBetween(r, today, horizonEnd)) {
       if (existingIds.has(await uuidV5(r.id, date))) doneOccurrences.add(occurrenceKey(r.id, date));
     }
   }
-  return { overflow: false, data: { ...data, doneOccurrences } };
+  // Подписи для списков (календарь): у правила — заметка или название категории, у долга — с кем.
+  const categoryName = new Map(categoryRows.map((c) => [c.id, c.name] as const));
+  const labels = new Map<UUID, string>();
+  for (const r of ruleRows) {
+    const label = r.note.trim() || (r.categoryId !== null ? categoryName.get(r.categoryId) : undefined) || '';
+    if (label !== '') labels.set(r.id, label);
+  }
+  for (const d of debtRows) if (d.deletedAt === null) labels.set(d.id, d.counterparty);
+  return { overflow: false, data: { ...data, doneOccurrences }, labels };
 }
 
 /**
