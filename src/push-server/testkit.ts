@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, vi } from 'vitest';
 import {
   DbError,
+  type CategoryLite,
   type DebtLite,
   type DebtTxLite,
   type EndpointClaim,
   type HandlerDeps,
+  type LevelBudget,
+  type LevelTx,
   type LogEntry,
   type PushSub,
   type ReminderSettingsRow,
@@ -60,6 +63,7 @@ export const settings = (userId: string, o: Partial<ReminderSettingsRow> = {}): 
   remindPayments: true,
   remindDebts: true,
   remindDaily: false,
+  remindBudgets: false,
   showDetails: false,
   ...o,
 });
@@ -99,6 +103,11 @@ export class FakeStore implements ReminderStore {
   debtTxs: DebtTxLite[] = [];
   wallets = new Map<string, string>();
   liveTxDates = new Map<string, Set<string>>();
+  /** Лимиты, категории, основная валюта и расходы (с датой) по пользователям — для лимитов бюджета. */
+  budgets = new Map<string, LevelBudget[]>();
+  categories = new Map<string, CategoryLite[]>();
+  baseCurrencies = new Map<string, string>();
+  monthSpend = new Map<string, Array<LevelTx & { date: string }>>();
   log = new Set<string>();
   revoked: string[] = [];
   pruned: string[] = [];
@@ -159,6 +168,31 @@ export class FakeStore implements ReminderStore {
   async hasLiveTransactionOn(userId: string, date: string): Promise<boolean> {
     this.enter('hasLiveTransactionOn', userId);
     return this.liveTxDates.get(userId)?.has(date) ?? false;
+  }
+  async listBudgets(userId: string): Promise<LevelBudget[]> {
+    this.enter('listBudgets', userId);
+    return this.budgets.get(userId) ?? [];
+  }
+  async listCategories(userId: string): Promise<CategoryLite[]> {
+    this.enter('listCategories', userId);
+    return this.categories.get(userId) ?? [];
+  }
+  async baseCurrency(userId: string): Promise<string | null> {
+    this.enter('baseCurrency', userId);
+    return this.baseCurrencies.get(userId) ?? null;
+  }
+  async listMonthSpend(userId: string, from: string, untilExclusive: string): Promise<LevelTx[]> {
+    this.enter('listMonthSpend', userId);
+    return (this.monthSpend.get(userId) ?? []).filter((t) => t.date >= from && t.date < untilExclusive).map(({ date: _d, ...tx }) => (void _d, tx));
+  }
+  async listBudgetLogRefs(userId: string, sinceDate: string): Promise<string[]> {
+    this.enter('listBudgetLogRefs', userId);
+    const out: string[] = [];
+    for (const k of this.log) {
+      const [u, sentOn, kind, ...ref] = k.split('|');
+      if (u === userId && kind === 'budget' && (sentOn as string) >= sinceDate) out.push(ref.join('|'));
+    }
+    return out;
   }
   async insertLog(userId: string, sentOn: string, entries: readonly LogEntry[]): Promise<LogEntry[]> {
     this.enter('insertLog', userId);

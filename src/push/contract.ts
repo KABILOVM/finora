@@ -5,11 +5,11 @@
  * Как это работает: приложение просит разрешение на уведомления, подписывается на push браузера (Web Push, ключ VAPID) и
  * сохраняет подписку в public.push_subscriptions; настройки — в public.reminder_settings. Раз в час расписание (pg_cron или внешний
  * планировщик) вызывает Edge Function send-reminders: для каждого пользователя, у которого сейчас «его» час, она смотрит данные
- * (регулярные платежи, долги, операции за сегодня) и шлёт шифрованное push-сообщение (PushPayload). Service worker показывает его,
+ * (регулярные платежи, долги, операции за сегодня, лимиты бюджета) и шлёт шифрованное push-сообщение (PushPayload). Service worker показывает его,
  * по нажатию открывает приложение на нужном экране. На iPhone это работает ТОЛЬКО в приложении, добавленном на экран «Домой» (iOS 16.4+).
  */
 
-export type ReminderKind = 'payment' | 'debt' | 'daily';
+export type ReminderKind = 'payment' | 'debt' | 'daily' | 'budget';
 
 /** Настройки напоминаний в виде для приложения (колонки reminder_settings в camelCase). */
 export interface ReminderSettings {
@@ -22,7 +22,9 @@ export interface ReminderSettings {
   remindDebts: boolean;
   /** Каждый день напоминать внести траты, если за сегодня нет ни одной операции. */
   remindDaily: boolean;
-  /** true — в уведомлении названия платежей и имена; false (по умолчанию) — только общие слова и числа. Суммы не пишутся никогда. */
+  /** Напоминать, когда расходы месяца дошли до 70% / 90% лимита бюджета или превысили его (в уведомлении только процент, без сумм). */
+  remindBudgets: boolean;
+  /** true — в уведомлении названия платежей, имена и названия лимитов; false (по умолчанию) — только общие слова и числа. Суммы не пишутся никогда. */
   showDetails: boolean;
 }
 
@@ -33,6 +35,7 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
   remindPayments: true,
   remindDebts: true,
   remindDaily: false,
+  remindBudgets: false,
   showDetails: false,
 };
 

@@ -216,20 +216,23 @@ describe('адреса push-сервисов', () => {
 describe('разбор строк базы (имена колонок — как в supabase/schema.sql)', () => {
   const U = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
   it('настройки', () => {
-    expect(parseSettingsRow({ user_id: U.toUpperCase(), hour_local: 9, timezone: 'Asia/Dushanbe', remind_payments: true, remind_debts: false, remind_daily: true, show_details: false })).toEqual({
+    expect(parseSettingsRow({ user_id: U.toUpperCase(), hour_local: 9, timezone: 'Asia/Dushanbe', remind_payments: true, remind_debts: false, remind_daily: true, remind_budgets: true, show_details: false })).toEqual({
       userId: U,
       hourLocal: 9,
       timezone: 'Asia/Dushanbe',
       remindPayments: true,
       remindDebts: false,
       remindDaily: true,
+      remindBudgets: true,
       showDetails: false,
     });
+    // старая строка без колонки remind_budgets: лимиты выключены
+    expect(parseSettingsRow({ user_id: U, hour_local: 9, timezone: 'UTC' })).toMatchObject({ remindBudgets: false });
     for (const bad of [null, 5, [], { user_id: 'не-uuid', hour_local: 9, timezone: 'UTC' }, { user_id: U, hour_local: 24, timezone: 'UTC' }, { user_id: U, hour_local: 9.5, timezone: 'UTC' }, { user_id: U, hour_local: '9', timezone: 'UTC' }, { user_id: U, hour_local: 9, timezone: null }]) {
       expect(parseSettingsRow(bad)).toBeNull();
     }
     // флаги: только настоящее true включает (null/«true» строкой — нет)
-    expect(parseSettingsRow({ user_id: U, hour_local: 0, timezone: 'UTC', remind_payments: 'true', show_details: 1 })).toMatchObject({ remindPayments: false, showDetails: false });
+    expect(parseSettingsRow({ user_id: U, hour_local: 0, timezone: 'UTC', remind_payments: 'true', remind_budgets: 'true', show_details: 1 })).toMatchObject({ remindPayments: false, remindBudgets: false, showDetails: false });
   });
 
   it('правила, долги, операции долга, подписки', () => {

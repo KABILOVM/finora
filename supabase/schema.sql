@@ -3,7 +3,8 @@
 --
 -- ЧТО ЭТО
 --   Таблицы личного учёта денег: настройки, кошельки, категории, операции (этап 1) и долги, бюджеты,
---   регулярные платежи (этап 2, раздел 8 в конце файла), список покупок (раздел 10) плюс общие курсы валют. Итого 9 таблиц:
+--   регулярные платежи (этап 2, раздел 8 в конце файла), список покупок (раздел 10), напоминания о лимитах бюджета (раздел 12)
+--   плюс общие курсы валют. Итого 9 таблиц:
 --   settings, wallets, categories, debts, budgets, recurring_rules, transactions, shopping_items, exchange_rates.
 --   Правила доступа (у каждого пользователя видны и меняются только СВОИ данные)
 --   и защитный триггер, который решает конфликты между устройствами
@@ -931,3 +932,19 @@ create policy shopping_items_insert_own on public.shopping_items for insert to a
 drop policy if exists shopping_items_update_own on public.shopping_items;
 create policy shopping_items_update_own on public.shopping_items for update to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+
+-- 12. Напоминания о лимитах бюджета ----------------------------------------------------------
+-- Функция send-reminders (supabase/functions/send-reminders) умеет присылать push, когда расходы месяца дошли до 70% или 90% лимита
+-- бюджета или превысили его. Для этого нужен переключатель в настройках напоминаний и новый вид записи в журнале отправленного.
+-- Переключатель по умолчанию ВЫКЛЮЧЕН: у тех, у кого напоминания уже включены, новый вид уведомлений сам не появится.
+-- Суммы в уведомление не попадают (только целый процент), названия лимитов — только при «Показывать названия».
+-- Выполнять до выкладки приложения и до обновления файла функции; повторный запуск безопасен.
+
+-- 12.1. Переключатель.
+alter table public.reminder_settings add column if not exists remind_budgets boolean not null default false;
+
+-- 12.2. Журнал отправленного: kind = 'budget', ref = '<id лимита>:<уровень>' (warn / danger / over). По нему функция не шлёт один и тот же
+-- уровень лимита дважды за месяц. Таблица небольшая (чистится через 60 суток), пересоздание проверки быстрое.
+alter table public.push_log drop constraint if exists push_log_kind;
+alter table public.push_log add constraint push_log_kind check (kind in ('payment', 'debt', 'daily', 'budget'));

@@ -47,11 +47,17 @@ describe('настройки напоминаний', () => {
   });
 
   it('читает строку и переводит snake_case в camelCase', async () => {
-    const c = fakeCloud({ settings: { enabled: true, hour_local: 21, timezone: 'Europe/Moscow', remind_payments: false, remind_debts: true, remind_daily: true, show_details: true } });
+    const c = fakeCloud({ settings: { enabled: true, hour_local: 21, timezone: 'Europe/Moscow', remind_payments: false, remind_debts: true, remind_daily: true, remind_budgets: true, show_details: true } });
     expect(await readReminderSettings(c.client)).toEqual({
       ok: true,
-      value: { enabled: true, hourLocal: 21, timezone: 'Europe/Moscow', remindPayments: false, remindDebts: true, remindDaily: true, showDetails: true },
+      value: { enabled: true, hourLocal: 21, timezone: 'Europe/Moscow', remindPayments: false, remindDebts: true, remindDaily: true, remindBudgets: true, showDetails: true },
     });
+  });
+
+  it('строка без колонки remind_budgets (схему ещё не обновили) читается как «лимиты выключены»', async () => {
+    const c = fakeCloud({ settings: { enabled: true, hour_local: 9, timezone: 'UTC', remind_payments: true } });
+    const r = await readReminderSettings(c.client);
+    expect(r.ok && r.value?.remindBudgets).toBe(false);
   });
 
   it('чужие строки не читаются (имитация RLS): видна только своя', async () => {
@@ -90,6 +96,15 @@ describe('настройки напоминаний', () => {
     expect(c.tables.reminder_settings[0]).toMatchObject({ hour_local: 20, remind_daily: true, show_details: true });
   });
 
+  it('переключатель лимитов бюджета: колонка remind_budgets, остальные настройки не трогаются', async () => {
+    const c = fakeCloud({ settings: { enabled: true, hour_local: 18, remind_daily: true, timezone: 'Europe/Moscow' } });
+    const r = await saveReminderSettings(c.client, { remindBudgets: true });
+    expect(r).toMatchObject({ ok: true, value: { remindBudgets: true, remindDaily: true, hourLocal: 18 } });
+    expect(c.tables.reminder_settings[0]).toMatchObject({ remind_budgets: true, remind_daily: true, hour_local: 18 });
+    expect(settingsToColumns({ remindBudgets: false })).toEqual({ remind_budgets: false });
+    expect(await saveReminderSettings(c.client, { remindBudgets: 'yes' } as never)).toMatchObject({ ok: false, error: { kind: 'invalid' } });
+  });
+
   it('неверные изменения не уходят на сервер вообще (invalid, ни одного запроса)', async () => {
     const c = fakeCloud();
     const bad: Array<Record<string, unknown>> = [
@@ -103,6 +118,7 @@ describe('настройки напоминаний', () => {
       { timezone: 'x'.repeat(65) },
       { enabled: 'true' },
       { remindDaily: 1 },
+      { remindBudgets: 0 },
       { showDetails: null },
     ];
     for (const b of bad) expect(await saveReminderSettings(c.client, b as never), JSON.stringify(b)).toMatchObject({ ok: false, error: { kind: 'invalid' } });
