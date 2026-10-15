@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { classifyPostgrestError, createSupabaseTransport, toWellFormed } from '@/sync/supabaseTransport';
 import { toWire } from '@/sync/tables';
 import { TransportError, type TransportErrorKind } from '@/sync/transport';
-import { makeUserId, makeWallet } from './factories';
+import { makeCategory, makeUserId, makeWallet } from './factories';
 import { makeJwt } from './postgrestEmulator';
 
 /** Боевой транспорт: какие запросы строит и как разбирает отказы PostgREST. */
@@ -113,6 +113,84 @@ describe('запросы', () => {
     await t.push('wallets', [toWire('wallets', makeWallet(), 6)]); // запомнил: первый запрос уже без колонки
     expect(queries).toHaveLength(3);
     expect(((queries[2] as Query).rows as Array<Record<string, unknown>>).every((r) => !('base_seq' in r))).toBe(true);
+  });
+
+  describe('push: сервер без колонок цели накопления (раздел 11 схемы не выполнен)', () => {
+    const missingGoal = { code: 'PGRST204', message: "Could not find the 'goal_minor' column of 'wallets' in the schema cache" };
+    const withGoalCols = (q: Query) => (q.rows as Array<Record<string, unknown>>).some((r) => 'goal_minor' in r || 'goal_on' in r);
+    const old = () => fakeClient((q) => (withGoalCols(q) ? { data: null, error: missingGoal, status: 400 } : { data: null, error: null, status: 201 }));
+
+    it('у всех строк цель пуста — повтор без двух пустых колонок, дальше сразу без них; остальные поля те же', async () => {
+      const { client, queries } = old();
+      const t = createSupabaseTransport(client);
+      const w = makeWallet();
+      const full = toWire('wallets', w, 5);
+      const { goal_minor: _a, goal_on: _b, ...trimmed } = full;
+      await t.push('wallets', [full]); // ошибки наружу нет
+      expect(queries).toHaveLength(2);
+      expect((queries[0] as Query).rows).toEqual([full]);
+      expect((queries[1] as Query).rows).toEqual([trimmed]);
+      await t.push('wallets', [toWire('wallets', makeWallet(), 6)]); // запомнил: сразу без колонок цели
+      expect(queries).toHaveLength(3);
+      expect(((queries[2] as Query).rows as Array<Record<string, unknown>>).every((r) => !('goal_minor' in r) && !('goal_on' in r))).toBe(true);
+    });
+
+    it('у какой-то строки цель задана — ошибку не прячем (цель нельзя потерять молча): ошибка сервера, повторов нет', async () => {
+      const { client, queries } = old();
+      const withGoal = makeWallet({ kind: 'savings', goalMinor: 100_000, goalOn: '2027-01-01' });
+      const err = await createSupabaseTransport(client).push('wallets', [toWire('wallets', makeWallet(), 1), toWire('wallets', withGoal, 2)]).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TransportError);
+      expect((err as TransportError).kind).toBe('server');
+      expect(queries).toHaveLength(1);
+    });
+
+    it('колонки отключены раньше, а теперь пришла правка с целью: идёт С колонками (не теряется); пока сервер без них — ошибка, когда появились — принято', async () => {
+      let serverHasGoal = false;
+      const { client, queries } = fakeClient((q) => (withGoalCols(q) && !serverHasGoal ? { data: null, error: missingGoal, status: 400 } : { data: null, error: null, status: 201 }));
+      const t = createSupabaseTransport(client);
+      await t.push('wallets', [toWire('wallets', makeWallet(), 1)]); // отключили колонки цели
+      const goalRow = toWire('wallets', makeWallet({ kind: 'savings', goalMinor: 100_000, goalOn: '2027-01-01' }), 2);
+      const err = await t.push('wallets', [goalRow]).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TransportError);
+      expect((err as TransportError).kind).toBe('server');
+      const sent = (queries[queries.length - 1] as Query).rows as Array<Record<string, unknown>>;
+      expect(sent[0]).toMatchObject({ goal_minor: 100_000, goal_on: '2027-01-01' }); // цель в запросе была
+      serverHasGoal = true; // схему обновили
+      await t.push('wallets', [goalRow]);
+      expect(((queries[queries.length - 1] as Query).rows as Array<Record<string, unknown>>)[0]).toMatchObject({ goal_minor: 100_000 });
+      await t.push('wallets', [toWire('wallets', makeWallet(), 3)]); // дальше колонки снова шлются всегда
+      expect(withGoalCols(queries[queries.length - 1] as Query)).toBe(true);
+    });
+
+    it('другие таблицы не страдают: пачка категорий уходит как есть', async () => {
+      const { client, queries } = fakeClient(() => ({ data: null, error: null, status: 201 }));
+      await createSupabaseTransport(client).push('categories', [toWire('categories', makeCategory(), 1)]);
+      expect(queries).toHaveLength(1);
+    });
+
+    it('нет и base_seq, и колонок цели (самая старая схема): оба отключаются, отправка проходит', async () => {
+      const missingBase = { code: 'PGRST204', message: "Could not find the 'base_seq' column of 'wallets' in the schema cache" };
+      const { client, queries } = fakeClient((q) => {
+        const rows = q.rows as Array<Record<string, unknown>>;
+        if (rows.some((r) => 'goal_minor' in r)) return { data: null, error: missingGoal, status: 400 };
+        if (rows.some((r) => 'base_seq' in r)) return { data: null, error: missingBase, status: 400 };
+        return { data: null, error: null, status: 201 };
+      });
+      await createSupabaseTransport(client).push('wallets', [toWire('wallets', makeWallet(), 5)]);
+      const last = (queries[queries.length - 1] as Query).rows as Array<Record<string, unknown>>;
+      expect(last.every((r) => !('goal_minor' in r) && !('goal_on' in r) && !('base_seq' in r))).toBe(true);
+    });
+
+    it('колонка goal_on тоже узнаётся по сообщению; ошибка про ДРУГУЮ колонку по-прежнему наружу', async () => {
+      const missingOn = { code: 'PGRST204', message: "Could not find the 'goal_on' column of 'wallets' in the schema cache" };
+      const a = fakeClient((q) => (withGoalCols(q) ? { data: null, error: missingOn, status: 400 } : { data: null, error: null, status: 201 }));
+      await createSupabaseTransport(a.client).push('wallets', [toWire('wallets', makeWallet(), 5)]);
+      expect(a.queries).toHaveLength(2);
+      const other = { code: 'PGRST204', message: "Could not find the 'nope' column of 'wallets' in the schema cache" };
+      const b = fakeClient(() => ({ data: null, error: other, status: 400 }));
+      await expect(createSupabaseTransport(b.client).push('wallets', [toWire('wallets', makeWallet(), 5)])).rejects.toBeInstanceOf(TransportError);
+      expect(b.queries).toHaveLength(1);
+    });
   });
 
   it('push: PGRST204 про ДРУГУЮ колонку — по-прежнему ошибка сервера, а не тихий повтор без проверки версии', async () => {

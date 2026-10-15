@@ -43,6 +43,8 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     name: ['name'],
     money: ['currency', 'kind', 'openingBalanceMinor'],
     look: ['color', 'icon', 'sortOrder'],
+    /** Цель накопления: сумма и срок правятся вместе и не конфликтуют с валютой и начальным остатком. */
+    goal: ['goalMinor', 'goalOn'],
     archived: ['archivedAt'],
     deleted: ['deletedAt'],
   },

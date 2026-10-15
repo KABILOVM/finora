@@ -319,3 +319,26 @@ describe('согласование (reconcile) ставит группы', () =>
     expect(await store.db.categories.get(cats.id)).toMatchObject({ kind: 'expense', dirty: 1, dirtyGroups: ['kind'] });
   });
 });
+
+describe('цель накопления: группа goal', () => {
+  it('сумма и срок цели — группа goal (не money и не look); пустая правка и повтор той же цели не грязнят строку', async () => {
+    const { store, cash } = await setup();
+    expect((await store.wallets.update(cash.id, { goalMinor: 100_000, goalOn: '2027-03-01' })).dirtyGroups).toEqual(['goal']);
+    await clean(store, 'wallets', cash.id);
+    expect((await store.wallets.update(cash.id, { goalOn: '2027-04-01' })).dirtyGroups).toEqual(['goal']);
+    await clean(store, 'wallets', cash.id);
+    const same = await store.wallets.update(cash.id, { goalMinor: 100_000, goalOn: '2027-04-01' });
+    expect(same.dirty).toBe(0);
+    const empty = await store.wallets.update(cash.id, {});
+    expect(empty.dirty).toBe(0);
+  });
+
+  it('очистка цели патчем null — тоже правка группы goal; вместе с названием — обе группы', async () => {
+    const { store, cash } = await setup();
+    await store.wallets.update(cash.id, { goalMinor: 5_000 });
+    await clean(store, 'wallets', cash.id);
+    const row = await store.wallets.update(cash.id, { goalMinor: null, name: 'Копилка' });
+    expect(row.dirtyGroups).toEqual(['name', 'goal']);
+    expect(row.goalMinor).toBeNull();
+  });
+});

@@ -30,6 +30,8 @@ export type Op =
   | { t: 'wallet-color'; d: number; i: number; n: number }
   | { t: 'wallet-opening'; d: number; i: number; amount: number }
   | { t: 'wallet-archive'; d: number; i: number; restore: boolean }
+  /** Цель накопления: amount 0 — очистить (сумма и срок = null); day 0 — цель без срока. */
+  | { t: 'wallet-goal'; d: number; i: number; amount: number; day: number }
   | { t: 'category-rename'; d: number; i: number }
   | { t: 'category-color'; d: number; i: number; n: number }
   | { t: 'settings'; d: number }
@@ -56,6 +58,7 @@ export const opsArb = (n: number, min: number, max: number): fc.Arbitrary<Op[]> 
       { weight: 2, arbitrary: fc.record({ t: fc.constant('wallet-color' as const), d: dev(n), i: idx, n: small }) },
       { weight: 1, arbitrary: fc.record({ t: fc.constant('wallet-opening' as const), d: dev(n), i: idx, amount: fc.integer({ min: 0, max: 100_000 }) }) },
       { weight: 1, arbitrary: fc.record({ t: fc.constant('wallet-archive' as const), d: dev(n), i: idx, restore: fc.boolean() }) },
+      { weight: 2, arbitrary: fc.record({ t: fc.constant('wallet-goal' as const), d: dev(n), i: idx, amount: fc.integer({ min: 0, max: 100_000 }), day: fc.integer({ min: 0, max: 27 }) }) },
       { weight: 1, arbitrary: fc.record({ t: fc.constant('category-rename' as const), d: dev(n), i: idx }) },
       { weight: 1, arbitrary: fc.record({ t: fc.constant('category-color' as const), d: dev(n), i: idx, n: small }) },
       { weight: 1, arbitrary: fc.record({ t: fc.constant('settings' as const), d: dev(n) }) },
@@ -194,6 +197,14 @@ export async function apply(w: World, op: Op): Promise<void> {
       case 'wallet-opening': {
         const x = pick(wallets, op.i);
         if (x) await s.wallets.update(x.id, { openingBalanceMinor: op.amount });
+        return;
+      }
+      case 'wallet-goal': {
+        const x = pick(wallets, op.i);
+        if (x) {
+          const goalMinor = op.amount === 0 ? null : op.amount;
+          await s.wallets.update(x.id, { goalMinor, goalOn: goalMinor === null || op.day === 0 ? null : `2027-01-${String(op.day).padStart(2, '0')}` });
+        }
         return;
       }
       case 'wallet-archive': {

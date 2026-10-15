@@ -149,6 +149,36 @@ describe('граничные значения, которые принимает
     expect(made.length).toBeGreaterThan(0);
   });
 
+  it('цель накопления: крайние сумма и срок доезжают до настоящей схемы и возвращаются без изменений на втором устройстве', async () => {
+    const u = makeUserId();
+    const a = await device(u, 'dev-a');
+    await a.engine.syncNow();
+    const edges: Array<[number, string | null]> = [[1, '2000-01-01'], [1e15, '2100-01-01'], [1e15 - 1, '2028-02-29'], [500_000, null]];
+    const made: string[] = [];
+    for (const [i, [goalMinor, goalOn]] of edges.entries()) {
+      made.push((await a.store.wallets.create({ ...walletBase, name: `цель ${i}`, kind: 'savings', goalMinor, goalOn })).id);
+    }
+    await a.engine.syncNow();
+    expect(await quarantinedOf(a), 'карантин').toEqual([]);
+    const server = await pg.adminRows('wallets');
+    for (const [i, [goalMinor, goalOn]] of edges.entries()) {
+      const row = server.find((r) => r['id'] === made[i]);
+      expect(Number(row?.['goal_minor']), String(goalMinor)).toBe(goalMinor);
+      expect(row?.['goal_on'] == null ? null : String(row['goal_on']).slice(0, 10)).toBe(goalOn);
+    }
+    const b = await device(u, 'dev-b');
+    for (let k = 0; k < 3; k++) { await b.engine.syncNow(); await a.engine.syncNow(); }
+    for (const [i, [goalMinor, goalOn]] of edges.entries()) {
+      expect(await b.store.db.wallets.get(made[i] as string)).toMatchObject({ goalMinor, goalOn });
+    }
+    // очистка цели на втором устройстве доезжает до первого
+    await b.store.wallets.update(made[0] as string, { goalMinor: null, goalOn: null });
+    for (let k = 0; k < 3; k++) { await b.engine.syncNow(); await a.engine.syncNow(); }
+    expect(await a.store.db.wallets.get(made[0] as string)).toMatchObject({ goalMinor: null, goalOn: null });
+    expect(await quarantinedOf(a)).toEqual([]);
+    expect(await quarantinedOf(b)).toEqual([]);
+  }, 60_000);
+
   it('курсы: крайние и «длинные» значения возвращаются без искажения суммы в базовой валюте', async () => {
     const u = makeUserId();
     const d = await device(u, 'dev-a');
