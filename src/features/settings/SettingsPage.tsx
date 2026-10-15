@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Glyph } from '@/components/Glyph';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
+import { RELEASES } from '@/features/whatsnew/releases';
+import { WhatsNewSheet } from '@/features/whatsnew/WhatsNewSheet';
 import { useSyncEnabled, useSyncStatus } from '@/sync/syncContext';
 import { version } from '../../../package.json';
 import { AppearanceSection } from './AppearanceSection';
@@ -34,6 +37,8 @@ function SyncProblems() {
 
 /** Настройки: только то, чем человек пользуется. Всё остальное (синхронизация, курсы, проверки) работает само. */
 export default function SettingsPage() {
+  const [news, setNews] = useState(false);
+  const latest = RELEASES[0];
   return (
     <>
       <PageHeader title="Настройки" />
@@ -46,6 +51,19 @@ export default function SettingsPage() {
           <li>
             <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Дзен-мани" />
           </li>
+          {latest && (
+            <li>
+              <button
+                type="button"
+                onClick={() => setNews(true)}
+                className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left transition-colors hover:bg-surface-2 active:bg-border/60"
+              >
+                <Glyph value="i:stars" color="#d97706" size={40} />
+                <span className="min-w-0 flex-1 text-base font-medium">Что нового</span>
+                <Icon name="chevron" size={18} className="shrink-0 text-muted" />
+              </button>
+            </li>
+          )}
         </ul>
       </Card>
 
@@ -57,6 +75,8 @@ export default function SettingsPage() {
       <AccountSection />
       <AppLockSection />
       <RemindersSection />
+
+      {news && latest && <WhatsNewSheet releases={[latest]} onClose={() => setNews(false)} />}
 
       <p className="pb-2 text-center text-xs text-muted">
         Sumoima {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Manrope (SIL OFL)
