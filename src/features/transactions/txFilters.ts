@@ -84,13 +84,17 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
   return out;
 }
 
-/** Ссылка на список операций с готовыми фильтрами (обратное к filtersFromParams). categoryId null — «без категории». */
-export function transactionsLink(f: { month: string; categoryId?: string | null; kind?: TxKind }): string {
+/**
+ * Строка запроса для ссылки на список операций с готовыми фильтрами (обратное к filtersFromParams): `month=…&category=…&kind=…`.
+ * Ссылка пишется как <Link to={`/transactions?${transactionsQuery(…)}`}>: начало адреса фиксировано в самой ссылке, из данных
+ * подставляется только закодированный хвост (так требует статический аудит e2e/sec). categoryId null — «без категории».
+ */
+export function transactionsQuery(f: { month: string; categoryId?: string | null; kind?: TxKind }): string {
   const q = new URLSearchParams({ month: f.month });
   if (f.categoryId === null) q.set('category', 'none');
   else if (f.categoryId !== undefined) q.set('category', f.categoryId);
   if (f.kind !== undefined) q.set('kind', f.kind);
-  return `/transactions?${q.toString()}`;
+  return q.toString();
 }
 
 /** Сдвиг месяца 'ГГГГ-ММ' на n месяцев (можно отрицательное). */

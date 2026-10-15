@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, activeFilterLabels, filtersFromParams, NO_CATEGORY, totalsByCurrency, transactionsLink, withKind } from './txFilters';
+import { activeFilterCount, activeFilterLabels, filtersFromParams, NO_CATEGORY, totalsByCurrency, transactionsQuery, withKind } from './txFilters';
 
 describe('фильтры из шита «Фильтры»: чистая логика', () => {
   it('activeFilterCount: считает только то, что лежит в шите (кошелёк, вид, категория)', () => {
@@ -89,17 +89,17 @@ describe('filtersFromParams: фильтры из адреса', () => {
   });
 });
 
-describe('transactionsLink: ссылка с готовыми фильтрами', () => {
+describe('transactionsQuery: запрос для ссылки с готовыми фильтрами', () => {
   it('месяц, категория и вид', () => {
-    expect(transactionsLink({ month: '2026-10', categoryId: 'c1', kind: 'expense' })).toBe('/transactions?month=2026-10&category=c1&kind=expense');
+    expect(transactionsQuery({ month: '2026-10', categoryId: 'c1', kind: 'expense' })).toBe('month=2026-10&category=c1&kind=expense');
   });
   it('без категории — none; без категории и вида — только месяц', () => {
-    expect(transactionsLink({ month: '2026-10', categoryId: null })).toBe('/transactions?month=2026-10&category=none');
-    expect(transactionsLink({ month: '2026-09' })).toBe('/transactions?month=2026-09');
+    expect(transactionsQuery({ month: '2026-10', categoryId: null })).toBe('month=2026-10&category=none');
+    expect(transactionsQuery({ month: '2026-09' })).toBe('month=2026-09');
   });
-  it('ссылка разбирается обратно', () => {
-    const link = transactionsLink({ month: '2026-09', categoryId: 'c-1', kind: 'expense' });
-    expect(filtersFromParams(new URLSearchParams(link.split('?')[1]), '2026-10-15')).toEqual({ period: 'month', month: '2026-09', categoryId: 'c-1', kind: 'expense' });
+  it('запрос разбирается обратно', () => {
+    const query = transactionsQuery({ month: '2026-09', categoryId: 'c-1', kind: 'expense' });
+    expect(filtersFromParams(new URLSearchParams(query), '2026-10-15')).toEqual({ period: 'month', month: '2026-09', categoryId: 'c-1', kind: 'expense' });
   });
 });
 

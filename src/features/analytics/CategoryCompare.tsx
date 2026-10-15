@@ -3,7 +3,7 @@ import { Glyph } from '@/components/Glyph';
 import { MoneyText } from '@/components/MoneyText';
 import { formatMinor } from '@/domain/money';
 import type { Category, CurrencyCode, LocalRow } from '@/domain/types';
-import { transactionsLink } from '@/features/transactions/txFilters';
+import { transactionsQuery } from '@/features/transactions/txFilters';
 import { pluralRu } from '@/lib/plural';
 import type { CategoryDelta } from './analytics';
 
@@ -47,10 +47,10 @@ export function CategoryCompare({ deltas, categories, base, month }: CategoryCom
         const cat = d.categoryId === null ? undefined : categories.get(d.categoryId);
         const name = fee ? 'Комиссии' : (cat?.name ?? 'Без категории');
         const label = deltaLabel(d);
-        const href = fee ? transactionsLink({ month, kind: 'transfer' }) : transactionsLink({ month, categoryId: d.categoryId, kind: 'expense' });
+        const query = fee ? transactionsQuery({ month, kind: 'transfer' }) : transactionsQuery({ month, categoryId: d.categoryId, kind: 'expense' });
         return (
           <li key={d.key}>
-            <Link to={href} className="flex min-h-[56px] items-center gap-3 py-2 transition-colors hover:bg-surface-2/60" data-testid={`compare-${d.key}`}>
+            <Link to={`/transactions?${query}`} className="flex min-h-[56px] items-center gap-3 py-2 transition-colors hover:bg-surface-2/60" data-testid={`compare-${d.key}`}>
               <Glyph value={fee ? '🏦' : (cat?.icon ?? '➖')} color={fee ? undefined : cat?.color} size={32} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{name}</span>

@@ -77,7 +77,7 @@ describe('экран «Аналитика»', () => {
     expect(norm(oct[0]?.textContent)).toBe(norm(formatMinor(500_000, 'TJS')));
     expect(norm(oct[1]?.textContent)).toBe(norm(formatMinor(12_450, 'TJS')));
     expect(heightOf('bar-income-2026-10')).toBeGreaterThan(heightOf('bar-expense-2026-10')); // 5 000 > 124,50
-    expect(heightOf('bar-expense-2026-10')).toBeGreaterThan(heightOf('bar-expense-2026-09')); // 124,50 > 47
+    expect(heightOf('bar-expense-2026-10')).toBeGreaterThanOrEqual(heightOf('bar-expense-2026-09')); // 124,50 ≥ 47 (обе почти нулевые: минимальная видимая высота)
     expect(heightOf('bar-expense-2026-08')).toBe(0); // пустой месяц — без столбика
     expect(heightOf('bar-income-2026-07')).toBeGreaterThan(0); // июльский доход 70 — виден, хоть и маленький
   });
