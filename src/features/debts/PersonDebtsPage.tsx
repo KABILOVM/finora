@@ -7,7 +7,8 @@ import { Icon } from '@/components/Icon';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { DEBT_OVERFLOW_MESSAGE } from '@/db';
-import type { DebtDirection } from '@/domain/types';
+import { formatMinor } from '@/domain/money';
+import type { CurrencyCode, DebtDirection } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
 import { mergeCandidates } from './debtMatch';
@@ -15,11 +16,13 @@ import type { DebtItem } from './debtSummary';
 import { DIRECTION_LABEL } from './debtText';
 import { DebtList, Fold } from './DebtLists';
 import { MergeDebtsSheet } from './MergeDebtsSheet';
+import { NettingSheet } from './NettingSheet';
+import { nettableCurrencies, planNetting } from './netting';
 import { canNet, groupByPerson, personKey, reminderText, type PersonTotals } from './people';
 import { ReminderSheet } from './ReminderSheet';
 import { useDebtsData } from './useDebtsData';
 
-type Dialog = { kind: 'remind' } | { kind: 'merge'; target: DebtItem } | null;
+type Dialog = { kind: 'remind' } | { kind: 'merge'; target: DebtItem } | { kind: 'net'; currency: CurrencyCode } | null;
 
 function BackLink() {
   return (
@@ -111,6 +114,10 @@ export default function PersonDebtsPage() {
   if (!person) return <Notice title="Человек не найден" text="Возможно, все его долги удалены или в архиве. Вернитесь к списку долгов." />;
 
   const remind = reminderText(person, today);
+  const nets = nettableCurrencies(person).flatMap((t) => {
+    const plan = planNetting(person.open, t.currency);
+    return plan ? [{ currency: t.currency, totalMinor: plan.totalMinor }] : [];
+  });
   const lentOpen = person.open.filter((it) => it.debt.direction === 'lent');
   const borrowedOpen = person.open.filter((it) => it.debt.direction === 'borrowed');
   // Дубли: несколько открытых долгов одного направления и валюты — их можно объединить в один
@@ -142,8 +149,13 @@ export default function PersonDebtsPage() {
         </Card>
       ) : null}
 
-      {(remind !== null || dupGroups.length > 0) && (
+      {(remind !== null || dupGroups.length > 0 || nets.length > 0) && (
         <div className="mb-4 flex flex-col gap-2">
+          {nets.map((n) => (
+            <Button key={n.currency} variant="secondary" onClick={() => setDialog({ kind: 'net', currency: n.currency })}>
+              Взаимозачёт: {formatMinor(n.totalMinor, n.currency)}
+            </Button>
+          ))}
           {remind !== null && (
             <Button variant="secondary" onClick={() => setDialog({ kind: 'remind' })}>
               Напомнить о долге
@@ -177,6 +189,9 @@ export default function PersonDebtsPage() {
       )}
 
       {dialog?.kind === 'remind' && remind !== null && <ReminderSheet name={person.name} text={remind} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'net' && data.base !== null && (
+        <NettingSheet items={person.open} currency={dialog.currency} base={data.base} onClose={() => setDialog(null)} />
+      )}
       {dialog?.kind === 'merge' && <MergeDebtsSheet target={dialog.target} items={data.items} onClose={() => setDialog(null)} />}
     </>
   );
