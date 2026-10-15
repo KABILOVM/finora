@@ -439,6 +439,11 @@ test.describe('21. Напоминания: облачная сборка', () =>
     await expect(s.getByRole('combobox', { name: 'В какое время напоминать (ваше местное время)' })).toHaveValue('9');
     await s.getByRole('combobox', { name: 'В какое время напоминать (ваше местное время)' }).selectOption('21');
     await expect.poll(() => cloud.settings?.hour_local).toBe(21);
+    // лимиты бюджета: по умолчанию выключены, переключатель правит только свою колонку
+    await expect(s.getByRole('switch', { name: 'Лимиты бюджета' })).toHaveAttribute('aria-checked', 'false');
+    await s.getByRole('switch', { name: 'Лимиты бюджета' }).click();
+    await expect.poll(() => cloud.settings?.remind_budgets).toBe(true);
+    expect(Object.keys(reqs(cloud, 'POST', '/rest/v1/reminder_settings').at(-1)!.body as object).sort()).toEqual(['remind_budgets', 'updated_at']);
     await s.getByRole('switch', { name: 'Показывать названия в уведомлении' }).click();
     await expect.poll(() => cloud.settings?.show_details).toBe(true);
     await expect(s.getByRole('switch', { name: 'Показывать названия в уведомлении' })).toHaveAttribute('aria-checked', 'true');

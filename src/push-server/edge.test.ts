@@ -43,6 +43,12 @@ const SHARED: Array<{ name: string; file: string; mustHave: string[]; skipped: s
     skipped: ['FINORA_NAMESPACE', 'newId', 'defaultId'],
   },
   { name: 'plural', file: '../lib/plural.ts', mustHave: ['pluralRu'], skipped: [] },
+  {
+    name: 'budgetLevels',
+    file: '../domain/budgetLevels.ts',
+    mustHave: ['BudgetLevel', 'WARN_AT', 'percentOf', 'levelOf', 'categoryCovers', 'LevelBudget', 'LevelTx', 'BudgetLevelRow', 'BudgetLevelsArgs', 'budgetLevelsOf'],
+    skipped: [],
+  },
 ];
 
 describe('Edge-функция: файл самодостаточен и не расходится с приложением', () => {

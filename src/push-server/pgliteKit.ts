@@ -47,21 +47,64 @@ export async function rule(user: string, o: RuleOpts): Promise<string> {
 export interface TxOpts {
   walletId: string;
   occurredOn: string;
-  kind?: 'expense' | 'income';
+  kind?: 'expense' | 'income' | 'transfer';
   id?: string;
   debtId?: string | null;
   amount?: number;
   deleted?: boolean;
+  /** Категория расхода/дохода (у перевода её быть не может). */
+  categoryId?: string | null;
+  /** Валюта снимка суммы (по умолчанию TJS). */
+  baseCurrency?: string;
+  /** Снимок суммы в основной валюте (по умолчанию равен amount); у перевода это комиссия. */
+  baseAmount?: number;
+  /** Только для перевода: кошелёк «куда». */
+  toWalletId?: string;
 }
 export async function tx(user: string, o: TxOpts): Promise<string> {
   const tid = o.id ?? id('c');
+  const kind = o.kind ?? 'expense';
   await sql(
     user,
-    `insert into public.transactions (id, created_at, client_updated_at, device_id, deleted_at, kind, wallet_id, amount_minor, occurred_on, note, base_currency, base_amount_minor, debt_id)
-     values ($1, $2, $2, 'dev', $3, $4, $5, $6, $7, '', 'TJS', $6, $8)`,
-    [tid, TS, o.deleted ? TS : null, o.kind ?? 'expense', o.walletId, o.amount ?? 100, o.occurredOn, o.debtId ?? null],
+    `insert into public.transactions (id, created_at, client_updated_at, device_id, deleted_at, kind, wallet_id, amount_minor, occurred_on, note, base_currency, base_amount_minor, debt_id, category_id, to_wallet_id, to_amount_minor)
+     values ($1, $2, $2, 'dev', $3, $4, $5, $6, $7, '', $9, $10, $8, $11, $12, $13)`,
+    [tid, TS, o.deleted ? TS : null, kind, o.walletId, o.amount ?? 100, o.occurredOn, o.debtId ?? null, o.baseCurrency ?? 'TJS', o.baseAmount ?? o.amount ?? 100, kind === 'transfer' ? null : (o.categoryId ?? null), kind === 'transfer' ? (o.toWalletId ?? null) : null, kind === 'transfer' ? (o.amount ?? 100) : null],
   );
   return tid;
+}
+
+/** Категория пользователя (parentId — родитель; archived/deleted — как у старых трат). */
+export async function category(user: string, o: { name?: string; parentId?: string | null; archived?: boolean; deleted?: boolean; id?: string } = {}): Promise<string> {
+  const cid = o.id ?? id('e');
+  await sql(
+    user,
+    `insert into public.categories (id, created_at, client_updated_at, device_id, deleted_at, name, kind, parent_id, color, icon, sort_order, archived_at)
+     values ($1, $2, $2, 'dev', $3, $4, 'expense', $5, '#fff', 'x', 0, $6)`,
+    [cid, TS, o.deleted ? TS : null, o.name ?? 'Еда', o.parentId ?? null, o.archived ? TS : null],
+  );
+  return cid;
+}
+
+/** Лимит на месяц (categoryId null — общий лимит). */
+export async function budget(user: string, o: { categoryId?: string | null; amount?: number; currency?: string; archived?: boolean; deleted?: boolean; id?: string } = {}): Promise<string> {
+  const bid = o.id ?? id('f');
+  await sql(
+    user,
+    `insert into public.budgets (id, created_at, client_updated_at, device_id, deleted_at, category_id, amount_minor, currency, period, archived_at)
+     values ($1, $2, $2, 'dev', $3, $4, $5, $6, 'month', $7)`,
+    [bid, TS, o.deleted ? TS : null, o.categoryId ?? null, o.amount ?? 1000, o.currency ?? 'TJS', o.archived ? TS : null],
+  );
+  return bid;
+}
+
+/** Настройки пользователя в приложении (строка settings, id = id пользователя): нужна основная валюта. */
+export async function appSettings(user: string, baseCurrency = 'TJS'): Promise<void> {
+  await sql(
+    user,
+    `insert into public.settings (id, created_at, client_updated_at, device_id, base_currency, locale, week_starts_on)
+     values ($1, $2, $2, 'dev', $3, 'ru', 1)`,
+    [user, TS, baseCurrency],
+  );
 }
 
 export interface DebtOpts {
@@ -85,12 +128,12 @@ export async function debt(user: string, o: DebtOpts): Promise<string> {
   return did;
 }
 
-export async function settings(user: string, o: { hour?: number; tz?: string; payments?: boolean; debts?: boolean; daily?: boolean; details?: boolean; enabled?: boolean } = {}): Promise<void> {
+export async function settings(user: string, o: { hour?: number; tz?: string; payments?: boolean; debts?: boolean; daily?: boolean; budgets?: boolean; details?: boolean; enabled?: boolean } = {}): Promise<void> {
   await current.addUser(user);
   await admin(
-    `insert into public.reminder_settings (user_id, enabled, hour_local, timezone, remind_payments, remind_debts, remind_daily, show_details) values ($1, $2, $3, $4, $5, $6, $7, $8)
-     on conflict (user_id) do update set enabled = excluded.enabled, hour_local = excluded.hour_local, timezone = excluded.timezone, remind_payments = excluded.remind_payments, remind_debts = excluded.remind_debts, remind_daily = excluded.remind_daily, show_details = excluded.show_details`,
-    [user, o.enabled ?? true, o.hour ?? 9, o.tz ?? 'Asia/Dushanbe', o.payments ?? true, o.debts ?? true, o.daily ?? false, o.details ?? false],
+    `insert into public.reminder_settings (user_id, enabled, hour_local, timezone, remind_payments, remind_debts, remind_daily, remind_budgets, show_details) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     on conflict (user_id) do update set enabled = excluded.enabled, hour_local = excluded.hour_local, timezone = excluded.timezone, remind_payments = excluded.remind_payments, remind_debts = excluded.remind_debts, remind_daily = excluded.remind_daily, remind_budgets = excluded.remind_budgets, show_details = excluded.show_details`,
+    [user, o.enabled ?? true, o.hour ?? 9, o.tz ?? 'Asia/Dushanbe', o.payments ?? true, o.debts ?? true, o.daily ?? false, o.budgets ?? false, o.details ?? false],
   );
 }
 

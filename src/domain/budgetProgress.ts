@@ -1,3 +1,4 @@
+import { categoryCovers, levelOf, percentOf, WARN_AT, DANGER_AT, OVER_AT, type BudgetLevel } from './budgetLevels';
 import { addMinor, isMinor } from './money';
 import type { CurrencyCode, IsoDateTime, Minor, UUID } from './types';
 
@@ -13,25 +14,8 @@ import type { CurrencyCode, IsoDateTime, Minor, UUID } from './types';
  * Проценты и остатки считаются целыми числами (BigInt для произведения), поэтому на больших суммах точность не теряется.
  */
 
-export type BudgetLevel = 'ok' | 'warn' | 'danger' | 'over';
-
-export const WARN_AT = 70;
-export const DANGER_AT = 90;
-export const OVER_AT = 100;
-
-/** Целый процент «потрачено от лимита», округление вниз. Нет лимита, нет трат или некорректные суммы — 0. */
-export function percentOf(spentMinor: Minor, limitMinor: Minor): number {
-  if (!isMinor(spentMinor) || !isMinor(limitMinor) || limitMinor <= 0 || spentMinor <= 0) return 0;
-  return Number((BigInt(spentMinor) * 100n) / BigInt(limitMinor));
-}
-
-/** Уровень по целому проценту. */
-export function levelOf(percent: number): BudgetLevel {
-  if (percent >= OVER_AT) return 'over';
-  if (percent >= DANGER_AT) return 'danger';
-  if (percent >= WARN_AT) return 'warn';
-  return 'ok';
-}
+export type { BudgetLevel };
+export { categoryCovers, levelOf, percentOf, WARN_AT, DANGER_AT, OVER_AT };
 
 /** Бюджет в том виде, в каком он нужен расчёту (подходит и LocalRow<Budget>). */
 export interface BudgetLike {
@@ -87,22 +71,6 @@ export interface BudgetsOverview {
 }
 
 export type BudgetsResult = ({ ok: true } & BudgetsOverview) | { ok: false; error: 'overflow' };
-
-/** Охватывает ли бюджет категории `budgetCategoryId` расход в категории `spendCategoryId` (сама категория или её потомок). */
-export function categoryCovers(
-  budgetCategoryId: UUID,
-  spendCategoryId: UUID | null,
-  parentOf: ReadonlyMap<UUID, UUID | null>,
-): boolean {
-  const seen = new Set<UUID>(); // защита от петли в данных: A → B → A
-  let cur = spendCategoryId;
-  while (cur !== null && !seen.has(cur)) {
-    if (cur === budgetCategoryId) return true;
-    seen.add(cur);
-    cur = parentOf.get(cur) ?? null;
-  }
-  return false;
-}
 
 export interface BudgetProgressArgs {
   budgets: readonly BudgetLike[];

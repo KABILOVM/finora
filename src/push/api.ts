@@ -126,6 +126,7 @@ export function parseSettingsRow(row: unknown): ReminderSettings | null {
     remindPayments: bool(row.remind_payments, d.remindPayments),
     remindDebts: bool(row.remind_debts, d.remindDebts),
     remindDaily: bool(row.remind_daily, d.remindDaily),
+    remindBudgets: bool(row.remind_budgets, d.remindBudgets),
     showDetails: bool(row.show_details, d.showDetails),
   };
 }
@@ -141,7 +142,7 @@ export function settingsToColumns(patch: Partial<ReminderSettings>): Record<stri
     return true;
   };
   if (!flag('enabled', 'enabled') || !flag('remindPayments', 'remind_payments') || !flag('remindDebts', 'remind_debts')) return null;
-  if (!flag('remindDaily', 'remind_daily') || !flag('showDetails', 'show_details')) return null;
+  if (!flag('remindDaily', 'remind_daily') || !flag('remindBudgets', 'remind_budgets') || !flag('showDetails', 'show_details')) return null;
   if (patch.hourLocal !== undefined) {
     if (typeof patch.hourLocal !== 'number' || !Number.isInteger(patch.hourLocal) || patch.hourLocal < 0 || patch.hourLocal > 23) return null;
     out.hour_local = patch.hourLocal;
