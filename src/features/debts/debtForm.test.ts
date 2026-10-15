@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, emptyDebtForm, overpayOf, validateDebtForm, validatePayment, type DebtFormState } from './debtForm';
+import { cleanName, emptyDebtForm, overpayOf, validateDebtForm, validatePayment, validateTopUp, type DebtFormState, type TopUpFormInput } from './debtForm';
 
 const form = (over: Partial<DebtFormState> = {}): DebtFormState => ({
   ...emptyDebtForm('lent', 'TJS', '2026-10-15'),
@@ -78,3 +78,45 @@ describe('переплата и проверка платежа', () => {
     expect(validatePayment({ ...ok, date: '2026-10-15' }).ok).toBe(true);
   });
 });
+
+describe('validateTopUp: «добавить ещё в долг»', () => {
+  const top = (over: Partial<TopUpFormInput> = {}): TopUpFormInput => ({
+    amountMinor: 30_000,
+    moneyOn: true,
+    walletId: 'w1',
+    date: '2026-10-15',
+    note: '',
+    openedOn: '2026-10-01',
+    hasDue: false,
+    dueOn: '2026-11-14',
+    ...over,
+  });
+
+  it('нормальная форма — без ошибок; «на бумаге» кошелёк не нужен', () => {
+    expect(validateTopUp(top())).toEqual({ errors: {}, ok: true });
+    expect(validateTopUp(top({ moneyOn: false, walletId: null })).ok).toBe(true);
+  });
+  it('нет суммы, ноль и минус', () => {
+    expect(validateTopUp(top({ amountMinor: null })).errors.amount).toBe('Введите сумму пополнения');
+    expect(validateTopUp(top({ amountMinor: 0 })).errors.amount).toBe('Сумма пополнения должна быть больше нуля');
+    expect(validateTopUp(top({ amountMinor: -5 })).errors.amount).toBe('Сумма пополнения должна быть больше нуля');
+  });
+  it('деньги двигаются, а кошелька нет', () => {
+    expect(validateTopUp(top({ walletId: null })).errors.wallet).toBe('Выберите кошелёк');
+  });
+  it('дата не раньше даты долга; в день долга можно', () => {
+    expect(validateTopUp(top({ date: '2026-09-30' })).errors.date).toBe('Пополнение не может быть раньше даты долга (01.10.2026)');
+    expect(validateTopUp(top({ date: '2026-10-01' })).ok).toBe(true);
+    expect(validateTopUp(top({ date: 'вчера' })).errors.date).toBeTruthy();
+  });
+  it('срок не раньше пополнения (проверяется, только если указан)', () => {
+    expect(validateTopUp(top({ hasDue: true, dueOn: '2026-10-14' })).errors.dueOn).toBe('Срок возврата не может быть раньше даты пополнения (15.10.2026)');
+    expect(validateTopUp(top({ hasDue: true, dueOn: '2026-10-15' })).ok).toBe(true);
+    expect(validateTopUp(top({ hasDue: false, dueOn: '2020-01-01' })).ok).toBe(true);
+  });
+  it('длинная заметка', () => {
+    expect(validateTopUp(top({ note: 'я'.repeat(501) })).errors.note).toMatch(/Заметка не длиннее 500/);
+    expect(validateTopUp(top({ note: 'я'.repeat(500) })).ok).toBe(true);
+  });
+});
+

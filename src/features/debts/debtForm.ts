@@ -108,3 +108,43 @@ export function validatePayment(f: PaymentFormInput): { errors: PaymentFormError
   }
   return { errors, ok: Object.keys(errors).length === 0 };
 }
+
+export interface TopUpFormInput {
+  amountMinor: Minor | null;
+  /** Записывать ли движение денег по кошельку. */
+  moneyOn: boolean;
+  walletId: string | null;
+  date: IsoDate;
+  note: string;
+  /** Дата долга: пополнение раньше неё не принимаем. */
+  openedOn: IsoDate;
+  /** false — срок не указан (его не меняем). */
+  hasDue: boolean;
+  dueOn: IsoDate;
+}
+
+export interface TopUpFormErrors {
+  amount?: string;
+  wallet?: string;
+  date?: string;
+  dueOn?: string;
+  note?: string;
+}
+
+/** «Добавить ещё в долг»: сумма больше нуля, кошелёк (если деньги двигаются), дата не раньше долга, срок не раньше пополнения. */
+export function validateTopUp(f: TopUpFormInput): { errors: TopUpFormErrors; ok: boolean } {
+  const errors: TopUpFormErrors = {};
+  if (f.amountMinor === null) errors.amount = 'Введите сумму пополнения';
+  else if (f.amountMinor <= 0) errors.amount = 'Сумма пополнения должна быть больше нуля';
+  if (f.moneyOn && f.walletId === null) errors.wallet = 'Выберите кошелёк';
+  const dateError = checkDate(f.date);
+  if (dateError) errors.date = dateError;
+  else if (f.date < f.openedOn) errors.date = `Пополнение не может быть раньше даты долга (${ruDateShort(f.openedOn)})`;
+  if (f.hasDue) {
+    const dueError = checkDate(f.dueOn);
+    if (dueError) errors.dueOn = dueError;
+    else if (!dateError && f.dueOn < f.date) errors.dueOn = `Срок возврата не может быть раньше даты пополнения (${ruDateShort(f.date)})`;
+  }
+  if (f.note.trim().length > NOTE_MAX) errors.note = `Заметка не длиннее ${NOTE_MAX} символов (сейчас ${f.note.trim().length})`;
+  return { errors, ok: Object.keys(errors).length === 0 };
+}

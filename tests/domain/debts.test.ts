@@ -117,3 +117,43 @@ describe('computeDebtState', () => {
     expect(computeDebtState(debt(), [], wallets)).toMatchObject({ remainingMinor: 100_000, paidMinor: 0, issuedMinor: 0, settled: false, payments: [] });
   });
 });
+
+describe('computeDebtState: выдачи и пополнения (entries)', () => {
+  it('исходная выдача и «добавить ещё» — по порядку, старые первыми; платежи в них не попадают', () => {
+    const s = computeDebtState(
+      debt({ principalMinor: 150_000 }),
+      [
+        op({ id: 'late', kind: 'expense', amountMinor: 50_000, occurredOn: '2026-10-20' }),
+        op({ id: 'first', kind: 'expense', amountMinor: 100_000, occurredOn: '2026-10-01' }),
+        op({ id: 'pay', amountMinor: 30_000, occurredOn: '2026-10-10' }),
+      ],
+      wallets,
+    );
+    expect(s.entries).toEqual([
+      { txId: 'first', occurredOn: '2026-10-01', amountMinor: 100_000 },
+      { txId: 'late', occurredOn: '2026-10-20', amountMinor: 50_000 },
+    ]);
+    expect(s.issuedMinor).toBe(150_000);
+    expect(s.payments.map((p) => p.txId)).toEqual(['pay']);
+  });
+
+  it('удалённые, чужие и другой валюты операции в entries не входят', () => {
+    const s = computeDebtState(
+      debt(),
+      [
+        op({ id: 'ok', kind: 'expense', amountMinor: 100_000 }),
+        op({ id: 'gone', kind: 'expense', amountMinor: 1, deletedAt: '2026-10-06T00:00:00.000Z' }),
+        op({ id: 'other', kind: 'expense', amountMinor: 2, debtId: 'd2' }),
+        op({ id: 'usd', kind: 'expense', amountMinor: 3, walletId: 'usd' }),
+      ],
+      wallets,
+    );
+    expect(s.entries.map((e) => e.txId)).toEqual(['ok']);
+    expect(s.issues.map((i) => i.txId)).toEqual(['usd']);
+  });
+
+  it('долг «на бумаге» — entries пуст', () => {
+    expect(computeDebtState(debt(), [], wallets).entries).toEqual([]);
+  });
+});
+

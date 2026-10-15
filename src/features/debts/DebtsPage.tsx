@@ -201,6 +201,7 @@ export default function DebtsPage() {
       {sheet && base !== null && (
         <DebtSheet
           debt={null}
+          existing={data.items}
           defaultDirection={direction}
           base={base}
           onClose={() => setSheet(false)}

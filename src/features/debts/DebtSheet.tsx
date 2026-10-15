@@ -13,9 +13,11 @@ import type { CurrencyCode, Debt, DebtDirection, LocalRow, Minor } from '@/domai
 import { endSentence } from '@/features/transactions/txDisplay';
 import { NOTE_MAX } from '@/features/transactions/txForm';
 import { addDays, todayLocal } from '@/lib/dates';
-import { freshPlanIds, saveNewDebt } from './debtActions';
+import { freshPlanIds, saveNewDebt, saveTopUp } from './debtActions';
 import { emptyDebtForm, validateDebtForm, type DebtFormErrors, type DebtFormState } from './debtForm';
-import { DIRECTION_ACTION, DIRECTION_LABEL, DIRECTION_NAME_LABEL } from './debtText';
+import { findMatchingDebts, normName } from './debtMatch';
+import type { DebtItem } from './debtSummary';
+import { DIRECTION_ACTION, DIRECTION_LABEL, DIRECTION_NAME_LABEL, ruDateShort, TOP_UP_AMOUNT_LABEL } from './debtText';
 import { DayField, DueField } from './DebtDates';
 import { DebtMoneySection } from './DebtMoneySection';
 import { rankWallets, usePopularity } from '@/features/transactions/popularity';
@@ -30,8 +32,13 @@ export interface DebtSheetProps {
   defaultDirection?: DebtDirection;
   base: CurrencyCode;
   onClose: () => void;
-  /** Долг создан: экран переключается на его направление. */
+  /** Долг создан (или к существующему добавлено): экран переключается на его направление. */
   onCreated?: (debt: LocalRow<Debt>) => void;
+  /**
+   * Уже заведённые долги (для нового долга): если человек, направление и валюта совпали с существующим долгом, предлагаем
+   * «добавить к нему» вместо второго долга. Не передали — предложения нет.
+   */
+  existing?: readonly DebtItem[];
 }
 
 const DIRECTIONS = [
@@ -64,7 +71,7 @@ function formFromDebt(d: LocalRow<Debt>): DebtFormState {
 }
 
 /** Новый долг (с движением денег по желанию) или правка долга. Деньги вводятся только через AmountInput. */
-export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base, onClose, onCreated }: DebtSheetProps) {
+export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base, onClose, onCreated, existing }: DebtSheetProps) {
   const store = useStore();
   const toast = useToast();
   const wallets = useWallets();
@@ -83,8 +90,17 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   const [walletError, setWalletError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [joinId, setJoinId] = useState<string | null>(null);
+  const [declinedKey, setDeclinedKey] = useState<string | null>(null);
   const busy = useRef(false);
   const ids = useRef(freshPlanIds());
+
+  // Тот же человек, то же направление и валюта: предлагаем добавить к существующему долгу. «Добавить» выбрано — долг не создаётся,
+  // сумма идёт как пополнение. Выбор привязан к найденному долгу: сменили имя или валюту — совпадения пересчитались, выбор сам снялся.
+  const matches = orig === null && existing ? findMatchingDebts(existing, form) : [];
+  const matchKey = `${form.direction}|${form.currency}|${normName(form.counterparty)}`;
+  const joined = matches.find((m) => m.debt.id === joinId) ?? null;
+  const asking = matches.length > 0 && joined === null && declinedKey !== matchKey;
 
   // Направление и валюту репозиторий менять не даёт, когда по долгу есть операции или регулярные платежи: говорим об этом словами
   const linked = useLiveQuery(async () => {
@@ -149,11 +165,29 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
       }
       if (walletId === null) return setWalletError('Выберите кошелёк');
     }
+    if (joined && value.openedOn < joined.debt.openedOn) {
+      return setErrors({ openedOn: `Пополнение не может быть раньше даты долга (${ruDateShort(joined.debt.openedOn)})` });
+    }
     setErrors({});
     busy.current = true;
     setSaving(true);
     try {
-      if (!orig) {
+      if (joined) {
+        const movement =
+          moneyOn && walletId !== null ? { walletId, txId: ids.current.txId, ...(resolved?.ok && resolved.fx ? { fx: resolved.fx } : {}) } : null;
+        const res = await saveTopUp(store, {
+          debtId: joined.debt.id,
+          direction: form.direction,
+          amountMinor: value.principalMinor,
+          occurredOn: value.openedOn,
+          note: value.note,
+          ...(value.dueOn !== null ? { dueOn: value.dueOn } : {}),
+          movement,
+        });
+        if (resolved?.ok) resolved.remember();
+        toast.success(res.tx ? 'Добавлено к долгу, деньги учтены в кошельке' : 'Добавлено к долгу «на бумаге»');
+        onCreated?.(res.debt);
+      } else if (!orig) {
         const res = await saveNewDebt(store, {
           debtId: ids.current.debtId,
           debt: {
@@ -203,7 +237,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
       open
       onClose={onClose}
       dismissible={!saving}
-      title={editing ? 'Правка долга' : 'Новый долг'}
+      title={editing ? 'Правка долга' : joined ? 'Ещё в долг' : 'Новый долг'}
       footer={
         <div className="flex flex-col gap-2">
           {errors.form && (
@@ -212,7 +246,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             </p>
           )}
           <Button size="lg" fullWidth loading={saving} onClick={() => void save()}>
-            Сохранить
+            {joined ? 'Добавить к долгу' : 'Сохранить'}
           </Button>
         </div>
       }
@@ -248,6 +282,55 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
           data-autofocus
         />
 
+        {asking && (
+          <section aria-label="Такой долг уже есть" data-testid="debt-match" className="flex flex-col gap-2 rounded-2xl border border-brand/40 bg-brand/5 p-3">
+            <p className="font-semibold">
+              {matches.length === 1 ? `У вас уже есть долг «${matches[0]!.debt.counterparty}»` : `У вас уже есть долги с «${matches[0]!.debt.counterparty}»`}
+            </p>
+            <p className="text-sm text-muted">Добавьте сумму к нему, чтобы не вести два долга одному человеку.</p>
+            <ul className="flex flex-col gap-2">
+              {matches.map((m) => (
+                <li key={m.debt.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 text-sm">
+                    Остаток <span className="money font-semibold">{formatMinor(m.state?.remainingMinor ?? 0, m.debt.currency)}</span>
+                    {m.debt.closedAt !== null && ' · закрыт, откроется снова'}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    aria-label={`Добавить к долгу «${m.debt.counterparty}» от ${ruDateShort(m.debt.openedOn)}`}
+                    onClick={() => setJoinId(m.debt.id)}
+                  >
+                    Добавить к этому долгу
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <Button variant="ghost" className="self-start" onClick={() => setDeclinedKey(matchKey)}>
+              Создать отдельный долг
+            </Button>
+          </section>
+        )}
+        {joined && (
+          <section aria-label="Добавление к долгу" data-testid="debt-joined" className="flex flex-col gap-1 rounded-2xl border border-brand/40 bg-brand/5 p-3">
+            <p className="font-semibold">Сумма добавится к долгу «{joined.debt.counterparty}»</p>
+            <p className="text-sm text-muted">
+              Сейчас сумма долга {formatMinor(joined.state?.principalMinor ?? joined.debt.principalMinor, joined.debt.currency)}, остаток{' '}
+              {formatMinor(joined.state?.remainingMinor ?? 0, joined.debt.currency)}. Новый долг не создаётся. Срок поменяется, только если вы
+              его укажете; заметка запишется к операции.
+            </p>
+            <Button
+              variant="ghost"
+              className="self-start"
+              onClick={() => {
+                setJoinId(null);
+                setDeclinedKey(matchKey);
+              }}
+            >
+              Создать отдельный долг
+            </Button>
+          </section>
+        )}
+
         {!locked && (
           <Field id="debt-currency" label="Валюта" hint={editing ? undefined : 'Деньги по долгу идут в кошелёк этой же валюты'}>
             <select
@@ -270,7 +353,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
 
         <div className="flex flex-col gap-1">
           <AmountInput
-            label="Сумма долга"
+            label={joined ? TOP_UP_AMOUNT_LABEL[form.direction] : 'Сумма долга'}
             currency={form.currency}
             value={form.amountMinor}
             error={errors.amount}
@@ -286,7 +369,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
           )}
         </div>
 
-        <DayField label="Дата долга" value={form.openedOn} onChange={(openedOn) => set({ openedOn })} error={errors.openedOn} />
+        <DayField label={joined ? 'Дата пополнения' : 'Дата долга'} value={form.openedOn} onChange={(openedOn) => set({ openedOn })} error={errors.openedOn} />
         <DueField
           hasDue={form.hasDue}
           dueOn={form.dueOn}
@@ -311,6 +394,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
 
         {!editing && (
           <DebtMoneySection
+            topUp={joined !== null}
             direction={form.direction}
             currency={form.currency}
             amountMinor={form.amountMinor}
