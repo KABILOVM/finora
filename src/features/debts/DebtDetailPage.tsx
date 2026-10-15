@@ -12,15 +12,19 @@ import { formatMinor } from '@/domain/money';
 import { humanError, toastWithUndo, UNDO_MS } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { useToday } from '@/recurring/useToday';
+import { mergeCandidates } from './debtMatch';
 import { DebtSheet } from './DebtSheet';
 import { DeleteDebtDialog } from './DeleteDebtDialog';
 import { DebtSummaryCard } from './DebtSummaryCard';
-import { DIRECTION_LABEL, ruDateShort } from './debtText';
-import { IssuesNotice, PaymentsList } from './PaymentsList';
+import { DIRECTION_LABEL, ruDateShort, TOP_UP_ACTION } from './debtText';
+import { MergeDebtsSheet } from './MergeDebtsSheet';
+import { EntriesList, IssuesNotice, PaymentsList } from './PaymentsList';
 import { PaymentSheet } from './PaymentSheet';
+import { TopUpSheet } from './TopUpSheet';
 import { useDebtLines } from './useDebtLines';
+import { useDebtsData } from './useDebtsData';
 
-type Dialog = 'close' | 'payment' | 'edit' | 'delete' | null;
+type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | null;
 
 function BackLink({ dir }: { dir?: string }) {
   return (
@@ -62,6 +66,7 @@ export default function DebtDetailPage() {
   const location = useLocation();
   const view = useDebtView(id);
   const lines = useDebtLines(id);
+  const all = useDebtsData(); // для «Объединить»: какие ещё долги подходят
   const [dialog, setDialog] = useState<Dialog>(null);
   const [deleting, setDeleting] = useState<DebtPayment | null>(null);
   const [busy, setBusy] = useState(false);
@@ -90,6 +95,8 @@ export default function DebtDetailPage() {
   const archived = debt.archivedAt !== null;
   const closed = debt.closedAt !== null;
   const base = lines.base ?? debt.currency;
+  const mergeTarget = all?.items.find((it) => it.debt.id === debt.id) ?? null;
+  const canMerge = !archived && mergeTarget !== null && mergeCandidates(all?.items ?? [], debt).length > 0;
 
   const run = async (action: () => Promise<unknown>, fallback: string, done?: () => void) => {
     if (busy) return false;
@@ -193,6 +200,18 @@ export default function DebtDetailPage() {
           </Button>
         )}
         {!archived && (
+          <div className={canMerge ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
+            <Button variant="secondary" icon="plus" onClick={() => setDialog('topup')}>
+              {TOP_UP_ACTION[debt.direction]}
+            </Button>
+            {canMerge && (
+              <Button variant="secondary" onClick={() => setDialog('merge')}>
+                Объединить…
+              </Button>
+            )}
+          </div>
+        )}
+        {!archived && (
           <div className="grid grid-cols-2 gap-2">
             <Button variant="secondary" icon="edit" onClick={() => setDialog('edit')}>
               Править
@@ -220,6 +239,7 @@ export default function DebtDetailPage() {
       </div>
 
       <IssuesNotice issues={state.issues} txs={lines.txs} wallets={lines.wallets} onOpen={openTx} />
+      <EntriesList entries={state.entries} currency={debt.currency} txs={lines.txs} wallets={lines.wallets} today={today} />
       <PaymentsList
         payments={state.payments}
         currency={debt.currency}
@@ -276,6 +296,8 @@ export default function DebtDetailPage() {
       />
 
       {dialog === 'payment' && <PaymentSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
+      {dialog === 'topup' && <TopUpSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
+      {dialog === 'merge' && mergeTarget && <MergeDebtsSheet target={mergeTarget} items={all?.items ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'edit' && <DebtSheet debt={debt} paidMinor={state.paidMinor} base={base} onClose={() => setDialog(null)} />}
     </>
   );

@@ -94,3 +94,59 @@ export function savePayment(store: Store, p: PaymentPlan): Promise<LocalRow<Tran
     { id: p.txId },
   );
 }
+
+export interface TopUpPlan {
+  debtId: UUID;
+  direction: DebtDirection;
+  amountMinor: Minor;
+  occurredOn: IsoDate;
+  /** Заметка к операции выдачи/получения (при «на бумаге» записать её некуда). */
+  note: string;
+  /** Новый срок возврата; undefined — не менять. */
+  dueOn?: IsoDate | null;
+  /** null — «на бумаге»: сумма долга растёт, деньги в кошельках не двигаются. */
+  movement: IssueMovement | null;
+}
+
+export interface TopUpResult {
+  debt: LocalRow<Debt>;
+  tx: LocalRow<Transaction> | null;
+}
+
+/**
+ * «Добавить ещё в долг»: сумма долга растёт и (по желанию) создаётся операция выдачи/получения — ОДНОЙ транзакцией базы, как у
+ * saveNewDebt: если операция не создалась (кошелёк в архиве, валюта не совпала, нет курса…), откатывается и рост суммы.
+ * Идемпотентность: операция с таким id уже есть — повтор ничего не меняет и возвращает имеющееся. «На бумаге» id нет, там от
+ * двойного нажатия защищает сам экран (busy).
+ */
+export async function saveTopUp(store: Store, plan: TopUpPlan): Promise<TopUpResult> {
+  const { db } = store;
+  // ВАЖНО: внутри транзакции нельзя ждать ничего, кроме базы (crypto и т.п.) — она закроется. Все id уже готовы.
+  return db.transaction(
+    'rw',
+    [db.debts, db.transactions, db.wallets, db.categories, db.settings, db.recurring_rules, db.meta],
+    async (): Promise<TopUpResult> => {
+      if (plan.movement !== null) {
+        const done = await db.transactions.get(plan.movement.txId);
+        const debt = done ? await db.debts.get(plan.debtId) : undefined;
+        if (done && debt) return { debt, tx: done };
+      }
+      const debt = await store.debts.increase(plan.debtId, plan.amountMinor, plan.dueOn !== undefined ? { dueOn: plan.dueOn } : undefined);
+      if (plan.movement === null) return { debt, tx: null };
+      const tx = await store.transactions.create(
+        {
+          kind: issueKind(plan.direction),
+          walletId: plan.movement.walletId,
+          amountMinor: plan.amountMinor,
+          categoryId: null,
+          occurredOn: plan.occurredOn,
+          note: plan.note.trim(),
+          debtId: debt.id,
+          ...(plan.movement.fx ? { fx: plan.movement.fx } : {}),
+        },
+        { id: plan.movement.txId },
+      );
+      return { debt, tx };
+    },
+  );
+}
