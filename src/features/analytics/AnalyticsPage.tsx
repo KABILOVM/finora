@@ -14,9 +14,11 @@ import { useToday } from '@/recurring/useToday';
 import { CategoryCompare } from './CategoryCompare';
 import { MonthlyBars } from './charts/MonthlyBars';
 import { WeekdayBars } from './charts/WeekdayBars';
+import { NetWorthCard } from './NetWorthCard';
 import { hasPaceContent, PaceCard } from './PaceCard';
 import { TopExpensesList } from './TopExpensesList';
 import { useAnalyticsData, type AnalyticsData } from './useAnalyticsData';
+import { useNetWorth } from './useNetWorth';
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
@@ -94,6 +96,7 @@ export default function AnalyticsPage() {
   });
   const data = useAnalyticsData(month, today);
   const categories = useCategoryIndex();
+  const netWorth = useNetWorth(today);
 
   const header = <PageHeader title="Аналитика" />;
   const switcher = <MonthSwitcher month={month} max={currentMonth} onChange={setMonth} className="mb-3" />;
@@ -143,6 +146,7 @@ export default function AnalyticsPage() {
           <Section id="analytics-months" title="Доходы и расходы по месяцам">
             <MonthlyBars points={data.series} base={data.base} />
           </Section>
+          {netWorth && !('overflow' in netWorth) && <NetWorthCard data={netWorth} />}
           <Section id="analytics-categories" title="Категории: сравнение с прошлым месяцем">
             {data.deltas.length === 0 ? (
               <p className="text-muted">Расходов по категориям в этом и прошлом месяце нет.</p>
