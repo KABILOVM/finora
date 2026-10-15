@@ -391,6 +391,34 @@ describe('виджет «Можно тратить в день» на «Глав
     expect(screen.queryAllByRole('progressbar')).toHaveLength(0);
   });
 
+  it('«Обычно вы тратите» — средний расход в день; обычно меньше, чем можно, — без предупреждения', async () => {
+    await openWidget(baseSetup);
+    const usual = await waitFor(() => {
+      const el = document.querySelector('[data-testid="widget-usual-per-day"]');
+      expect(el).not.toBeNull();
+      return text(el);
+    });
+    expect(usual).toBe(`Обычно вы тратите ${fmt(3_571)} в день`); // 500 ÷ 14 дней с первой операции
+  });
+
+  it('обычно тратите больше, чем можно в день, — об этом сказано', async () => {
+    await openWidget(async (s) => {
+      const i = await ids(s);
+      const income = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+      await s.transactions.create({ kind: 'income', walletId: i.cash, amountMinor: 300_000, categoryId: income?.id ?? null, occurredOn: '2026-10-01' });
+      await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 280_000, categoryId: i.cats['Покупки'] ?? null, occurredOn: '2026-10-10' });
+    });
+    // на руках 200 с., до конца месяца 17 дней: 11,76 в день; а обычно уходит 2 800 с. ÷ 14 дней = 200 с. в день
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(1_176)));
+    expect(text(document.querySelector('[data-testid="widget-usual-per-day"]'))).toBe(`Обычно вы тратите ${fmt(20_000)} в день — больше, чем можно`);
+  });
+
+  it('истории операций ещё нет — строки «Обычно вы тратите» нет (а не «0 в день»)', async () => {
+    await openWidget();
+    await waitFor(() => expect(document.querySelector('[data-testid="widget-per-day"]')).not.toBeNull());
+    expect(document.querySelector('[data-testid="widget-usual-per-day"]')).toBeNull();
+  });
+
   it('есть общий лимит: показан он; категории — только если уже не «в пределах»', async () => {
     await openWidget(async (s) => {
       const i = await baseSetup(s);

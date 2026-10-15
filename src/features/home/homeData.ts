@@ -1,4 +1,5 @@
 import { totalInBase } from '@/domain/totals';
+import { floorDiv } from '@/domain/forecast';
 import { addMinor } from '@/domain/money';
 import type { CategoryTotal } from '@/db';
 import { summarizeDay } from '@/db/queries';
@@ -93,6 +94,17 @@ export function topCategories(byCategory: readonly CategoryTotal[], limit = 5): 
 export function sharePercent(part: Minor, whole: Minor): number {
   if (!(whole > 0) || !(part > 0)) return 0;
   return Math.min(100, Math.round((part / whole) * 100));
+}
+
+/**
+ * Средний расход в день с начала месяца: расход месяца ÷ число прошедших дней, считая сегодняшний (номер дня в дате).
+ * Округляем вниз, как и остальные «в день» (domain/forecast.ts). null — расходов в месяце нет: «0 в день» ничего не говорит.
+ * Бросает RangeError, если сумма не помещается в безопасное целое.
+ */
+export function avgPerDay(expenseMinor: Minor, today: IsoDate): Minor | null {
+  if (expenseMinor <= 0) return null;
+  const day = Number(today.slice(8, 10));
+  return floorDiv(expenseMinor, day >= 1 ? day : 1);
 }
 
 type DayTx = Parameters<typeof summarizeDay>[0][number];
