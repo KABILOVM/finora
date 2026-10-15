@@ -47,6 +47,9 @@ export const BASE_AMOUNT_MAX = MINOR_LIMIT;
 export const OPENING_BALANCE_MIN = -MINOR_LIMIT;
 export const OPENING_BALANCE_MAX = MINOR_LIMIT;
 /** wallets.sort_order и categories.sort_order: от −1e15 до 1e15. */
+/** Цель накопления: от 1 до 1e15 (как CHECK wallets_goal_minor на сервере). */
+export const GOAL_MIN = 1;
+export const GOAL_MAX = MINOR_LIMIT;
 export const SORT_ORDER_MIN = -MINOR_LIMIT;
 export const SORT_ORDER_MAX = MINOR_LIMIT;
 
@@ -245,9 +248,15 @@ export interface WalletData {
   icon: string;
   sortOrder: number;
   archivedAt: IsoDateTime | null;
+  goalMinor: Minor | null;
+  goalOn: IsoDate | null;
 }
 
 export function parseWalletData(raw: Record<string, unknown>): WalletData {
+  // Цели может не быть вовсе: старые строки, бэкапы и ответы сервера без этих полей — это «цели нет» (undefined → null)
+  const goalMinor = raw['goalMinor'] == null ? null : reqMinorInRange(raw['goalMinor'], 'Цель накопления', GOAL_MIN, GOAL_MAX);
+  const goalOn = raw['goalOn'] == null ? null : reqDate(raw['goalOn'], 'Срок цели');
+  if (goalOn !== null && goalMinor === null) fail('Срок цели указан без суммы: укажите, сколько хотите накопить');
   return {
     name: reqText(raw['name'], 'Название кошелька', LIMITS.name),
     currency: reqCurrency(raw['currency'], 'Валюта кошелька'),
@@ -257,6 +266,8 @@ export function parseWalletData(raw: Record<string, unknown>): WalletData {
     icon: reqText(raw['icon'], 'Значок кошелька', LIMITS.short),
     sortOrder: reqSafeInt(raw['sortOrder'], 'Порядок кошелька', SORT_ORDER_MIN, SORT_ORDER_MAX),
     archivedAt: optStamp(raw['archivedAt'], 'Дата архивации кошелька'),
+    goalMinor,
+    goalOn,
   };
 }
 

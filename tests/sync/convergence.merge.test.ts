@@ -47,6 +47,7 @@ const denseOps = (n: number, min: number, max: number): fc.Arbitrary<Op[]> => {
       { weight: 3, arbitrary: fc.record({ t: fc.constant('wallet-rename' as const), d, i: idx }) },
       { weight: 2, arbitrary: fc.record({ t: fc.constant('wallet-color' as const), d, i: idx, n: fc.integer({ min: 0, max: 9 }) }) },
       { weight: 1, arbitrary: fc.record({ t: fc.constant('wallet-opening' as const), d, i: idx, amount: fc.integer({ min: 0, max: 99_999 }) }) },
+      { weight: 2, arbitrary: fc.record({ t: fc.constant('wallet-goal' as const), d, i: idx, amount: fc.integer({ min: 0, max: 99_999 }), day: fc.integer({ min: 0, max: 27 }) }) },
       { weight: 1, arbitrary: fc.record({ t: fc.constant('settings' as const), d }) },
       { weight: 3, arbitrary: fc.record({ t: fc.constant('offline' as const), d }) },
       { weight: 3, arbitrary: fc.record({ t: fc.constant('online' as const), d }) },

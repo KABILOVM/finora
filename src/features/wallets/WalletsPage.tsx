@@ -16,9 +16,11 @@ import { formatDayLabel } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { enteredNote } from '@/rates/enteredText';
 import { useRates } from '@/rates/hooks';
+import { GoalLine } from './GoalLine';
 import { ReconcileSheet } from './ReconcileSheet';
 import { computeWalletsTotal } from './walletTotals';
 import { WALLET_KIND_LABELS } from './walletUi';
+import { useGoals } from './useGoals';
 import { WalletSheet } from './WalletSheet';
 
 type SheetState = { kind: 'new' } | { kind: 'edit'; wallet: LocalRow<Wallet> };
@@ -35,6 +37,7 @@ export default function WalletsPage() {
   const balances = useBalances();
   const settings = useSettings();
   const { getRate } = useRates();
+  const goals = useGoals();
 
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [reconciling, setReconciling] = useState<LocalRow<Wallet> | null>(null);
@@ -45,6 +48,8 @@ export default function WalletsPage() {
   const active = useMemo(() => (wallets ?? []).filter((w) => w.archivedAt === null), [wallets]);
   const archived = useMemo(() => (wallets ?? []).filter((w) => w.archivedAt !== null), [wallets]);
   const base = settings?.baseCurrency;
+
+  const goalById = useMemo(() => new Map((goals ?? []).map((g) => [g.wallet.id, g])), [goals]);
 
   const total = useMemo(
     () => (base && balances ? computeWalletsTotal(active, balances, base, getRate) : undefined),
@@ -158,20 +163,24 @@ export default function WalletsPage() {
           <ul className="divide-y divide-border">
             {active.map((w) => {
               const bal = balanceOf(w);
+              const goal = goalById.get(w.id);
               return (
-                <li key={w.id} className="flex items-center pr-2">
-                  <ListRow
-                    className="min-w-0 flex-1"
-                    leading={<WalletIcon wallet={w} />}
-                    title={w.name}
-                    subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
-                    trailing={<MoneyText minor={bal} currency={w.currency} tone={bal < 0 ? 'expense' : 'none'} className="font-semibold" />}
-                    onClick={() => setSheet({ kind: 'edit', wallet: w })}
-                  />
-                  {/* узкие px: на экране 320 px каждая клетка нужна названию и валюте кошелька */}
-                  <Button variant="ghost" className="shrink-0 !px-2" aria-label={`Сверка: ${w.name}`} onClick={() => setReconciling(w)}>
-                    Сверка
-                  </Button>
+                <li key={w.id}>
+                  <div className="flex items-center pr-2">
+                    <ListRow
+                      className="min-w-0 flex-1"
+                      leading={<WalletIcon wallet={w} />}
+                      title={w.name}
+                      subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
+                      trailing={<MoneyText minor={bal} currency={w.currency} tone={bal < 0 ? 'expense' : 'none'} className="font-semibold" />}
+                      onClick={() => setSheet({ kind: 'edit', wallet: w })}
+                    />
+                    {/* узкие px: на экране 320 px каждая клетка нужна названию и валюте кошелька */}
+                    <Button variant="ghost" className="shrink-0 !px-2" aria-label={`Сверка: ${w.name}`} onClick={() => setReconciling(w)}>
+                      Сверка
+                    </Button>
+                  </div>
+                  {goal && <GoalLine item={goal} />}
                 </li>
               );
             })}

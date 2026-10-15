@@ -103,8 +103,9 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       const { userId, t } = fresh();
       const t0 = h.now().getTime();
       const sync = (k: number) => ({ createdAt: iso(t0 - HOUR + k * 1000), clientUpdatedAt: iso(t0 - HOUR + k * 1000 + 500), deviceId: 'device-a' });
-      const w1 = makeWallet({ ...sync(0), openingBalanceMinor: 150_000 });
-      const w2 = makeWallet({ ...sync(1), currency: 'USD', kind: 'card', name: 'Карта «Алиф»', archivedAt: iso(t0 - 30 * MIN), deletedAt: iso(t0 - 20 * MIN) });
+      // цель накопления: крайние значения суммы и срока (1e15 и 2100-01-01) должны вернуться без изменений
+      const w1 = makeWallet({ ...sync(0), openingBalanceMinor: 150_000, kind: 'savings', goalMinor: 1_000_000_000_000_000, goalOn: '2100-01-01' });
+      const w2 = makeWallet({ ...sync(1), currency: 'USD', kind: 'card', name: 'Карта «Алиф»', archivedAt: iso(t0 - 30 * MIN), deletedAt: iso(t0 - 20 * MIN), goalMinor: 1, goalOn: '2000-01-01' });
       const cat = makeCategory({ ...sync(2), kind: 'income', name: 'Зарплата', archivedAt: iso(t0 - 10 * MIN) });
       const sub = makeCategory({ ...sync(3), parentId: cat.id });
       const settings = makeSettings(userId, { ...sync(4), defaultWalletId: w1.id, weekStartsOn: 0 });
@@ -365,6 +366,11 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
         ['имя кошелька длиннее 80 символов', 'wallets', () => wal({ name: 'я'.repeat(81) })],
         ['неизвестный вид кошелька', 'wallets', () => wal({ kind: 'crypto' as Wallet['kind'] })],
         ['остаток кошелька за пределом', 'wallets', () => wal({ openingBalanceMinor: 1_000_000_000_000_001 })],
+        ['цель накопления 0', 'wallets', () => wal({ goalMinor: 0 })],
+        ['отрицательная цель накопления', 'wallets', () => wal({ goalMinor: -5 })],
+        ['цель накопления за пределом', 'wallets', () => wal({ goalMinor: 1_000_000_000_000_001 })],
+        ['срок цели раньше 2000 года', 'wallets', () => wal({ goalMinor: 1_000, goalOn: '1999-12-31' })],
+        ['срок цели позже 2100 года', 'wallets', () => wal({ goalMinor: 1_000, goalOn: '2100-01-02' })],
         ['неизвестный вид категории', 'categories', () => cat({ kind: 'transfer' as 'expense' })],
         ['пустое имя категории', 'categories', () => cat({ name: '' })],
       ];

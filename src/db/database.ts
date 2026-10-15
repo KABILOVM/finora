@@ -34,7 +34,8 @@ export function dbNameFor(userId: string): string {
  *  - 1: настройки, кошельки, категории, операции;
  *  - 2: + budgets, debts, recurring_rules, индексы debtId и recurringRuleId у операций. Старым операциям в upgrade()
  *    проставляется debtId = null и recurringRuleId = null (новые поля договора обязательны, а не «может не быть»);
- *  - 3: + shopping_items (список покупок).
+ *  - 3: + shopping_items (список покупок);
+ *  - 4: у кошельков цель накопления (goalMinor, goalOn — без индексов). Старым кошелькам в upgrade() проставляется null.
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -77,6 +78,17 @@ export class FinoraDB extends Dexie {
     this.version(3).stores({
       shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
     });
+    this.version(4)
+      .stores({})
+      .upgrade((tx) =>
+        tx
+          .table('wallets')
+          .toCollection()
+          .modify((w: Record<string, unknown>) => {
+            if (w['goalMinor'] === undefined) w['goalMinor'] = null;
+            if (w['goalOn'] === undefined) w['goalOn'] = null;
+          }),
+      );
   }
 
   /** Таблица синхронизируемой сущности по имени. */

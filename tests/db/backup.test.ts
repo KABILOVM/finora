@@ -111,6 +111,63 @@ describe('importBackup — круговой обмен', () => {
   });
 });
 
+describe('резервная копия: цель накопления', () => {
+  const goalWallet = { name: 'Копилка', currency: 'TJS', kind: 'savings', openingBalanceMinor: 0, color: '#000000', icon: 'x' } as const;
+
+  it('цель и срок попадают в файл и возвращаются из него без изменений', async () => {
+    const src = await fresh();
+    await src.settings.ensure();
+    const w = await src.wallets.create({ ...goalWallet, goalMinor: 1_000_000, goalOn: '2027-06-30' });
+    const plain = await src.wallets.create({ ...goalWallet, name: 'Без цели' });
+    const file = await exportBackup(src);
+    expect(file.wallets.find((x) => x.id === w.id)).toMatchObject({ goalMinor: 1_000_000, goalOn: '2027-06-30' });
+    expect(file.wallets.find((x) => x.id === plain.id)).toMatchObject({ goalMinor: null, goalOn: null });
+    const dst = await fresh();
+    await importBackup(dst, JSON.parse(JSON.stringify(file)));
+    expect(await dst.db.wallets.get(w.id)).toMatchObject({ goalMinor: 1_000_000, goalOn: '2027-06-30', dirty: 1 });
+    expect({ ...(await exportBackup(dst)), exportedAt: '' }).toEqual({ ...file, exportedAt: '' });
+  });
+
+  it('копия, сделанная до целей (у кошельков нет полей цели), загружается: цель = null, версия копии не менялась', async () => {
+    const src = await fresh();
+    await populated(src);
+    const file = clone(await exportBackup(src));
+    expect(file.version).toBe(2);
+    for (const w of file.wallets) {
+      delete w.goalMinor;
+      delete w.goalOn;
+    }
+    const dst = await fresh();
+    await importBackup(dst, file);
+    for (const w of await dst.db.wallets.toArray()) expect(w).toMatchObject({ goalMinor: null, goalOn: null });
+  });
+
+  it('цель вне границ или срок без суммы в файле — отказ целиком, ничего не записано', async () => {
+    const src = await fresh();
+    await src.settings.ensure();
+    await src.wallets.create({ ...goalWallet, goalMinor: 5_000, goalOn: '2027-01-01' });
+    const good = clone(await exportBackup(src));
+    const bad: Array<Record<string, unknown>> = [
+      { goalMinor: 0 },
+      { goalMinor: -1 },
+      { goalMinor: 1e15 + 1 },
+      { goalMinor: 1.5 },
+      { goalMinor: '5000' },
+      { goalOn: '1999-12-31' },
+      { goalOn: '2100-01-02' },
+      { goalOn: '2027-02-30' },
+      { goalMinor: null }, // срок остался без суммы
+    ];
+    for (const patch of bad) {
+      const file = clone(good as BackupFile);
+      Object.assign(file.wallets[0], patch);
+      const dst = await fresh();
+      await expect(importBackup(dst, file), JSON.stringify(patch)).rejects.toBeInstanceOf(ValidationError);
+      expect(await dst.db.wallets.count(), JSON.stringify(patch)).toBe(0);
+    }
+  });
+});
+
 describe('importBackup — мусорные файлы: ничего не записывается', () => {
   const garbage: [string, unknown][] = [
     ['null', null],

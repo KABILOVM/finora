@@ -30,7 +30,7 @@ afterEach(() => {
 
 let hist: History = { cash: '', card: '', usd: '', txs: {} };
 
-async function openList(options: { empty?: boolean; sync?: SyncEngineApi | null } = {}) {
+async function openList(options: { empty?: boolean; sync?: SyncEngineApi | null; path?: string } = {}) {
   const td = opsDeps([table()], {
     setup: async (s) => {
       if (!options.empty) hist = await seedHistory(s);
@@ -42,7 +42,7 @@ async function openList(options: { empty?: boolean; sync?: SyncEngineApi | null 
       <LocationProbe />
     </>
   );
-  await showApp(options.sync ? <SyncProvider engine={options.sync}>{page}</SyncProvider> : page, td, '/transactions');
+  await showApp(options.sync ? <SyncProvider engine={options.sync}>{page}</SyncProvider> : page, td, options.path ?? '/transactions');
   await findByRole('heading', { name: 'Операции', level: 1 });
   // данные прочитаны: есть панель фильтров (или подсказка «Операций пока нет»)
   await waitFor(() => expect(screen.queryByText('Загрузка…')).toBeNull());
@@ -464,5 +464,28 @@ describe('чистые функции фильтров', () => {
     expect(dayTotal([t('income', 500), t('expense', 120), t('transfer', 0), t('expense', 9, 'USD')], 'TJS')).toEqual({ netMinor: 380, excluded: 1 });
     expect(dayTotal([], 'TJS')).toEqual({ netMinor: 0, excluded: 0 });
     expect(dayTotal([t('income', 9_000_000_000_000_000), t('income', 9_000_000_000_000_000)], 'TJS')).toBeNull();
+  });
+});
+
+describe('фильтры из адреса (ссылка с экрана «Аналитика»)', () => {
+  it('?month=2026-09&kind=expense: открывается сентябрь, только расходы', async () => {
+    await openList({ path: '/transactions?month=2026-09&kind=expense' });
+    await waitFor(() => expect(has('рынок')).toBe(true));
+    expect(rowTexts()).toHaveLength(2); // рынок и расход без категории
+    expect(has('обед')).toBe(false); // октябрь не показан
+    expect(has('Работа')).toBe(false); // июльский доход не показан
+  });
+
+  it('category=none: только расходы «Без категории» этого месяца', async () => {
+    await openList({ path: '/transactions?month=2026-09&category=none' });
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(rowTexts()[0]).toContain('Без категории');
+    expect(has('рынок')).toBe(false);
+  });
+
+  it('мусор в адресе не ломает страницу: открываются обычные фильтры (этот месяц)', async () => {
+    await openList({ path: '/transactions?month=ой&category=%3Cb%3E&kind=все' });
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера']));
+    expect(has('рынок')).toBe(false);
   });
 });

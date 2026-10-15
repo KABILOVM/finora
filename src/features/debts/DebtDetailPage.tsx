@@ -12,15 +12,22 @@ import { formatMinor } from '@/domain/money';
 import { humanError, toastWithUndo, UNDO_MS } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { useToday } from '@/recurring/useToday';
+import { mergeCandidates } from './debtMatch';
 import { DebtSheet } from './DebtSheet';
 import { DeleteDebtDialog } from './DeleteDebtDialog';
 import { DebtSummaryCard } from './DebtSummaryCard';
-import { DIRECTION_LABEL, ruDateShort } from './debtText';
-import { IssuesNotice, PaymentsList } from './PaymentsList';
+import { DIRECTION_LABEL, PARTS_ACTION, ruDateShort, TOP_UP_ACTION } from './debtText';
+import { MergeDebtsSheet } from './MergeDebtsSheet';
+import { groupByPerson, personKey, reminderText } from './people';
+import { EntriesList, IssuesNotice, PaymentsList } from './PaymentsList';
+import { PayInPartsSheet } from './PayInPartsSheet';
 import { PaymentSheet } from './PaymentSheet';
+import { ReminderSheet } from './ReminderSheet';
+import { TopUpSheet } from './TopUpSheet';
 import { useDebtLines } from './useDebtLines';
+import { useDebtsData } from './useDebtsData';
 
-type Dialog = 'close' | 'payment' | 'edit' | 'delete' | null;
+type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | 'remind' | 'parts' | null;
 
 function BackLink({ dir }: { dir?: string }) {
   return (
@@ -62,6 +69,7 @@ export default function DebtDetailPage() {
   const location = useLocation();
   const view = useDebtView(id);
   const lines = useDebtLines(id);
+  const all = useDebtsData(); // для «Объединить»: какие ещё долги подходят
   const [dialog, setDialog] = useState<Dialog>(null);
   const [deleting, setDeleting] = useState<DebtPayment | null>(null);
   const [busy, setBusy] = useState(false);
@@ -90,6 +98,13 @@ export default function DebtDetailPage() {
   const archived = debt.archivedAt !== null;
   const closed = debt.closedAt !== null;
   const base = lines.base ?? debt.currency;
+  const mergeTarget = all?.items.find((it) => it.debt.id === debt.id) ?? null;
+  const canMerge = !archived && mergeTarget !== null && mergeCandidates(all?.items ?? [], debt).length > 0;
+  // «Напомнить» — только по открытому долгу «мне должны»; «Все долги человека» — если у него есть и другие открытые долги
+  const remind = mergeTarget !== null && !archived && !closed ? reminderText({ name: debt.counterparty, open: [mergeTarget] }, today) : null;
+  const key = personKey(debt.counterparty);
+  const person = all ? groupByPerson(all.items).find((p) => p.key === key) : undefined;
+  const hasOthers = person !== undefined && person.open.some((it) => it.debt.id !== debt.id);
 
   const run = async (action: () => Promise<unknown>, fallback: string, done?: () => void) => {
     if (busy) return false;
@@ -193,6 +208,33 @@ export default function DebtDetailPage() {
           </Button>
         )}
         {!archived && (
+          <div className={canMerge ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
+            <Button variant="secondary" icon="plus" onClick={() => setDialog('topup')}>
+              {TOP_UP_ACTION[debt.direction]}
+            </Button>
+            {canMerge && (
+              <Button variant="secondary" onClick={() => setDialog('merge')}>
+                Объединить…
+              </Button>
+            )}
+          </div>
+        )}
+        {!archived && !closed && state.remainingMinor > 0 && (
+          <Button variant="secondary" onClick={() => setDialog('parts')}>
+            {PARTS_ACTION[debt.direction]}
+          </Button>
+        )}
+        {remind !== null && (
+          <Button variant="secondary" onClick={() => setDialog('remind')}>
+            Напомнить о долге
+          </Button>
+        )}
+        {hasOthers && (
+          <Link to={`/debts/people/${encodeURIComponent(key)}`} className={buttonClasses('secondary')}>
+            Все долги: {debt.counterparty}
+          </Link>
+        )}
+        {!archived && (
           <div className="grid grid-cols-2 gap-2">
             <Button variant="secondary" icon="edit" onClick={() => setDialog('edit')}>
               Править
@@ -220,6 +262,7 @@ export default function DebtDetailPage() {
       </div>
 
       <IssuesNotice issues={state.issues} txs={lines.txs} wallets={lines.wallets} onOpen={openTx} />
+      <EntriesList entries={state.entries} currency={debt.currency} txs={lines.txs} wallets={lines.wallets} today={today} />
       <PaymentsList
         payments={state.payments}
         currency={debt.currency}
@@ -276,6 +319,10 @@ export default function DebtDetailPage() {
       />
 
       {dialog === 'payment' && <PaymentSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
+      {dialog === 'topup' && <TopUpSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
+      {dialog === 'parts' && <PayInPartsSheet debt={debt} state={state} onClose={() => setDialog(null)} />}
+      {dialog === 'remind' && remind !== null && <ReminderSheet name={debt.counterparty} text={remind} onClose={() => setDialog(null)} />}
+      {dialog === 'merge' && mergeTarget && <MergeDebtsSheet target={mergeTarget} items={all?.items ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'edit' && <DebtSheet debt={debt} paidMinor={state.paidMinor} base={base} onClose={() => setDialog(null)} />}
     </>
   );

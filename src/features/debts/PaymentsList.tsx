@@ -60,6 +60,50 @@ export function PaymentsList({ payments, currency, txs, wallets, today, readOnly
   );
 }
 
+export interface EntriesListProps {
+  /** Выдачи и пополнения по порядку: старые первыми (как отдаёт computeDebtState). */
+  entries: readonly DebtPayment[];
+  currency: CurrencyCode;
+  txs: ReadonlyMap<UUID, LocalRow<Transaction>>;
+  wallets: ReadonlyMap<UUID, LocalRow<Wallet>>;
+  today: IsoDate;
+}
+
+/**
+ * «Выдачи и пополнения»: исходная операция и каждое «добавить ещё». Показывается, только когда пополнения были (операций две и
+ * больше): у обычного долга с одной выдачей отдельный список ничего не добавил бы. Удалить отсюда нельзя — операции открываются в журнале.
+ */
+export function EntriesList({ entries, currency, txs, wallets, today }: EntriesListProps) {
+  if (entries.length < 2) return null;
+  const rows = [...entries].reverse();
+  return (
+    <section aria-labelledby="debt-entries-title">
+      <h2 id="debt-entries-title" className="mb-2 mt-6 text-lg font-bold">
+        Выдачи и пополнения
+      </h2>
+      <Card padding="none">
+        <ul className="divide-y divide-border" aria-label="Выдачи и пополнения долга">
+          {rows.map((e) => {
+            const tx = txs.get(e.txId);
+            const wallet = tx ? wallets.get(tx.walletId) : undefined;
+            const note = tx?.note.trim() ?? '';
+            const sub = [wallet?.name ?? MISSING_WALLET, note].filter((x) => x !== '').join(' · ');
+            return (
+              <li key={e.txId} className="flex items-center gap-2 py-1 pl-4 pr-4">
+                <div className="min-w-0 flex-1 py-2">
+                  <p className="font-medium">{formatDayLabel(e.occurredOn, today)}</p>
+                  <p className="truncate text-sm text-muted">{sub}</p>
+                </div>
+                <MoneyText minor={e.amountMinor} currency={currency} tone="none" className="shrink-0 font-semibold" />
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
 export interface IssuesNoticeProps {
   issues: readonly DebtIssue[];
   txs: ReadonlyMap<UUID, LocalRow<Transaction>>;

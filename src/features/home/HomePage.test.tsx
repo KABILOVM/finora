@@ -124,6 +124,34 @@ describe('«Всего» и кошельки', () => {
   });
 });
 
+describe('«В среднем в день» в шапке', () => {
+  const avg = () => document.querySelector('[data-testid="home-avg-per-day"]');
+
+  it('расход месяца ÷ прошедшие дни (сегодня 15 октября), округление вниз', async () => {
+    await openHome();
+    // расходы октября 124,50 (см. «Этот месяц») ÷ 15 = 8,30
+    await waitFor(() => expect(avg()).not.toBeNull());
+    expect(text(avg())).toBe(`В среднем в день в этом месяце: ${fmt(830)}`);
+  });
+
+  it('«Скрыть суммы» прячет и среднее', async () => {
+    try {
+      await openHome();
+      await waitFor(() => expect(avg()).not.toBeNull());
+      await user.click(screen.getByRole('button', { name: 'Скрыть суммы' }));
+      expect(text(avg())).toBe('В среднем в день в этом месяце: ••••');
+    } finally {
+      localStorage.removeItem('finora-hide-balance');
+    }
+  });
+
+  it('в месяце нет расходов — строки нет (а не «0 в день»)', async () => {
+    await openHome({ setup: async () => undefined });
+    await waitFor(() => expect(summaryRow('Расходы')).toBe(fmt(0)));
+    expect(avg()).toBeNull();
+  });
+});
+
 describe('«Этот месяц»', () => {
   it('доходы, расходы и разница в основной валюте; переводы и сентябрь не считаются', async () => {
     await openHome();

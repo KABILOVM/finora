@@ -186,6 +186,9 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (!inBound(r['sort_order'] ?? null)) fail('sort_order');
       if (charLength(String(r['color'])) > SHORT_MAX) fail('color_len');
       if (charLength(String(r['icon'])) > SHORT_MAX) fail('icon_len');
+      // цель накопления (раздел 11 supabase/schema.sql): сумма от 1 до 1e15, срок — в границах дат схемы
+      if (r['goal_minor'] != null && !inBound(r['goal_minor'], 1)) fail('goal_minor');
+      if (!dayOkOrNull(r['goal_on'] ?? null)) fail('goal_on');
       break;
     }
     case 'categories': {

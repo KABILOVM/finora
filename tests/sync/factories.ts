@@ -37,6 +37,8 @@ export function makeWallet(overrides: Partial<Wallet> = {}): Wallet {
     icon: 'wallet',
     sortOrder: n,
     archivedAt: null,
+    goalMinor: null,
+    goalOn: null,
     ...overrides,
   };
 }

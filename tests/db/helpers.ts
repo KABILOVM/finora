@@ -98,6 +98,8 @@ export function remoteWallet(over: Partial<Wallet> & { id: string }): Wallet {
     icon: 'x',
     sortOrder: 0,
     archivedAt: null,
+    goalMinor: null,
+    goalOn: null,
     createdAt: '2026-10-01T00:00:00.000Z',
     clientUpdatedAt: '2026-10-01T00:00:00.000Z',
     deviceId: 'device-remote-1',

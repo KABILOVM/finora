@@ -44,7 +44,7 @@ describe('Напоминания: настройки', () => {
     expect(maybeBtn('Проверить уведомление')).toBeNull();
   });
 
-  it('когда включены: час (00:00–23:00, по умолчанию 09:00), четыре переключателя с честными пояснениями, часовой пояс, «Проверить»', async () => {
+  it('когда включены: час (00:00–23:00, по умолчанию 09:00), пять переключателей с честными пояснениями, часовой пояс, «Проверить»', async () => {
     await openEnabled();
     const options = Array.from(hourSelect().options).map((o) => o.textContent);
     expect(options).toHaveLength(24);
@@ -54,6 +54,8 @@ describe('Напоминания: настройки', () => {
     expect(toggle('Платежи по расписанию').getAttribute('aria-checked')).toBe('true');
     expect(toggle('Долги и сроки возврата').getAttribute('aria-checked')).toBe('true');
     expect(toggle('Каждый вечер напомнить внести траты, если за день ничего не внесено').getAttribute('aria-checked')).toBe('false');
+    expect(toggle('Лимиты бюджета').getAttribute('aria-checked')).toBe('false'); // новый вид напоминаний по умолчанию выключен
+    expect(text(/дошли до 70% или 90% лимита или превысили его\. Суммы в уведомление не попадают/)).toBeTruthy();
     expect(toggle('Показывать названия в уведомлении').getAttribute('aria-checked')).toBe('false');
     // один час на всё: так и написано
     expect(text(/Придёт в то же время, что выбрано выше/)).toBeTruthy();
@@ -84,6 +86,7 @@ describe('Напоминания: настройки', () => {
       ['Платежи по расписанию', 'remind_payments', false],
       ['Долги и сроки возврата', 'remind_debts', false],
       ['Каждый вечер напомнить внести траты, если за день ничего не внесено', 'remind_daily', true],
+      ['Лимиты бюджета', 'remind_budgets', true],
       ['Показывать названия в уведомлении', 'show_details', true],
     ];
     for (const [label, column, expected] of cases) {

@@ -16,6 +16,7 @@ import { PageNotices } from '@/app/PageNotices';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
+import BudgetAlerts from '@/features/budgets/BudgetAlerts';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
 import { WhatsNew } from '@/features/whatsnew/WhatsNew';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
@@ -33,10 +34,12 @@ const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage')
 const MorePage = lazy(() => import('@/features/more/MorePage'));
 // Пока заглушки «Скоро»: настоящие экраны заменят содержимое этих файлов (имена и default export остаются).
 const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'));
+const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'));
 const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'));
 const ShoppingPage = lazy(() => import('@/features/shopping/ShoppingPage'));
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'));
 const DebtDetailPage = lazy(() => import('@/features/debts/DebtDetailPage'));
+const PersonDebtsPage = lazy(() => import('@/features/debts/PersonDebtsPage'));
 const ImportPage = lazy(() => import('@/features/import/ImportPage'));
 // Шит «Новая операция» (пока заглушка в src/layout; настоящий подключат вместо неё).
 const AddTransactionSheet = lazy(() => import('@/layout/AddTransactionSheet'));
@@ -108,6 +111,7 @@ export function AppRoutes() {
   return (
     <>
       <AutoPostRunner />
+      <BudgetAlerts />
       <PushKeeper />
       <InstallPrompt />
       <Routes location={pagesLocation}>
@@ -120,9 +124,11 @@ export function AppRoutes() {
             <Route path="/wallets" element={<WalletsPage />} />
             <Route path="/more" element={<MorePage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
             <Route path="/shopping" element={<ShoppingPage />} />
             <Route path="/debts" element={<DebtsPage />} />
+            <Route path="/debts/people/:key" element={<PersonDebtsPage />} />
             <Route path="/debts/:id" element={<DebtDetailPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />

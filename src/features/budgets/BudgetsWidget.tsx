@@ -19,6 +19,9 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
     return <p className="mt-2 text-muted">Все кошельки — накопления, а их мы не считаем: на траты денег нет.</p>;
   }
   if (forecast.status !== 'ok') return null;
+  const usual = forecast.usualPerDayMinor;
+  // Та же отметка, что на странице бюджетов (ForecastCard): если денег не хватает, об этом и так сказано ниже красным.
+  const usualOver = usual !== null && usual > forecast.perDayMinor && !forecast.notEnough;
   return (
     <>
       <p
@@ -32,6 +35,12 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
         До {longDate(forecast.horizonEnd)} — {daysText(forecast.daysLeft)}
         {forecast.incomeDate !== null && `, потом ждём доход ${longDate(forecast.incomeDate)}`}
       </p>
+      {usual !== null && (
+        <p data-testid="widget-usual-per-day" className={`text-[13px] ${usualOver ? 'font-medium text-warning' : 'text-muted'}`}>
+          Обычно вы тратите <span className="money">{formatMinor(usual, forecast.base)}</span> в день
+          {usualOver && ' — больше, чем можно'}
+        </p>
+      )}
       {forecast.notEnough && (
         <p className="mt-1.5 flex items-start gap-2 text-sm font-semibold text-danger">
           <Icon name="alert" size={18} className="mt-0.5 shrink-0" />

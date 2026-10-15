@@ -192,3 +192,87 @@ describe('обновление базы с версии 2 до 3 (список �
     }
   });
 });
+
+describe('обновление базы с версии 3 до 4 (цели накопления)', () => {
+  const WALLET_OLD = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa20';
+  const stores3 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions:
+      'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const wallet3 = {
+    ...sync, dirty: 0, serverSeq: 4, syncError: null, id: WALLET_OLD, name: 'Копилка', currency: 'TJS', kind: 'savings',
+    openingBalanceMinor: 1000, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null,
+  };
+
+  it('у старых кошельков цель = null (а не undefined), остальное на месте, строка остаётся «чистой»', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(3).stores(stores3);
+    await old.open();
+    await old.table('wallets').add(wallet3);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      const w = await store.db.wallets.get(WALLET_OLD);
+      expect(w).toMatchObject({ name: 'Копилка', openingBalanceMinor: 1000, dirty: 0, serverSeq: 4, goalMinor: null, goalOn: null });
+      expect('goalMinor' in w!).toBe(true);
+      // пустая правка не помечает кошелёк изменённым
+      const same = await store.wallets.update(WALLET_OLD, { goalMinor: null, goalOn: null });
+      expect(same.dirty).toBe(0);
+      // цель ставится и читается
+      const set = await store.wallets.update(WALLET_OLD, { goalMinor: 50_000, goalOn: '2027-01-01' });
+      expect(set).toMatchObject({ goalMinor: 50_000, goalOn: '2027-01-01', dirty: 1 });
+    } finally {
+      store.close();
+    }
+  });
+
+  it('строка, записанная прежней версией ПОСЛЕ обновления (без ключей цели), читается как «цели нет» и правится без ошибок', async () => {
+    const factory = new IDBFactory();
+    const store = await open(factory);
+    try {
+      await store.db.wallets.add(wallet3 as never); // как вкладка со старым кодом: полей цели нет совсем
+      const w = (await store.db.wallets.get(WALLET_OLD))!;
+      expect(w.goalMinor).toBeUndefined();
+      // правка «ничего не меняет» не помечает такой кошелёк изменённым (undefined в базе и null после проверки — одно и то же)
+      const same = await store.wallets.update(WALLET_OLD, { name: 'Копилка', goalMinor: null });
+      expect(same.dirty).toBe(0);
+      const renamed = await store.wallets.update(WALLET_OLD, { name: 'Новая копилка' });
+      expect(renamed).toMatchObject({ name: 'Новая копилка', goalMinor: null, goalOn: null });
+      expect(renamed.dirtyGroups).toEqual(['name']);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('копия, сделанная до целей (кошелёк без полей цели), загружается, цель = null', async () => {
+    const factory = new IDBFactory();
+    const store = await open(factory);
+    try {
+      await store.settings.ensure();
+      const w = await store.wallets.create({ name: 'Нал', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x' });
+      const file = await exportBackup(store);
+      const { goalMinor: _g, goalOn: _o, ...old } = file.wallets[0] as unknown as Record<string, unknown>;
+      void [_g, _o];
+      const fresh = await open(new IDBFactory());
+      try {
+        await fresh.settings.ensure();
+        await importBackup(fresh, { ...file, wallets: [old as never] });
+        expect(await fresh.db.wallets.get(w.id)).toMatchObject({ name: 'Нал', goalMinor: null, goalOn: null });
+      } finally {
+        fresh.close();
+      }
+    } finally {
+      store.close();
+    }
+  });
+});

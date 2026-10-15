@@ -63,6 +63,12 @@ export interface Wallet extends SyncFields {
   icon: string;
   sortOrder: number;
   archivedAt: IsoDateTime | null;
+  /**
+   * Цель накопления (для кошелька вида «Накопления»): сколько хотим накопить и к какой дате. null — цели нет.
+   * Срок без суммы не бывает. Накоплено = остаток кошелька, он считается из операций (domain/goals.ts).
+   */
+  goalMinor: Minor | null;
+  goalOn: IsoDate | null;
 }
 
 export type CategoryKind = 'expense' | 'income';

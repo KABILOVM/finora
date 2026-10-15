@@ -1,6 +1,6 @@
 /**
  * Edge Function «send-reminders»: раз в час смотрит, у кого сейчас «его» час, и шлёт push-напоминания (регулярные платежи,
- * долги, «внесите траты»); по кнопке «Проверить уведомление» шлёт пробное сообщение на устройства ВОШЕДШЕГО пользователя.
+ * долги, «внесите траты», лимиты бюджета); по кнопке «Проверить уведомление» шлёт пробное сообщение на устройства ВОШЕДШЕГО пользователя.
  * Договор: src/push/contract.ts и supabase/schema.sql, раздел 9. Файл САМОДОСТАТОЧЕН: его целиком вставляют в редактор
  * Edge Functions (Supabase → Edge Functions → Create function → send-reminders), относительных импортов нет
  * (кроме web-push: `npm:web-push@3.6.7` подгружается в момент первой отправки).
@@ -49,6 +49,9 @@
  *     Успех: 200 и {"ok":true,"mode":"cron","users":N,"sent":N,...} — только счётчики. Кнопка «Проверить уведомление» в
  *     Настройках → Напоминания шлёт то же с токеном пользователя: {"action":"test"}.
  *
+ * ОБНОВЛЕНИЕ уже развёрнутой функции: сначала выполни весь supabase/schema.sql (раздел 12: колонка remind_budgets и вид журнала budget), затем вставь
+ * этот файл заново и задеплой. Функция, развёрнутая РАНЬШЕ схемы, не ломается: без колонки remind_budgets лимиты просто молчат.
+ *
  * КАК ЭТО РАБОТАЕТ
  *  - Плановый запуск (Authorization: Bearer <CRON_SECRET>, тело {}): читает reminder_settings (enabled = true); для каждого
  *    пользователя считает ЕГО локальные дату и час по timezone (неверная зона — пропуск, остальные не страдают). Шлёт, если
@@ -59,6 +62,11 @@
  *    = «пропущено» = обработано.
  *  - debts: живые не архивные не закрытые долги со сроком сегодня, завтра или просроченным (до 30 дней), у которых остаток > 0.
  *  - daily: за локальное «сегодня» нет ни одной живой операции (любого вида).
+ *  - budgets (remind_budgets = true): живые не архивные лимиты на месяц в основной валюте пользователя (settings.base_currency); расходы
+ *    ЭТОГО местного месяца считаются так же, как на экране «Бюджеты» (блок SHARED:budgetLevels): по снимкам base_amount_minor, без операций
+ *    по долгам, комиссия перевода — только в общий лимит, лимит категории охватывает подкатегории. Уровни: 70% «на исходе», 90%, 100% «превышен».
+ *    Один push на (лимит, уровень) за месяц: push_log (kind = 'budget', ref = '<id лимита>:<уровень>') читается с начала местного месяца, и
+ *    шлём только если уровень выше самого высокого уже отправленного. Текст: слова и процент, названия — только при show_details.
  *  - На пользователя за запуск уходит ОДНО сообщение. Суммы в нём не пишутся никогда; названия — только если show_details = true.
  *  - Порядок: сначала запись в push_log (только новые пункты попадают в сообщение), потом отправка. Если ни одно устройство не
  *    приняло сообщение и причина не в «подписка мертва» (404/410), записи запуска из push_log убираются: следующий час повторит.
@@ -367,6 +375,121 @@ export function pluralRu(n: number, one: string, few: string, many: string): str
 }
 // SHARED:plural >>>
 
+// <<< SHARED:budgetLevels
+/**
+ * Уровни бюджетов за месяц — ЧИСТЫЕ функции без импортов (ни базы, ни React, ни часов).
+ * Этот файл один на приложение и серверную функцию send-reminders: его дословно копируют в supabase/functions/send-reminders/index.ts
+ * (блок SHARED:budgetLevels; совпадение проверяет src/push-server/edge.test.ts), поэтому здесь нельзя ничего импортировать.
+ * Правила те же, что у экрана «Бюджеты» (budgetProgress.ts + db/queries.ts → summarizeMonth): тест
+ * budgetLevels.differential.test.ts сравнивает оба пути на случайных данных.
+ *
+ * Уровни по целому проценту (дробная часть отбрасывается вниз — «почти 70%» ещё не 70%):
+ *   ok < 70 · warn 70–89 · danger 90–99 · over ≥ 100.
+ */
+
+export type BudgetLevel = 'ok' | 'warn' | 'danger' | 'over';
+
+export const WARN_AT = 70;
+export const DANGER_AT = 90;
+export const OVER_AT = 100;
+
+/** Целый процент «потрачено от лимита», округление вниз. Нет лимита, нет трат или некорректные суммы — 0. */
+export function percentOf(spentMinor: number, limitMinor: number): number {
+  if (!Number.isSafeInteger(spentMinor) || !Number.isSafeInteger(limitMinor) || limitMinor <= 0 || spentMinor <= 0) return 0;
+  return Number((BigInt(spentMinor) * 100n) / BigInt(limitMinor));
+}
+
+/** Уровень по целому проценту. */
+export function levelOf(percent: number): BudgetLevel {
+  if (percent >= OVER_AT) return 'over';
+  if (percent >= DANGER_AT) return 'danger';
+  if (percent >= WARN_AT) return 'warn';
+  return 'ok';
+}
+
+/** Охватывает ли бюджет категории `budgetCategoryId` расход в категории `spendCategoryId` (сама категория или её потомок). */
+export function categoryCovers(budgetCategoryId: string, spendCategoryId: string | null, parentOf: ReadonlyMap<string, string | null>): boolean {
+  const seen = new Set<string>(); // защита от петли в данных: A → B → A
+  let cur = spendCategoryId;
+  while (cur !== null && !seen.has(cur)) {
+    if (cur === budgetCategoryId) return true;
+    seen.add(cur);
+    cur = parentOf.get(cur) ?? null;
+  }
+  return false;
+}
+
+/** Бюджет: живой, не в архиве (отбор — на вызывающем). categoryId null — общий лимит на все расходы. */
+export interface LevelBudget {
+  id: string;
+  categoryId: string | null;
+  amountMinor: number;
+  currency: string;
+}
+
+/** Операция месяца в том виде, как она нужна расчёту: baseAmountMinor — снимок суммы в основной валюте (у перевода — комиссия). */
+export interface LevelTx {
+  kind: string;
+  categoryId: string | null;
+  debtId: string | null;
+  baseCurrency: string;
+  baseAmountMinor: number;
+}
+
+export interface BudgetLevelRow {
+  id: string;
+  categoryId: string | null;
+  /** Целый процент, округление вниз; может быть больше 100. */
+  percent: number;
+  level: BudgetLevel;
+}
+
+export interface BudgetLevelsArgs {
+  budgets: readonly LevelBudget[];
+  /** Живые операции ОДНОГО месяца (отбор месяца и удалённых — на вызывающем). */
+  txs: readonly LevelTx[];
+  /** Категория → родитель. Нужны ВСЕ категории, в том числе архивные: у старых трат категория могла уйти в архив. */
+  parentOf: ReadonlyMap<string, string | null>;
+  /** Основная валюта сейчас: в ней посчитаны снимки сумм. */
+  base: string;
+}
+
+/**
+ * Уровни всех бюджетов за месяц. Потрачено — по снимкам суммы в основной валюте: расходы без операций по долгам; у перевода в расход
+ * идёт только комиссия (baseAmountMinor > 0) и только в общий лимит; операции со снимком в другой валюте пропускаются.
+ * Бюджет в валюте, отличной от основной, не сравнивается с тратами и в результат не попадает. Суммы — BigInt: переполнения нет.
+ */
+export function budgetLevelsOf(args: BudgetLevelsArgs): BudgetLevelRow[] {
+  const { budgets, txs, parentOf, base } = args;
+  let expense = 0n;
+  const byCategory = new Map<string | null, bigint>();
+  for (const t of txs) {
+    if (!Number.isSafeInteger(t.baseAmountMinor) || t.baseCurrency !== base) continue;
+    if (t.kind === 'transfer') {
+      if (t.baseAmountMinor > 0) expense += BigInt(t.baseAmountMinor); // комиссия перевода: только в общий лимит
+      continue;
+    }
+    if (t.debtId !== null || t.kind === 'income') continue;
+    expense += BigInt(t.baseAmountMinor);
+    byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0n) + BigInt(t.baseAmountMinor));
+  }
+  const out: BudgetLevelRow[] = [];
+  for (const b of budgets) {
+    if (b.currency !== base || !Number.isSafeInteger(b.amountMinor) || b.amountMinor <= 0) continue;
+    let spent = 0n;
+    if (b.categoryId === null) spent = expense;
+    else {
+      for (const [categoryId, total] of byCategory) {
+        if (categoryId !== null && categoryCovers(b.categoryId, categoryId, parentOf)) spent += total;
+      }
+    }
+    const percent = spent <= 0n ? 0 : Number((spent * 100n) / BigInt(b.amountMinor));
+    out.push({ id: b.id, categoryId: b.categoryId, percent, level: levelOf(percent) });
+  }
+  return out;
+}
+// SHARED:budgetLevels >>>
+
 // ====================== Ядро: чистые функции (без сети, базы и часов; «сейчас» передаётся) ======================
 
 export const PAYMENT_LOOKBACK_DAYS = 7;
@@ -388,6 +511,9 @@ export const MAX_CLAIMS_PER_ENDPOINT = 50;
 export const SEND_TIMEOUT_MS = 15_000;
 export const MAX_PAYMENT_CANDIDATES = 400;
 export const MAX_DEBTS_PER_USER = 200;
+export const MAX_BUDGETS_PER_USER = 200;
+/** Как общий лимит называется на экране «Бюджеты» (budgetText.ts). */
+export const TOTAL_BUDGET_NAME = 'Все расходы';
 export const MIN_SECRET_LENGTH = 32;
 export const PUSH_TITLE = 'Sumoima';
 /** Записи push_log старше стольких суток чистятся (нужны только текущему дню). */
@@ -395,7 +521,7 @@ export const LOG_KEEP_DAYS = 60;
 /** Плановый запуск не начинает новых людей позже этого срока (у платформы жёсткий предел около 150 секунд). */
 export const RUN_BUDGET_MS = 90_000;
 
-export type LogKind = 'payment' | 'debt' | 'daily';
+export type LogKind = 'payment' | 'debt' | 'daily' | 'budget';
 export interface LogEntry {
   kind: LogKind;
   ref: string;
@@ -409,7 +535,15 @@ export interface ReminderSettingsRow {
   remindPayments: boolean;
   remindDebts: boolean;
   remindDaily: boolean;
+  remindBudgets: boolean;
   showDetails: boolean;
+}
+
+/** Категория пользователя (все, в том числе архивные и удалённые: у старых трат категория могла уйти в архив). */
+export interface CategoryLite {
+  id: string;
+  parentId: string | null;
+  name: string;
 }
 
 export interface RuleLite extends ScheduleRule {
@@ -661,10 +795,38 @@ const namesText = (names: readonly string[]): string => {
   return names.length > NAMES_SHOWN ? `${shown} и ещё ${names.length - NAMES_SHOWN}` : shown;
 };
 
+export type AlertLevel = Exclude<BudgetLevel, 'ok'>;
+
+export interface BudgetItem {
+  level: AlertLevel;
+  /** Целый процент потрачено/лимит (может быть больше 100). */
+  percent: number;
+  name: string;
+}
+
 export interface ReminderItems {
   payments: ReadonlyArray<{ note: string; overdue: boolean }>;
   debts: ReadonlyArray<{ counterparty: string }>;
   daily: boolean;
+  budgets?: ReadonlyArray<BudgetItem>;
+}
+
+const LEVEL_RANK: Record<BudgetLevel, number> = { ok: 0, warn: 1, danger: 2, over: 3 };
+
+/** «Лимит на исходе: потрачено 90%» (один лимит) или «Лимиты бюджета: превышено 1, на исходе 2» (несколько). Суммы не пишутся никогда. */
+function budgetsText(budgets: readonly BudgetItem[], showDetails: boolean): string {
+  const sorted = [...budgets].sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || b.percent - a.percent || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const first = sorted[0] as BudgetItem;
+  if (sorted.length === 1) {
+    const status = first.level === 'over' ? 'превышен' : 'на исходе';
+    const head = showDetails ? `Лимит «${cleanName(first.name, 'Лимит')}» ${status}` : `Лимит ${status}`;
+    return `${head}: потрачено ${Math.min(first.percent, 999)}%`;
+  }
+  const over = sorted.filter((b) => b.level === 'over').length;
+  const near = sorted.length - over;
+  const counts = [over > 0 ? `превышено ${over}` : '', near > 0 ? `на исходе ${near}` : ''].filter((x) => x !== '').join(', ');
+  const names = showDetails ? ` (${namesText(sorted.map((b) => cleanName(b.name, 'Лимит')))})` : '';
+  return `Лимиты бюджета: ${counts}${names}`;
 }
 
 /** Сообщение режется до PUSH_PAYLOAD_MAX_BYTES (размер всего JSON в байтах UTF-8) и BODY_MAX_CHARS знаков, по границе знака. */
@@ -675,13 +837,14 @@ export function fitPayload(p: PushPayload, maxBytes: number = PUSH_PAYLOAD_MAX_B
 
 /**
  * Одно сообщение на пользователя за запуск. Только числа и общие слова; showDetails добавляет названия (заметка платежа или
- * «Платёж», имя должника). Суммы не пишутся никогда. Нечего сообщать → null.
- * url: только платежи → /recurring, только долги → /debts, иначе /.
+ * «Платёж», имя должника, название категории лимита). Суммы не пишутся никогда (у лимитов — только целый процент). Нечего сообщать → null.
+ * url: только платежи → /recurring, только долги → /debts, только лимиты → /budgets, иначе /.
  */
 export function buildPayload(items: ReminderItems, showDetails: boolean): PushPayload | null {
   const pay = items.payments;
   const debts = items.debts;
-  if (pay.length === 0 && debts.length === 0 && !items.daily) return null;
+  const bud = items.budgets ?? [];
+  if (pay.length === 0 && debts.length === 0 && !items.daily && bud.length === 0) return null;
   const parts: string[] = [];
   if (pay.length > 0) {
     const late = pay.filter((p) => p.overdue).length;
@@ -696,15 +859,17 @@ export function buildPayload(items: ReminderItems, showDetails: boolean): PushPa
     if (showDetails) s += ` (${namesText(debts.map((d) => cleanName(d.counterparty, 'Долг')))})`;
     parts.push(`${s}.`);
   }
+  if (bud.length > 0) parts.push(`${budgetsText(bud, showDetails)}.`);
   if (items.daily) parts.push('Сегодня ещё нет записей. Внесите траты и доходы.');
-  const onlyPay = pay.length > 0 && debts.length === 0 && !items.daily;
-  const onlyDebts = debts.length > 0 && pay.length === 0 && !items.daily;
-  const onlyDaily = items.daily && pay.length === 0 && debts.length === 0;
+  const onlyPay = pay.length > 0 && debts.length === 0 && !items.daily && bud.length === 0;
+  const onlyDebts = debts.length > 0 && pay.length === 0 && !items.daily && bud.length === 0;
+  const onlyDaily = items.daily && pay.length === 0 && debts.length === 0 && bud.length === 0;
+  const onlyBudgets = bud.length > 0 && pay.length === 0 && debts.length === 0 && !items.daily;
   return fitPayload({
     title: PUSH_TITLE,
     body: parts.join(' '),
-    url: onlyPay ? '/recurring' : onlyDebts ? '/debts' : '/',
-    tag: onlyPay ? 'finora-payments' : onlyDebts ? 'finora-debts' : onlyDaily ? 'finora-daily' : 'finora-reminder',
+    url: onlyPay ? '/recurring' : onlyDebts ? '/debts' : onlyBudgets ? '/budgets' : '/',
+    tag: onlyPay ? 'finora-payments' : onlyDebts ? 'finora-debts' : onlyDaily ? 'finora-daily' : onlyBudgets ? 'finora-budgets' : 'finora-reminder',
   });
 }
 
@@ -745,6 +910,16 @@ export interface ReminderStore {
   walletCurrencies(userId: string, walletIds: readonly string[]): Promise<Map<string, string>>;
   /** Есть ли живая операция с датой `date`. */
   hasLiveTransactionOn(userId: string, date: IsoDate): Promise<boolean>;
+  /** Живые не архивные лимиты на месяц с положительной суммой (не больше MAX_BUDGETS_PER_USER). */
+  listBudgets(userId: string): Promise<LevelBudget[]>;
+  /** Все категории пользователя (и архивные, и удалённые): нужны цепочки родителей и названия. */
+  listCategories(userId: string): Promise<CategoryLite[]>;
+  /** Основная валюта пользователя (settings.base_currency); null — настроек нет. */
+  baseCurrency(userId: string): Promise<string | null>;
+  /** Живые расходы и переводы с датой в [from, untilExclusive): для расчёта лимитов (все страницы). */
+  listMonthSpend(userId: string, from: IsoDate, untilExclusive: IsoDate): Promise<LevelTx[]>;
+  /** Какие лимиты и уровни уже слали с даты `sinceDate` включительно (ref вида '<id лимита>:<уровень>'). */
+  listBudgetLogRefs(userId: string, sinceDate: IsoDate): Promise<string[]>;
   /** insert … ignore duplicates: возвращает ТОЛЬКО новые записи (их раньше сегодня не отправляли). */
   insertLog(userId: string, sentOn: IsoDate, entries: readonly LogEntry[]): Promise<LogEntry[]>;
   deleteLog(userId: string, sentOn: IsoDate, entries: readonly LogEntry[]): Promise<void>;
@@ -810,6 +985,7 @@ export function parseSettingsRow(row: unknown): ReminderSettingsRow | null {
     remindPayments: row.remind_payments === true,
     remindDebts: row.remind_debts === true,
     remindDaily: row.remind_daily === true,
+    remindBudgets: row.remind_budgets === true,
     showDetails: row.show_details === true,
   };
 }
@@ -835,6 +1011,38 @@ export function parseDebtTxRow(row: unknown): DebtTxLite | null {
   if (!isRec(row) || typeof row.debt_id !== 'string' || typeof row.wallet_id !== 'string') return null;
   if (typeof row.kind !== 'string' || typeof row.amount_minor !== 'number') return null;
   return { debtId: row.debt_id.toLowerCase(), kind: row.kind, walletId: row.wallet_id.toLowerCase(), amountMinor: row.amount_minor };
+}
+
+export function parseBudgetRow(row: unknown): LevelBudget | null {
+  if (!isRec(row)) return null;
+  const { id, category_id: categoryId, amount_minor: amount, currency } = row;
+  if (typeof id !== 'string' || !isUuid(id)) return null;
+  if (categoryId !== null && (typeof categoryId !== 'string' || !isUuid(categoryId))) return null;
+  if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0 || typeof currency !== 'string') return null;
+  return { id: id.toLowerCase(), categoryId: categoryId === null ? null : categoryId.toLowerCase(), amountMinor: amount, currency };
+}
+
+export function parseCategoryRow(row: unknown): CategoryLite | null {
+  if (!isRec(row)) return null;
+  const { id, parent_id: parentId, name } = row;
+  if (typeof id !== 'string' || !isUuid(id)) return null;
+  if (parentId !== null && (typeof parentId !== 'string' || !isUuid(parentId))) return null;
+  return { id: id.toLowerCase(), parentId: parentId === null ? null : parentId.toLowerCase(), name: typeof name === 'string' ? name : '' };
+}
+
+export function parseSpendRow(row: unknown): LevelTx | null {
+  if (!isRec(row)) return null;
+  const { kind, category_id: categoryId, debt_id: debtId, base_currency: baseCurrency, base_amount_minor: amount } = row;
+  if (typeof kind !== 'string' || typeof baseCurrency !== 'string' || typeof amount !== 'number' || !Number.isSafeInteger(amount)) return null;
+  if (categoryId !== null && (typeof categoryId !== 'string' || !isUuid(categoryId))) return null;
+  if (debtId !== null && (typeof debtId !== 'string' || !isUuid(debtId))) return null;
+  return {
+    kind,
+    categoryId: categoryId === null ? null : categoryId.toLowerCase(),
+    debtId: debtId === null ? null : debtId.toLowerCase(),
+    baseCurrency,
+    baseAmountMinor: amount,
+  };
 }
 
 export function parseSubscriptionRow(row: unknown): PushSub | null {
@@ -931,14 +1139,25 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
 
   return {
     async listEnabledSettings(afterUserId) {
-      const q: Array<[string, string]> = [
-        ['select', 'user_id,hour_local,timezone,remind_payments,remind_debts,remind_daily,show_details'],
-        ['enabled', 'eq.true'],
-        ['order', 'user_id.asc'],
-        ['limit', String(PAGE_SIZE)],
-      ];
-      if (afterUserId !== null) q.push(['user_id', `gt.${afterUserId}`]);
-      const raw = await call('GET', 'reminder_settings', q);
+      const query = (columns: string): Array<[string, string]> => {
+        const q: Array<[string, string]> = [
+          ['select', columns],
+          ['enabled', 'eq.true'],
+          ['order', 'user_id.asc'],
+          ['limit', String(PAGE_SIZE)],
+        ];
+        if (afterUserId !== null) q.push(['user_id', `gt.${afterUserId}`]);
+        return q;
+      };
+      const COLUMNS = 'user_id,hour_local,timezone,remind_payments,remind_debts,remind_daily,show_details';
+      let raw: unknown;
+      try {
+        raw = await call('GET', 'reminder_settings', query(`${COLUMNS},remind_budgets`));
+      } catch (e) {
+        // Схему (раздел 12) ещё не обновили: колонки remind_budgets нет (42703). Остальные напоминания работают без неё.
+        if (!(e instanceof DbError) || !e.message.endsWith('HTTP 400 42703')) throw e;
+        raw = await call('GET', 'reminder_settings', query(COLUMNS));
+      }
       const list = Array.isArray(raw) ? raw : [];
       const rows: ReminderSettingsRow[] = [];
       for (const r of list) {
@@ -1090,6 +1309,81 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
       return Array.isArray(raw) && raw.length > 0;
     },
 
+    async listBudgets(userId) {
+      const rows = await allRows(
+        'budgets',
+        [
+          ['select', 'id,category_id,amount_minor,currency'],
+          ['user_id', `eq.${userId}`],
+          ['deleted_at', 'is.null'],
+          ['archived_at', 'is.null'],
+          ['period', 'eq.month'],
+        ],
+        'id',
+      );
+      const out: LevelBudget[] = [];
+      for (const r of rows) {
+        const p = parseBudgetRow(r);
+        if (p) out.push(p);
+      }
+      return out.slice(0, MAX_BUDGETS_PER_USER);
+    },
+
+    async listCategories(userId) {
+      const rows = await allRows('categories', [['select', 'id,parent_id,name'], ['user_id', `eq.${userId}`]], 'id');
+      const out: CategoryLite[] = [];
+      for (const r of rows) {
+        const p = parseCategoryRow(r);
+        if (p) out.push(p);
+      }
+      return out;
+    },
+
+    async baseCurrency(userId) {
+      const raw = await call('GET', 'settings', [
+        ['select', 'base_currency'],
+        ['user_id', `eq.${userId}`],
+        ['deleted_at', 'is.null'],
+        ['limit', '1'],
+      ]);
+      const row: unknown = Array.isArray(raw) ? raw[0] : undefined;
+      return isRec(row) && typeof row.base_currency === 'string' ? row.base_currency : null;
+    },
+
+    async listMonthSpend(userId, from, untilExclusive) {
+      const rows = await allRows(
+        'transactions',
+        [
+          ['select', 'id,kind,category_id,debt_id,base_currency,base_amount_minor'],
+          ['user_id', `eq.${userId}`],
+          ['deleted_at', 'is.null'],
+          ['kind', 'in.(expense,transfer)'],
+          ['occurred_on', `gte.${from}`],
+          ['occurred_on', `lt.${untilExclusive}`],
+        ],
+        'id',
+      );
+      const out: LevelTx[] = [];
+      for (const r of rows) {
+        const p = parseSpendRow(r);
+        if (p) out.push(p);
+      }
+      return out;
+    },
+
+    async listBudgetLogRefs(userId, sinceDate) {
+      const raw = await call('GET', 'push_log', [
+        ['select', 'ref'],
+        ['user_id', `eq.${userId}`],
+        ['kind', 'eq.budget'],
+        ['sent_on', `gte.${sinceDate}`],
+        ['limit', '1000'],
+      ]);
+      const out: string[] = [];
+      for (const r of Array.isArray(raw) ? raw : []) if (isRec(r) && typeof r.ref === 'string') out.push(r.ref);
+      return out;
+    },
+
     async insertLog(userId, sentOn, entries) {
       const fresh: LogEntry[] = [];
       for (const part of chunks(entries, WRITE_CHUNK)) {
@@ -1099,14 +1393,14 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
           prefer: 'resolution=ignore-duplicates,return=representation',
         });
         for (const r of Array.isArray(raw) ? raw : []) {
-          if (isRec(r) && (r.kind === 'payment' || r.kind === 'debt' || r.kind === 'daily') && typeof r.ref === 'string') fresh.push({ kind: r.kind, ref: r.ref });
+          if (isRec(r) && (r.kind === 'payment' || r.kind === 'debt' || r.kind === 'daily' || r.kind === 'budget') && typeof r.ref === 'string') fresh.push({ kind: r.kind, ref: r.ref });
         }
       }
       return fresh;
     },
 
     async deleteLog(userId, sentOn, entries) {
-      for (const kind of ['payment', 'debt', 'daily'] as const) {
+      for (const kind of ['payment', 'debt', 'daily', 'budget'] as const) {
         const refs = entries.filter((e) => e.kind === kind).map((e) => e.ref);
         if (refs.some((r) => !SAFE_REF.test(r))) throw new DbError('push_log: недопустимый ref');
         for (const part of chunks(refs, IN_CHUNK)) {
@@ -1332,11 +1626,53 @@ interface Found {
   payments: Array<{ ref: string; note: string; overdue: boolean }>;
   debts: Array<{ ref: string; counterparty: string }>;
   daily: boolean;
+  budgets: Array<BudgetItem & { ref: string }>;
+}
+
+/** Первый день месяца этой даты и первый день следующего ('2026-12-15' → ['2026-12-01', '2027-01-01']). */
+export function monthBounds(date: IsoDate): [IsoDate, IsoDate] {
+  const y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return [`${String(y).padStart(4, '0')}-${pad(m)}-01`, m === 12 ? `${String(y + 1).padStart(4, '0')}-01-01` : `${String(y).padStart(4, '0')}-${pad(m + 1)}-01`];
+}
+
+/**
+ * Лимиты, о которых пора сказать: уровень выше самого высокого, уже отправленного в этом местном месяце (push_log). Нет лимитов —
+ * больше ничего не читаем. Новый месяц начинает всё заново. Самые тяжёлые — первыми.
+ */
+export async function findBudgetAlerts(store: ReminderStore, userId: string, today: IsoDate): Promise<Array<BudgetItem & { ref: string }>> {
+  const budgets = await store.listBudgets(userId);
+  if (budgets.length === 0) return [];
+  const base = await store.baseCurrency(userId);
+  if (base === null) return [];
+  const comparable = budgets.filter((b) => b.currency === base);
+  if (comparable.length === 0) return [];
+  const [from, until] = monthBounds(today);
+  const categories = await store.listCategories(userId);
+  const parentOf = new Map<string, string | null>(categories.map((c) => [c.id, c.parentId]));
+  const nameOf = new Map<string, string>(categories.map((c) => [c.id, c.name]));
+  const rows = budgetLevelsOf({ budgets: comparable, txs: await store.listMonthSpend(userId, from, until), parentOf, base });
+  const sent = new Map<string, number>(); // лимит → самый высокий уровень, о котором уже говорили в этом месяце
+  for (const ref of await store.listBudgetLogRefs(userId, from)) {
+    const at = ref.lastIndexOf(':');
+    const level = ref.slice(at + 1);
+    if (at > 0 && (level === 'warn' || level === 'danger' || level === 'over')) {
+      const id = ref.slice(0, at);
+      sent.set(id, Math.max(sent.get(id) ?? 0, LEVEL_RANK[level]));
+    }
+  }
+  const out: Array<BudgetItem & { ref: string }> = [];
+  for (const r of rows) {
+    if (r.level === 'ok' || LEVEL_RANK[r.level] <= (sent.get(r.id) ?? 0)) continue;
+    out.push({ ref: `${r.id}:${r.level}`, level: r.level, percent: r.percent, name: r.categoryId === null ? TOTAL_BUDGET_NAME : (nameOf.get(r.categoryId) ?? '') });
+  }
+  return out.sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || b.percent - a.percent || (a.ref < b.ref ? -1 : 1));
 }
 
 /** Что сегодня напомнить пользователю (до проверки по push_log). */
 async function findDue(store: ReminderStore, s: ReminderSettingsRow, today: IsoDate): Promise<Found> {
-  const found: Found = { payments: [], debts: [], daily: false };
+  const found: Found = { payments: [], debts: [], daily: false, budgets: [] };
   if (s.remindPayments) {
     const cands = paymentCandidates(await store.listRules(s.userId, today), today);
     if (cands.length > 0) {
@@ -1358,6 +1694,7 @@ async function findDue(store: ReminderStore, s: ReminderSettingsRow, today: IsoD
     }
   }
   if (s.remindDaily && !(await store.hasLiveTransactionOn(s.userId, today))) found.daily = true;
+  if (s.remindBudgets) found.budgets = await findBudgetAlerts(store, s.userId, today);
   return found;
 }
 
@@ -1372,7 +1709,7 @@ async function remindUser(ctx: RunCtx, s: ReminderSettingsRow, c: Counters): Pro
     return;
   }
   c.inWindow++;
-  if (!s.remindPayments && !s.remindDebts && !s.remindDaily) {
+  if (!s.remindPayments && !s.remindDebts && !s.remindDaily && !s.remindBudgets) {
     c.skippedNothingToSend++;
     return;
   }
@@ -1388,6 +1725,7 @@ async function remindUser(ctx: RunCtx, s: ReminderSettingsRow, c: Counters): Pro
     ...found.payments.map((p): LogEntry => ({ kind: 'payment', ref: p.ref })),
     ...found.debts.map((d): LogEntry => ({ kind: 'debt', ref: d.ref })),
     ...(found.daily ? [{ kind: 'daily', ref: DAILY_REF } as LogEntry] : []),
+    ...found.budgets.map((b): LogEntry => ({ kind: 'budget', ref: b.ref })),
   ];
   if (entries.length === 0) {
     c.skippedNothingToSend++;
@@ -1401,6 +1739,7 @@ async function remindUser(ctx: RunCtx, s: ReminderSettingsRow, c: Counters): Pro
       payments: found.payments.filter((p) => isNew.has(`payment|${p.ref}`)),
       debts: found.debts.filter((d) => isNew.has(`debt|${d.ref}`)),
       daily: found.daily && isNew.has(`daily|${DAILY_REF}`),
+      budgets: found.budgets.filter((b) => isNew.has(`budget|${b.ref}`)),
     },
     s.showDetails,
   );

@@ -77,6 +77,8 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'icon', column: 'icon', type: 'text' },
       { field: 'sortOrder', column: 'sort_order', type: 'int' },
       { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
+      { field: 'goalMinor', column: 'goal_minor', type: 'int', nullable: true },
+      { field: 'goalOn', column: 'goal_on', type: 'date', nullable: true },
     ],
   },
   categories: {

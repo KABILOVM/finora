@@ -15,6 +15,7 @@ import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData
 import { monthKey, todayLocal } from '@/lib/dates';
 import { useRates } from '@/rates/hooks';
 import { computeHomeTotal } from './homeData';
+import GoalsWidget from './GoalsWidget';
 import { HomeHero } from './HomeHero';
 import { MonthCard } from './MonthCard';
 import { RecentOps } from './RecentOps';
@@ -127,6 +128,7 @@ export default function HomePage() {
         <BudgetsWidget />
         <UpcomingWidget />
         <DebtsWidget />
+        <GoalsWidget />
 
         <MonthCard month={month} currentMonth={currentMonth} onMonth={setMonth} categories={categoryIndex} />
 
