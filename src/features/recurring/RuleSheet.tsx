@@ -31,6 +31,8 @@ export interface RuleSheetProps {
   rule: LocalRow<RecurringRule> | null;
   lookups: RecurringLookups;
   today: IsoDate;
+  /** Новый платёж: поля, заполненные заранее (например, из подсказки «Похоже на подписки»). */
+  prefill?: Partial<RuleFormState>;
   onClose: () => void;
 }
 
@@ -52,7 +54,7 @@ const CLEARS: Partial<Record<keyof RuleFormState, (keyof RuleFormErrors)[]>> = {
 };
 
 /** Создание и правка регулярного платежа. Проверки делает репозиторий; понятные подсказки — тут, у своих полей. */
-export function RuleSheet({ rule: liveRule, lookups, today, onClose }: RuleSheetProps) {
+export function RuleSheet({ rule: liveRule, lookups, today, prefill, onClose }: RuleSheetProps) {
   const store = useStore();
   // Платёж, каким он был при открытии окна: от него считаются «что изменил человек». Живая копия могла уйти вперёд (правка с
   // другого устройства), и сравнивать с ней значило бы откатить чужую правку устаревшей формой.
@@ -76,7 +78,7 @@ export function RuleSheet({ rule: liveRule, lookups, today, onClose }: RuleSheet
   const [initial] = useState<RuleFormState>(() =>
     rule
       ? formFromRule(rule, (id) => lookups.wallets.get(id)?.currency)
-      : emptyRuleForm(pickDefaultWallet(selectable, null, lookups.defaultWalletId), today),
+      : { ...emptyRuleForm(pickDefaultWallet(selectable, null, lookups.defaultWalletId), today), ...prefill },
   );
   const [form, setForm] = useState<RuleFormState>(initial);
   const [errors, setErrors] = useState<RuleFormErrors>({});
