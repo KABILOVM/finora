@@ -1,4 +1,5 @@
 import type { BudgetLevel, BudgetProgress } from '@/domain/budgetProgress';
+import type { BudgetPace } from '@/domain/pace';
 import { formatMinor } from '@/domain/money';
 import type { Category, CurrencyCode, IsoDate, UUID } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
@@ -77,3 +78,13 @@ export function fitFontSize(chars: number, min: string, vw: string, max: string)
   const n = Number.isFinite(chars) ? Math.max(1, Math.floor(chars)) : 1;
   return `min(clamp(${min}, ${vw}, ${max}), calc((100vw - 4.5rem) / ${(n * 0.56).toFixed(2)}))`;
 }
+
+/** «19 октября»: день месяца `month` ('ГГГГ-ММ') по его номеру. */
+export const dayOfMonthText = (month: string, day: number): string => longDate(`${month}-${String(day).padStart(2, '0')}`);
+
+/** «При таком темпе лимит закончится около 19 октября»; null — лимита хватит, или прогноз пока невозможен. */
+export function paceNote(pace: BudgetPace | undefined, month: string): string | null {
+  if (!pace || pace.status !== 'will-exceed') return null;
+  return `При таком темпе лимит закончится около ${dayOfMonthText(month, pace.exhaustDay)}`;
+}
+

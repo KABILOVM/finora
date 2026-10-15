@@ -2,7 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { summarizeMonth, useStore, type MonthSummary } from '@/db';
 import { computeBudgetProgress, type BudgetsResult } from '@/domain/budgetProgress';
+import { budgetPace, monthPace, type BudgetPace } from '@/domain/pace';
 import type { Budget, Category, CurrencyCode, LocalRow, UUID } from '@/domain/types';
+import { useToday } from '@/recurring/useToday';
 
 export interface BudgetsData {
   /** Месяц, за который посчитано ('ГГГГ-ММ'). */
@@ -17,9 +19,11 @@ export interface BudgetsData {
   summary: MonthSummary;
   /** Прогресс бюджетов не в архиве или признак переполнения сумм. */
   progress: BudgetsResult;
+  /** Темп по id бюджета — только для идущего месяца; у прошедшего и будущего пусто. */
+  pace: ReadonlyMap<UUID, BudgetPace>;
 }
 
-type Loaded = { overflow: true } | { overflow: false; value: Omit<BudgetsData, 'progress'> };
+type Loaded = { overflow: true } | { overflow: false; value: Omit<BudgetsData, 'progress' | 'pace'> };
 
 const byOrder = (a: LocalRow<Budget>, b: LocalRow<Budget>): number => {
   if ((a.categoryId === null) !== (b.categoryId === null)) return a.categoryId === null ? -1 : 1;
@@ -33,6 +37,7 @@ const byOrder = (a: LocalRow<Budget>, b: LocalRow<Budget>): number => {
  */
 export function useBudgetsData(month: string): BudgetsData | { overflow: true } | null | undefined {
   const store = useStore();
+  const today = useToday();
   const loaded = useLiveQuery(async (): Promise<Loaded | null> => {
     const settings = await store.settings.get();
     if (!settings) return null;
@@ -74,6 +79,18 @@ export function useBudgetsData(month: string): BudgetsData | { overflow: true } 
       parentOf: new Map([...value.categories].map(([id, c]) => [id, c.parentId] as const)),
       base: value.base,
     });
-    return { ...value, progress };
-  }, [loaded]);
+    const days = monthPace(month, today);
+    const pace = new Map<UUID, BudgetPace>();
+    if (days && progress.ok) {
+      for (const p of progress.items) {
+        if (!p.comparable) continue;
+        try {
+          pace.set(p.id, budgetPace({ limitMinor: p.limitMinor, spentMinor: p.spentMinor, ...days }));
+        } catch (e) {
+          if (!(e instanceof RangeError)) throw e; // суммы слишком велики для прогноза — подсказки просто нет
+        }
+      }
+    }
+    return { ...value, progress, pace };
+  }, [loaded, month, today]);
 }

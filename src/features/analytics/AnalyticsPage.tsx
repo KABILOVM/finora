@@ -14,6 +14,7 @@ import { useToday } from '@/recurring/useToday';
 import { CategoryCompare } from './CategoryCompare';
 import { MonthlyBars } from './charts/MonthlyBars';
 import { WeekdayBars } from './charts/WeekdayBars';
+import { hasPaceContent, PaceCard } from './PaceCard';
 import { TopExpensesList } from './TopExpensesList';
 import { useAnalyticsData, type AnalyticsData } from './useAnalyticsData';
 
@@ -138,6 +139,7 @@ export default function AnalyticsPage() {
       ) : (
         <div className="stagger flex flex-col gap-4">
           <Summary data={data} />
+          {hasPaceContent(data) && <PaceCard data={data} />}
           <Section id="analytics-months" title="Доходы и расходы по месяцам">
             <MonthlyBars points={data.series} base={data.base} />
           </Section>

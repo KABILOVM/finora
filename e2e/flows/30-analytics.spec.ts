@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { addTx, dismissToasts, expect, goSection, money, norm, openApp, shot, test } from '../helpers';
+import { addTx, dismissToasts, expect, goSection, money, norm, openApp, shot, sheet, tapAmount, test } from '../helpers';
 
 /** «Сегодня» закреплено: 15 октября 2026 (четверг). */
 const NOW = new Date('2026-10-15T09:00:00Z');
@@ -87,4 +87,47 @@ test.describe('30. Аналитика', () => {
     await expect(summary(page)).toContainText('Расходы за октябрь 2026');
     await expect(summary(page)).toContainText(money('80 с.'));
   });
+
+  test('«Темп трат»: прогноз на конец месяца, лимит, который не дотянет, и подсказка в «Бюджетах»', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    await openApp(page);
+    await addTx(page, { kind: 'income', amount: '3000', category: 'Зарплата' });
+    await addTx(page, { amount: '420', category: 'Еда' });
+    await addTx(page, { amount: '200', category: 'Продукты', date: '2026-09-20' });
+    await dismissToasts(page);
+
+    await goSection(page, 'Аналитика');
+    // 420 с. за 15 дней из 31 → floor(42 000 × 31 ÷ 15) = 86 800 → ≈ 868 с.; в прошлом месяце было 200 с.
+    const card = page.getByTestId('pace-card');
+    await expect(card).toBeVisible();
+    await expect(page.getByTestId('pace-projection')).toContainText(money('868 с.'));
+    await expect(page.getByTestId('pace-previous')).toContainText(money('200 с.'));
+    await expect(page.getByTestId('pace-budget')).toHaveCount(0); // лимитов нет
+    await shot(page, '30-pace-card', testInfo);
+    await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
+    await expect(page.getByTestId('analytics-summary')).toContainText('Расходы за сентябрь 2026');
+    await expect(card).toHaveCount(0); // в прошедшем месяце прогнозировать нечего
+
+    // лимит на «Еду» 500 с.: при таком темпе кончится на ceil(500 × 15 ÷ 420) = 18-й день
+    await goSection(page, 'Бюджеты');
+    await page.getByRole('button', { name: 'Поставить первый лимит' }).click();
+    const dlg = sheet(page, 'Новый лимит');
+    await dlg.getByRole('combobox', { name: 'На что лимит' }).selectOption({ label: 'Еда' });
+    await tapAmount(page, '500');
+    await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    await expect(dlg).toBeHidden();
+    await dismissToasts(page);
+    await expect(page.getByTestId('budget-pace')).toHaveText('При таком темпе лимит закончится около 18 октября');
+    await shot(page, '30-pace-budget-row', testInfo);
+
+    await goSection(page, 'Аналитика');
+    const item = page.getByTestId('pace-budget');
+    await expect(item).toHaveCount(1);
+    await expect(item).toContainText('Еда');
+    await expect(item).toContainText('закончится около 18 октября');
+    await expect(item).toContainText(money('368 с.')); // 868 − 500
+    await shot(page, '30-pace-card-budget', testInfo);
+    await noHorizontalScroll(page, 'Аналитика с темпом');
+  });
 });
+

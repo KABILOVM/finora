@@ -18,7 +18,7 @@ import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
 import { BudgetRow } from './BudgetRow';
 import { BudgetSheet } from './BudgetSheet';
-import { budgetLabel, excludedText } from './budgetText';
+import { budgetLabel, excludedText, paceNote } from './budgetText';
 import { ForecastCard } from './ForecastCard';
 import { useBudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
@@ -140,7 +140,15 @@ export default function BudgetsPage() {
                 const label = budgetLabel(b.categoryId, categories);
                 return (
                   <li key={b.id}>
-                    <BudgetRow progress={p} name={label.name} icon={label.icon} color={label.color} base={base} onOpen={() => setSheet({ kind: 'edit', budget: b })} />
+                    <BudgetRow
+                      progress={p}
+                      name={label.name}
+                      icon={label.icon}
+                      color={label.color}
+                      base={base}
+                      paceNote={paceNote(data.pace.get(b.id), month)}
+                      onOpen={() => setSheet({ kind: 'edit', budget: b })}
+                    />
                   </li>
                 );
               })}
