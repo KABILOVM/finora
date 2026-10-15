@@ -94,6 +94,7 @@ describe('«Добавить ещё в долг» на странице долг
     expect(screen.queryByRole('heading', { name: 'Выдачи и пополнения' })).toBeNull(); // пока одна выдача — отдельного списка нет
     const dlg = await openTopUp();
     expect(text(dlg)).toContain(`сумма долга сейчас ${fmt(50_000)}, остаток ${fmt(50_000)}`);
+    expect(text(dlg)).not.toContain('..'); // «500 с.» уже кончается точкой
     await tapAmount('300');
     expect(text(dlg)).toContain(`Сумма долга станет ${fmt(80_000)}`);
     await user.click(button('Добавить к долгу'));
@@ -320,6 +321,7 @@ describe('новый долг тому же человеку: предложен
     expect(text(banner)).toContain(`Остаток ${fmt(50_000)}`);
     await user.click(within(banner, 'Добавить к долгу «Алишер» от 01.10.2026'));
     expect(text(tid('debt-joined')!)).toContain('Сумма добавится к долгу «Алишер»');
+    expect(text(tid('debt-joined')!)).not.toContain('..');
     expect(tid('debt-match')).toBeNull();
     await tapAmount('300');
     await user.click(button('Добавить к долгу'));

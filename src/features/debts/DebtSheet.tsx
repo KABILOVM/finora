@@ -315,8 +315,8 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             <p className="font-semibold">Сумма добавится к долгу «{joined.debt.counterparty}»</p>
             <p className="text-sm text-muted">
               Сейчас сумма долга {formatMinor(joined.state?.principalMinor ?? joined.debt.principalMinor, joined.debt.currency)}, остаток{' '}
-              {formatMinor(joined.state?.remainingMinor ?? 0, joined.debt.currency)}. Новый долг не создаётся. Срок поменяется, только если вы
-              его укажете; заметка запишется к операции.
+              {endSentence(formatMinor(joined.state?.remainingMinor ?? 0, joined.debt.currency))} Новый долг не создаётся. Срок поменяется,
+              только если вы его укажете; заметка запишется к операции.
             </p>
             <Button
               variant="ghost"

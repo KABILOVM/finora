@@ -137,7 +137,8 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
       <div className="flex flex-col gap-5">
         <p className="text-muted">
           {debt.counterparty}: сумма долга сейчас <span className="money font-semibold text-text">{formatMinor(state.principalMinor, debt.currency)}</span>, остаток{' '}
-          <span className="money font-semibold text-text">{formatMinor(state.remainingMinor, debt.currency)}</span>.
+          <span className="money font-semibold text-text">{formatMinor(state.remainingMinor, debt.currency)}</span>
+          {!formatMinor(state.remainingMinor, debt.currency).trimEnd().endsWith('.') && '.'}
           {debt.closedAt !== null && ' Долг закрыт — после пополнения он откроется снова.'}
         </p>
 

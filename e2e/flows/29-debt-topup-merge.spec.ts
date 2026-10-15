@@ -50,16 +50,18 @@ test.describe('29. Добавить ещё в долг и объединение
     await expect(banner).toContainText(money('500 с.'));
     await shot(page, '29-debt-match', testInfo);
     await banner.getByRole('button', { name: /^Добавить к долгу «Алишер»/ }).click();
-    await expect(dlg.getByTestId('debt-joined')).toContainText('Сумма добавится к долгу «Алишер»');
+    const joined = sheet(page, 'Ещё в долг'); // после выбора шит называется «Ещё в долг»
+    await expect(joined.getByTestId('debt-joined')).toContainText('Сумма добавится к долгу «Алишер»');
+    await expect(joined.getByTestId('debt-joined')).not.toContainText('..');
     await tapAmount(page, '300');
     await shot(page, '29-debt-joined', testInfo);
     const vp = page.viewportSize()!;
-    const save = dlg.getByRole('button', { name: 'Добавить к долгу', exact: true });
+    const save = joined.getByRole('button', { name: 'Добавить к долгу', exact: true });
     const box = await save.boundingBox();
     expect(box, 'кнопка видна').not.toBeNull();
     expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height);
     await save.click();
-    await expect(dlg).toBeHidden();
+    await expect(joined).toBeHidden();
     await dismissToasts(page);
 
     // один долг на 800, а не два; деньги ушли с кошелька, расходы месяца те же
@@ -126,7 +128,7 @@ test.describe('29. Добавить ещё в долг и объединение
     await page.getByRole('button', { name: 'Дал ещё в долг', exact: true }).click();
     const top = sheet(page, 'Дал ещё в долг');
     await expect(top).toBeVisible();
-    await expect(top).toContainText('Сумма долга сейчас');
+    await expect(top).toContainText('сумма долга сейчас');
     await tapAmount(page, '100');
     await expect(top).toContainText('Сумма долга станет');
     await shot(page, '29-topup-sheet', testInfo);
