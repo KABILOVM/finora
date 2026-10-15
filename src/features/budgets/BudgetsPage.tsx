@@ -16,6 +16,8 @@ import { humanError } from '@/features/transactions/txActions';
 import { monthKey } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
+import { ToggleRow } from '@/features/recurring/ToggleRow';
+import { setBudgetAlertsEnabled, useBudgetAlertsEnabled } from './budgetAlertsPref';
 import { BudgetRow } from './BudgetRow';
 import { BudgetSheet } from './BudgetSheet';
 import { budgetLabel, excludedText } from './budgetText';
@@ -50,6 +52,16 @@ function LevelChips({ items }: { items: readonly BudgetProgress[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Подсказки «лимит на исходе»: когда траты поднимают лимит через 70%, 90% или 100%. Настройка хранится на этом устройстве. */
+function AlertsToggle() {
+  const on = useBudgetAlertsEnabled();
+  return (
+    <div className="mt-6">
+      <ToggleRow label="Подсказки о лимитах" hint="Скажем, когда потрачено 70%, 90% и весь лимит" checked={on} onChange={setBudgetAlertsEnabled} />
+    </div>
   );
 }
 
@@ -159,6 +171,8 @@ export default function BudgetsPage() {
         )}
 
         {summary.excludedCount > 0 && <p className="mt-3 text-sm font-medium text-warning">{excludedText(summary.excludedCount, base)}</p>}
+
+        {active.length > 0 && <AlertsToggle />}
 
         {archived.length > 0 && (
           <section className="mt-6">

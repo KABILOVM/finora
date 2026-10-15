@@ -16,6 +16,7 @@ import { PageNotices } from '@/app/PageNotices';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
+import BudgetAlerts from '@/features/budgets/BudgetAlerts';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { InstallPrompt } from '@/install/InstallPrompt';
@@ -107,6 +108,7 @@ export function AppRoutes() {
   return (
     <>
       <AutoPostRunner />
+      <BudgetAlerts />
       <PushKeeper />
       <InstallPrompt />
       <Routes location={pagesLocation}>
