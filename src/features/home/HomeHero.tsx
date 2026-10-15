@@ -119,6 +119,12 @@ export function HomeHero({ total, base }: HomeHeroProps) {
                   </span>
                 </div>
               )}
+              {flow && flow.avgPerDayMinor !== null && (
+                <p className="mt-2 text-[13px] opacity-90" data-testid="home-avg-per-day">
+                  В среднем в день в этом месяце:{' '}
+                  <span className="money font-semibold">{hidden ? '••••' : formatMinor(flow.avgPerDayMinor, base)}</span>
+                </p>
+              )}
             </>
           ) : (
             <p className="mt-1 text-4xl font-bold">—</p>
