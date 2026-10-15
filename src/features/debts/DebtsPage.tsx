@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -11,18 +11,22 @@ import { useToast } from '@/components/Toast';
 import { DEBT_OVERFLOW_MESSAGE, useStore } from '@/db';
 import type { DebtDirection } from '@/domain/types';
 import { humanError } from '@/features/transactions/txActions';
-import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
 import { groupDebts, overdueCount, remainingByCurrency, type DebtItem } from './debtSummary';
 import { DIRECTION_LABEL } from './debtText';
-import { DebtRow } from './DebtRow';
+import { DebtList, Fold } from './DebtLists';
 import { DebtSheet } from './DebtSheet';
+import { PeopleList } from './PeopleList';
+import { groupByPerson, peopleWithOpenDebts } from './people';
 import { useDebtsData } from './useDebtsData';
+
+type View = DebtDirection | 'people';
 
 const OPTIONS = [
   { value: 'lent', label: DIRECTION_LABEL.lent, tone: 'brand' },
   { value: 'borrowed', label: DIRECTION_LABEL.borrowed, tone: 'brand' },
+  { value: 'people', label: 'Люди', tone: 'brand' },
 ] as const;
 
 const EMPTY: Record<DebtDirection, { title: string; text: string }> = {
@@ -65,47 +69,6 @@ function Totals({ items, direction, base, today }: { items: readonly DebtItem[];
   );
 }
 
-function DebtList({ items, today, label, onRestore, busy }: { items: readonly DebtItem[]; today: string; label: string; onRestore?: (it: DebtItem) => void; busy?: boolean }) {
-  return (
-    <Card padding="none" className="overflow-hidden">
-      <ul aria-label={label} className="divide-y divide-border">
-        {items.map((it) => (
-          <li key={it.debt.id} className={cn('flex items-center', onRestore && 'pr-2')}>
-            <div className="min-w-0 flex-1">
-              <DebtRow item={it} today={today} />
-            </div>
-            {onRestore && (
-              <Button variant="secondary" className="shrink-0" disabled={busy} aria-label={`Вернуть из архива: ${it.debt.counterparty}`} onClick={() => onRestore(it)}>
-                Вернуть
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-function Fold({ title, count, children }: { title: string; count: number; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="mt-6">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-1 text-left font-semibold text-muted"
-      >
-        <span>
-          {title} · {count}
-        </span>
-        <Icon name="chevron" size={18} className={open ? 'rotate-90' : ''} />
-      </button>
-      {open && <div className="mt-1">{children}</div>}
-    </section>
-  );
-}
-
 /**
  * Долги и кредиты: переключатель «Мне должны» / «Я должен», итог по каждой валюте отдельно, строки с остатком, полосой и сроком
  * словами, свёрнутые «Закрытые» и «Архив». Остаток каждого долга считается из операций (нигде не хранится).
@@ -115,13 +78,17 @@ export default function DebtsPage() {
   const toast = useToast();
   const data = useDebtsData();
   const [params, setParams] = useSearchParams();
-  const direction: DebtDirection = params.get('dir') === 'borrowed' ? 'borrowed' : 'lent';
+  const dir = params.get('dir');
+  const view: View = dir === 'borrowed' ? 'borrowed' : dir === 'people' ? 'people' : 'lent';
+  // вкладка «Люди» не про одно направление: новый долг по умолчанию — «Я дал в долг»
+  const direction: DebtDirection = view === 'borrowed' ? 'borrowed' : 'lent';
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const today = useToday();
 
-  const setDirection = (d: DebtDirection) => setParams(d === 'lent' ? {} : { dir: d }, { replace: true });
+  const setView = (v: View) => setParams(v === 'lent' ? {} : { dir: v }, { replace: true });
   const groups = useMemo(() => groupDebts(data?.items ?? [], direction), [data, direction]);
+  const people = useMemo(() => peopleWithOpenDebts(groupByPerson(data?.items ?? [], data?.base ?? undefined)), [data]);
 
   const restore = async (it: DebtItem) => {
     if (busy) return;
@@ -166,36 +133,46 @@ export default function DebtsPage() {
   return (
     <>
       {header}
-      <Segmented ariaLabel="Чьи долги" options={OPTIONS} value={direction} onChange={setDirection} className="mb-4" />
-      <Totals items={groups.active} direction={direction} base={base} today={today} />
-
-      {empty ? (
-        <EmptyState
-          icon="banknote"
-          title={EMPTY[direction].title}
-          text={EMPTY[direction].text}
-          action={
-            base !== null ? (
-              <Button size="lg" icon="plus" onClick={() => setSheet(true)}>
-                Записать долг
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : noOpen ? (
-        <p className="px-1 text-muted">Открытых долгов нет.</p>
+      <Segmented ariaLabel="Чьи долги" options={OPTIONS} value={view} onChange={setView} compact className="mb-4" />
+      {view === 'people' ? (
+        people.length === 0 ? (
+          <EmptyState icon="banknote" title="Открытых долгов нет" text="Здесь появятся люди, с которыми у вас есть долги: сколько они должны вам и сколько вы им." />
+        ) : (
+          <PeopleList people={people} today={today} />
+        )
       ) : (
-        <DebtList items={groups.active} today={today} label={DIRECTION_LABEL[direction]} />
-      )}
-      {groups.closed.length > 0 && (
-        <Fold title="Закрытые" count={groups.closed.length}>
-          <DebtList items={groups.closed} today={today} label="Закрытые долги" />
-        </Fold>
-      )}
-      {groups.archived.length > 0 && (
-        <Fold title="Архив" count={groups.archived.length}>
-          <DebtList items={groups.archived} today={today} label="Долги в архиве" onRestore={(it) => void restore(it)} busy={busy} />
-        </Fold>
+        <>
+          <Totals items={groups.active} direction={direction} base={base} today={today} />
+
+          {empty ? (
+            <EmptyState
+              icon="banknote"
+              title={EMPTY[direction].title}
+              text={EMPTY[direction].text}
+              action={
+                base !== null ? (
+                  <Button size="lg" icon="plus" onClick={() => setSheet(true)}>
+                    Записать долг
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : noOpen ? (
+            <p className="px-1 text-muted">Открытых долгов нет.</p>
+          ) : (
+            <DebtList items={groups.active} today={today} label={DIRECTION_LABEL[direction]} />
+          )}
+          {groups.closed.length > 0 && (
+            <Fold title="Закрытые" count={groups.closed.length}>
+              <DebtList items={groups.closed} today={today} label="Закрытые долги" />
+            </Fold>
+          )}
+          {groups.archived.length > 0 && (
+            <Fold title="Архив" count={groups.archived.length}>
+              <DebtList items={groups.archived} today={today} label="Долги в архиве" onRestore={(it) => void restore(it)} busy={busy} />
+            </Fold>
+          )}
+        </>
       )}
 
       {sheet && base !== null && (
@@ -205,7 +182,7 @@ export default function DebtsPage() {
           defaultDirection={direction}
           base={base}
           onClose={() => setSheet(false)}
-          onCreated={(d) => setDirection(d.direction)}
+          onCreated={(d) => setView(d.direction)}
         />
       )}
     </>

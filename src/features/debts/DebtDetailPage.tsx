@@ -18,13 +18,15 @@ import { DeleteDebtDialog } from './DeleteDebtDialog';
 import { DebtSummaryCard } from './DebtSummaryCard';
 import { DIRECTION_LABEL, ruDateShort, TOP_UP_ACTION } from './debtText';
 import { MergeDebtsSheet } from './MergeDebtsSheet';
+import { groupByPerson, personKey, reminderText } from './people';
 import { EntriesList, IssuesNotice, PaymentsList } from './PaymentsList';
 import { PaymentSheet } from './PaymentSheet';
+import { ReminderSheet } from './ReminderSheet';
 import { TopUpSheet } from './TopUpSheet';
 import { useDebtLines } from './useDebtLines';
 import { useDebtsData } from './useDebtsData';
 
-type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | null;
+type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | 'remind' | null;
 
 function BackLink({ dir }: { dir?: string }) {
   return (
@@ -97,6 +99,11 @@ export default function DebtDetailPage() {
   const base = lines.base ?? debt.currency;
   const mergeTarget = all?.items.find((it) => it.debt.id === debt.id) ?? null;
   const canMerge = !archived && mergeTarget !== null && mergeCandidates(all?.items ?? [], debt).length > 0;
+  // «Напомнить» — только по открытому долгу «мне должны»; «Все долги человека» — если у него есть и другие открытые долги
+  const remind = mergeTarget !== null && !archived && !closed ? reminderText({ name: debt.counterparty, open: [mergeTarget] }, today) : null;
+  const key = personKey(debt.counterparty);
+  const person = all ? groupByPerson(all.items).find((p) => p.key === key) : undefined;
+  const hasOthers = person !== undefined && person.open.some((it) => it.debt.id !== debt.id);
 
   const run = async (action: () => Promise<unknown>, fallback: string, done?: () => void) => {
     if (busy) return false;
@@ -211,6 +218,16 @@ export default function DebtDetailPage() {
             )}
           </div>
         )}
+        {remind !== null && (
+          <Button variant="secondary" onClick={() => setDialog('remind')}>
+            Напомнить о долге
+          </Button>
+        )}
+        {hasOthers && (
+          <Link to={`/debts/people/${encodeURIComponent(key)}`} className={buttonClasses('secondary')}>
+            Все долги: {debt.counterparty}
+          </Link>
+        )}
         {!archived && (
           <div className="grid grid-cols-2 gap-2">
             <Button variant="secondary" icon="edit" onClick={() => setDialog('edit')}>
@@ -297,6 +314,7 @@ export default function DebtDetailPage() {
 
       {dialog === 'payment' && <PaymentSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
       {dialog === 'topup' && <TopUpSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
+      {dialog === 'remind' && remind !== null && <ReminderSheet name={debt.counterparty} text={remind} onClose={() => setDialog(null)} />}
       {dialog === 'merge' && mergeTarget && <MergeDebtsSheet target={mergeTarget} items={all?.items ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'edit' && <DebtSheet debt={debt} paidMinor={state.paidMinor} base={base} onClose={() => setDialog(null)} />}
     </>
