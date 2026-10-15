@@ -62,6 +62,37 @@ export function activeFilterLabels(
 export const MIN_MONTH = '2000-01';
 export const MAX_MONTH = '2100-12';
 
+const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
+const ID_PARAM = /^[0-9A-Za-z_-]{1,64}$/;
+
+/**
+ * Фильтры из адреса: `?month=ГГГГ-ММ&category=<id>|none&kind=expense`. Так ссылки с других экранов (аналитика) открывают готовый
+ * список. Всё, что не похоже на правду (чужой месяц, мусор вместо id), молча пропускается: страница откроется с обычными фильтрами.
+ */
+export function filtersFromParams(params: URLSearchParams, today: IsoDate): Partial<ListFilters> {
+  const out: Partial<ListFilters> = {};
+  const month = params.get('month');
+  if (month !== null && MONTH_PARAM.test(month) && month >= MIN_MONTH && month <= MAX_MONTH) {
+    out.period = month === monthKey(today) ? 'this' : 'month';
+    out.month = month;
+  }
+  const category = params.get('category');
+  if (category === 'none') out.categoryId = NO_CATEGORY;
+  else if (category !== null && ID_PARAM.test(category)) out.categoryId = category;
+  const kind = params.get('kind');
+  if (kind === 'expense' || kind === 'income' || kind === 'transfer') out.kind = kind;
+  return out;
+}
+
+/** Ссылка на список операций с готовыми фильтрами (обратное к filtersFromParams). categoryId null — «без категории». */
+export function transactionsLink(f: { month: string; categoryId?: string | null; kind?: TxKind }): string {
+  const q = new URLSearchParams({ month: f.month });
+  if (f.categoryId === null) q.set('category', 'none');
+  else if (f.categoryId !== undefined) q.set('category', f.categoryId);
+  if (f.kind !== undefined) q.set('kind', f.kind);
+  return `/transactions?${q.toString()}`;
+}
+
 /** Сдвиг месяца 'ГГГГ-ММ' на n месяцев (можно отрицательное). */
 export function shiftMonth(key: string, delta: number): string {
   const m = /^(\d{4})-(\d{2})$/.exec(key);

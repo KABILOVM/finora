@@ -11,12 +11,13 @@ const show = () =>
   );
 
 describe('MorePage', () => {
-  it('единственный h1 «Ещё» и пять пунктов в нужном порядке (категории и импорт лежат в «Настройках»)', () => {
+  it('единственный h1 «Ещё» и шесть пунктов в нужном порядке (категории и импорт лежат в «Настройках»)', () => {
     show();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1, name: 'Ещё' })).toBeTruthy();
     expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
       '/budgets',
+      '/analytics',
       '/recurring',
       '/shopping',
       '/debts',
