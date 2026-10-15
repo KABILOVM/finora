@@ -26,9 +26,14 @@ const text = (el: Element | null | undefined) => norm(el?.textContent);
 const fmt = (minor: number, sign: 'auto' | 'always' = 'auto') => norm(formatMinor(minor, 'TJS', { sign }));
 const tid = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 const heightOf = (id: string) => Number(tid(id)?.getAttribute('height'));
+/** Строки таблицы для скринридера по её подписи (caption). */
+const tableRows = (caption: string): Element[] => {
+  const t = Array.from(document.querySelectorAll('table')).find((x) => norm(x.querySelector('caption')?.textContent) === caption);
+  return Array.from(t?.querySelectorAll('tbody tr') ?? []);
+};
 
-async function openPage(options: { path?: string; empty?: boolean; setup?: (s: Store) => Promise<unknown> } = {}) {
-  const td = opsDeps([table()], {
+async function openPage(options: { path?: string; empty?: boolean; setup?: (s: Store) => Promise<unknown>; tables?: ReturnType<typeof table>[] } = {}) {
+  const td = opsDeps(options.tables ?? [table()], {
     setup: async (s) => {
       if (options.setup) await options.setup(s);
       else if (!options.empty) await seedHistory(s);
@@ -71,7 +76,7 @@ describe('экран «Аналитика»', () => {
 
   it('график по месяцам: шесть месяцев, высота столбиков по суммам, таблица для скринридера', async () => {
     await openPage();
-    const rows = Array.from(document.querySelectorAll('table[class~="sr-only"] tbody tr')).filter((r) => /^\d{4}-\d{2}/.test(text(r)));
+    const rows = tableRows('Доходы и расходы по месяцам');
     expect(rows.map((r) => r.querySelector('th')?.textContent)).toEqual(['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']);
     const oct = rows[5]!.querySelectorAll('td');
     expect(norm(oct[0]?.textContent)).toBe(norm(formatMinor(500_000, 'TJS')));
@@ -251,6 +256,91 @@ describe('«Темп трат» для идущего месяца', () => {
       },
     });
     expect(tid('pace-card')).toBeNull();
+  });
+});
+
+describe('«Чистый капитал»', () => {
+  const cashOf = async (s: Store) => (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+  const rowsOf = () => Array.from(tid('networth-rows')?.querySelectorAll('div') ?? []).map((r) => text(r));
+
+  it('без долгов равен «Всего» на главной (кошельки с накоплениями), «≈» — доллары пересчитаны по курсу', async () => {
+    await openPage();
+    // наличные 4 842,50 + карта 165 + (−10 $ × 10,9) = 4 898,50 — то же число, что «Всего» в HomePage.test
+    expect(text(tid('networth-total'))).toBe(`≈ ${fmt(489_850)}`);
+    expect(rowsOf()).toEqual([`Деньги в кошельках${fmt(489_850)}`]);
+  });
+
+  it('мне должны прибавляются, я должен вычитается; деньги в кошельках при этом те же', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s);
+        await s.debts.create({ direction: 'lent', counterparty: 'Алишер', principalMinor: 50_000, currency: 'TJS', openedOn: '2026-10-01' });
+        await s.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 20_000, currency: 'TJS', openedOn: '2026-10-01' });
+      },
+    });
+    expect(text(tid('networth-total'))).toBe(`≈ ${fmt(519_850)}`); // 4 898,50 + 500 − 200
+    expect(rowsOf()).toEqual([`Деньги в кошельках${fmt(489_850)}`, `Мне должны${fmt(50_000, 'always')}`, `Я должен${fmt(-20_000)}`]);
+  });
+
+  it('остаток долга, а не его сумма: платёж уменьшает «мне должны»; закрытые и архивные долги не входят', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s);
+        const cash = await cashOf(s);
+        const a = await s.debts.create({ direction: 'lent', counterparty: 'Алишер', principalMinor: 50_000, currency: 'TJS', openedOn: '2026-10-01' });
+        await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 20_000, occurredOn: '2026-10-05', debtId: a.id });
+        const closed = await s.debts.create({ direction: 'lent', counterparty: 'Закрытый', principalMinor: 9_000, currency: 'TJS', openedOn: '2026-10-01' });
+        await s.debts.close(closed.id);
+        const archived = await s.debts.create({ direction: 'borrowed', counterparty: 'Архивный', principalMinor: 8_000, currency: 'TJS', openedOn: '2026-10-01' });
+        await s.debts.archive(archived.id);
+      },
+    });
+    // платёж 200 лёг на «Наличные» (+200), остаток долга 300: капитал = (4 898,50 + 200) + 300
+    expect(text(tid('networth-total'))).toBe(`≈ ${fmt(489_850 + 20_000 + 30_000)}`);
+    expect(rowsOf()).toEqual([`Деньги в кошельках${fmt(509_850)}`, `Мне должны${fmt(30_000, 'always')}`]);
+  });
+
+  it('долг в долларах пересчитывается по курсу', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s);
+        await s.debts.create({ direction: 'lent', counterparty: 'Джон', principalMinor: 2_000, currency: 'USD', openedOn: '2026-10-01' }); // 20 $ = 218 с.
+      },
+    });
+    expect(rowsOf()[1]).toBe(`Мне должны${fmt(21_800, 'always')}`);
+  });
+
+  it('нет курса доллара: сумма в долларах НЕ входит, об этом сказано; «≈» стоит', async () => {
+    await openPage({
+      tables: [],
+      setup: async (s) => {
+        await seedHistory(s);
+        await s.debts.create({ direction: 'borrowed', counterparty: 'Джон', principalMinor: 2_000, currency: 'USD', openedOn: '2026-10-01' });
+      },
+    });
+    expect(text(tid('networth-total'))).toBe(`≈ ${fmt(500_750)}`); // наличные + карта, без доллара
+    expect(text(tid('networth-missing'))).toBe(`Не вошло в расчёт — нет курса: ${norm(formatMinor(-1000, 'USD'))} (в кошельках), ${norm(formatMinor(2_000, 'USD'))} (я должен).`);
+  });
+
+  it('график по месяцам: конец каждого месяца считается обратным ходом от сегодняшнего итога', async () => {
+    await openPage();
+    const by = Object.fromEntries(tableRows('Деньги в кошельках по месяцам').map((r) => [r.querySelector('th')?.textContent, text(r.querySelector('td'))]));
+    expect(Object.keys(by)).toHaveLength(12);
+    expect(by['2026-10']).toBe(fmt(489_850)); // сегодня
+    expect(by['2026-09']).toBe(fmt(2_300)); // до октябрьских 4 875,50 чистого дохода
+    expect(by['2026-08']).toBe(fmt(7_000)); // до сентябрьских расходов 47
+    expect(by['2026-07']).toBe(fmt(7_000));
+    expect(by['2026-06']).toBe(fmt(0)); // до июльской подработки 70
+    expect(by['2025-11']).toBe(fmt(0));
+    expect(tid('balance-line')).not.toBeNull();
+    expect(text(document.body)).toContain('Долги в историю не входят');
+  });
+
+  it('капитал не зависит от выбранного месяца', async () => {
+    await openPage();
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    await waitFor(() => expect(text(tid('analytics-summary'))).toContain('сентябрь 2026'));
+    expect(text(tid('networth-total'))).toBe(`≈ ${fmt(489_850)}`);
   });
 });
 

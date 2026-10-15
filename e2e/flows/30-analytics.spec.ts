@@ -44,6 +44,13 @@ test.describe('30. Аналитика', () => {
     await expect(cats.getByRole('listitem').filter({ hasText: 'Продукты' })).toContainText('нет трат');
     await shot(page, '30-analytics-categories', testInfo);
 
+    // чистый капитал: деньги в кошельках 3 000 − 120 − 300 − 45 − 200 (сентябрьская трата) = 2 335, долгов нет
+    await expect(page.getByTestId('networth-total')).toContainText(money('2 335 с.'));
+    await expect(page.getByTestId('networth-rows')).toContainText('Деньги в кошельках');
+    await expect(page.getByTestId('networth-rows')).not.toContainText('Мне должны');
+    await expect(page.getByTestId('balance-line')).toBeVisible();
+    await shot(page, '30-analytics-networth', testInfo);
+
     // дни недели: 12 октября — понедельник (300), 15-го — четверг (120 + 45); понедельников до 15-го два (5 и 12)
     await expect(page.getByTestId('weekday-summary')).toContainText('Чаще всего вы тратите по понедельникам');
     await expect(page.getByTestId('weekday-summary')).toContainText(money('150 с.')); // 300 ÷ 2 понедельника (5 и 12 октября)
