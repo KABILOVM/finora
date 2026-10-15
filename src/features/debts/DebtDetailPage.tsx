@@ -16,17 +16,18 @@ import { mergeCandidates } from './debtMatch';
 import { DebtSheet } from './DebtSheet';
 import { DeleteDebtDialog } from './DeleteDebtDialog';
 import { DebtSummaryCard } from './DebtSummaryCard';
-import { DIRECTION_LABEL, ruDateShort, TOP_UP_ACTION } from './debtText';
+import { DIRECTION_LABEL, PARTS_ACTION, ruDateShort, TOP_UP_ACTION } from './debtText';
 import { MergeDebtsSheet } from './MergeDebtsSheet';
 import { groupByPerson, personKey, reminderText } from './people';
 import { EntriesList, IssuesNotice, PaymentsList } from './PaymentsList';
+import { PayInPartsSheet } from './PayInPartsSheet';
 import { PaymentSheet } from './PaymentSheet';
 import { ReminderSheet } from './ReminderSheet';
 import { TopUpSheet } from './TopUpSheet';
 import { useDebtLines } from './useDebtLines';
 import { useDebtsData } from './useDebtsData';
 
-type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | 'remind' | null;
+type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | 'remind' | 'parts' | null;
 
 function BackLink({ dir }: { dir?: string }) {
   return (
@@ -218,6 +219,11 @@ export default function DebtDetailPage() {
             )}
           </div>
         )}
+        {!archived && !closed && state.remainingMinor > 0 && (
+          <Button variant="secondary" onClick={() => setDialog('parts')}>
+            {PARTS_ACTION[debt.direction]}
+          </Button>
+        )}
         {remind !== null && (
           <Button variant="secondary" onClick={() => setDialog('remind')}>
             Напомнить о долге
@@ -314,6 +320,7 @@ export default function DebtDetailPage() {
 
       {dialog === 'payment' && <PaymentSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
       {dialog === 'topup' && <TopUpSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
+      {dialog === 'parts' && <PayInPartsSheet debt={debt} state={state} onClose={() => setDialog(null)} />}
       {dialog === 'remind' && remind !== null && <ReminderSheet name={debt.counterparty} text={remind} onClose={() => setDialog(null)} />}
       {dialog === 'merge' && mergeTarget && <MergeDebtsSheet target={mergeTarget} items={all?.items ?? []} onClose={() => setDialog(null)} />}
       {dialog === 'edit' && <DebtSheet debt={debt} paidMinor={state.paidMinor} base={base} onClose={() => setDialog(null)} />}

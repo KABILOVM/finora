@@ -10,6 +10,8 @@ export const DIRECTION_ACTION: Record<DebtDirection, string> = { lent: 'Я да�
 export const DIRECTION_NAME_LABEL: Record<DebtDirection, string> = { lent: 'Кому я дал', borrowed: 'У кого я взял' };
 /** Кнопка «добавить ещё» на странице долга и заголовок шита. */
 export const TOP_UP_ACTION: Record<DebtDirection, string> = { lent: 'Дал ещё в долг', borrowed: 'Взял ещё в долг' };
+/** Кнопка «платить частями» на странице долга и заголовок окна. */
+export const PARTS_ACTION: Record<DebtDirection, string> = { lent: 'Получать частями', borrowed: 'Платить частями' };
 /** Подпись суммы пополнения. */
 export const TOP_UP_AMOUNT_LABEL: Record<DebtDirection, string> = { lent: 'Сколько ещё дали', borrowed: 'Сколько ещё взяли' };
 

@@ -148,3 +148,53 @@ export function validateTopUp(f: TopUpFormInput): { errors: TopUpFormErrors; ok:
   if (f.note.trim().length > NOTE_MAX) errors.note = `Заметка не длиннее ${NOTE_MAX} символов (сейчас ${f.note.trim().length})`;
   return { errors, ok: Object.keys(errors).length === 0 };
 }
+
+export interface NettingFormInput {
+  walletId: string | null;
+  date: IsoDate;
+  /** Самая поздняя дата среди долгов, которые зачитываются: зачёт раньше неё не принимаем. */
+  openedOn: IsoDate;
+}
+
+export interface NettingFormErrors {
+  wallet?: string;
+  date?: string;
+}
+
+/** Взаимозачёт: нужен кошелёк (платежи по обоим долгам идут через него) и дата не раньше самого позднего из долгов. */
+export function validateNetting(f: NettingFormInput): { errors: NettingFormErrors; ok: boolean } {
+  const errors: NettingFormErrors = {};
+  if (f.walletId === null) errors.wallet = 'Выберите кошелёк';
+  const dateError = checkDate(f.date);
+  if (dateError) errors.date = dateError;
+  else if (f.date < f.openedOn) errors.date = `Зачёт не может быть раньше даты долга (${ruDateShort(f.openedOn)})`;
+  return { errors, ok: Object.keys(errors).length === 0 };
+}
+
+export interface PayInPartsFormInput {
+  amountMinor: Minor | null;
+  walletId: string | null;
+  startOn: IsoDate;
+  today: IsoDate;
+  /** Дата долга: платёж раньше неё не принимаем. */
+  openedOn: IsoDate;
+}
+
+export interface PayInPartsFormErrors {
+  amount?: string;
+  wallet?: string;
+  startOn?: string;
+}
+
+/** «Платить частями»: сумма больше нуля, кошелёк, первый платёж — сегодня или позже (иначе правило сразу «просрочено») и не раньше долга. */
+export function validatePayInParts(f: PayInPartsFormInput): { errors: PayInPartsFormErrors; ok: boolean } {
+  const errors: PayInPartsFormErrors = {};
+  if (f.amountMinor === null) errors.amount = 'Введите сумму платежа';
+  else if (f.amountMinor <= 0) errors.amount = 'Сумма платежа должна быть больше нуля';
+  if (f.walletId === null) errors.wallet = 'Выберите кошелёк';
+  const dateError = checkDate(f.startOn);
+  if (dateError) errors.startOn = dateError;
+  else if (f.startOn < f.today) errors.startOn = 'Первый платёж — сегодня или позже';
+  else if (f.startOn < f.openedOn) errors.startOn = `Платёж не может быть раньше даты долга (${ruDateShort(f.openedOn)})`;
+  return { errors, ok: Object.keys(errors).length === 0 };
+}
