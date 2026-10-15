@@ -22,6 +22,8 @@ export interface DebtMoneySectionProps {
   fx: WalletFx;
   fxError?: string | null;
   walletError?: string | null;
+  /** Это пополнение существующего долга («добавить ещё»), а не новый долг: меняются слова. */
+  topUp?: boolean;
 }
 
 /**
@@ -40,13 +42,16 @@ export function DebtMoneySection({
   fx,
   fxError,
   walletError,
+  topUp = false,
 }: DebtMoneySectionProps) {
   const titleId = useId();
   const hintId = useId();
   const noWallet = candidates.length === 0;
   const on = wanted && !noWallet;
   const wallet = candidates.find((w) => w.id === walletId);
-  const sum = amountMinor !== null && amountMinor > 0 ? formatMinor(amountMinor, currency) : 'сумма долга';
+  const sum = amountMinor !== null && amountMinor > 0 ? formatMinor(amountMinor, currency) : topUp ? 'сумма пополнения' : 'сумма долга';
+  const what = topUp ? 'Сумма пополнения' : 'Сумма долга';
+  const paper = topUp ? 'Пополнение' : 'Долг';
 
   return (
     <section aria-label="Движение денег" className="flex flex-col gap-3 rounded-2xl border border-border p-3">
@@ -66,23 +71,26 @@ export function DebtMoneySection({
           </span>
           <span id={hintId} className="block text-sm text-muted">
             {direction === 'lent'
-              ? 'Сумма долга спишется с кошелька как расход (в расходы месяца она не войдёт).'
-              : 'Сумма долга поступит на кошелёк как доход (в доходы месяца она не войдёт).'}
+              ? `${what} спишется с кошелька как расход (в расходы месяца она не войдёт).`
+              : `${what} поступит на кошелёк как доход (в доходы месяца она не войдёт).`}
           </span>
         </span>
       </label>
 
       {noWallet && (
         <p className="text-sm font-medium text-warning" data-testid="debt-paper-note">
-          Нет кошелька в валюте {currency}, поэтому долг запишется «на бумаге»: остатки кошельков не изменятся. Чтобы деньги
-          двигались, сначала создайте кошелёк в {currency} на экране «Кошельки».{' '}
+          Нет кошелька в валюте {currency}, поэтому {paper.toLowerCase()} запишется «на бумаге»: остатки кошельков не изменятся. Чтобы
+          деньги двигались, сначала создайте кошелёк в {currency} на экране «Кошельки».{' '}
           <Link to="/wallets" className="inline-flex min-h-[44px] items-center font-semibold text-brand">
             Открыть кошельки
           </Link>
         </p>
       )}
       {!noWallet && !on && (
-        <p className="text-sm text-muted">Долг запишется «на бумаге»: остатки кошельков не изменятся.</p>
+        <p className="text-sm text-muted">
+          {paper} запишется «на бумаге»: остатки кошельков не изменятся.
+          {topUp && ' В списке «Выдачи и пополнения» такого пополнения не будет — только сумма долга вырастет.'}
+        </p>
       )}
 
       {on && (
@@ -102,7 +110,7 @@ export function DebtMoneySection({
                   ? `С кошелька «${wallet.name}» спишется ${sum}`
                   : `На кошелёк «${wallet.name}» поступит ${sum}`,
               )}{' '}
-              Дата операции — дата долга.
+              {topUp ? 'Дата операции — дата пополнения.' : 'Дата операции — дата долга.'}
             </p>
           )}
           <FxNotice fx={fx.view} amountMinor={amountMinor} rateText={fx.rateText} onRateText={fx.setRateText} error={fxError} />

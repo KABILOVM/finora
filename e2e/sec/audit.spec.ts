@@ -77,10 +77,10 @@ test.describe('Статический аудит (один раз)', () => {
         const arg = (m[1] ?? m[2] ?? '').trim();
         if (/^['"`]\/[^'"`$]*['"`]/.test(arg) || /^\s*-?\d+\s*$/.test(arg) || /^\/edit\/\$\{id\}/.test(arg.replace(/^`/, '')) || /^`\/edit\/\$\{id\}`/.test(arg)) continue;
         if (/^\s*\{?\s*\.\.\.addLink/.test(arg) || /item\.to|^to=/.test(arg) || arg === 'to') continue;
-        // Адрес целиком внутренний: начало ФИКСИРОВАННОЕ (/debts/, /debts?dir=, /edit/, /transactions?, /analytics?month=), из данных
-        // подставляется только хвост (номер долга/операции, 'borrowed', закодированные фильтры или месяц). Уйти на чужой сайт такой
-        // адрес не может: «//evil» и «https:» тут не начало.
-        if (/^(?:dir \? )?`\/(?:debts\/|debts\?dir=|edit\/|transactions\?|analytics\?month=)\$\{/.test(arg)) continue;
+        // Адрес целиком внутренний: начало ФИКСИРОВАННОЕ (/debts/, /debts/people/, /debts?dir=, /edit/, /transactions?, /analytics?month=),
+        // из данных подставляется только хвост (номер долга/операции, закодированный ключ человека, 'borrowed', закодированные фильтры
+        // или месяц). Уйти на чужой сайт такой адрес не может: «//evil» и «https:» тут не начало.
+        if (/^(?:dir \? )?`\/(?:debts\/|debts\/people\/|debts\?dir=|edit\/|transactions\?|analytics\?month=)\$\{/.test(arg)) continue;
         dynamic.push(`${f}: ${arg.slice(0, 60)}`);
       }
     }

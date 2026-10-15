@@ -48,6 +48,8 @@ export interface DebtState {
   settled: boolean;
   /** Платежи по порядку: старые первыми. */
   payments: DebtPayment[];
+  /** Выдачи и пополнения (исходная операция и «добавить ещё») по порядку: старые первыми. Сумма — issuedMinor. */
+  entries: DebtPayment[];
   /** Операции долга, которые не вошли в расчёт, и почему. */
   issues: DebtIssue[];
 }
@@ -85,6 +87,7 @@ export function computeDebtState(
   let paid: Minor = 0;
   let issued: Minor = 0;
   const payments: DebtPayment[] = [];
+  const entries: DebtPayment[] = [];
   const issues: DebtIssue[] = [];
 
   for (const t of mine) {
@@ -115,6 +118,7 @@ export function computeDebtState(
       payments.push({ txId: t.id, occurredOn: t.occurredOn, amountMinor: t.amountMinor });
     } else {
       issued = addMinor(issued, t.amountMinor);
+      entries.push({ txId: t.id, occurredOn: t.occurredOn, amountMinor: t.amountMinor });
     }
   }
 
@@ -130,6 +134,7 @@ export function computeDebtState(
     issuedMinor: issued,
     settled: remaining === 0,
     payments,
+    entries,
     issues,
   };
 }
