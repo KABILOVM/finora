@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, activeFilterLabels, totalsByCurrency, withKind } from './txFilters';
+import { activeFilterCount, activeFilterLabels, filtersFromParams, NO_CATEGORY, totalsByCurrency, transactionsQuery, withKind } from './txFilters';
 
 describe('фильтры из шита «Фильтры»: чистая логика', () => {
   it('activeFilterCount: считает только то, что лежит в шите (кошелёк, вид, категория)', () => {
@@ -48,3 +48,58 @@ describe('totalsByCurrency', () => {
     ]);
   });
 });
+
+describe('filtersFromParams: фильтры из адреса', () => {
+  const q = (s: string) => new URLSearchParams(s);
+  const today = '2026-10-15';
+
+  it('нет параметров — ничего не меняет', () => {
+    expect(filtersFromParams(q(''), today)).toEqual({});
+  });
+  it('месяц: другой — period «month», сегодняшний — «this»', () => {
+    expect(filtersFromParams(q('month=2026-09'), today)).toEqual({ period: 'month', month: '2026-09' });
+    expect(filtersFromParams(q('month=2026-10'), today)).toEqual({ period: 'this', month: '2026-10' });
+  });
+  it('категория: id, «none» — без категории', () => {
+    expect(filtersFromParams(q('category=abc-123'), today)).toEqual({ categoryId: 'abc-123' });
+    expect(filtersFromParams(q('category=none'), today)).toEqual({ categoryId: NO_CATEGORY });
+  });
+  it('вид операции', () => {
+    expect(filtersFromParams(q('kind=expense'), today)).toEqual({ kind: 'expense' });
+    expect(filtersFromParams(q('kind=transfer'), today)).toEqual({ kind: 'transfer' });
+  });
+  it('всё вместе', () => {
+    expect(filtersFromParams(q('month=2026-08&category=c1&kind=expense'), today)).toEqual({ period: 'month', month: '2026-08', categoryId: 'c1', kind: 'expense' });
+  });
+  it.each([
+    ['month=2026-13'],
+    ['month=2026-9'],
+    ['month=1999-12'],
+    ['month=2101-01'],
+    ['month=вчера'],
+    ['month='],
+    ['category=a b'],
+    ['category=%3Cscript%3E'],
+    ['category='],
+    ['category=' + 'x'.repeat(65)],
+    ['kind=все'],
+    ['kind=EXPENSE'],
+  ])('мусор «%s» пропускается', (s) => {
+    expect(filtersFromParams(q(s), today)).toEqual({});
+  });
+});
+
+describe('transactionsQuery: запрос для ссылки с готовыми фильтрами', () => {
+  it('месяц, категория и вид', () => {
+    expect(transactionsQuery({ month: '2026-10', categoryId: 'c1', kind: 'expense' })).toBe('month=2026-10&category=c1&kind=expense');
+  });
+  it('без категории — none; без категории и вида — только месяц', () => {
+    expect(transactionsQuery({ month: '2026-10', categoryId: null })).toBe('month=2026-10&category=none');
+    expect(transactionsQuery({ month: '2026-09' })).toBe('month=2026-09');
+  });
+  it('запрос разбирается обратно', () => {
+    const query = transactionsQuery({ month: '2026-09', categoryId: 'c-1', kind: 'expense' });
+    expect(filtersFromParams(new URLSearchParams(query), '2026-10-15')).toEqual({ period: 'month', month: '2026-09', categoryId: 'c-1', kind: 'expense' });
+  });
+});
+

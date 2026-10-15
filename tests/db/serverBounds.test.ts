@@ -4,6 +4,8 @@ import { MAX_STAMP, MIN_STAMP } from '@/db/clock';
 import {
   AMOUNT_MAX,
   BASE_AMOUNT_MAX,
+  GOAL_MAX,
+  GOAL_MIN,
   OPENING_BALANCE_MAX,
   OPENING_BALANCE_MIN,
   SORT_ORDER_MAX,
@@ -284,5 +286,66 @@ describe('часы: метки только в границах сервера (
     expect(c2.observe('2100-01-01T00:00:00.001Z', true)).toBe(false);
     expect(c2.observe('2026-10-10T00:10:00.000Z')).toBe(true);
     expect(c2.tick() > '2026-10-10T00:10:00.000Z').toBe(true);
+  });
+});
+
+describe('цель накопления: границы сервера (wallets_goal_minor, wallets_goal_on)', () => {
+  const savings = { ...wallet, kind: 'savings' } as const;
+
+  it('константы равны серверным CHECK: сумма 1…1e15', () => {
+    expect([GOAL_MIN, GOAL_MAX]).toEqual([1, 1e15]);
+  });
+
+  it('сумма цели: 1 и 1e15 можно; 0, минус, 1e15 + 1, дробь и NaN — ValidationError по-русски (создание и правка)', async () => {
+    const s = await makeStore();
+    await s.settings.ensure();
+    expect((await s.wallets.create({ ...savings, goalMinor: 1 })).goalMinor).toBe(1);
+    const big = await s.wallets.create({ ...savings, name: 'Большая', goalMinor: 1e15 });
+    expect(big.goalMinor).toBe(1e15);
+    for (const bad of [0, -1, 1e15 + 1, 2e15, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const err = await s.wallets.create({ ...savings, name: 'Плохая', goalMinor: bad }).catch((e: unknown) => e);
+      expect(err, String(bad)).toBeInstanceOf(ValidationError);
+      expect((err as Error).message).toMatch(/Цель накопления/);
+      await expect(s.wallets.update(big.id, { goalMinor: bad })).rejects.toBeInstanceOf(ValidationError);
+    }
+    expect((await s.db.wallets.get(big.id))?.goalMinor).toBe(1e15);
+  });
+
+  it('срок цели: 2000-01-01 и 2100-01-01 можно; на день раньше/позже, несуществующие даты и не-даты — ValidationError', async () => {
+    const s = await makeStore();
+    await s.settings.ensure();
+    const w = await s.wallets.create({ ...savings, goalMinor: 1000 });
+    for (const ok of ['2000-01-01', '2100-01-01', '2028-02-29']) {
+      expect((await s.wallets.update(w.id, { goalOn: ok })).goalOn).toBe(ok);
+    }
+    for (const bad of ['1999-12-31', '2100-01-02', '2027-02-29', '2026-13-01', '2026-02-30', '26-01-01', '2026-1-1', '', ' 2026-01-01', '2026-01-01T00:00:00Z']) {
+      const err = await s.wallets.update(w.id, { goalOn: bad }).catch((e: unknown) => e);
+      expect(err, bad).toBeInstanceOf(ValidationError);
+    }
+    expect((await s.db.wallets.get(w.id))?.goalOn).toBe('2028-02-29');
+  });
+
+  it('срок без суммы цели запрещён (создание, правка и очистка суммы при сроке), с пустой суммой срок тоже очищается явно', async () => {
+    const s = await makeStore();
+    await s.settings.ensure();
+    const err = await s.wallets.create({ ...savings, goalOn: '2027-01-01' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ValidationError);
+    expect((err as Error).message).toMatch(/Срок цели указан без суммы/);
+    const w = await s.wallets.create({ ...savings, goalMinor: 1000, goalOn: '2027-01-01' });
+    // убрать сумму, оставив срок, нельзя: цель целиком очищается парой null
+    await expect(s.wallets.update(w.id, { goalMinor: null })).rejects.toBeInstanceOf(ValidationError);
+    const cleared = await s.wallets.update(w.id, { goalMinor: null, goalOn: null });
+    expect(cleared).toMatchObject({ goalMinor: null, goalOn: null });
+    // только срок на кошельке без цели — тоже нельзя
+    await expect(s.wallets.update(w.id, { goalOn: '2027-01-01' })).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('отвергнутая запись ничего не меняет в базе', async () => {
+    const s = await makeStore();
+    await s.settings.ensure();
+    const w = await s.wallets.create({ ...savings, goalMinor: 1000, goalOn: '2027-01-01' });
+    const before = await s.db.wallets.get(w.id);
+    await expect(s.wallets.update(w.id, { goalMinor: 0, name: 'Другое имя' })).rejects.toBeInstanceOf(ValidationError);
+    expect(await s.db.wallets.get(w.id)).toEqual(before);
   });
 });

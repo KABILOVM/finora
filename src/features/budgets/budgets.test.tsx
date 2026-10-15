@@ -391,6 +391,34 @@ describe('виджет «Можно тратить в день» на «Глав
     expect(screen.queryAllByRole('progressbar')).toHaveLength(0);
   });
 
+  it('«Обычно вы тратите» — средний расход в день; обычно меньше, чем можно, — без предупреждения', async () => {
+    await openWidget(baseSetup);
+    const usual = await waitFor(() => {
+      const el = document.querySelector('[data-testid="widget-usual-per-day"]');
+      expect(el).not.toBeNull();
+      return text(el);
+    });
+    expect(usual).toBe(`Обычно вы тратите ${fmt(3_571)} в день`); // 500 ÷ 14 дней с первой операции
+  });
+
+  it('обычно тратите больше, чем можно в день, — об этом сказано', async () => {
+    await openWidget(async (s) => {
+      const i = await ids(s);
+      const income = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+      await s.transactions.create({ kind: 'income', walletId: i.cash, amountMinor: 300_000, categoryId: income?.id ?? null, occurredOn: '2026-10-01' });
+      await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 280_000, categoryId: i.cats['Покупки'] ?? null, occurredOn: '2026-10-10' });
+    });
+    // на руках 200 с., до конца месяца 17 дней: 11,76 в день; а обычно уходит 2 800 с. ÷ 14 дней = 200 с. в день
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(1_176)));
+    expect(text(document.querySelector('[data-testid="widget-usual-per-day"]'))).toBe(`Обычно вы тратите ${fmt(20_000)} в день — больше, чем можно`);
+  });
+
+  it('истории операций ещё нет — строки «Обычно вы тратите» нет (а не «0 в день»)', async () => {
+    await openWidget();
+    await waitFor(() => expect(document.querySelector('[data-testid="widget-per-day"]')).not.toBeNull());
+    expect(document.querySelector('[data-testid="widget-usual-per-day"]')).toBeNull();
+  });
+
   it('есть общий лимит: показан он; категории — только если уже не «в пределах»', async () => {
     await openWidget(async (s) => {
       const i = await baseSetup(s);
@@ -455,3 +483,43 @@ describe('виджет «Можно тратить в день» на «Глав
     await waitFor(() => expect(currentPath()).toBe('/budgets'));
   });
 });
+
+describe('подсказка о темпе «лимит закончится около …»', () => {
+  /** baseSetup: «Еда» 400 с. за 15 дней из 31; при лимите 500 с. темп даёт 826,66 к концу месяца, и лимит кончится на ceil(500 × 15 ÷ 400) = 19-й день. */
+  const withFoodLimit = (limit: number) => async (s: Store) => {
+    const i = await baseSetup(s);
+    await s.budgets.create({ categoryId: i.cats['Еда'] ?? null, amountMinor: limit });
+  };
+  const paceNotes = () => Array.from(document.querySelectorAll('[data-testid="budget-pace"]')).map((n) => text(n));
+
+  it('на странице «Бюджеты»: лимит не дотянет — сказано, когда закончится', async () => {
+    await openPage(withFoodLimit(50_000));
+    expect(paceNotes()).toEqual(['При таком темпе лимит закончится около 19 октября']);
+  });
+
+  it('лимит с запасом — подсказки нет', async () => {
+    await openPage(withFoodLimit(1_000_000));
+    expect(paceNotes()).toEqual([]);
+  });
+
+  it('лимит уже исчерпан — подсказки нет (это видно по уровню «Лимит превышен»)', async () => {
+    await openPage(withFoodLimit(30_000));
+    expect(paceNotes()).toEqual([]);
+    expect(text(rowButton('Еда'))).toContain('Лимит превышен');
+  });
+
+  it('в виджете «Главной» подсказки нет', async () => {
+    await openWidget(withFoodLimit(50_000));
+    await waitFor(() => expect(document.querySelector('[data-testid="budgets-widget"]')).not.toBeNull());
+    await waitFor(() => expect(screen.getByRole('list', { name: 'Лимиты на месяц' })).toBeTruthy());
+    expect(paceNotes()).toEqual([]);
+  });
+
+  it('в прошедшем месяце подсказки нет', async () => {
+    await openPage(withFoodLimit(50_000));
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    await waitFor(() => expect(text(document.body)).toContain('Сентябрь 2026'));
+    expect(paceNotes()).toEqual([]);
+  });
+});
+

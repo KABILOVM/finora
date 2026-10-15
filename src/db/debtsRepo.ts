@@ -1,8 +1,9 @@
+import { addMinor, isMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, DebtDirection, IsoDate, LocalRow, Minor, Transaction, UUID } from '@/domain/types';
 import { ValidationError } from './errors';
 import { newId } from './ids';
 import { cleanPatch, sameFields, touch, withDirtyGroups, writeTx, type RepoContext } from './repoContext';
-import { reqId } from './validate';
+import { LIMITS, reqId } from './validate';
 import { parseDebtData, type DebtData } from './validatePlans';
 
 export interface DebtInput {
@@ -35,10 +36,42 @@ export interface DebtDeletion {
   ruleIds: UUID[];
 }
 
+/**
+ * Что сделало объединение долгов: по этому описанию его можно отменить (undoMerge).
+ * Долги-источники тоже остаются в базе (мягко удалены), поэтому отмена возвращает всё как было.
+ */
+export interface DebtMerge {
+  /** Долг, в который всё собрано. */
+  targetId: UUID;
+  /** Склеенные долги (после объединения они удалены). */
+  sourceIds: UUID[];
+  /** Операции, перешедшие к target, и долг, к которому каждая относилась (включая удалённые операции). */
+  txs: { id: UUID; from: UUID }[];
+  /** Регулярные платежи, перешедшие к target, и прежний долг каждого. */
+  rules: { id: UUID; from: UUID }[];
+  /** Данные target до объединения. */
+  before: DebtData;
+  /** Данные target сразу после объединения: если с тех пор долг правили, отменять уже нельзя. */
+  after: DebtData;
+}
+
 export interface DebtsRepo {
   create(input: DebtInput, opts?: { id?: UUID }): Promise<LocalRow<Debt>>;
   /** Направление и валюту нельзя менять, когда по долгу уже есть операции или регулярные платежи: суммы поменяли бы смысл. */
   update(id: UUID, patch: DebtPatch): Promise<LocalRow<Debt>>;
+  /**
+   * «Добавить ещё в долг»: сумма долга растёт на deltaMinor (закрытый долг при этом открывается снова). Сама операция выдачи
+   * или получения денег — отдельно (debtActions.saveTopUp), здесь только долг. dueOn — новый срок (undefined — не менять).
+   */
+  increase(id: UUID, deltaMinor: Minor, opts?: { dueOn?: IsoDate | null }): Promise<LocalRow<Debt>>;
+  /**
+   * Объединение долгов ОДНОЙ транзакцией базы: всё из sourceIds переходит в targetId, источники удаляются (мягко).
+   * Долги обязаны быть живыми, не в архиве, одного направления и одной валюты. Деньги в кошельках не двигаются.
+   * Сумма — сумма всех сумм, дата — самая ранняя, срок — ближайший, заметки склеиваются, платежи и регулярные платежи переезжают.
+   */
+  merge(targetId: UUID, sourceIds: readonly UUID[]): Promise<DebtMerge>;
+  /** Отмена объединения. Долг, который с тех пор правили, не трогает (ValidationError). Повтор безопасен. */
+  undoMerge(merge: DebtMerge): Promise<LocalRow<Debt>>;
   /** Долг закрыт (погашен или прощён). Остаток при этом не обнуляется — он считается из операций. Повтор безопасен. */
   close(id: UUID): Promise<LocalRow<Debt>>;
   reopen(id: UUID): Promise<LocalRow<Debt>>;
@@ -82,6 +115,23 @@ const dataOf = (d: Debt): DebtData => ({
 
 function checkDates(d: DebtData): void {
   if (d.dueOn !== null && d.dueOn < d.openedOn) throw new ValidationError('Срок возврата не может быть раньше даты долга');
+}
+
+const NOTE_SEPARATOR = '\n';
+
+/** Склеенные заметки не длиннее предела: лишнее обрезается с «…», не разрывая символ-пару (иначе заметка не пройдёт проверку). */
+function joinNotes(notes: readonly string[]): string {
+  const parts: string[] = [];
+  for (const raw of notes) {
+    const n = raw.trim();
+    if (n !== '' && !parts.includes(n)) parts.push(n);
+  }
+  const all = parts.join(NOTE_SEPARATOR);
+  if (all.length <= LIMITS.note) return all;
+  let cut = all.slice(0, LIMITS.note - 1);
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1); // «голова» пары без «хвоста»
+  return `${cut.trimEnd()}…`;
 }
 
 export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
@@ -145,6 +195,111 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
     async update(id, patch) {
       const clean = cleanPatch(patch, INPUT_KEYS, 'Долг');
       return save(id, (cur) => parseDebtData({ ...dataOf(cur), ...clean }));
+    },
+
+    async increase(id, deltaMinor, opts) {
+      if (!isMinor(deltaMinor) || deltaMinor <= 0) throw new ValidationError('Сумма пополнения должна быть больше нуля');
+      const due = opts?.dueOn;
+      return save(id, (cur) => {
+        if (cur.archivedAt !== null) throw new ValidationError(`Долг «${cur.counterparty}» в архиве: сначала верните его из архива`);
+        return parseDebtData({
+          ...dataOf(cur),
+          principalMinor: addMinor(cur.principalMinor, deltaMinor),
+          ...(due !== undefined ? { dueOn: due } : {}),
+          closedAt: null,
+        });
+      });
+    },
+
+    async merge(targetId, sourceIds) {
+      const ids = [...new Set(sourceIds)];
+      if (ids.length === 0) throw new ValidationError('Выберите долги, которые нужно объединить');
+      if (ids.includes(targetId)) throw new ValidationError('Долг нельзя объединить с самим собой');
+      return writeTx(ctx, [db.debts, db.transactions, db.recurring_rules], async () => {
+        const target = await getLiveDebt(targetId);
+        const sources: LocalRow<Debt>[] = [];
+        for (const id of ids) sources.push(await getLiveDebt(id));
+        const all = [target, ...sources];
+        for (const d of all) {
+          if (d.archivedAt !== null) throw new ValidationError(`Долг «${d.counterparty}» в архиве: сначала верните его из архива`);
+          if (d.direction !== target.direction || d.currency !== target.currency) {
+            throw new ValidationError('Объединять можно только долги одного направления и одной валюты');
+          }
+        }
+
+        let principal = target.principalMinor;
+        for (const s of sources) principal = addMinor(principal, s.principalMinor);
+        const dues = all.map((d) => d.dueOn).filter((d): d is IsoDate => d !== null);
+        const before = dataOf(target);
+        const after = parseDebtData({
+          ...before,
+          principalMinor: principal,
+          openedOn: all.reduce((min, d) => (d.openedOn < min ? d.openedOn : min), target.openedOn),
+          dueOn: dues.length > 0 ? dues.reduce((min, d) => (d < min ? d : min)) : null,
+          note: joinNotes(all.map((d) => d.note)),
+          // открыт хотя бы один — общий долг открыт; все закрыты — остаётся закрытым
+          closedAt: all.some((d) => d.closedAt === null) ? null : target.closedAt,
+        });
+        checkDates(after);
+
+        const txs: DebtMerge['txs'] = [];
+        const rules: DebtMerge['rules'] = [];
+        const allRules = await db.recurring_rules.toArray();
+        for (const s of sources) {
+          // Все операции источника, в том числе удалённые: иначе «вернуть платёж» потом бы упёрлось в удалённый долг.
+          for (const t of await db.transactions.where('debtId').equals(s.id).toArray()) {
+            await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, { ...t, debtId: targetId, ...touch(ctx).fields }));
+            txs.push({ id: t.id, from: s.id });
+          }
+          for (const r of allRules) {
+            if (r.debtId !== s.id || r.deletedAt !== null) continue;
+            await db.recurring_rules.put(withDirtyGroups('recurring_rules', r, { ...r, debtId: targetId, ...touch(ctx).fields }));
+            rules.push({ id: r.id, from: s.id });
+          }
+          const { stamp, fields } = touch(ctx);
+          await db.debts.put(withDirtyGroups<LocalRow<Debt>>('debts', s, { ...s, deletedAt: stamp, ...fields }));
+        }
+        if (!sameFields(before, after, DATA_KEYS)) {
+          await db.debts.put(withDirtyGroups<LocalRow<Debt>>('debts', target, { ...target, ...after, ...touch(ctx).fields }));
+        }
+        return { targetId, sourceIds: ids, txs, rules, before, after };
+      });
+    },
+
+    async undoMerge(merge) {
+      return writeTx(ctx, [db.debts, db.transactions, db.recurring_rules], async () => {
+        const target = await db.debts.get(merge.targetId);
+        if (!target) throw new ValidationError('Долг не найден');
+        if (target.deletedAt !== null) throw new ValidationError(`Долг «${target.counterparty}» удалён: объединение уже не отменить`);
+        const sources: LocalRow<Debt>[] = [];
+        for (const id of merge.sourceIds) {
+          const s = await db.debts.get(id);
+          if (!s) throw new ValidationError('Долг не найден');
+          sources.push(s);
+        }
+        const gone = sources.filter((s) => s.deletedAt !== null);
+        if (gone.length === 0) return target; // уже отменено
+        if (!sameFields(dataOf(target), merge.after, DATA_KEYS)) {
+          throw new ValidationError(`Долг «${target.counterparty}» уже изменили после объединения, поэтому отменить его нельзя`);
+        }
+        for (const s of gone) {
+          await db.debts.put(withDirtyGroups<LocalRow<Debt>>('debts', s, { ...s, deletedAt: null, ...touch(ctx).fields }));
+        }
+        const back = new Set(gone.map((s) => s.id));
+        for (const { id, from } of merge.txs) {
+          const t = await db.transactions.get(id);
+          if (!t || t.debtId !== merge.targetId || !back.has(from)) continue; // с тех пор перепривязана или источник не удалён
+          await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, { ...t, debtId: from, ...touch(ctx).fields }));
+        }
+        for (const { id, from } of merge.rules) {
+          const r = await db.recurring_rules.get(id);
+          if (!r || r.deletedAt !== null || r.debtId !== merge.targetId || !back.has(from)) continue;
+          await db.recurring_rules.put(withDirtyGroups('recurring_rules', r, { ...r, debtId: from, ...touch(ctx).fields }));
+        }
+        const row = withDirtyGroups<LocalRow<Debt>>('debts', target, { ...target, ...merge.before, ...touch(ctx).fields });
+        await db.debts.put(row);
+        return row;
+      });
     },
 
     async close(id) {

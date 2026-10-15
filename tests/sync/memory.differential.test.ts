@@ -65,7 +65,7 @@ const GENERAL: Focus = {
   stamps: [0, 1, 2, 3, 4, 5, 6],
   devices: [0, 1, 2, 3, 4, 5, 6, 7],
   ids: 4,
-  variants: [0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  variants: [0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
   variants2: [0, 0, 0, ...V2_ALL],
 };
 /** Повторы одной и той же правки с «убежавшими» часами: проверяют журнал меток из будущего. */
@@ -157,6 +157,9 @@ async function compare(specs: Spec[]): Promise<void> {
           currency: r.variant === 3 ? 'tjs' : 'TJS',
           kind: r.variant === 4 ? ('crypto' as 'cash') : 'cash',
           openingBalanceMinor: r.variant === 5 ? 1_000_000_000_000_001 : r.kind,
+          // цель: variant 10 — сумма за пределом, 11 — срок до 2000 года; в остальных случаях цели нет
+          goalMinor: r.variant === 10 ? 1_000_000_000_000_001 : r.variant === 11 ? 1_000 : null,
+          goalOn: r.variant === 11 ? '1999-12-31' : null,
           // длина color / icon считается в символах: 32 эмодзи (64 единицы UTF-16) — можно, 33 — нельзя
           color: r.variant === 6 ? 'c'.repeat(33) : r.variant === 8 ? '😀'.repeat(32) : r.variant === 9 ? 'c'.repeat(32) : '#0ea5e9',
           icon: r.variant === 7 ? '😀'.repeat(33) : r.variant === 8 ? '😀'.repeat(32) : 'wallet',

@@ -149,7 +149,7 @@ describe('openStore: изоляция и открытие', () => {
     const factory = new IDBFactory();
     const a = await makeStore({ userId: USER_A, factory });
     const b = await makeStore({ userId: USER_B, factory });
-    await a.sync.applyRemotePage('wallets', [{ entity: { id: 'w-1', name: 'x', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, createdAt: '2026-10-01T00:00:00.000Z', clientUpdatedAt: '2026-10-01T00:00:00.000Z', deviceId: 'device-r-0001', deletedAt: null }, serverSeq: 9 }], 9);
+    await a.sync.applyRemotePage('wallets', [{ entity: { id: 'w-1', name: 'x', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, goalMinor: null, goalOn: null, createdAt: '2026-10-01T00:00:00.000Z', clientUpdatedAt: '2026-10-01T00:00:00.000Z', deviceId: 'device-r-0001', deletedAt: null }, serverSeq: 9 }], 9);
     expect(await a.sync.getCursor('wallets')).toBe(9);
     expect(await b.sync.getCursor('wallets')).toBe(0);
   });

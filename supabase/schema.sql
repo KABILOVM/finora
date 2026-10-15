@@ -3,8 +3,8 @@
 --
 -- ЧТО ЭТО
 --   Таблицы личного учёта денег: настройки, кошельки, категории, операции (этап 1) и долги, бюджеты,
---   регулярные платежи (этап 2, раздел 8 в конце файла), список покупок (раздел 10), напоминания о лимитах бюджета (раздел 12)
---   плюс общие курсы валют. Итого 9 таблиц:
+--   регулярные платежи (этап 2, раздел 8 в конце файла), список покупок (раздел 10), цели накопления (раздел 11: две колонки
+--   у кошельков), напоминания о лимитах бюджета (раздел 12) плюс общие курсы валют. Итого 9 таблиц:
 --   settings, wallets, categories, debts, budgets, recurring_rules, transactions, shopping_items, exchange_rates.
 --   Правила доступа (у каждого пользователя видны и меняются только СВОИ данные)
 --   и защитный триггер, который решает конфликты между устройствами
@@ -932,6 +932,42 @@ create policy shopping_items_insert_own on public.shopping_items for insert to a
 drop policy if exists shopping_items_update_own on public.shopping_items;
 create policy shopping_items_update_own on public.shopping_items for update to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+
+-- 11. Цели накопления --------------------------------------------------------------------
+-- У кошелька вида «Накопления» может быть цель: сколько накопить (goal_minor, в минимальных единицах валюты кошелька)
+-- и к какой дате (goal_on). Пока цель не задана, обе колонки пустые. Накоплено = остаток кошелька: он считается
+-- из операций и в базе не хранится. Срок без суммы приложение не записывает.
+-- Блок идемпотентен, как раздел 8: колонки «add column if not exists», ограничения — только если их ещё нет. Данные
+-- не трогаются, триггер sync_guard, права и политики доступа остаются прежними (они действуют на таблицу целиком).
+-- Старые приложения этих колонок не знают: при записи они их не присылают, и сохранённая цель не затирается.
+alter table public.wallets add column if not exists goal_minor bigint;
+alter table public.wallets add column if not exists goal_on date;
+
+do $$
+declare
+  r record;
+begin
+  for r in
+    select * from (values
+      ('wallets', 'wallets_goal_minor', 'goal_minor is null or goal_minor between 1 and 1000000000000000'),
+      ('wallets', 'wallets_goal_on',    'goal_on is null or goal_on between date ''2000-01-01'' and date ''2100-01-01''')
+    ) as c (tbl, cname, expr)
+  loop
+    if not exists (
+      select 1 from pg_constraint
+       where conname = r.cname and conrelid = format('public.%I', r.tbl)::regclass
+    ) then
+      execute format('alter table public.%I add constraint %I check (%s) not valid', r.tbl, r.cname, r.expr);
+      begin
+        execute format('alter table public.%I validate constraint %I', r.tbl, r.cname);
+      exception when check_violation then
+        raise warning 'В таблице % есть старые строки, нарушающие ограничение %; новые и изменённые строки оно проверяет', r.tbl, r.cname;
+      end;
+    end if;
+  end loop;
+end
+$$;
 
 
 -- 12. Напоминания о лимитах бюджета ----------------------------------------------------------

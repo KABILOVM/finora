@@ -88,6 +88,26 @@ const isMissingBaseColumn = (error: unknown): boolean => {
   return e?.code === 'PGRST204' && typeof e.message === 'string' && e.message.includes(`'${BASE_SEQ_COLUMN}'`);
 };
 
+/** Колонки цели накопления у кошельков (раздел 11 схемы). */
+const GOAL_COLUMNS = ['goal_minor', 'goal_on'] as const;
+
+/** Строка без колонок цели (для сервера, у которого раздел 11 схемы ещё не выполнен). */
+const withoutGoal = (row: WireRow): WireRow => {
+  if (!GOAL_COLUMNS.some((c) => c in row)) return row;
+  const copy = { ...row };
+  for (const c of GOAL_COLUMNS) delete copy[c];
+  return copy;
+};
+
+/** В строке задана цель накопления: такую правку без колонок цели не отправить, не потеряв её. */
+const hasGoal = (row: WireRow): boolean => GOAL_COLUMNS.some((c) => row[c] !== null && row[c] !== undefined);
+
+/** PostgREST не нашёл колонку цели в кэше схемы: раздел 11 схемы ещё не выполнен. */
+const isMissingGoalColumn = (error: unknown): boolean => {
+  const e = error as PostgrestFailure | null;
+  return e?.code === 'PGRST204' && typeof e.message === 'string' && GOAL_COLUMNS.some((c) => (e.message as string).includes(`'${c}'`));
+};
+
 const wellFormedRow = (row: WireRow): WireRow => {
   let copy: WireRow | null = null;
   for (const [k, v] of Object.entries(row)) {
@@ -132,6 +152,12 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
    * лучше работающая синхронизация «последний побеждает», чем остановленная.
    */
   let versionCheck = true;
+  /**
+   * false — сервер ответил, что колонок цели накопления нет (раздел 11 схемы ещё не выполнен), а у всех строк пачки цель пуста:
+   * убираем две пустые колонки и повторяем, иначе одна ошибка останавливает отправку ВСЕХ таблиц, в том числе операций. Без потерь:
+   * сервер без колонок хранить цель не может. Если цель у какой-то строки задана, ошибку не прячем (см. push).
+   */
+  let goalColumns = true;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new RangeError(`timeoutMs: ожидалось положительное число, получено ${timeoutMs}`);
 
   /** Один запрос с жёстким таймаутом: отмена через AbortController + гонка с таймером (на случай клиента, не слушающего отмену). */
@@ -192,10 +218,21 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
       const wire = rows.map(wellFormedRow);
       const send = (payload: WireRow[]) =>
         request<PostgrestResult>((signal) => client.from(remote).upsert(payload, { onConflict: 'id' }).abortSignal(signal));
-      let res = await send(versionCheck ? wire : wire.map(withoutBase));
-      if (res.error && versionCheck && isMissingBaseColumn(res.error)) {
-        versionCheck = false;
-        res = await send(wire.map(withoutBase));
+      // Строки с заданной целью без колонок цели не отправить, не потеряв её: такая пачка всегда идёт с колонками (даже если раньше
+      // они были отключены), а ошибка «нет колонки» для неё наружу — правка остаётся на устройстве и уйдёт, когда схему обновят.
+      const hasGoalRows = wire.some(hasGoal);
+      const prepare = (r: WireRow): WireRow => {
+        const x = versionCheck ? r : withoutBase(r);
+        return goalColumns || hasGoalRows ? x : withoutGoal(x);
+      };
+      let res = await send(wire.map(prepare));
+      if (!res.error && hasGoalRows) goalColumns = true; // сервер принял цель: колонки у него появились (схему обновили)
+      // Не хватает колонки старой схемы: отключаем её и повторяем (не больше раза на каждую); незнакомая ошибка — наружу
+      for (let attempt = 0; attempt < 2 && res.error; attempt++) {
+        if (versionCheck && isMissingBaseColumn(res.error)) versionCheck = false;
+        else if (goalColumns && !hasGoalRows && isMissingGoalColumn(res.error)) goalColumns = false;
+        else break;
+        res = await send(wire.map(prepare));
       }
       if (res.error) throw classifyPostgrestError(res.error, res.status);
     },
