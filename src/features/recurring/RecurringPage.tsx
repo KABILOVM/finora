@@ -10,6 +10,7 @@ import type { IsoDate, LocalRow, RecurringRule } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
 import { useAutoPostFailures } from '@/recurring/autoPostState';
+import type { RuleFormState } from '@/recurring/ruleForm';
 import { AUTO_POST_MAX_AGE_DAYS } from '@/recurring/plan';
 import { groupUpcoming, itemKey, SOON_DAYS } from '@/recurring/upcoming';
 import { useSkipped } from '@/recurring/useSkipped';
@@ -19,13 +20,15 @@ import { ArchivedRow, RuleRow } from './RulesList';
 import { RuleSheet } from './RuleSheet';
 import { SkipDialog } from './SkipDialog';
 import { SkippedRow } from './SkippedList';
+import { candidateLabel, SubscriptionsCard } from './SubscriptionsCard';
 import { UpcomingRow } from './UpcomingRow';
 import { useRecurringLookups } from './useRecurringData';
+import { useSubscriptions } from './useSubscriptions';
 
 /** Сколько просроченных показываем сразу (остальные — по кнопке): у давнего ежедневного платежа их сотни. */
 const OVERDUE_PAGE = 30;
 
-type SheetState = { kind: 'new' } | { kind: 'edit'; id: string };
+type SheetState = { kind: 'new'; prefill?: Partial<RuleFormState> } | { kind: 'edit'; id: string };
 type PendingRef = { ruleId: string; date: IsoDate };
 
 function Section({ id, title, hint, tone, children }: { id: string; title: string; hint?: string; tone?: 'danger'; children: ReactNode }) {
@@ -73,6 +76,7 @@ export default function RecurringPage() {
   const lookups = useRecurringLookups();
   const failures = useAutoPostFailures(store.userId);
   const skipped = useSkipped(rules ?? [], today);
+  const subs = useSubscriptions(lookups, today);
 
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [posting, setPosting] = useState<PendingRef | null>(null);
@@ -188,6 +192,31 @@ export default function RecurringPage() {
           </Button>
         }
       />
+
+      {subs && subs.items.length > 0 && (
+        <SubscriptionsCard
+          items={subs.items}
+          lookups={lookups}
+          onDismiss={subs.dismiss}
+          onCreate={(c) => {
+            const category = c.categoryId === null ? undefined : lookups.categories.get(c.categoryId);
+            setSheet({
+              kind: 'new',
+              prefill: {
+                kind: 'expense',
+                walletId: c.walletId,
+                amountMinor: c.amountMinor,
+                // категория могла уйти в архив: тогда без неё, а не с ошибкой при сохранении
+                categoryId: category && category.deletedAt === null && category.archivedAt === null ? c.categoryId : null,
+                note: candidateLabel(c, lookups),
+                frequency: c.frequency,
+                intervalText: String(c.intervalN),
+                startOn: c.nextOn,
+              },
+            });
+          }}
+        />
+      )}
 
       {rules.length === 0 ? (
         <EmptyState
@@ -311,6 +340,7 @@ export default function RecurringPage() {
         <RuleSheet
           key={sheet.kind === 'edit' ? sheet.id : 'new'}
           rule={sheet.kind === 'edit' ? (editRule ?? null) : null}
+          prefill={sheet.kind === 'new' ? sheet.prefill : undefined}
           lookups={lookups}
           today={today}
           onClose={() => setSheet(null)}
