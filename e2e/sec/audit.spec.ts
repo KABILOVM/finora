@@ -79,7 +79,7 @@ test.describe('Статический аудит (один раз)', () => {
         if (/^\s*\{?\s*\.\.\.addLink/.test(arg) || /item\.to|^to=/.test(arg) || arg === 'to') continue;
         // Адрес целиком внутренний: начало ФИКСИРОВАННОЕ (/debts/, /debts?dir=, /edit/), из данных подставляется только хвост
         // (номер долга/операции или 'borrowed'). Уйти на чужой сайт такой адрес не может: «//evil» и «https:» тут не начало.
-        if (/^(?:dir \? )?`\/(?:debts\/|debts\?dir=|edit\/)\$\{/.test(arg)) continue;
+        if (/^(?:dir \? )?`\/(?:debts\/|debts\/people\/|debts\?dir=|edit\/)\$\{/.test(arg)) continue;
         dynamic.push(`${f}: ${arg.slice(0, 60)}`);
       }
     }
