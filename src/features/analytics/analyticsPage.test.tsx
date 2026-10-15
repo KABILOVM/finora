@@ -176,3 +176,81 @@ describe('экран «Аналитика»', () => {
     expect(Array.from(screen.getByRole('list', { name: 'Самые крупные расходы' }).querySelectorAll('li'))).toHaveLength(1);
   });
 });
+
+describe('«Темп трат» для идущего месяца', () => {
+  const findCat = async (s: Store, name: string) => (await s.db.categories.toArray()).find((c) => c.name === name && c.kind === 'expense')!.id;
+  const withSetup = (extra: (s: Store, cash: string) => Promise<unknown>) => async (s: Store) => {
+    await seedHistory(s);
+    const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+    await extra(s, cash);
+  };
+
+  it('прогноз на конец месяца: расход ÷ прошедшие дни × дней в месяце, с вчерашним сравнением', async () => {
+    await openPage();
+    // 124,50 за 15 дней из 31 → floor(12 450 × 31 ÷ 15) = 25 730 → 257,30
+    const projection = tid('pace-projection')!;
+    expect(text(projection)).toContain(`≈ ${fmt(25_730)}`);
+    expect(text(projection)).toContain('(15 из 31)');
+    expect(text(tid('pace-previous'))).toBe(`В прошлом месяце было ${fmt(4_700)}`);
+  });
+
+  it('в прошедшем месяце карточки нет: прогнозировать нечего', async () => {
+    await openPage();
+    expect(tid('pace-card')).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    await waitFor(() => expect(text(tid('analytics-summary'))).toContain('сентябрь 2026'));
+    expect(tid('pace-card')).toBeNull();
+  });
+
+  it('лимит, который кончится раньше конца месяца: день, когда он закончится, и перерасход к концу', async () => {
+    await openPage({
+      setup: withSetup(async (s) => void (await s.budgets.create({ categoryId: await findCat(s, 'Еда'), amountMinor: 20_000 }))),
+    });
+    // «Еда» 121,50 за 15 дней при лимите 200: к концу месяца 251,10 (на 51,10 больше), лимит кончится на ceil(200 × 15 ÷ 121,5) = 25-й день
+    const item = tid('pace-budget')!;
+    expect(text(item)).toContain('Еда');
+    expect(text(item)).toContain(`лимит ${fmt(20_000)} закончится около 25 октября`);
+    expect(text(item)).toContain(`выйдет на ${fmt(5_110)} больше лимита`);
+  });
+
+  it('лимит с запасом и уже исчерпанный в список «не дотянут» не попадают', async () => {
+    await openPage({
+      setup: withSetup(async (s) => {
+        await s.budgets.create({ categoryId: await findCat(s, 'Еда'), amountMinor: 1_000_000 }); // хватит
+        await s.budgets.create({ categoryId: await findCat(s, 'Транспорт'), amountMinor: 300 }); // уже исчерпан (3 с. из 3 с.)
+      }),
+    });
+    expect(tid('pace-budget')).toBeNull();
+    expect(tid('pace-card')).not.toBeNull(); // прогноз на месте
+  });
+
+  it('необычно много: уже потрачено ≥ 120 % медианы трёх прошлых месяцев', async () => {
+    await openPage({
+      setup: withSetup(async (s, cash) => {
+        const fun = await findCat(s, 'Развлечения');
+        for (const [date, amount] of [['2026-07-10', 10_000], ['2026-08-10', 12_000], ['2026-09-10', 11_000], ['2026-10-10', 14_000]] as const) {
+          await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: amount, categoryId: fun, occurredOn: date });
+        }
+      }),
+    });
+    const item = tid('pace-unusual')!;
+    expect(text(item)).toBe(`Развлечения: уже ${fmt(14_000)}, а обычно за месяц около ${fmt(11_000)}`);
+  });
+
+  it('траты есть только в этом месяце — «обычного» нет, необычных нет', async () => {
+    await openPage();
+    expect(tid('pace-unusual')).toBeNull();
+  });
+
+  it('нет расходов в этом месяце — прогноза нет, карточка не рисуется', async () => {
+    await openPage({
+      setup: async (s) => {
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 50_000, occurredOn: '2026-10-05' });
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 700, occurredOn: '2026-09-05' });
+      },
+    });
+    expect(tid('pace-card')).toBeNull();
+  });
+});
+

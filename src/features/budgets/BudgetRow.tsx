@@ -22,6 +22,8 @@ export interface BudgetRowProps {
   onOpen?: () => void;
   /** Компактный вид для виджета: без суммы «из …» и без своих боковых отступов (их даёт карточка). */
   compact?: boolean;
+  /** Подсказка о темпе («При таком темпе лимит закончится около 19 октября»): только в полном виде, в виджете её нет. */
+  paceNote?: string | null;
 }
 
 function Head({
@@ -54,7 +56,7 @@ function Head({
 }
 
 /** Строка бюджета: название, полоса, «Потрачено N%», остаток или превышение, слово уровня. */
-export function BudgetRow({ progress, name, icon, color, base, onOpen, compact = false }: BudgetRowProps) {
+export function BudgetRow({ progress, name, icon, color, base, onOpen, compact = false, paceNote = null }: BudgetRowProps) {
   const size = compact ? 36 : 44;
   const body = !progress.comparable ? (
     <>
@@ -87,6 +89,12 @@ export function BudgetRow({ progress, name, icon, color, base, onOpen, compact =
         </span>
         <span className={cn('money', progress.overMinor > 0 ? 'font-semibold text-danger' : 'text-muted')}>{restWord(progress, base)}</span>
       </div>
+      {!compact && paceNote && (
+        <p data-testid="budget-pace" className="mt-1 flex items-start gap-1.5 text-sm font-medium text-warning">
+          <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+          <span>{paceNote}</span>
+        </p>
+      )}
     </>
   );
 
