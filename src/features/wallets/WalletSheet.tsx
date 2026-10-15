@@ -10,10 +10,12 @@ import { useToast } from '@/components/Toast';
 import { ValidationError, useStore } from '@/db';
 import { CURRENCIES, currencyInfo } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
-import type { CurrencyCode, LocalRow, Minor, Wallet, WalletKind } from '@/domain/types';
+import type { CurrencyCode, IsoDate, LocalRow, Minor, Wallet, WalletKind } from '@/domain/types';
 import { endSentence } from '@/features/transactions/txDisplay';
+import { addDays, isValidIsoDate, todayLocal } from '@/lib/dates';
 import { BANKS, bankById, bankIcon } from './banks';
 import { ColorSwatches } from './ColorSwatches';
+import { GoalFields } from './GoalFields';
 import { cleanName, COLOR_CHOICES, DEFAULT_ICON_BY_KIND, sameName, WALLET_KIND_LABELS, WALLET_KINDS } from './walletUi';
 
 export interface WalletSheetProps {
@@ -28,7 +30,10 @@ export interface WalletSheetProps {
   onArchive?: () => void;
 }
 
-type FieldError = { field: 'name' | 'currency' | 'opening' | 'form'; message: string };
+type FieldError = { field: 'name' | 'currency' | 'opening' | 'goal' | 'goalOn' | 'form'; message: string };
+
+/** Срок цели по умолчанию, когда человек нажал «Указать срок»: через полгода. */
+const DEFAULT_GOAL_DAYS = 180;
 
 /** Создание и правка кошелька. */
 export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onArchive }: WalletSheetProps) {
@@ -46,6 +51,10 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
   // Ввод не умеет отрицательные суммы: у кошелька с отрицательным начальным остатком поле пустое, пока человек его не тронул.
   const [opening, setOpening] = useState<Minor | null>(wallet && wallet.openingBalanceMinor >= 0 ? wallet.openingBalanceMinor : null);
   const [openingTouched, setOpeningTouched] = useState(false);
+  // Цель накопления (только для вида «Накопления»): сумма и необязательный срок.
+  const [goal, setGoal] = useState<Minor | null>(wallet?.goalMinor ?? null);
+  const [hasDue, setHasDue] = useState(wallet?.goalOn != null);
+  const [dueOn, setDueOn] = useState<IsoDate>(wallet?.goalOn ?? addDays(todayLocal(), DEFAULT_GOAL_DAYS));
   const [error, setError] = useState<FieldError | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -72,6 +81,17 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
     if (otherNames.some((n) => sameName(n, cleaned))) {
       return setError({ field: 'name', message: 'Кошелёк с таким названием уже есть' });
     }
+    // цель есть только у накоплений: при другом виде она очищается
+    const wantGoal = kind === 'savings' ? goal : null;
+    if (wantGoal !== null && wantGoal <= 0) return setError({ field: 'goal', message: 'Цель должна быть больше нуля' });
+    const wantDue = wantGoal !== null && hasDue ? dueOn : null;
+    if (wantDue !== null) {
+      if (!isValidIsoDate(wantDue)) return setError({ field: 'goalOn', message: 'Укажите дату, к которой хотите накопить' });
+      // уже прошедший срок можно оставить у старой цели, но новый ставить в прошлое незачем
+      if (wantDue < todayLocal() && wantDue !== (wallet?.goalOn ?? null)) {
+        return setError({ field: 'goalOn', message: 'Срок не может быть в прошлом' });
+      }
+    }
     setError(null);
     setSaving(true);
     try {
@@ -83,6 +103,8 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
           openingBalanceMinor: opening ?? 0,
           color,
           icon,
+          goalMinor: wantGoal,
+          goalOn: wantDue,
         });
       } else {
         const patch: Parameters<typeof store.wallets.update>[1] = {};
@@ -92,6 +114,8 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
         if (icon !== wallet.icon) patch.icon = icon;
         if (color !== wallet.color) patch.color = color;
         if (openingTouched && (opening ?? 0) !== wallet.openingBalanceMinor) patch.openingBalanceMinor = opening ?? 0;
+        if (wantGoal !== (wallet.goalMinor ?? null)) patch.goalMinor = wantGoal;
+        if (wantDue !== (wallet.goalOn ?? null)) patch.goalOn = wantDue;
         if (Object.keys(patch).length > 0) await store.wallets.update(wallet.id, patch);
       }
       toast.success(editing ? 'Кошелёк сохранён' : 'Кошелёк добавлен');
@@ -100,7 +124,16 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
       const message = e instanceof Error ? e.message : 'Не удалось сохранить кошелёк';
       if (e instanceof ValidationError) {
         const isCurrency = editing && wallet && currency !== wallet.currency && /валют/i.test(message);
-        setError({ field: isCurrency ? 'currency' : /остаток/i.test(message) ? 'opening' : 'form', message });
+        const field: FieldError['field'] = isCurrency
+          ? 'currency'
+          : /срок цели/i.test(message)
+            ? 'goalOn'
+            : /цель накопления/i.test(message)
+              ? 'goal'
+              : /остаток/i.test(message)
+                ? 'opening'
+                : 'form';
+        setError({ field, message });
       } else {
         console.error('Не удалось сохранить кошелёк:', e);
         setError({ field: 'form', message: 'Не удалось сохранить кошелёк. Данные не изменены, попробуйте ещё раз.' });
@@ -211,6 +244,26 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
             }}
           />
         </div>
+
+        {kind === 'savings' && (
+          <GoalFields
+            currency={currency}
+            goal={goal}
+            onGoal={(v) => {
+              setGoal(v);
+              setError(null);
+            }}
+            hasDue={hasDue}
+            dueOn={dueOn}
+            onDue={(p) => {
+              if (p.hasDue !== undefined) setHasDue(p.hasDue);
+              if (p.dueOn !== undefined) setDueOn(p.dueOn);
+              setError(null);
+            }}
+            goalError={err('goal')}
+            dueError={err('goalOn')}
+          />
+        )}
 
         <div className="flex flex-col gap-1">
           <span className="text-sm font-semibold">Начальный остаток</span>

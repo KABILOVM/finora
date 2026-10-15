@@ -39,6 +39,8 @@ export interface PostgrestEmulator {
   loseResponse(times?: number): void;
   /** Задержка ответа, мс. */
   setLatency(ms: number): void;
+  /** Сбросить «кэш схемы» (колонки таблиц): после DDL настоящий PostgREST перечитывает схему сам. */
+  reloadSchema(): void;
 }
 
 const b64url = (obj: unknown): string => Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -252,5 +254,6 @@ export function createPostgrestEmulator(server: PgliteServer, opts: { url?: stri
     failHttp: (status, body = { message: 'forced' }, times = 1) => void httpFails.push(...Array.from({ length: times }, () => ({ status, body }))),
     loseResponse: (times = 1) => void (lost.n += times),
     setLatency: (ms) => void (latency = ms),
+    reloadSchema: () => void (columns = null),
   };
 }

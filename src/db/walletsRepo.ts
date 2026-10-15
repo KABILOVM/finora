@@ -1,4 +1,4 @@
-import type { CurrencyCode, LocalRow, Minor, UUID, Wallet, WalletKind } from '@/domain/types';
+import type { CurrencyCode, IsoDate, LocalRow, Minor, UUID, Wallet, WalletKind } from '@/domain/types';
 import { ValidationError } from './errors';
 import { newId } from './ids';
 import {
@@ -20,6 +20,9 @@ export interface WalletInput {
   openingBalanceMinor: Minor;
   color: string;
   icon: string;
+  /** Цель накопления: сумма и срок. null (или не задано) — цели нет; в правке null очищает цель. */
+  goalMinor?: Minor | null;
+  goalOn?: IsoDate | null;
 }
 
 export type WalletPatch = Partial<WalletInput & { sortOrder: number }>;
@@ -33,7 +36,7 @@ export interface WalletsRepo {
   restore(id: UUID): Promise<LocalRow<Wallet>>;
 }
 
-const INPUT_KEYS = ['name', 'currency', 'kind', 'openingBalanceMinor', 'color', 'icon'] as const;
+const INPUT_KEYS = ['name', 'currency', 'kind', 'openingBalanceMinor', 'color', 'icon', 'goalMinor', 'goalOn'] as const;
 const PATCH_KEYS = [...INPUT_KEYS, 'sortOrder'] as const;
 const DATA_KEYS: readonly (keyof WalletData)[] = [
   'name',
@@ -44,6 +47,8 @@ const DATA_KEYS: readonly (keyof WalletData)[] = [
   'icon',
   'sortOrder',
   'archivedAt',
+  'goalMinor',
+  'goalOn',
 ];
 
 function dataOf(w: Wallet): WalletData {
@@ -56,6 +61,9 @@ function dataOf(w: Wallet): WalletData {
     icon: w.icon,
     sortOrder: w.sortOrder,
     archivedAt: w.archivedAt,
+    // строки, записанные до появления цели, хранят undefined: без ?? null пустая правка пометила бы кошелёк изменённым
+    goalMinor: w.goalMinor ?? null,
+    goalOn: w.goalOn ?? null,
   };
 }
 
