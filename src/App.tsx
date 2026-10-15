@@ -18,6 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
 import BudgetAlerts from '@/features/budgets/BudgetAlerts';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
+import { WhatsNew } from '@/features/whatsnew/WhatsNew';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { InstallPrompt } from '@/install/InstallPrompt';
 import PushKeeper from '@/push/PushKeeper';
@@ -163,6 +164,8 @@ export default function App() {
             <AppRoutes />
             {/* Пошаговая настройка нового человека: поверх «Главной», один раз */}
             <OnboardingGate />
+            {/* После обновления: один раз коротко, что изменилось */}
+            <WhatsNew />
           </AppRoot>
         </HashRouter>
       </ToastProvider>
