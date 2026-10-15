@@ -4,6 +4,7 @@ import { expect, goSection, isPhone, mainNav, openApp, openFromMore, shot, test 
 /** Разделы за пунктом «Ещё»: (название в списке, заголовок страницы, адрес). */
 const MORE: ReadonlyArray<readonly [string, string, string]> = [
   ['Бюджеты', 'Бюджеты', '#/budgets'],
+  ['Аналитика', 'Аналитика', '#/analytics'],
   ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
   ['Покупки', 'Покупки', '#/shopping'],
   ['Долги и кредиты', 'Долги и кредиты', '#/debts'],
@@ -74,6 +75,7 @@ test.describe('15. Меню «Ещё»', () => {
     await openApp(page);
     for (const [name, title, hash] of [
       ['Бюджеты', 'Бюджеты', '#/budgets'],
+  ['Аналитика', 'Аналитика', '#/analytics'],
       ['Платежи', 'Регулярные платежи', '#/recurring'],
       ['Долги', 'Долги и кредиты', '#/debts'],
       ['Настройки', 'Настройки', '#/settings'],

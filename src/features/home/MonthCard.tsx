@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Glyph } from '@/components/Glyph';
 import { Card } from '@/components/Card';
 import { MoneyText } from '@/components/MoneyText';
@@ -122,6 +123,9 @@ export function MonthCard({ month, currentMonth, onMonth, categories }: MonthCar
           ) : (
             <p className="mt-2 text-sm text-muted">В этом месяце расходов нет.</p>
           )}
+          <Link to={`/analytics?month=${month}`} className="mt-2 inline-flex min-h-[44px] items-center text-sm font-semibold text-brand">
+            Подробная аналитика
+          </Link>
         </>
       )}
     </Card>

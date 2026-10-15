@@ -48,6 +48,7 @@ describe('isNavActive: боковая панель ПК', () => {
     ['/transactions', ['Операции']],
     ['/wallets', ['Кошельки']],
     ['/budgets', ['Бюджеты']],
+    ['/analytics', ['Аналитика']],
     ['/recurring', ['Платежи']],
     ['/shopping', ['Покупки']],
     ['/debts', ['Долги']],

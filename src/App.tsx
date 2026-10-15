@@ -32,6 +32,7 @@ const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage')
 const MorePage = lazy(() => import('@/features/more/MorePage'));
 // Пока заглушки «Скоро»: настоящие экраны заменят содержимое этих файлов (имена и default export остаются).
 const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'));
+const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'));
 const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'));
 const ShoppingPage = lazy(() => import('@/features/shopping/ShoppingPage'));
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'));
@@ -120,6 +121,7 @@ export function AppRoutes() {
             <Route path="/wallets" element={<WalletsPage />} />
             <Route path="/more" element={<MorePage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
             <Route path="/shopping" element={<ShoppingPage />} />
             <Route path="/debts" element={<DebtsPage />} />

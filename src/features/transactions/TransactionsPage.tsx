@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
@@ -14,7 +14,7 @@ import { useSyncEnabled } from '@/sync/syncContext';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionRow } from './TransactionRow';
 import { useCategoryIndex, useWalletIndex } from './txData';
-import { dayTotal, toTxFilter, totalsByCurrency, useDebounced, type ListFilters } from './txFilters';
+import { dayTotal, filtersFromParams, toTxFilter, totalsByCurrency, useDebounced, type ListFilters } from './txFilters';
 
 /** Сколько операций показываем сразу (целыми днями) и сколько добавляет «Показать ещё». */
 export const PAGE_SIZE = 200;
@@ -41,7 +41,9 @@ export default function TransactionsPage() {
   const wallets = useWallets({ includeArchived: true });
   const categories = useCategories(undefined, { includeArchived: true });
 
-  const [filters, setFilters] = useState<ListFilters>(defaultFilters);
+  const [params] = useSearchParams();
+  // Начальные фильтры — из адреса (ссылка с экрана «Аналитика»: месяц и категория); дальше ими управляет сам экран
+  const [filters, setFilters] = useState<ListFilters>(() => ({ ...defaultFilters(), ...filtersFromParams(params, todayLocal()) }));
   const [limit, setLimit] = useState(PAGE_SIZE);
   const search = useDebounced(filters.search, SEARCH_DELAY_MS);
   const today = todayLocal();
