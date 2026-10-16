@@ -7,6 +7,7 @@ import type { Category, Wallet } from '@/domain/types';
 import { TransactionRow } from '@/features/transactions/TransactionRow';
 import { useAddLink } from '@/layout/nav';
 import { useSyncEnabled } from '@/sync/syncContext';
+import { useHideAmounts } from './hideAmounts';
 
 export interface RecentOpsProps {
   wallets: ReadonlyMap<string, Wallet>;
@@ -20,23 +21,34 @@ export function RecentOps({ wallets, categories }: RecentOpsProps) {
   const addLink = useAddLink();
   const syncEnabled = useSyncEnabled();
   const rows = useTransactions({}, { limit: 5 });
+  const { hidden } = useHideAmounts();
 
   return (
     <section aria-labelledby="home-recent">
       <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
-        <h2 id="home-recent" className="text-lg font-bold">
+        <h2 id="home-recent" className="text-base font-semibold text-muted">
           Последние операции
         </h2>
         {rows && rows.length > 0 && (
-          <Link to="/transactions" className="min-h-[44px] content-center text-base font-semibold text-brand">
+          <Link to="/transactions" className="press min-h-[44px] content-center text-base font-semibold text-brand">
             Все операции
           </Link>
         )}
       </div>
       {!rows ? (
-        <p role="status" className="py-6 text-center text-muted">
-          Загрузка…
-        </p>
+        <Card aria-busy="true" role="status" className="space-y-3 !p-4">
+          <span className="sr-only">Загрузка…</span>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3" aria-hidden="true">
+              <div className="skeleton h-10 w-10 rounded-2xl" />
+              <div className="flex-1 space-y-2">
+                <div className="skeleton h-3.5 w-2/5 rounded" />
+                <div className="skeleton h-3 w-3/5 rounded" />
+              </div>
+              <div className="skeleton h-4 w-16 rounded" />
+            </div>
+          ))}
+        </Card>
       ) : rows.length === 0 ? (
         <Card>
           <EmptyState
@@ -60,6 +72,7 @@ export function RecentOps({ wallets, categories }: RecentOpsProps) {
               wallets={wallets}
               categories={categories}
               syncEnabled={syncEnabled}
+              maskAmounts={hidden}
               onOpen={(id) => navigate(`/edit/${id}`, { state: { background: location } })}
             />
           ))}

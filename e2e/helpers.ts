@@ -410,10 +410,24 @@ export async function homeTotalText(page: Page): Promise<string> {
   return norm(await homeTotal(page).innerText());
 }
 
-/** Значение строки сводки месяца на «Главной»: 'Доходы' | 'Расходы' | 'Разница'. */
-export async function monthRow(page: Page, label: 'Доходы' | 'Расходы' | 'Разница'): Promise<string> {
-  const dd = page.locator('dt', { hasText: new RegExp(`^${label}$`) }).locator('xpath=following-sibling::dd[1]').first();
-  return norm(await dd.innerText());
+/** Пояснения к итогу «Главной»: открывает окно по значку ⓘ, читает текст и закрывает его. */
+export async function totalNotes(page: Page): Promise<string> {
+  await homeTotal(page).getByRole('button', { name: 'Как посчитан итог' }).click();
+  const dlg = sheet(page, 'Как посчитан итог');
+  await expect(dlg).toBeVisible();
+  const text = norm(await dlg.innerText());
+  await dlg.getByRole('button', { name: 'Закрыть' }).click();
+  await expect(dlg).toBeHidden();
+  return text;
+}
+
+/**
+ * Значение капсулы месяца в верхней карточке «Главной»: 'Доходы' (приход) или 'Расходы' (расход).
+ * Прежнего «Итога месяца» с «Разницей» на «Главной» больше нет — эти цифры в «Аналитике».
+ */
+export async function monthRow(page: Page, label: 'Доходы' | 'Расходы'): Promise<string> {
+  const testId = label === 'Доходы' ? 'home-flow-income' : 'home-flow-expense';
+  return norm(await page.getByTestId(testId).innerText());
 }
 
 /** Карточка кошелька на «Главной» (виден список «Кошельки»). */

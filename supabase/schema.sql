@@ -4,7 +4,7 @@
 -- ЧТО ЭТО
 --   Таблицы личного учёта денег: настройки, кошельки, категории, операции (этап 1) и долги, бюджеты,
 --   регулярные платежи (этап 2, раздел 8 в конце файла), список покупок (раздел 10), цели накопления (раздел 11: две колонки
---   у кошельков), напоминания о лимитах бюджета (раздел 12) плюс общие курсы валют. Итого 9 таблиц:
+--   у кошельков), напоминания о лимитах бюджета (раздел 12), города для погоды (раздел 13: одна колонка у настроек) плюс общие курсы валют. Итого 9 таблиц:
 --   settings, wallets, categories, debts, budgets, recurring_rules, transactions, shopping_items, exchange_rates.
 --   Правила доступа (у каждого пользователя видны и меняются только СВОИ данные)
 --   и защитный триггер, который решает конфликты между устройствами
@@ -984,3 +984,31 @@ alter table public.reminder_settings add column if not exists remind_budgets boo
 -- уровень лимита дважды за месяц. Таблица небольшая (чистится через 60 суток), пересоздание проверки быстрое.
 alter table public.push_log drop constraint if exists push_log_kind;
 alter table public.push_log add constraint push_log_kind check (kind in ('payment', 'debt', 'daily', 'budget'));
+
+
+-- 13. Города для погоды ------------------------------------------------------------------
+-- Раздел «Погода» запоминает города и выбранный город. Чтобы выбор был один на все устройства человека, он лежит в настройках:
+-- колонка weather, один текст (JSON: {"v":1,"selected":"37.50,70.25","cities":[{"id","name","region","lat","lon","here"?}]}).
+-- Пока человек ничего не выбирал, колонка пустая. Формат и все проверки полей — в приложении (src/domain/weatherPlaces.ts); сервер
+-- ограничивает только длину: города — это не деньги, а лишний текст не должен раздувать строку настроек.
+-- Блок идемпотентен, как разделы 8 и 11: колонка «add column if not exists», ограничение — только если его ещё нет. Данные не
+-- трогаются, триггер sync_guard, права и политики доступа остаются прежними (они действуют на таблицу целиком).
+-- Старые приложения колонки не знают: при записи они её не присылают, и сохранённый выбор не затирается.
+-- Выполнять до выкладки приложения; повторный запуск безопасен.
+alter table public.settings add column if not exists weather text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'settings_weather_len' and conrelid = 'public.settings'::regclass
+  ) then
+    alter table public.settings add constraint settings_weather_len check (weather is null or char_length(weather) <= 8000) not valid;
+    begin
+      alter table public.settings validate constraint settings_weather_len;
+    exception when check_violation then
+      raise warning 'В таблице settings есть старые строки, нарушающие ограничение settings_weather_len; новые и изменённые строки оно проверяет';
+    end;
+  end if;
+end
+$$;

@@ -37,7 +37,9 @@ test.describe('Статика: vercel.json и index.html', () => {
     expect(h['strict-transport-security']).toMatch(/max-age=\d{7,}/);
     expect(h['cross-origin-opener-policy']).toBe('same-origin');
     const pp = h['permissions-policy'] ?? '';
-    for (const f of ['camera', 'microphone', 'geolocation']) expect(pp, f).toContain(`${f}=()`);
+    for (const f of ['camera', 'microphone']) expect(pp, f).toContain(`${f}=()`);
+    // местоположение — только само приложение и только по нажатию «Определить место» (погода); чужим фреймам нельзя
+    expect(pp, 'geolocation').toContain('geolocation=(self)');
     expect(parseCsp(h['content-security-policy'] ?? '')['frame-ancestors']).toEqual(["'none'"]);
   });
 
@@ -259,7 +261,7 @@ test.describe('CSP в настоящем браузере', () => {
     await expect.poll(() => external.length, { message: 'запросов курсов не было' }).toBeGreaterThan(0);
     for (const name of ['Сохранить копию', 'Операции в таблицу (CSV)']) {
       const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name }).click()]);
-      expect(dl.suggestedFilename()).toMatch(/^finora-/);
+      expect(dl.suggestedFilename()).toMatch(/^sumoima-/);
     }
     await page.getByRole('link', { name: 'Категории' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();

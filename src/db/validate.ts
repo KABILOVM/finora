@@ -1,5 +1,6 @@
 import { isValidCurrencyCode } from '@/domain/currency';
 import { isMinor } from '@/domain/money';
+import { readWeather, stringifyWeather } from '@/domain/weatherPlaces';
 import type {
   CategoryKind,
   CurrencyCode,
@@ -395,6 +396,7 @@ export interface SettingsData {
   locale: 'ru';
   weekStartsOn: 0 | 1;
   defaultWalletId: UUID | null;
+  weather: string | null;
 }
 
 export function parseSettingsData(raw: Record<string, unknown>): SettingsData {
@@ -405,7 +407,16 @@ export function parseSettingsData(raw: Record<string, unknown>): SettingsData {
     locale: 'ru',
     weekStartsOn: week === 1 ? 1 : 0,
     defaultWalletId: optId(raw['defaultWalletId'], 'Кошелёк по умолчанию'),
+    weather: optWeather(raw['weather']),
   };
+}
+
+/** Города для погоды: нет (undefined/null) → null; иначе допустимый текст в каноническом виде (так одинаковое не плодит правки). */
+function optWeather(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  const r = readWeather(v);
+  if (!r.ok) return fail(`Города для погоды: ${r.error}`);
+  return stringifyWeather(r.places);
 }
 
 export interface SyncData {

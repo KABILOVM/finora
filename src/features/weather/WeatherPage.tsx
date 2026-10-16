@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -6,14 +6,17 @@ import { IconButton } from '@/components/IconButton';
 import { inputClasses } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { Sheet } from '@/components/Sheet';
-import { Spinner } from '@/components/Button';
+import { useToast } from '@/components/Toast';
+import { buttonClasses, Spinner } from '@/components/Button';
 import { cn } from '@/lib/cn';
-import { fetchForecast, searchCities, type City, type Forecast } from './api';
+import { searchCities, type City } from './api';
 import { conditionOf, formatTemp, skyGradient } from './conditions';
-import { clearCache, loadCache, loadCities, loadSelected, MAX_CITIES, saveCache, saveCities, saveSelected } from './store';
+import { locate } from './geolocation';
+import { withCity, withoutCity, type PlacesChange } from './places';
+import { clearCache, MAX_CITIES } from './store';
+import { useForecast } from './useForecast';
+import { usePlaces } from './usePlaces';
 import { WeatherIcon } from './WeatherIcon';
-
-const FRESH_MS = 20 * 60 * 1000;
 
 function weekday(date: string, index: number): string {
   if (index === 0) return 'Сегодня';
@@ -27,50 +30,6 @@ function shortDate(date: string): string {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
-function useForecast(city: City) {
-  const [data, setData] = useState<Forecast | null>(() => loadCache(city.id));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const ctrl = useRef<AbortController | null>(null);
-
-  const load = useCallback(async () => {
-    ctrl.current?.abort();
-    const c = new AbortController();
-    ctrl.current = c;
-    setLoading(true);
-    try {
-      const f = await fetchForecast(city, c.signal);
-      if (c.signal.aborted) return;
-      saveCache(city.id, f);
-      setData(f);
-      setError(null);
-    } catch (e) {
-      if (c.signal.aborted) return;
-      setError(e instanceof Error ? e.message : 'Не удалось получить погоду');
-    } finally {
-      if (!c.signal.aborted) setLoading(false);
-    }
-  }, [city]);
-
-  useEffect(() => {
-    const cached = loadCache(city.id);
-    setData(cached);
-    setError(null);
-    const fresh = cached && Date.now() - Date.parse(cached.fetchedAt) < FRESH_MS;
-    if (fresh) setLoading(false);
-    else void load();
-    return () => ctrl.current?.abort();
-  }, [city, load]);
-
-  useEffect(() => {
-    const onOnline = () => void load();
-    window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
-  }, [load]);
-
-  return { data, loading, error, reload: load };
-}
-
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-black/15 px-3 py-2.5">
@@ -80,7 +39,18 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CitySearch({ open, cities, onAdd, onClose }: { open: boolean; cities: City[]; onAdd: (c: City) => void; onClose: () => void }) {
+interface CitySearchProps {
+  open: boolean;
+  cities: City[];
+  onAdd: (c: City) => void;
+  onClose: () => void;
+  /** Определить место по геолокации; вызывается только по нажатию. */
+  onLocate: () => void;
+  locating: boolean;
+  locateError: string | null;
+}
+
+function CitySearch({ open, cities, onAdd, onClose, onLocate, locating, locateError }: CitySearchProps) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<City[]>([]);
   const [busy, setBusy] = useState(false);
@@ -122,6 +92,22 @@ function CitySearch({ open, cities, onAdd, onClose }: { open: boolean; cities: C
 
   return (
     <Sheet open={open} onClose={close} title="Добавить город">
+      <button
+        type="button"
+        onClick={onLocate}
+        disabled={locating}
+        aria-busy={locating}
+        className={cn(buttonClasses('secondary', 'md', true), 'mb-1')}
+      >
+        {locating ? <Spinner /> : <Icon name="target" size={20} />}
+        {locating ? 'Определяем…' : 'Определить по геолокации'}
+      </button>
+      {locateError && (
+        <p role="alert" className="mb-2 mt-2 text-sm font-medium text-danger">
+          {locateError}
+        </p>
+      )}
+      <p className="mb-3 mt-1 text-xs text-muted">Телефон спросит разрешение. Место запоминается с точностью около километра.</p>
       <div className="relative mb-3">
         <Icon name="search" size={20} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
         <input
@@ -172,31 +158,48 @@ function CitySearch({ open, cities, onAdd, onClose }: { open: boolean; cities: C
   );
 }
 
-/** Погода: текущая, по часам на сутки и на 7 дней (Open-Meteo, без ключа). Города запоминаются на устройстве. */
+/** Погода: текущая, по часам на сутки и на 7 дней (Open-Meteo, без ключа). Города и выбранный город хранятся в настройках и едут между устройствами. */
 export default function WeatherPage() {
-  const [cities, setCities] = useState<City[]>(loadCities);
-  const [selectedId, setSelectedId] = useState(() => loadSelected(cities));
+  const { cities, selectedId, commit } = usePlaces();
+  const toast = useToast();
   const [adding, setAdding] = useState(false);
   const city = cities.find((c) => c.id === selectedId) ?? cities[0]!;
   const { data, loading, error, reload } = useForecast(city);
 
-  const select = (id: string) => {
-    setSelectedId(id);
-    saveSelected(id);
+  const apply = async (change: PlacesChange): Promise<boolean> => {
+    try {
+      await commit(change);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось сохранить выбор');
+      return false;
+    }
+    for (const gone of cities) if (!change.cities.some((c) => c.id === gone.id)) clearCache(gone.id);
+    return true;
   };
-  const add = (c: City) => {
-    const next = [...cities, c];
-    setCities(next);
-    saveCities(next);
-    select(c.id);
+  const select = (id: string) => void apply({ cities, selectedId: id });
+  const add = async (c: City): Promise<boolean> => {
+    const change = withCity(cities, c);
+    return change !== null && (await apply(change));
   };
   const remove = (c: City) => {
-    if (cities.length <= 1) return;
-    const next = cities.filter((x) => x.id !== c.id);
-    setCities(next);
-    saveCities(next);
-    clearCache(c.id);
-    if (c.id === selectedId) select(next[0]!.id);
+    const change = withoutCity(cities, city.id, c.id);
+    if (change) void apply(change);
+  };
+
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const findMe = async () => {
+    setLocating(true);
+    setLocateError(null);
+    try {
+      const here = await locate();
+      if (await add(here)) setAdding(false);
+      else setLocateError(`Не удалось сохранить место. Можно держать до ${MAX_CITIES} городов: удалите ненужный.`);
+    } catch (e) {
+      setLocateError(e instanceof Error ? e.message : 'Не удалось определить местоположение');
+    } finally {
+      setLocating(false);
+    }
   };
 
   const cond = data ? conditionOf(data.current.code) : null;
@@ -221,11 +224,11 @@ export default function WeatherPage() {
             <button
               type="button"
               role="tab"
-              aria-selected={c.id === selectedId}
+              aria-selected={c.id === city.id}
               onClick={() => select(c.id)}
               className={cn(
                 'min-h-[40px] rounded-full px-4 text-sm font-semibold transition active:scale-95',
-                c.id === selectedId ? 'bg-brand text-brand-fg shadow-float' : 'border border-border bg-surface/70 text-text hover:bg-surface-2',
+                c.id === city.id ? 'bg-brand text-brand-fg shadow-float' : 'border border-border bg-surface/70 text-text hover:bg-surface-2',
               )}
             >
               {c.name}
@@ -354,7 +357,18 @@ export default function WeatherPage() {
         </div>
       )}
 
-      <CitySearch open={adding} cities={cities} onAdd={add} onClose={() => setAdding(false)} />
+      <CitySearch
+        open={adding}
+        cities={cities}
+        onAdd={(c) => void add(c)}
+        onClose={() => {
+          setAdding(false);
+          setLocateError(null);
+        }}
+        onLocate={() => void findMe()}
+        locating={locating}
+        locateError={locateError}
+      />
     </>
   );
 }

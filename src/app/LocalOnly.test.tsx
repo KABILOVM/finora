@@ -14,36 +14,31 @@ afterEach(() => {
 const renderAt = (path: string) => renderAppRoot(<AppRoutes />, { path, deps: makeTestDeps().deps });
 const banner = () => document.querySelector('[data-testid="local-mode-banner"]') as HTMLElement | null;
 
-describe('плашка локального режима: одна строка с действием', () => {
-  it('на «Главной»: «Облако не подключено» и ссылка «Сделать копию» в «Настройки»', async () => {
+describe('локальный режим: значок в шапке вместо плашки над страницей', () => {
+  it('плашки «Облако не подключено · Сделать копию» над «Главной» больше нет: она повторяла значок', async () => {
     renderAt('/');
     await findByRole('heading', { name: 'Главная', level: 1 });
-    const el = banner() as HTMLElement;
-    expect(el).not.toBeNull();
-    // видимая часть — коротко: заголовок и действие; полная фраза — для скринридера
-    const visible = Array.from(el.querySelectorAll('strong, a')).map((n) => n.textContent?.trim());
-    expect(visible).toEqual(['Облако не подключено', 'Сделать копию']);
-    expect(el.textContent).toContain('данные хранятся только на этом устройстве');
-    const link = el.querySelector('a') as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('/settings');
+    expect(banner()).toBeNull();
+    expect(screen.queryByText('Сделать копию')).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
   });
 
-  it('ссылка ведёт в «Настройки»', async () => {
+  it('значок «Только на устройстве» — ссылка в «Настройки» (к резервной копии), доступное имя говорит об этом', async () => {
     renderAt('/');
     await findByRole('heading', { name: 'Главная', level: 1 });
-    await user.click(screen.getByRole('link', { name: /Сделать копию/ }));
+    const status = screen.getAllByRole('status').find((el) => el.textContent?.includes('Только на устройстве')) as HTMLElement;
+    expect(status).toBeTruthy();
+    expect(status.getAttribute('title')).toContain('Облако не подключено');
+    expect(status.getAttribute('title')).toContain('сделать копию');
+    const link = status.querySelector('a') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/settings');
+    await user.click(link);
     expect(await findByRole('heading', { name: 'Настройки', level: 1 })).toBeInTheDocument();
   });
 
-  it('в самих «Настройках» плашки нет: копия там же, а режим виден по значку в шапке', async () => {
+  it('плашки нет ни в «Настройках», ни на «Операциях»', async () => {
     renderAt('/settings');
     await findByRole('heading', { name: 'Настройки', level: 1 });
-    expect(banner()).toBeNull();
-  });
-
-  it('на «Операциях» и «Кошельках» плашки нет', async () => {
-    renderAt('/transactions');
-    await findByRole('heading', { name: 'Операции', level: 1 });
     expect(banner()).toBeNull();
   });
 });

@@ -201,6 +201,7 @@ export function makeSettings(userId: string, overrides: Partial<Settings> = {}):
     locale: 'ru',
     weekStartsOn: 1,
     defaultWalletId: null,
+    weather: null,
     ...overrides,
   };
 }

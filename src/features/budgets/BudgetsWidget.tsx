@@ -1,17 +1,24 @@
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/Card';
+import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
-import { pickWidgetBudgets } from '@/domain/budgetProgress';
+import { pickWidgetBudgets, type BudgetProgress } from '@/domain/budgetProgress';
 import type { DailyForecast } from '@/domain/forecast';
 import { formatMinor } from '@/domain/money';
+import type { CurrencyCode } from '@/domain/types';
+import { HomeMoney } from '@/features/home/hideAmounts';
 import { endSentence } from '@/features/transactions/txDisplay';
+import { cn } from '@/lib/cn';
 import { monthKey } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
-import { BudgetRow } from './BudgetRow';
-import { budgetLabel, daysText, fitFontSize, longDate } from './budgetText';
-import { PerDay, perDayChars, skippedText } from './ForecastCard';
+import { BudgetBar, LEVEL_TEXT } from './BudgetBar';
+import { budgetLabel, fitFontSize, longDate, spentWord } from './budgetText';
+import { perDayChars } from './ForecastCard';
 import { useBudgetsData, type BudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
+
+/** Сколько полосок лимитов на «Главной»: общий лимит и самый «горячий» по категории, либо два самых «горячих». */
+export const WIDGET_BUDGET_ROWS = 2;
 
 function ForecastPart({ forecast }: { forecast: DailyForecast }) {
   if (forecast.status === 'overflow') return <p className="mt-2 text-muted">Суммы слишком большие, проверьте данные.</p>;
@@ -19,9 +26,6 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
     return <p className="mt-2 text-muted">Все кошельки — накопления, а их мы не считаем: на траты денег нет.</p>;
   }
   if (forecast.status !== 'ok') return null;
-  const usual = forecast.usualPerDayMinor;
-  // Та же отметка, что на странице бюджетов (ForecastCard): если денег не хватает, об этом и так сказано ниже красным.
-  const usualOver = usual !== null && usual > forecast.perDayMinor && !forecast.notEnough;
   return (
     <>
       <p
@@ -29,52 +33,58 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
         className="mt-0.5 font-bold leading-tight tracking-tight"
         style={{ fontSize: fitFontSize(perDayChars(forecast), '1.75rem', '8.4vw', '2.25rem') }}
       >
-        <PerDay f={forecast} />
+        {forecast.approximate && <span title="Приблизительно: часть денег пересчитана по курсу или не вошла в расчёт">≈ </span>}
+        <HomeMoney minor={forecast.perDayMinor} currency={forecast.base} tone={forecast.notEnough ? 'expense' : 'none'} animated />
       </p>
-      <p className="text-[13px] text-muted">
-        До {longDate(forecast.horizonEnd)} — {daysText(forecast.daysLeft)}
-        {forecast.incomeDate !== null && `, потом ждём доход ${longDate(forecast.incomeDate)}`}
-      </p>
-      {usual !== null && (
-        <p data-testid="widget-usual-per-day" className={`text-[13px] ${usualOver ? 'font-medium text-warning' : 'text-muted'}`}>
-          Обычно вы тратите <span className="money">{formatMinor(usual, forecast.base)}</span> в день
-          {usualOver && ' — больше, чем можно'}
-        </p>
-      )}
       {forecast.notEnough && (
         <p className="mt-1.5 flex items-start gap-2 text-sm font-semibold text-danger">
           <Icon name="alert" size={18} className="mt-0.5 shrink-0" />
           <span>Денег не хватает: нужно ещё {endSentence(formatMinor(forecast.shortfallMinor, forecast.base))}</span>
         </p>
       )}
-      {forecast.skipped.length > 0 && (
-        <p className="mt-1.5 text-sm font-medium text-warning">Не вошло в расчёт — нет курса: {endSentence(skippedText(forecast.skipped))}</p>
-      )}
     </>
+  );
+}
+
+/** Тонкая строка лимита: значок, название, процент и анимированная полоска. Нажатия нет — вся карточка ведёт в «Бюджеты». */
+function MiniRow({ progress, name, icon, color, base, index }: { progress: BudgetProgress; name: string; icon: string; color: string | null; base: CurrencyCode; index: number }) {
+  return (
+    <li style={{ '--i': index } as React.CSSProperties} className="pop-spring py-1.5" data-testid="widget-budget-row">
+      <div className="flex items-center gap-2">
+        <Glyph value={icon} color={color ?? undefined} size={24} />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{name}</span>
+        {progress.comparable ? (
+          <span className={cn('shrink-0 text-sm font-bold tabular-nums', LEVEL_TEXT[progress.level])}>{progress.percent > 999 ? '999%+' : `${progress.percent}%`}</span>
+        ) : (
+          <span className="shrink-0 text-xs font-medium text-warning">лимит в {progress.currency}</span>
+        )}
+      </div>
+      {progress.comparable ? (
+        <BudgetBar percent={progress.percent} level={progress.level} label={`${name}: ${spentWord(progress.percent)}`} className="mt-1.5 !h-2" />
+      ) : (
+        <p className="mt-1 text-xs font-medium text-warning">Основная валюта сейчас {base}. Укажите сумму заново.</p>
+      )}
+    </li>
   );
 }
 
 function BudgetsPart({ data }: { data: BudgetsData }) {
   if (!data.progress.ok) return null;
-  const rows = pickWidgetBudgets(data.progress.items);
+  const rows = pickWidgetBudgets(data.progress.items, WIDGET_BUDGET_ROWS);
   if (rows.length === 0) return null;
   return (
-    <ul className="mt-3 divide-y divide-border border-t border-border" aria-label="Лимиты на месяц">
-      {rows.map((p) => {
+    <ul className="mt-2" aria-label="Лимиты на месяц">
+      {rows.map((p, i) => {
         const label = budgetLabel(p.categoryId, data.categories);
-        return (
-          <li key={p.id}>
-            <BudgetRow progress={p} name={label.name} icon={label.icon} color={label.color} base={data.base} compact />
-          </li>
-        );
+        return <MiniRow key={p.id} progress={p} name={label.name} icon={label.icon} color={label.color} base={data.base} index={i} />;
       })}
     </ul>
   );
 }
 
 /**
- * Карточка для «Главной»: «Можно тратить в день» и бюджеты месяца с предупреждениями 70/90/100%.
- * Пока данные читаются — серый каркас, а не нули; нет кошельков — ничего не рисуем.
+ * Карточка для «Главной»: «Можно тратить в день» крупной цифрой и до двух тонких полосок лимитов месяца. Пока данные читаются —
+ * мерцающая заглушка той же высоты, а не нули; нет кошельков — ничего не рисуем. Заголовок ведёт в «Бюджеты».
  */
 export default function BudgetsWidget() {
   const forecast = useDailyForecast();
@@ -83,8 +93,9 @@ export default function BudgetsWidget() {
   if (forecast === undefined || data === undefined) {
     return (
       <Card aria-busy="true" className="min-h-[7.5rem] !py-3 md:!p-5">
-        <div className="h-4 w-40 animate-pulse rounded bg-surface-2" aria-hidden="true" />
-        <div className="mt-3 h-9 w-44 animate-pulse rounded bg-surface-2" aria-hidden="true" />
+        <div className="skeleton h-4 w-40 rounded" aria-hidden="true" />
+        <div className="skeleton mt-3 h-9 w-44 rounded" aria-hidden="true" />
+        <div className="skeleton mt-4 h-2 w-full rounded-full" aria-hidden="true" />
       </Card>
     );
   }
@@ -94,14 +105,15 @@ export default function BudgetsWidget() {
   const hasBudgets = budgetsData !== null && budgetsData.progress.ok && budgetsData.progress.items.length > 0;
   return (
     <Card aria-labelledby="budgets-widget-title" data-testid="budgets-widget" className="!py-3 md:!p-5">
-      <div className="flex items-center justify-between gap-3">
+      <Link to="/budgets" aria-label="Все бюджеты" className="press -my-1 flex min-h-[44px] items-center justify-between gap-3">
         <h2 id="budgets-widget-title" className="text-base font-semibold text-muted">
           Можно тратить в день
         </h2>
-        <Link to="/budgets" className="inline-flex min-h-[44px] shrink-0 items-center text-base font-semibold text-brand">
-          Все бюджеты
-        </Link>
-      </div>
+        <span className="flex shrink-0 items-center gap-1 text-sm text-muted">
+          {forecast.status === 'ok' && <span>до {longDate(forecast.horizonEnd)}</span>}
+          <Icon name="chevron" size={16} />
+        </span>
+      </Link>
       <ForecastPart forecast={forecast} />
       {budgetsData && <BudgetsPart data={budgetsData} />}
       {budgetsData && !hasBudgets && (

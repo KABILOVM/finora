@@ -2,14 +2,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { summarizeMonth, useStore } from '@/db';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { addDays, monthKey, todayLocal } from '@/lib/dates';
-import { avgPerDay, balanceSeries } from './homeData';
+import { balanceSeries } from './homeData';
 
 export interface HomeFlow {
   /** Доходы и расходы текущего месяца в базовой валюте (по снимкам суммы). */
   incomeMinor: Minor;
   expenseMinor: Minor;
-  /** Средний расход в день с начала месяца; null — расходов нет (или сумма не поместилась). */
-  avgPerDayMinor: Minor | null;
   /** Остаток по дням за две недели (от старой точки к сегодняшней) или null, если посчитать нельзя. */
   series: Minor[] | null;
 }
@@ -28,12 +26,10 @@ export function useHomeFlow(endMinor: Minor | null, base: CurrencyCode): HomeFlo
       .toArray();
     let incomeMinor = 0;
     let expenseMinor = 0;
-    let avgPerDayMinor: Minor | null = null;
     try {
       const m = summarizeMonth(rows, mk, base);
       incomeMinor = m.incomeMinor;
       expenseMinor = m.expenseMinor;
-      avgPerDayMinor = avgPerDay(m.expenseMinor, today);
     } catch {
       /* суммы не помещаются в безопасное целое — покажем нули, а не уроним экран */
     }
@@ -45,6 +41,6 @@ export function useHomeFlow(endMinor: Minor | null, base: CurrencyCode): HomeFlo
         series = null;
       }
     }
-    return { incomeMinor, expenseMinor, avgPerDayMinor, series };
+    return { incomeMinor, expenseMinor, series };
   }, [store, endMinor, base]);
 }

@@ -72,12 +72,11 @@ describe('атака: приложение простояло через пол�
     const td = opsDeps([table()], { setup: async (s) => void (await baseSetup(s)) });
     await showApp(<BudgetsWidget />, td, '/');
     await waitFor(() => expect(widgetPerDay()).toBe(fmt(14_705))); // 250 000 ÷ 17
-    expect(text(document.querySelector('[data-testid="budgets-widget"]'))).toContain('До 31 октября — 17 дней');
+    expect(text(document.querySelector('[data-testid="budgets-widget"]'))).toContain('до 31 октября');
 
     await wakeUpAt(new Date(2026, 9, 16, 8, 0, 0)); // уже пятница, 16 октября: до конца месяца 16 дней
 
     await eventually(() => expect(widgetPerDay()).toBe(fmt(15_625)), 3000); // 250 000 ÷ 16
-    expect(text(document.querySelector('[data-testid="budgets-widget"]'))).toContain('До 31 октября — 16 дней');
   });
 
   it('экран «Бюджеты» в первое число нового месяца не считает «до конца октября»', async () => {

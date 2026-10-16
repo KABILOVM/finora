@@ -113,7 +113,7 @@ describe('разные группы: объединяются независим
     await store.settings.update({ weekStartsOn: 0 });
     const server: Settings = {
       id: s0.id, createdAt: s0.createdAt, clientUpdatedAt: NEW, deviceId: REMOTE_DEV, deletedAt: null,
-      baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: b.cash.id,
+      baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: b.cash.id, weather: null,
     };
     const r = await store.sync.applyRemotePage('settings', [{ entity: server, serverSeq: 3 }], 3);
     expect(r.merged).toBe(1);

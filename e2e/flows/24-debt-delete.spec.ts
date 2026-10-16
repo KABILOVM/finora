@@ -62,7 +62,7 @@ test.describe('24. Удаление долга', () => {
     await expect(toast).toBeVisible();
     await expect(page).toHaveURL(/#\/debts/);
     await expect(page.getByRole('link', { name: /^Алишер/ })).toHaveCount(0);
-    await expect(page.getByTestId('debts-widget')).toHaveCount(0);
+    await expect(page.getByTestId('attention-row')).toHaveCount(0);
     await shot(page, '24-deleted-toast', testInfo);
 
     // деньги те же (700), но теперь это обычные операции: расходы месяца 500, доходы 1000 + 200

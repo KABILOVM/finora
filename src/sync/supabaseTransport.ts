@@ -88,24 +88,27 @@ const isMissingBaseColumn = (error: unknown): boolean => {
   return e?.code === 'PGRST204' && typeof e.message === 'string' && e.message.includes(`'${BASE_SEQ_COLUMN}'`);
 };
 
-/** Колонки цели накопления у кошельков (раздел 11 схемы). */
-const GOAL_COLUMNS = ['goal_minor', 'goal_on'] as const;
+/**
+ * Колонки, появившиеся в схеме позже (разделы 11 и 13 supabase/schema.sql): цель накопления у кошельков и города для погоды в
+ * настройках. Сервер, у которого раздел ещё не выполнен, их не знает (PGRST204 «нет колонки в кэше схемы»).
+ */
+const LATE_COLUMN_SETS: readonly (readonly string[])[] = [['goal_minor', 'goal_on'], ['weather']];
 
-/** Строка без колонок цели (для сервера, у которого раздел 11 схемы ещё не выполнен). */
-const withoutGoal = (row: WireRow): WireRow => {
-  if (!GOAL_COLUMNS.some((c) => c in row)) return row;
+/** Строка без колонок набора (для сервера, у которого раздел схемы ещё не выполнен). */
+const withoutColumns = (row: WireRow, columns: readonly string[]): WireRow => {
+  if (!columns.some((c) => c in row)) return row;
   const copy = { ...row };
-  for (const c of GOAL_COLUMNS) delete copy[c];
+  for (const c of columns) delete copy[c];
   return copy;
 };
 
-/** В строке задана цель накопления: такую правку без колонок цели не отправить, не потеряв её. */
-const hasGoal = (row: WireRow): boolean => GOAL_COLUMNS.some((c) => row[c] !== null && row[c] !== undefined);
+/** В строке задано значение хотя бы в одной колонке набора: такую правку без этих колонок не отправить, не потеряв её. */
+const hasValue = (row: WireRow, columns: readonly string[]): boolean => columns.some((c) => row[c] !== null && row[c] !== undefined);
 
-/** PostgREST не нашёл колонку цели в кэше схемы: раздел 11 схемы ещё не выполнен. */
-const isMissingGoalColumn = (error: unknown): boolean => {
+/** PostgREST не нашёл колонку набора в кэше схемы: раздел схемы ещё не выполнен. */
+const isMissingColumnOf = (error: unknown, columns: readonly string[]): boolean => {
   const e = error as PostgrestFailure | null;
-  return e?.code === 'PGRST204' && typeof e.message === 'string' && GOAL_COLUMNS.some((c) => (e.message as string).includes(`'${c}'`));
+  return e?.code === 'PGRST204' && typeof e.message === 'string' && columns.some((c) => (e.message as string).includes(`'${c}'`));
 };
 
 const wellFormedRow = (row: WireRow): WireRow => {
@@ -153,11 +156,11 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
    */
   let versionCheck = true;
   /**
-   * false — сервер ответил, что колонок цели накопления нет (раздел 11 схемы ещё не выполнен), а у всех строк пачки цель пуста:
-   * убираем две пустые колонки и повторяем, иначе одна ошибка останавливает отправку ВСЕХ таблиц, в том числе операций. Без потерь:
-   * сервер без колонок хранить цель не может. Если цель у какой-то строки задана, ошибку не прячем (см. push).
+   * false у набора — сервер ответил, что этих колонок нет (раздел схемы ещё не выполнен), а у всех строк пачки в них пусто: убираем
+   * пустые колонки и повторяем, иначе одна ошибка останавливает отправку ВСЕХ таблиц, в том числе операций. Без потерь: сервер без
+   * колонок хранить значение не может. Если значение у какой-то строки задано, ошибку не прячем (см. push).
    */
-  let goalColumns = true;
+  const lateOn = LATE_COLUMN_SETS.map(() => true);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new RangeError(`timeoutMs: ожидалось положительное число, получено ${timeoutMs}`);
 
   /** Один запрос с жёстким таймаутом: отмена через AbortController + гонка с таймером (на случай клиента, не слушающего отмену). */
@@ -218,20 +221,27 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
       const wire = rows.map(wellFormedRow);
       const send = (payload: WireRow[]) =>
         request<PostgrestResult>((signal) => client.from(remote).upsert(payload, { onConflict: 'id' }).abortSignal(signal));
-      // Строки с заданной целью без колонок цели не отправить, не потеряв её: такая пачка всегда идёт с колонками (даже если раньше
-      // они были отключены), а ошибка «нет колонки» для неё наружу — правка остаётся на устройстве и уйдёт, когда схему обновят.
-      const hasGoalRows = wire.some(hasGoal);
+      // Строки с заданным значением в поздней колонке без неё не отправить, не потеряв его: такая пачка всегда идёт с колонками (даже
+      // если раньше они были отключены), а ошибка «нет колонки» для неё наружу — правка остаётся на устройстве и уйдёт, когда схему
+      // обновят.
+      const filled = LATE_COLUMN_SETS.map((cols) => wire.some((r) => hasValue(r, cols)));
       const prepare = (r: WireRow): WireRow => {
-        const x = versionCheck ? r : withoutBase(r);
-        return goalColumns || hasGoalRows ? x : withoutGoal(x);
+        let x = versionCheck ? r : withoutBase(r);
+        LATE_COLUMN_SETS.forEach((cols, i) => {
+          if (!lateOn[i] && !filled[i]) x = withoutColumns(x, cols);
+        });
+        return x;
       };
       let res = await send(wire.map(prepare));
-      if (!res.error && hasGoalRows) goalColumns = true; // сервер принял цель: колонки у него появились (схему обновили)
+      if (!res.error) filled.forEach((f, i) => f && (lateOn[i] = true)); // сервер принял значение: колонки у него появились (схему обновили)
       // Не хватает колонки старой схемы: отключаем её и повторяем (не больше раза на каждую); незнакомая ошибка — наружу
-      for (let attempt = 0; attempt < 2 && res.error; attempt++) {
+      for (let attempt = 0; attempt <= LATE_COLUMN_SETS.length && res.error; attempt++) {
         if (versionCheck && isMissingBaseColumn(res.error)) versionCheck = false;
-        else if (goalColumns && !hasGoalRows && isMissingGoalColumn(res.error)) goalColumns = false;
-        else break;
+        else {
+          const i = LATE_COLUMN_SETS.findIndex((cols, k) => lateOn[k] && !filled[k] && isMissingColumnOf(res.error, cols));
+          if (i < 0) break;
+          lateOn[i] = false;
+        }
         res = await send(wire.map(prepare));
       }
       if (res.error) throw classifyPostgrestError(res.error, res.status);

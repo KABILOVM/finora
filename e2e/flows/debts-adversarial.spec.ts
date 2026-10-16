@@ -55,14 +55,14 @@ async function newDebt(page: Page, d: { name: string; amount: string; currency?:
 test.describe('узкий телефон 360 px: длинное имя без пробелов', () => {
   test.use({ viewport: { width: 360, height: 740 } });
 
-  test('«Главная»: виджет «Долги» не растягивает страницу вбок', async ({ page }, testInfo) => {
+  test('«Главная»: строка «Требует внимания» с длинным именем не растягивает страницу вбок', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'iphone', 'узкий телефон проверяем один раз');
     await openApp(page, '/debts');
     await newDebt(page, { name: NICK, amount: '500', date: '2025-12-01', due: '2026-01-01' });
     await openApp(page, '/');
-    await expect(page.getByTestId('debts-widget')).toBeVisible();
+    await expect(page.getByTestId('attention-row')).toBeVisible();
     await shot(page, 'brk-home-widget-360', testInfo);
-    expect(await widthProblems(page), 'Главная с виджетом «Долги»').toEqual([]);
+    expect(await widthProblems(page), 'Главная со строкой «Требует внимания»').toEqual([]);
   });
 
   test('шит правки операции по долгу: пояснение со ссылкой на долг помещается в окно', async ({ page }, testInfo) => {

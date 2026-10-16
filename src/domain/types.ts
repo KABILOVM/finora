@@ -202,6 +202,11 @@ export interface Settings extends SyncFields {
   /** 1 = понедельник */
   weekStartsOn: 0 | 1;
   defaultWalletId: UUID | null;
+  /**
+   * Города для погоды и выбранный город одним текстом (формат и проверки — domain/weatherPlaces.ts). null — человек ещё ничего
+   * не выбирал. Живёт в настройках, чтобы выбор ехал между устройствами.
+   */
+  weather: string | null;
 }
 
 export type LocalRow<T> = T & LocalFields;

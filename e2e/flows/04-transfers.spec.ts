@@ -51,7 +51,6 @@ test.describe('4. Перевод между кошельками', () => {
     await goSection(page, 'Главная');
     expect(await monthRow(page, 'Расходы')).toMatch(moneyExact('−7 с.'));
     expect(await monthRow(page, 'Доходы')).toMatch(/^\+?200 с\.$/);
-    expect(await monthRow(page, 'Разница')).toMatch(/^\+?193 с\.$/);
 
     // В списке переводы видны как «откуда → куда», а не как расход
     await goSection(page, 'Операции');

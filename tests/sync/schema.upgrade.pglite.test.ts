@@ -112,7 +112,9 @@ const stamps = (offsetMs = -HOUR) => {
 const asStage1 = (table: SyncTableName, row: Record<string, unknown>): Record<string, unknown> => {
   const { debt_id: _d, recurring_rule_id: _r, ...rest } = row;
   const { goal_minor: _gm, goal_on: _go, ...withoutGoal } = row;
+  const { weather: _w, ...withoutWeather } = row;
   if (table === 'wallets') return withoutGoal; // цели накопления появились позже (раздел 11 схемы)
+  if (table === 'settings') return withoutWeather; // города для погоды — ещё позже (раздел 13 схемы)
   return table === 'transactions' ? rest : row;
 };
 
@@ -149,12 +151,13 @@ describe('схема: обновление с этапа 1 на этап 2 по�
     const after = await dumpAll(s, STAGE1_TABLES);
     for (const t of STAGE1_TABLES) {
       // новые колонки пусты: у всех старых таблиц — служебная base_seq (проверка версии), у операций — ещё debt_id и recurring_rule_id,
-      // у кошельков — цель накопления (goal_minor, goal_on)
+      // у кошельков — цель накопления (goal_minor, goal_on), у настроек — города для погоды (weather)
       const expected = before[t]!.map((r) => ({
         ...r,
         base_seq: null,
         ...(t === 'transactions' ? { debt_id: null, recurring_rule_id: null } : {}),
         ...(t === 'wallets' ? { goal_minor: null, goal_on: null } : {}),
+        ...(t === 'settings' ? { weather: null } : {}),
       }));
       expect(after[t], t).toEqual(expected);
     }

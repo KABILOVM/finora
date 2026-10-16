@@ -181,11 +181,11 @@ describe('шит правки /edit/:id', () => {
 });
 
 describe('плашка и индикатор локального режима', () => {
-  it('на «Главной» и в «Настройках» есть плашка «Облако не подключено», на «Операциях» нет', async () => {
+  it('плашки «Облако не подключено» над страницами нет: режим виден по значку в шапке', async () => {
     renderAt('/');
     await findByRole('heading', { name: 'Главная', level: 1 });
-    expect(screen.getByRole('note')).toHaveTextContent('Облако не подключено: данные хранятся только на этом устройстве');
-    expect(screen.getByRole('note')).toHaveTextContent('Делайте резервную копию');
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(screen.queryByText(/Облако не подключено/)).toBeNull();
 
     await user.click(screen.getAllByRole('link', { name: 'Операции' })[0] as HTMLElement);
     await findByRole('heading', { name: 'Операции', level: 1 });

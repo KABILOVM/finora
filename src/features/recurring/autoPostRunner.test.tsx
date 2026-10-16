@@ -422,7 +422,7 @@ describe('UpcomingWidget на «Главной»', () => {
     expect(screen.queryByText('Ближайшие платежи')).toBeNull();
   });
 
-  it('просроченные и ближайшие 7 дней; до 4 строк и «Ещё N»; дальше недели не показывает', async () => {
+  it('просроченные и ближайшие 7 дней; до 2 строк и «Ещё N»; дальше недели не показывает', async () => {
     const td = makeApp(async (s, ids) => {
       const base = { walletId: ids.cash, frequency: 'monthly' as const, autoPost: 0 as const };
       await s.recurring.create({ ...base, kind: 'expense', amountMinor: 100, startOn: addDays(TODAY, -3), note: 'Просрочен' });
@@ -434,13 +434,13 @@ describe('UpcomingWidget на «Главной»', () => {
     });
     await show(td, <UpcomingWidget />);
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Ближайшие платежи' })).toBeInTheDocument());
-    for (const name of ['Просрочен', 'Сегодняшний', 'Завтрашний', 'Через пять']) expect(screen.getByText(name)).toBeInTheDocument();
-    expect(screen.queryByText('Через семь')).toBeNull(); // не поместился: «Ещё 1»
+    // две строки: самый старый просроченный и сегодняшний; остальные три в пределах недели — «Ещё 3»
+    for (const name of ['Просрочен', 'Сегодняшний']) expect(screen.getByText(name)).toBeInTheDocument();
+    for (const name of ['Завтрашний', 'Через пять', 'Через семь']) expect(screen.queryByText(name)).toBeNull();
     expect(screen.queryByText('Через восемь')).toBeNull(); // дальше недели
-    expect(screen.getByRole('link', { name: 'Ещё 1' })).toHaveAttribute('href', '/recurring');
+    expect(screen.getByRole('link', { name: 'Ещё 3' })).toHaveAttribute('href', '/recurring');
     expect(screen.getByRole('link', { name: 'Все платежи' })).toHaveAttribute('href', '/recurring');
     expect(screen.getByText('Просрочено на 3 дня')).toBeInTheDocument();
-    expect(screen.getByText('Завтра')).toBeInTheDocument();
   });
 
   it('«Провести» в одно касание: операция записана, строка уходит, двойное нажатие не задваивает', async () => {

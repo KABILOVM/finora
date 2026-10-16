@@ -14,7 +14,7 @@ import {
 } from '@/features/transactions/__fixtures__/opsKit';
 import DebtDetailPage from './DebtDetailPage';
 import DebtsPage from './DebtsPage';
-import DebtsWidget from './DebtsWidget';
+import AttentionRow from '@/features/home/AttentionRow';
 
 /**
  * Состязательные проверки «свежести»: что видит человек, если экран открыт давно, а мир тем временем изменился
@@ -121,19 +121,15 @@ describe('экран открыт, а наступила полночь', () => 
     await waitFor(() => expect(text(screen.getByRole('link', { name: /^Алишер/ }))).toContain('Просрочен на 1 день'), 4000);
   });
 
-  it('виджет «Главной»: «сегодня» после полуночи становится «Просрочен на 1 день»', async () => {
+  it('«Главная»: срок «сегодня» не тревожит, а после полуночи появляется строка «Долг просрочен»', async () => {
     const td = opsDeps([table()], { setup: async (s) => void (await make(s, { dueOn: '2026-10-15' })) });
-    await showApp(<DebtsWidget />, td, '/');
-    const next = await waitFor(() => {
-      const el = document.querySelector('[data-testid="debts-widget-next"]');
-      if (!el) throw new Error('нет виджета');
-      return el;
-    });
-    expect(text(next)).toContain('сегодня');
+    await showApp(<AttentionRow />, td, '/');
+    await new Promise((r) => setTimeout(r, 300)); // даём всем запросам отработать: строка пустая, а не «ещё не готова»
+    expect(document.querySelector('[data-testid="attention-row"]')).toBeNull();
 
     await nextDay();
 
-    await eventually(() => expect(text(document.querySelector('[data-testid="debts-widget-next"]'))).toContain('Просрочен на 1 день'), 4000);
+    await eventually(() => expect(text(document.querySelector('[data-testid="attention-row"]'))).toContain('Долг просрочен: Алишер'), 4000);
   });
 
   it('страница долга: строка срока тоже обновляется', async () => {

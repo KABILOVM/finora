@@ -1,6 +1,7 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it, vi } from 'vitest';
 import { exportBackup, exportTransactionsCsv, importBackup, ValidationError, type BackupFile, type Store } from '@/db';
+import { stringifyWeather } from '@/domain/weatherPlaces';
 import { basics, expense, makeStore, USER_A, USER_B } from './helpers';
 
 /** Источник с данными: настройки, 2 кошелька, 2 категории, расход, доход, перевод, удалённая операция. */
@@ -521,5 +522,49 @@ describe('importBackup — метки из будущего и правила р
     await a.transactions.softDelete(live.id);
     await expect(importBackup(a, fileFromB)).resolves.toBeDefined();
     expect((await a.db.categories.get(food.id))?.kind).toBe('income');
+  });
+});
+
+describe('резервная копия: города для погоды', () => {
+  const PLACES = stringifyWeather({
+    selected: '37.50,70.25',
+    cities: [{ id: '37.50,70.25', name: 'Моё местоположение', region: '', lat: 37.5, lon: 70.25, here: true }],
+  });
+
+  it('выбор попадает в файл и возвращается из него без изменений', async () => {
+    const src = await fresh();
+    await src.settings.ensure();
+    await src.settings.update({ weather: PLACES });
+    const file = await exportBackup(src);
+    expect(file.settings?.weather).toBe(PLACES);
+    const dst = await fresh();
+    await importBackup(dst, JSON.parse(JSON.stringify(file)));
+    expect((await dst.db.settings.get(dst.userId))?.weather).toBe(PLACES);
+    expect({ ...(await exportBackup(dst)), exportedAt: '' }).toEqual({ ...file, exportedAt: '' });
+  });
+
+  it('копия, сделанная до погоды (в настройках нет поля), загружается: города = null, версия копии не менялась', async () => {
+    const src = await fresh();
+    await populated(src);
+    const file = clone(await exportBackup(src));
+    expect(file.version).toBe(2);
+    delete file['settings'].weather;
+    const dst = await fresh();
+    await importBackup(dst, file as BackupFile);
+    expect((await dst.db.settings.get(dst.userId))?.weather).toBeNull();
+  });
+
+  it('испорченные города в файле — отказ целиком, ничего не записано', async () => {
+    const src = await fresh();
+    await src.settings.ensure();
+    await src.settings.update({ weather: PLACES });
+    const good = clone(await exportBackup(src));
+    for (const weather of ['{', 5, '{"v":1,"selected":null,"cities":[]}', ' '.repeat(8001)]) {
+      const file = clone(good as BackupFile);
+      file['settings'].weather = weather;
+      const dst = await fresh();
+      await expect(importBackup(dst, file as BackupFile), String(weather).slice(0, 20)).rejects.toBeInstanceOf(ValidationError);
+      expect(await dst.db.settings.count(), String(weather).slice(0, 20)).toBe(0);
+    }
   });
 });

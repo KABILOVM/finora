@@ -1,9 +1,8 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { useSyncEnabled } from '@/sync/syncContext';
 import { LocalDataNotice } from './LocalDataNotice';
-import { LocalModeBanner } from './LocalOnly';
 
-/** Где показывать плашку локального режима: только на «Главной» (в «Настройках» и так всё видно по значку в шапке). */
+/** Где показывать плашку переноса записей: только на «Главной». */
 function showsBanner(pathname: string): boolean {
   return pathname === '/';
 }
@@ -14,7 +13,6 @@ export function PageNotices() {
   const syncEnabled = useSyncEnabled();
   return (
     <>
-      {!syncEnabled && showsBanner(pathname) && <LocalModeBanner />}
       {syncEnabled && showsBanner(pathname) && <LocalDataNotice />}
       <Outlet />
     </>
