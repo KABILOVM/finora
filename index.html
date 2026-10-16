@@ -17,12 +17,12 @@
           style={{…}} через CSSOM (element.style.x = …), которое политика не блокирует (проверено в браузере на всех экранах),
           поэтому в сборке style-src строгий: 'self'.
       script-src 'self' — без unsafe-inline/unsafe-eval: в сборке нет встроенных скриптов (Vite и PWA кладут только файлы).
-      connect-src: nbt.tj, jsdelivr.net, currency-api.pages.dev — курсы валют (src/rates).
+      connect-src: nbt.tj, jsdelivr.net, currency-api.pages.dev — курсы валют (src/rates); api.open-meteo.com, geocoding-api.open-meteo.com — погода (src/features/weather).
       Тест e2e/sec/csp.spec.ts проверяет и этот файл, и собранный результат.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'@@DEV_STYLE@@; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'@@SUPABASE_CONNECT@@ https://www.nbt.tj https://cdn.jsdelivr.net https://latest.currency-api.pages.dev; worker-src 'self'; manifest-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'@@DEV_STYLE@@; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'@@SUPABASE_CONNECT@@ https://www.nbt.tj https://cdn.jsdelivr.net https://latest.currency-api.pages.dev https://api.open-meteo.com https://geocoding-api.open-meteo.com; worker-src 'self'; manifest-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
     <!-- Адрес приложения не уходит в запросах к источникам курсов и по ссылкам (дублирует заголовок Referrer-Policy из vercel.json). -->
     <meta name="referrer" content="no-referrer" />

@@ -101,11 +101,11 @@ describe('переходы из страницы «Ещё»', () => {
     expect(current(bottomNav())).toEqual(['Ещё']);
   });
 
-  it('в «Ещё» шесть пунктов, категорий и импорта нет: они внутри «Настроек»', async () => {
+  it('в «Ещё» восемь пунктов, категорий и импорта нет: они внутри «Настроек»', async () => {
     renderAt('/more');
     await findByRole('heading', { name: 'Ещё', level: 1 });
     const links = screen.getAllByRole('link').filter((a) => screen.getByRole('main').contains(a));
-    expect(links).toHaveLength(6);
+    expect(links).toHaveLength(8);
   });
 
   it('в «Настройках» есть категории и импорт', async () => {

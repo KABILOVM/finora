@@ -26,7 +26,7 @@ const metaOf = (html: string): string => html.match(CSP_META_RE)?.[1] ?? '';
 const builtMeta = (): string => metaOf(readFileSync(join(DIST, 'index.html'), 'utf8'));
 const templateHtml = (): string => readFileSync(join(ROOT, 'index.html'), 'utf8');
 
-const RATE_HOSTS = ['https://www.nbt.tj', 'https://cdn.jsdelivr.net', 'https://latest.currency-api.pages.dev'];
+const RATE_HOSTS = ['https://www.nbt.tj', 'https://cdn.jsdelivr.net', 'https://latest.currency-api.pages.dev', 'https://api.open-meteo.com', 'https://geocoding-api.open-meteo.com'];
 
 test.describe('Статика: vercel.json и index.html', () => {
   test('заголовки безопасности заданы для всех путей', () => {

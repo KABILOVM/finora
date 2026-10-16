@@ -40,6 +40,8 @@ const ShoppingPage = lazy(() => import('@/features/shopping/ShoppingPage'));
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'));
 const DebtDetailPage = lazy(() => import('@/features/debts/DebtDetailPage'));
 const PersonDebtsPage = lazy(() => import('@/features/debts/PersonDebtsPage'));
+const ConverterPage = lazy(() => import('@/features/converter/ConverterPage'));
+const WeatherPage = lazy(() => import('@/features/weather/WeatherPage'));
 const ImportPage = lazy(() => import('@/features/import/ImportPage'));
 // Шит «Новая операция» (пока заглушка в src/layout; настоящий подключат вместо неё).
 const AddTransactionSheet = lazy(() => import('@/layout/AddTransactionSheet'));
@@ -130,6 +132,8 @@ export function AppRoutes() {
             <Route path="/debts" element={<DebtsPage />} />
             <Route path="/debts/people/:key" element={<PersonDebtsPage />} />
             <Route path="/debts/:id" element={<DebtDetailPage />} />
+            <Route path="/rates" element={<ConverterPage />} />
+            <Route path="/weather" element={<WeatherPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/categories" element={<CategoriesPage />} />

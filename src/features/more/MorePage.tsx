@@ -18,6 +18,8 @@ export const MORE_ITEMS: readonly MoreItem[] = [
   { to: '/recurring', title: 'Регулярные платежи', icon: 'repeat' },
   { to: '/shopping', title: 'Покупки', icon: 'cart' },
   { to: '/debts', title: 'Долги и кредиты', icon: 'banknote' },
+  { to: '/rates', title: 'Курсы и конвертер', icon: 'transfer' },
+  { to: '/weather', title: 'Погода', icon: 'cloud' },
   { to: '/settings', title: 'Настройки', icon: 'sliders' },
 ];
 
