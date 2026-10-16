@@ -7,7 +7,7 @@ type Ok = (p: { coords: { latitude: number; longitude: number } }) => void;
 type Fail = (e: { code: number }) => void;
 
 const geoOk = (lat: number, lon: number) => ({
-  getCurrentPosition: vi.fn((ok: Ok) => ok({ coords: { latitude: lat, longitude: lon } })),
+  getCurrentPosition: vi.fn((ok: Ok, _fail?: Fail, _options?: PositionOptions) => ok({ coords: { latitude: lat, longitude: lon } })),
 });
 const geoFail = (code: number) => ({ getCurrentPosition: vi.fn((_ok: Ok, fail: Fail) => fail({ code })) });
 
