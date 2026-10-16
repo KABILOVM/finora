@@ -7,6 +7,8 @@ export interface SettingsPatch {
   baseCurrency?: CurrencyCode;
   weekStartsOn?: 0 | 1;
   defaultWalletId?: UUID | null;
+  /** Города для погоды (канонический текст из stringifyWeather); null — сбросить. */
+  weather?: string | null;
 }
 
 export interface SettingsRepo {
@@ -21,12 +23,12 @@ export interface SettingsRepo {
   ensure(initial?: SettingsPatch): Promise<LocalRow<Settings>>;
 }
 
-const KEYS = ['baseCurrency', 'weekStartsOn', 'defaultWalletId'] as const;
-const DATA_KEYS: readonly (keyof SettingsData)[] = ['baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId'];
-const DEFAULTS: SettingsData = { baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null };
+const KEYS = ['baseCurrency', 'weekStartsOn', 'defaultWalletId', 'weather'] as const;
+const DATA_KEYS: readonly (keyof SettingsData)[] = ['baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather'];
+const DEFAULTS: SettingsData = { baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, weather: null };
 
 function dataOf(s: Settings): SettingsData {
-  return { baseCurrency: s.baseCurrency, locale: s.locale, weekStartsOn: s.weekStartsOn, defaultWalletId: s.defaultWalletId };
+  return { baseCurrency: s.baseCurrency, locale: s.locale, weekStartsOn: s.weekStartsOn, defaultWalletId: s.defaultWalletId, weather: s.weather ?? null };
 }
 
 export function createSettingsRepo(ctx: RepoContext): SettingsRepo {
@@ -50,7 +52,11 @@ export function createSettingsRepo(ctx: RepoContext): SettingsRepo {
       return writeTx(ctx, [db.settings, db.wallets], async () => {
         const cur = await db.settings.get(ctx.userId);
         if (!cur || cur.deletedAt !== null) throw new ValidationError('Настройки ещё не созданы: дождитесь первой загрузки данных');
-        const next = parseSettingsData({ ...dataOf(cur), ...clean });
+        // Города для погоды проверяем, только когда их меняют: запись с другого устройства (например, более нового приложения)
+        // не должна мешать поменять базовую валюту.
+        const keepWeather = !('weather' in clean);
+        const next = parseSettingsData({ ...dataOf(cur), ...clean, ...(keepWeather ? { weather: null } : {}) });
+        if (keepWeather) next.weather = cur.weather ?? null;
         if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
         if (next.defaultWalletId !== cur.defaultWalletId) await checkDefaultWallet(next.defaultWalletId);
         const row = withDirtyGroups<LocalRow<Settings>>('settings', cur, { ...cur, ...next, ...touch(ctx).fields });

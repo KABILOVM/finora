@@ -164,14 +164,13 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await noHorizontalScroll(page);
     await shot(page, '38-home-weather-located', testInfo);
 
-    // запомнилось с точностью около километра
-    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('finora:weather:cities:v1') ?? '[]') as { id: string; here?: boolean; lat: number; lon: number }[]);
-    const here = saved.find((c) => c.here);
-    expect(here).toMatchObject({ id: '37.50,70.25', lat: 37.5, lon: 70.25 });
-
+    // место запомнилось в настройках (они ездят между устройствами): в разделе «Погода» оно в списке и выбрано
     await widget.click();
     await expect(page.getByRole('tab', { name: 'Моё местоположение', selected: true })).toBeVisible();
     await expect(page.getByRole('region', { name: /Погода сейчас: Ясно/ })).toBeVisible();
+    // выбор пережил перезагрузку (лежит в базе приложения, а не в памяти страницы)
+    await page.reload();
+    await expect(page.getByRole('tab', { name: 'Моё местоположение', selected: true })).toBeVisible();
   });
 
   test('геолокация: в доступе отказано → понятное сообщение, в сеть за погодой не ходим, город можно выбрать вручную', async ({ page }, testInfo) => {

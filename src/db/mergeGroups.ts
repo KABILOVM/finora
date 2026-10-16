@@ -90,6 +90,8 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     week: ['weekStartsOn'],
     defaultWallet: ['defaultWalletId'],
     locale: ['locale'],
+    /** Города для погоды и выбранный город: правятся вместе и не конфликтуют с валютой, неделей и кошельком по умолчанию. */
+    weather: ['weather'],
     deleted: ['deletedAt'],
   },
 };

@@ -2,8 +2,8 @@ import fc from 'fast-check';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cityId, type City } from './api';
 import { cityFromCoords } from './geolocation';
-import { rememberCity, withCity, withoutCity } from './places';
-import { DEFAULT_CITIES, loadChosenCity, loadCities, loadSelected, MAX_CITIES } from './store';
+import { withCity, withoutCity } from './places';
+import { DEFAULT_CITIES, loadLegacyPlaces, MAX_CITIES } from './store';
 
 const city = (n: number, over: Partial<City> = {}): City => ({ id: cityId(n, n), name: `Город ${n}`, region: '', lat: n, lon: n, ...over });
 const here = (lat: number, lon: number): City => cityFromCoords(lat, lon)!;
@@ -82,28 +82,29 @@ describe('withoutCity', () => {
   });
 });
 
-describe('rememberCity (хранилище устройства)', () => {
+describe('loadLegacyPlaces (прежнее хранилище устройства, только чтение)', () => {
   beforeEach(() => localStorage.clear());
+  const put = (key: string, value: unknown) => localStorage.setItem(`finora:weather:${key}:v1`, JSON.stringify(value));
 
-  it('запоминает и выбирает; loadChosenCity возвращает это место', () => {
-    expect(loadChosenCity()).toBeNull();
-    const h = here(37.5, 70.25); // не совпадает ни с одним городом по умолчанию
-    expect(rememberCity(h)).toBe(true);
-    expect(loadChosenCity()).toEqual(h);
-    expect(loadSelected(loadCities())).toBe(h.id);
-    expect(loadCities()).toHaveLength(DEFAULT_CITIES.length + 1);
+  it('пусто — города по умолчанию, ничего не выбрано', () => {
+    expect(loadLegacyPlaces()).toEqual({ cities: [...DEFAULT_CITIES], selectedId: null });
   });
-  it('список полон — false и ничего не меняется', () => {
-    const full = Array.from({ length: MAX_CITIES }, (_, i) => city(i + 1));
-    localStorage.setItem('finora:weather:cities:v1', JSON.stringify(full));
-    expect(rememberCity(city(99))).toBe(false);
-    expect(loadCities()).toHaveLength(MAX_CITIES);
-    expect(loadChosenCity()).toBeNull();
+  it('что человек выбрал раньше — то и читается', () => {
+    const h = here(37.5, 70.25);
+    put('cities', [...DEFAULT_CITIES, h]);
+    put('selected', h.id);
+    expect(loadLegacyPlaces()).toEqual({ cities: [...DEFAULT_CITIES, h], selectedId: h.id });
   });
-  it('мусор в памяти (чужой «here», выбор неизвестного города) не ломает загрузку', () => {
-    localStorage.setItem('finora:weather:cities:v1', JSON.stringify([{ ...city(1), here: 'yes' }, city(2)]));
-    localStorage.setItem('finora:weather:selected:v1', JSON.stringify('нет такого'));
-    expect(loadCities().map((c) => c.id)).toEqual([city(2).id]);
-    expect(loadChosenCity()).toBeNull();
+  it('выбранный город, которого нет в списке, — как «не выбирал»', () => {
+    put('selected', 'нет такого');
+    expect(loadLegacyPlaces().selectedId).toBeNull();
+  });
+  it('мусор в памяти (чужой «here», лишние города) не ломает чтение, список не длиннее 8', () => {
+    const many = Array.from({ length: 12 }, (_, i) => city(i + 1));
+    put('cities', [{ ...city(1), here: 'yes' }, ...many]);
+    const { cities } = loadLegacyPlaces();
+    expect(cities).toHaveLength(MAX_CITIES);
+    expect(cities.every((c) => c.here === undefined || c.here === true)).toBe(true);
+    expect(cities.map((c) => c.id)).not.toContain(undefined);
   });
 });

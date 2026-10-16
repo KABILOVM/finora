@@ -137,6 +137,7 @@ describe('состав групп (как в договоре задачи)', ()
       week: ['weekStartsOn'],
       defaultWallet: ['defaultWalletId'],
       locale: ['locale'],
+      weather: ['weather'],
       deleted: ['deletedAt'],
     });
   });
@@ -158,7 +159,7 @@ const BASE: Record<SyncTableName, Record<string, unknown>> = {
   },
   wallets: { name: 'N', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, goalMinor: null, goalOn: null, deletedAt: null },
   categories: { name: 'N', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, deletedAt: null },
-  settings: { baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, deletedAt: null },
+  settings: { baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, weather: null, deletedAt: null },
   shopping_items: { name: 'Молоко', qtyMilli: 2000, unit: 'l', priceMinor: null, checkedAt: null, purchasedAt: null, transactionId: null, deletedAt: null },
 };
 

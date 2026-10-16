@@ -5,9 +5,9 @@ import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { conditionOf, formatTemp } from '@/features/weather/conditions';
 import { locate } from '@/features/weather/geolocation';
-import { rememberCity } from '@/features/weather/places';
-import { loadChosenCity } from '@/features/weather/store';
+import { withCity } from '@/features/weather/places';
 import { useForecast } from '@/features/weather/useForecast';
+import { usePlaces } from '@/features/weather/usePlaces';
 import { WeatherIcon } from '@/features/weather/WeatherIcon';
 
 const CARD_LINK =
@@ -31,7 +31,7 @@ function hhmm(iso: string): string {
  * следующие дни. Пока город не выбран, в сеть не ходим: карточка предлагает выбрать место.
  */
 export default function WeatherWidget() {
-  const [city, setCity] = useState(loadChosenCity);
+  const { ready, cities, chosen: city, commit } = usePlaces();
   const { data, loading, error } = useForecast(city);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -42,8 +42,9 @@ export default function WeatherWidget() {
     setLocateError(null);
     try {
       const here = await locate();
-      if (!rememberCity(here)) throw new Error('Список городов полон. Откройте «Погоду» и удалите ненужный');
-      setCity(loadChosenCity());
+      const change = withCity(cities, here);
+      if (!change) throw new Error('Список городов полон. Откройте «Погоду» и удалите ненужный');
+      await commit(change);
     } catch (e) {
       setLocateError(e instanceof Error ? e.message : 'Не удалось определить местоположение');
     } finally {
@@ -51,6 +52,7 @@ export default function WeatherWidget() {
     }
   };
 
+  if (!ready) return null; // настройки ещё читаются: не мигаем «выберите город» тем, кто уже выбирал
   if (!city) {
     return (
       <Card data-testid="weather-widget" aria-labelledby="weather-widget-title" className="h-full !p-3 md:!p-5">

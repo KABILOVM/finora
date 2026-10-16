@@ -1,5 +1,5 @@
 import type { City } from './api';
-import { loadCities, MAX_CITIES, saveCities, saveSelected } from './store';
+import { MAX_CITIES } from './store';
 
 export interface PlacesChange {
   cities: City[];
@@ -26,13 +26,4 @@ export function withoutCity(cities: readonly City[], selectedId: string, id: str
   const next = cities.filter((c) => c.id !== id);
   if (next.length === cities.length) return null;
   return { cities: next, selectedId: selectedId === id ? next[0]!.id : selectedId };
-}
-
-/** Запоминает город на устройстве и выбирает его (для «Главной», где списка городов на экране нет). false — список полон. */
-export function rememberCity(city: City): boolean {
-  const change = withCity(loadCities(), city);
-  if (!change) return false;
-  saveCities(change.cities);
-  saveSelected(change.selectedId);
-  return true;
 }

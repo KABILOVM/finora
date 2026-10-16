@@ -35,7 +35,8 @@ export function dbNameFor(userId: string): string {
  *  - 2: + budgets, debts, recurring_rules, индексы debtId и recurringRuleId у операций. Старым операциям в upgrade()
  *    проставляется debtId = null и recurringRuleId = null (новые поля договора обязательны, а не «может не быть»);
  *  - 3: + shopping_items (список покупок);
- *  - 4: у кошельков цель накопления (goalMinor, goalOn — без индексов). Старым кошелькам в upgrade() проставляется null.
+ *  - 4: у кошельков цель накопления (goalMinor, goalOn — без индексов). Старым кошелькам в upgrade() проставляется null;
+ *  - 5: у настроек города для погоды (weather — без индексов). Старым настройкам в upgrade() проставляется null.
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -87,6 +88,16 @@ export class FinoraDB extends Dexie {
           .modify((w: Record<string, unknown>) => {
             if (w['goalMinor'] === undefined) w['goalMinor'] = null;
             if (w['goalOn'] === undefined) w['goalOn'] = null;
+          }),
+      );
+    this.version(5)
+      .stores({})
+      .upgrade((tx) =>
+        tx
+          .table('settings')
+          .toCollection()
+          .modify((s: Record<string, unknown>) => {
+            if (s['weather'] === undefined) s['weather'] = null;
           }),
       );
   }

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually } from '@/app/testkit';
 import { user, waitFor } from '@/components/testUtils';
-import { currentPath, LocationProbe, opsDeps, pinToday, showApp, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
+import { currentPath, LocationProbe, opsDeps, pinToday, showApp, storeOf, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
+import type { Store } from '@/db';
+import { stringifyWeather } from '@/domain/weatherPlaces';
 import { parseForecast, type City, type Forecast } from '@/features/weather/api';
-import { DEFAULT_CITIES, saveCache, saveCities, saveSelected } from '@/features/weather/store';
+import { DEFAULT_CITIES, saveCache } from '@/features/weather/store';
 import WeatherWidget from './WeatherWidget';
 
 vi.mock('virtual:pwa-register/react', () => ({
@@ -44,18 +46,22 @@ afterEach(() => {
 const widget = () => document.querySelector('[data-testid="weather-widget"]') as HTMLElement | null;
 const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
 
+/** Прежнее хранилище устройства (до переезда в настройки): человек уже выбирал этот город здесь. */
 function choose(city: City): void {
-  saveCities([...DEFAULT_CITIES]);
-  saveSelected(city.id);
+  localStorage.setItem('finora:weather:cities:v1', JSON.stringify([...DEFAULT_CITIES]));
+  localStorage.setItem('finora:weather:selected:v1', JSON.stringify(city.id));
 }
+/** Города в настройках (так они приходят с другого устройства). */
+const weatherOf = (selected: City | null, cities: readonly City[] = DEFAULT_CITIES) =>
+  stringifyWeather({ selected: selected?.id ?? null, cities: [...cities] });
 function cacheFor(city: City, ageMs: number): Forecast {
   const f = { ...parseForecast(sample), fetchedAt: new Date(Date.now() - ageMs).toISOString() };
   saveCache(city.id, f);
   return f;
 }
 
-async function open() {
-  const td = opsDeps();
+async function open(setup?: (s: Store) => Promise<unknown>) {
+  const td = opsDeps([], { setup: setup ? async (s) => void (await setup(s)) : undefined });
   await showApp(
     <>
       <WeatherWidget />
@@ -65,6 +71,7 @@ async function open() {
     '/',
   );
   await eventually(() => expect(widget()).not.toBeNull());
+  return td;
 }
 
 describe('виджет «Погода» на «Главной»', () => {
@@ -76,7 +83,7 @@ describe('виджет «Погода» на «Главной»', () => {
   });
 
   it('город по умолчанию из списка, но не выбранный человеком, считается невыбранным', async () => {
-    saveCities([...DEFAULT_CITIES]); // список есть, выбора нет
+    localStorage.setItem('finora:weather:cities:v1', JSON.stringify([...DEFAULT_CITIES])); // список есть, выбора нет
     await open();
     expect(norm(widget()?.textContent)).toContain('Выбрать город');
     expect(norm(widget()?.textContent)).toContain('Определить место');
@@ -144,6 +151,52 @@ describe('виджет «Погода» на «Главной»', () => {
     expect(currentPath()).toBe('/weather');
   });
 
+  describe('выбор в настройках (приходит с другого устройства)', () => {
+    const KH = DEFAULT_CITIES[1]!;
+    const BO = DEFAULT_CITIES[2]!;
+
+    it('город из настроек показывается без всякого выбора на этом устройстве', async () => {
+      cacheFor(KH, 1000);
+      await open((s) => s.settings.update({ weather: weatherOf(KH) }));
+      expect(norm(widget()?.textContent)).toContain('Худжанд');
+      expect(norm(widget()?.textContent)).toContain('+23°');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('настройки главнее прежнего выбора на устройстве', async () => {
+      choose(KH);
+      cacheFor(KH, 1000);
+      cacheFor(BO, 1000);
+      await open((s) => s.settings.update({ weather: weatherOf(BO) }));
+      expect(norm(widget()?.textContent)).toContain('Бохтар');
+      expect(norm(widget()?.textContent)).not.toContain('Худжанд');
+    });
+
+    it('выбор сменили на другом устройстве, пока главная открыта, — карточка переключается сама', async () => {
+      cacheFor(KH, 1000);
+      cacheFor(BO, 1000);
+      const td = await open((s) => s.settings.update({ weather: weatherOf(KH) }));
+      expect(norm(widget()?.textContent)).toContain('Худжанд');
+      await storeOf(td).settings.update({ weather: weatherOf(BO) });
+      await waitFor(() => expect(norm(widget()?.textContent)).toContain('Бохтар'));
+    });
+
+    it('настройки испорчены или от незнакомой версии — как «ничего не выбрано», без ошибок', async () => {
+      const td = await open((s) => s.db.settings.update(s.userId, { weather: '{"v":9}' }).then(() => undefined));
+      expect(norm(widget()?.textContent)).toContain('Определить место');
+      expect(storeOf(td)).toBeTruthy();
+    });
+
+    it('добавили город на другом устройстве, а выбранный прежний — прогноз заново не запрашивается', async () => {
+      cacheFor(KH, 1000);
+      const td = await open((s) => s.settings.update({ weather: weatherOf(KH) }));
+      const bigger = [...DEFAULT_CITIES, { id: '1.00,1.00', name: 'Ещё', region: '', lat: 1, lon: 1 }];
+      await storeOf(td).settings.update({ weather: weatherOf(KH, bigger) });
+      await waitFor(() => expect(norm(widget()?.textContent)).toContain('Худжанд'));
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('место не выбрано: «Определить место» и «Выбрать город»', () => {
     const button = () => widget()?.querySelector('button') as HTMLButtonElement;
     const setGeo = (getCurrentPosition: (ok: (p: unknown) => void, fail: (e: { code: number }) => void) => void) =>
@@ -170,19 +223,24 @@ describe('виджет «Погода» на «Главной»', () => {
     it('устройство назвало место → оно запоминается (с округлением) и выбирается, берётся прогноз и показывается погода', async () => {
       setGeo((ok) => ok({ coords: { latitude: 37.50321, longitude: 70.24987 } }));
       fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => sample });
-      await open();
+      const td = await open();
       await user.click(button());
       await waitFor(() => expect(norm(widget()?.textContent)).toContain('+23°'));
       expect(norm(widget()?.textContent)).toContain('Моё местоположение');
       const url = new URL(String(fetchMock.mock.calls[0]![0]));
       expect(url.searchParams.get('latitude')).toBe('37.5');
       expect(url.searchParams.get('longitude')).toBe('70.25');
-      expect(localStorage.getItem('finora:weather:selected:v1')).toBe(JSON.stringify('37.50,70.25'));
+      // выбор лёг в настройки (они уедут на другие устройства), а прежнее хранилище устройства не трогали
+      const saved = JSON.parse((await storeOf(td).settings.get())!.weather!) as { selected: string; cities: { id: string; here?: true }[] };
+      expect(saved.selected).toBe('37.50,70.25');
+      expect(saved.cities.find((c) => c.here)).toMatchObject({ id: '37.50,70.25', lat: 37.5, lon: 70.25 });
+      expect(saved.cities.slice(0, 3).map((c) => c.id)).toEqual(DEFAULT_CITIES.map((c) => c.id));
+      expect(localStorage.getItem('finora:weather:selected:v1')).toBeNull();
     });
 
     it('отказ в доступе — понятное сообщение, прогноза нет, карточка остаётся с выбором города', async () => {
       setGeo((_ok, fail) => fail({ code: 1 }));
-      await open();
+      const td = await open();
       await user.click(button());
       const alert = await waitFor(() => {
         const a = widget()?.querySelector('[role="alert"]');
@@ -191,7 +249,7 @@ describe('виджет «Погода» на «Главной»', () => {
       });
       expect(norm(alert.textContent)).toContain('Доступ к местоположению не разрешён');
       expect(fetchMock).not.toHaveBeenCalled();
-      expect(localStorage.getItem('finora:weather:selected:v1')).toBeNull();
+      expect((await storeOf(td).settings.get())?.weather).toBeNull();
       expect(norm(widget()?.textContent)).toContain('Выбрать город');
     });
 

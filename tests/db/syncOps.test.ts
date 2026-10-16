@@ -281,7 +281,7 @@ describe('applyRemotePage — ветки слияния', () => {
   it('работает для всех четырёх таблиц', async () => {
     const store = await makeStore();
     const base = { createdAt: '2026-10-01T00:00:00.000Z', clientUpdatedAt: '2026-10-01T00:00:00.000Z', deviceId: 'device-remote-1', deletedAt: null };
-    const settings: Settings = { ...base, id: USER_A, baseCurrency: 'USD', locale: 'ru', weekStartsOn: 0, defaultWalletId: null };
+    const settings: Settings = { ...base, id: USER_A, baseCurrency: 'USD', locale: 'ru', weekStartsOn: 0, defaultWalletId: null, weather: null };
     const category: Category = { ...base, id: 'c-1', name: 'Кафе', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null };
     const t: Transaction = {
       ...base, id: 't-1', kind: 'expense', walletId: 'w-1', toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: 'c-1',

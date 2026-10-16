@@ -6,14 +6,16 @@ import { IconButton } from '@/components/IconButton';
 import { inputClasses } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { Sheet } from '@/components/Sheet';
+import { useToast } from '@/components/Toast';
 import { buttonClasses, Spinner } from '@/components/Button';
 import { cn } from '@/lib/cn';
 import { searchCities, type City } from './api';
 import { conditionOf, formatTemp, skyGradient } from './conditions';
 import { locate } from './geolocation';
-import { withCity, withoutCity } from './places';
-import { clearCache, loadCities, loadSelected, MAX_CITIES, saveCities, saveSelected } from './store';
+import { withCity, withoutCity, type PlacesChange } from './places';
+import { clearCache, MAX_CITIES } from './store';
 import { useForecast } from './useForecast';
+import { usePlaces } from './usePlaces';
 import { WeatherIcon } from './WeatherIcon';
 
 function weekday(date: string, index: number): string {
@@ -156,32 +158,32 @@ function CitySearch({ open, cities, onAdd, onClose, onLocate, locating, locateEr
   );
 }
 
-/** Погода: текущая, по часам на сутки и на 7 дней (Open-Meteo, без ключа). Города запоминаются на устройстве. */
+/** Погода: текущая, по часам на сутки и на 7 дней (Open-Meteo, без ключа). Города и выбранный город хранятся в настройках и едут между устройствами. */
 export default function WeatherPage() {
-  const [cities, setCities] = useState<City[]>(loadCities);
-  const [selectedId, setSelectedId] = useState(() => loadSelected(cities));
+  const { cities, selectedId, commit } = usePlaces();
+  const toast = useToast();
   const [adding, setAdding] = useState(false);
   const city = cities.find((c) => c.id === selectedId) ?? cities[0]!;
   const { data, loading, error, reload } = useForecast(city);
 
-  const select = (id: string) => {
-    setSelectedId(id);
-    saveSelected(id);
-  };
-  const apply = (change: { cities: City[]; selectedId: string }) => {
+  const apply = async (change: PlacesChange): Promise<boolean> => {
+    try {
+      await commit(change);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось сохранить выбор');
+      return false;
+    }
     for (const gone of cities) if (!change.cities.some((c) => c.id === gone.id)) clearCache(gone.id);
-    setCities(change.cities);
-    saveCities(change.cities);
-    select(change.selectedId);
+    return true;
   };
-  const add = (c: City): boolean => {
+  const select = (id: string) => void apply({ cities, selectedId: id });
+  const add = async (c: City): Promise<boolean> => {
     const change = withCity(cities, c);
-    if (change) apply(change);
-    return change !== null;
+    return change !== null && (await apply(change));
   };
   const remove = (c: City) => {
-    const change = withoutCity(cities, selectedId, c.id);
-    if (change) apply(change);
+    const change = withoutCity(cities, city.id, c.id);
+    if (change) void apply(change);
   };
 
   const [locating, setLocating] = useState(false);
@@ -191,8 +193,8 @@ export default function WeatherPage() {
     setLocateError(null);
     try {
       const here = await locate();
-      if (add(here)) setAdding(false);
-      else setLocateError(`Можно сохранить до ${MAX_CITIES} городов. Удалите ненужный.`);
+      if (await add(here)) setAdding(false);
+      else setLocateError(`Не удалось сохранить место. Можно держать до ${MAX_CITIES} городов: удалите ненужный.`);
     } catch (e) {
       setLocateError(e instanceof Error ? e.message : 'Не удалось определить местоположение');
     } finally {
@@ -222,11 +224,11 @@ export default function WeatherPage() {
             <button
               type="button"
               role="tab"
-              aria-selected={c.id === selectedId}
+              aria-selected={c.id === city.id}
               onClick={() => select(c.id)}
               className={cn(
                 'min-h-[40px] rounded-full px-4 text-sm font-semibold transition active:scale-95',
-                c.id === selectedId ? 'bg-brand text-brand-fg shadow-float' : 'border border-border bg-surface/70 text-text hover:bg-surface-2',
+                c.id === city.id ? 'bg-brand text-brand-fg shadow-float' : 'border border-border bg-surface/70 text-text hover:bg-surface-2',
               )}
             >
               {c.name}

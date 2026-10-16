@@ -38,30 +38,27 @@ const isCity = (c: unknown): c is City =>
   Number.isFinite((c as City).lon) &&
   ((c as City).here === undefined || (c as City).here === true);
 
-export function loadCities(): City[] {
+/*
+ * Города и выбранный город раньше жили только в localStorage этого устройства. Теперь они в настройках (Settings.weather) и ездят
+ * между устройствами; здесь остаётся только ЧТЕНИЕ прежнего: пока в настройках пусто, показываем то, что человек выбрал раньше.
+ * Первая же правка записывает всё в настройки, и прежние ключи больше не читаются.
+ */
+function loadLegacyCities(): City[] {
   const saved = read<unknown>(CITIES_KEY);
   const list = Array.isArray(saved) ? saved.filter(isCity).slice(0, MAX_CITIES) : [];
   return list.length > 0 ? list : [...DEFAULT_CITIES];
 }
 
-export function saveCities(cities: readonly City[]): void {
-  write(CITIES_KEY, cities);
+export interface LegacyPlaces {
+  cities: City[];
+  /** null — человек ещё ничего не выбирал на этом устройстве. */
+  selectedId: string | null;
 }
 
-export function loadSelected(cities: readonly City[]): string {
+export function loadLegacyPlaces(): LegacyPlaces {
+  const cities = loadLegacyCities();
   const id = read<unknown>(SELECTED_KEY);
-  return typeof id === 'string' && cities.some((c) => c.id === id) ? id : (cities[0]?.id ?? DEFAULT_CITIES[0]!.id);
-}
-
-export function saveSelected(id: string): void {
-  write(SELECTED_KEY, id);
-}
-
-/** Город, который человек сам выбрал (или определил по геолокации). null — ещё не выбирал: на «Главной» погоду не показываем и не запрашиваем. */
-export function loadChosenCity(): City | null {
-  const cities = loadCities();
-  const id = read<unknown>(SELECTED_KEY);
-  return typeof id === 'string' ? (cities.find((c) => c.id === id) ?? null) : null;
+  return { cities, selectedId: typeof id === 'string' && cities.some((c) => c.id === id) ? id : null };
 }
 
 export function loadCache(id: string): Forecast | null {

@@ -276,3 +276,37 @@ describe('обновление базы с версии 3 до 4 (цели на�
     }
   });
 });
+
+describe('обновление базы с версии 4 до 5: города для погоды', () => {
+  const stores4 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions: 'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const settings4 = { ...sync, dirty: 0, serverSeq: 7, syncError: null, id: USER_A, baseCurrency: 'USD', locale: 'ru', weekStartsOn: 0, defaultWalletId: null };
+
+  it('у старых настроек города = null (а не undefined), остальное на месте, строка остаётся «чистой»', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(4).stores(stores4);
+    await old.open();
+    await old.table('settings').add(settings4);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      const s = await store.db.settings.get(USER_A);
+      expect(s).toMatchObject({ baseCurrency: 'USD', weekStartsOn: 0, dirty: 0, serverSeq: 7, weather: null });
+      expect('weather' in s!).toBe(true);
+      expect((await store.settings.update({ weather: null })).dirty).toBe(0); // пустая правка строку не «пачкает»
+    } finally {
+      store.close();
+    }
+  });
+});

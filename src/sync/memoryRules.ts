@@ -175,6 +175,8 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (!CURRENCY_RE.test(String(r['base_currency']))) fail('base_currency_fmt');
       if (r['locale'] !== 'ru') fail('locale_ru');
       if (r['week_starts_on'] !== 0 && r['week_starts_on'] !== 1) fail('week_starts_on');
+      // города для погоды (раздел 13 supabase/schema.sql): текст не длиннее 8000 знаков
+      if (r['weather'] != null && charLength(String(r['weather'])) > 8000) fail('weather_len');
       break;
     case 'wallets': {
       if (!tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');
