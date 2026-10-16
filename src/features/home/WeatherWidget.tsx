@@ -4,6 +4,8 @@ import { Spinner } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { conditionOf, formatTemp } from '@/features/weather/conditions';
+import { locate } from '@/features/weather/geolocation';
+import { rememberCity } from '@/features/weather/places';
 import { loadChosenCity } from '@/features/weather/store';
 import { useForecast } from '@/features/weather/useForecast';
 import { WeatherIcon } from '@/features/weather/WeatherIcon';
@@ -29,18 +31,54 @@ function hhmm(iso: string): string {
  * следующие дни. Пока город не выбран, в сеть не ходим: карточка предлагает выбрать место.
  */
 export default function WeatherWidget() {
-  const [city] = useState(loadChosenCity);
+  const [city, setCity] = useState(loadChosenCity);
   const { data, loading, error } = useForecast(city);
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+
+  // Геолокацию спрашиваем только по нажатию: само приложение за человеком не следит.
+  const findMe = async () => {
+    setLocating(true);
+    setLocateError(null);
+    try {
+      const here = await locate();
+      if (!rememberCity(here)) throw new Error('Список городов полон. Откройте «Погоду» и удалите ненужный');
+      setCity(loadChosenCity());
+    } catch (e) {
+      setLocateError(e instanceof Error ? e.message : 'Не удалось определить местоположение');
+    } finally {
+      setLocating(false);
+    }
+  };
 
   if (!city) {
     return (
-      <Link to="/weather" data-testid="weather-widget" aria-label="Погода: выберите город. Открыть погоду" className={CARD_LINK}>
-        <Card className="h-full !p-3 hover:bg-surface-2 md:!p-5">
-          <Heading />
-          <p className="mt-1.5 text-sm font-semibold leading-snug">Покажем погоду там, где вы</p>
-          <p className="mt-1 text-sm font-semibold text-brand">Выбрать город</p>
-        </Card>
-      </Link>
+      <Card data-testid="weather-widget" aria-labelledby="weather-widget-title" className="h-full !p-3 md:!p-5">
+        <div className="flex items-center justify-between gap-2">
+          <h2 id="weather-widget-title" className="text-base font-semibold text-muted">
+            Погода
+          </h2>
+        </div>
+        <p className="mt-1.5 text-sm font-semibold leading-snug">Покажем погоду там, где вы</p>
+        <button
+          type="button"
+          onClick={() => void findMe()}
+          disabled={locating}
+          aria-busy={locating}
+          className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-brand/10 px-2 text-sm font-semibold leading-tight text-brand transition active:scale-[0.97] hover:bg-brand/15 disabled:opacity-60"
+        >
+          {locating && <Spinner size={16} />}
+          {locating ? 'Определяем…' : 'Определить место'}
+        </button>
+        {locateError && (
+          <p role="alert" className="mt-1.5 text-xs font-medium text-danger">
+            {locateError}
+          </p>
+        )}
+        <Link to="/weather" className="mt-0.5 inline-flex min-h-[44px] items-center text-sm font-semibold text-brand">
+          Выбрать город
+        </Link>
+      </Card>
     );
   }
 

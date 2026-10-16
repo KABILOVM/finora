@@ -18,7 +18,7 @@ const EMAIL = 'friend.secret@example.org';
 const PASSWORD = 'p@ssw0rd-SECRET-123';
 const USER_ID = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa48';
 
-const RATE_HOSTS = ['https://www.nbt.tj', 'https://cdn.jsdelivr.net', 'https://latest.currency-api.pages.dev'];
+const RATE_HOSTS = ['https://www.nbt.tj', 'https://cdn.jsdelivr.net', 'https://latest.currency-api.pages.dev', 'https://api.open-meteo.com', 'https://geocoding-api.open-meteo.com'];
 const b64 = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url');
 const ACCESS = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER_ID, email: EMAIL, role: 'authenticated', aud: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })}.fakesignature`;
 const REFRESH = 'REFRESH-TOKEN-SECRET-xyz';

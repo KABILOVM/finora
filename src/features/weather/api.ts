@@ -14,6 +14,8 @@ export interface City {
   region: string;
   lat: number;
   lon: number;
+  /** true — место определено по геолокации устройства (такое в списке только одно, оно заменяется при новом определении). */
+  here?: true;
 }
 
 export interface HourPoint {

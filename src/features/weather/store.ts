@@ -35,7 +35,8 @@ const isCity = (c: unknown): c is City =>
   typeof (c as City).name === 'string' &&
   typeof (c as City).region === 'string' &&
   Number.isFinite((c as City).lat) &&
-  Number.isFinite((c as City).lon);
+  Number.isFinite((c as City).lon) &&
+  ((c as City).here === undefined || (c as City).here === true);
 
 export function loadCities(): City[] {
   const saved = read<unknown>(CITIES_KEY);

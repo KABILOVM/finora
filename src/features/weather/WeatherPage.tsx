@@ -6,10 +6,12 @@ import { IconButton } from '@/components/IconButton';
 import { inputClasses } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { Sheet } from '@/components/Sheet';
-import { Spinner } from '@/components/Button';
+import { buttonClasses, Spinner } from '@/components/Button';
 import { cn } from '@/lib/cn';
 import { searchCities, type City } from './api';
 import { conditionOf, formatTemp, skyGradient } from './conditions';
+import { locate } from './geolocation';
+import { withCity, withoutCity } from './places';
 import { clearCache, loadCities, loadSelected, MAX_CITIES, saveCities, saveSelected } from './store';
 import { useForecast } from './useForecast';
 import { WeatherIcon } from './WeatherIcon';
@@ -35,7 +37,18 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CitySearch({ open, cities, onAdd, onClose }: { open: boolean; cities: City[]; onAdd: (c: City) => void; onClose: () => void }) {
+interface CitySearchProps {
+  open: boolean;
+  cities: City[];
+  onAdd: (c: City) => void;
+  onClose: () => void;
+  /** Определить место по геолокации; вызывается только по нажатию. */
+  onLocate: () => void;
+  locating: boolean;
+  locateError: string | null;
+}
+
+function CitySearch({ open, cities, onAdd, onClose, onLocate, locating, locateError }: CitySearchProps) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<City[]>([]);
   const [busy, setBusy] = useState(false);
@@ -77,6 +90,22 @@ function CitySearch({ open, cities, onAdd, onClose }: { open: boolean; cities: C
 
   return (
     <Sheet open={open} onClose={close} title="Добавить город">
+      <button
+        type="button"
+        onClick={onLocate}
+        disabled={locating}
+        aria-busy={locating}
+        className={cn(buttonClasses('secondary', 'md', true), 'mb-1')}
+      >
+        {locating ? <Spinner /> : <Icon name="target" size={20} />}
+        {locating ? 'Определяем…' : 'Определить по геолокации'}
+      </button>
+      {locateError && (
+        <p role="alert" className="mb-2 mt-2 text-sm font-medium text-danger">
+          {locateError}
+        </p>
+      )}
+      <p className="mb-3 mt-1 text-xs text-muted">Телефон спросит разрешение. Место запоминается с точностью около километра.</p>
       <div className="relative mb-3">
         <Icon name="search" size={20} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
         <input
@@ -139,19 +168,36 @@ export default function WeatherPage() {
     setSelectedId(id);
     saveSelected(id);
   };
-  const add = (c: City) => {
-    const next = [...cities, c];
-    setCities(next);
-    saveCities(next);
-    select(c.id);
+  const apply = (change: { cities: City[]; selectedId: string }) => {
+    for (const gone of cities) if (!change.cities.some((c) => c.id === gone.id)) clearCache(gone.id);
+    setCities(change.cities);
+    saveCities(change.cities);
+    select(change.selectedId);
+  };
+  const add = (c: City): boolean => {
+    const change = withCity(cities, c);
+    if (change) apply(change);
+    return change !== null;
   };
   const remove = (c: City) => {
-    if (cities.length <= 1) return;
-    const next = cities.filter((x) => x.id !== c.id);
-    setCities(next);
-    saveCities(next);
-    clearCache(c.id);
-    if (c.id === selectedId) select(next[0]!.id);
+    const change = withoutCity(cities, selectedId, c.id);
+    if (change) apply(change);
+  };
+
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const findMe = async () => {
+    setLocating(true);
+    setLocateError(null);
+    try {
+      const here = await locate();
+      if (add(here)) setAdding(false);
+      else setLocateError(`Можно сохранить до ${MAX_CITIES} городов. Удалите ненужный.`);
+    } catch (e) {
+      setLocateError(e instanceof Error ? e.message : 'Не удалось определить местоположение');
+    } finally {
+      setLocating(false);
+    }
   };
 
   const cond = data ? conditionOf(data.current.code) : null;
@@ -309,7 +355,18 @@ export default function WeatherPage() {
         </div>
       )}
 
-      <CitySearch open={adding} cities={cities} onAdd={add} onClose={() => setAdding(false)} />
+      <CitySearch
+        open={adding}
+        cities={cities}
+        onAdd={(c) => void add(c)}
+        onClose={() => {
+          setAdding(false);
+          setLocateError(null);
+        }}
+        onLocate={() => void findMe()}
+        locating={locating}
+        locateError={locateError}
+      />
     </>
   );
 }

@@ -79,6 +79,7 @@ describe('виджет «Погода» на «Главной»', () => {
     saveCities([...DEFAULT_CITIES]); // список есть, выбора нет
     await open();
     expect(norm(widget()?.textContent)).toContain('Выбрать город');
+    expect(norm(widget()?.textContent)).toContain('Определить место');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -134,14 +135,75 @@ describe('виджет «Погода» на «Главной»', () => {
     expect(norm(status?.textContent)).toBe('Загружаем…');
   });
 
-  it.each([
-    ['не выбран город', () => undefined],
-    ['выбран город, прогноз в памяти', () => (choose(KHUJAND), cacheFor(KHUJAND, 1000))],
-  ])('нажатие открывает раздел «Погода»: %s', async (_name, setup) => {
-    setup();
+  it('нажатие на карточку с погодой открывает раздел «Погода»', async () => {
+    choose(KHUJAND);
+    cacheFor(KHUJAND, 1000);
     await open();
     expect(currentPath()).toBe('/');
     await user.click(widget() as HTMLElement);
     expect(currentPath()).toBe('/weather');
+  });
+
+  describe('место не выбрано: «Определить место» и «Выбрать город»', () => {
+    const button = () => widget()?.querySelector('button') as HTMLButtonElement;
+    const setGeo = (getCurrentPosition: (ok: (p: unknown) => void, fail: (e: { code: number }) => void) => void) =>
+      Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition }, configurable: true });
+
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, 'geolocation');
+    });
+
+    it('«Выбрать город» ведёт в раздел «Погода»', async () => {
+      await open();
+      await user.click(widget()!.querySelector('a') as HTMLElement);
+      expect(currentPath()).toBe('/weather');
+    });
+
+    it('местоположение спрашивается только по нажатию, а не при открытии главной', async () => {
+      const ask = vi.fn();
+      setGeo(ask);
+      await open();
+      expect(ask).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('устройство назвало место → оно запоминается (с округлением) и выбирается, берётся прогноз и показывается погода', async () => {
+      setGeo((ok) => ok({ coords: { latitude: 37.50321, longitude: 70.24987 } }));
+      fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => sample });
+      await open();
+      await user.click(button());
+      await waitFor(() => expect(norm(widget()?.textContent)).toContain('+23°'));
+      expect(norm(widget()?.textContent)).toContain('Моё местоположение');
+      const url = new URL(String(fetchMock.mock.calls[0]![0]));
+      expect(url.searchParams.get('latitude')).toBe('37.5');
+      expect(url.searchParams.get('longitude')).toBe('70.25');
+      expect(localStorage.getItem('finora:weather:selected:v1')).toBe(JSON.stringify('37.50,70.25'));
+    });
+
+    it('отказ в доступе — понятное сообщение, прогноза нет, карточка остаётся с выбором города', async () => {
+      setGeo((_ok, fail) => fail({ code: 1 }));
+      await open();
+      await user.click(button());
+      const alert = await waitFor(() => {
+        const a = widget()?.querySelector('[role="alert"]');
+        if (!a) throw new Error('нет сообщения');
+        return a;
+      });
+      expect(norm(alert.textContent)).toContain('Доступ к местоположению не разрешён');
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(localStorage.getItem('finora:weather:selected:v1')).toBeNull();
+      expect(norm(widget()?.textContent)).toContain('Выбрать город');
+    });
+
+    it('кнопка занята, пока устройство отвечает: второе нажатие не плодит запросов', async () => {
+      const ask = vi.fn();
+      setGeo(ask);
+      await open();
+      await user.click(button());
+      await waitFor(() => expect(button().disabled).toBe(true));
+      expect(button().getAttribute('aria-busy')).toBe('true');
+      await user.click(button());
+      expect(ask).toHaveBeenCalledTimes(1);
+    });
   });
 });

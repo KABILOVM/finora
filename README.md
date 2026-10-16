@@ -118,7 +118,7 @@ curl -sI "https://ваш-сайт/$(curl -s https://ваш-сайт/ | grep -o '
 | `Referrer-Policy` | `no-referrer` | то же |
 | `Strict-Transport-Security` | `max-age=31536000` | то же |
 | `Cross-Origin-Opener-Policy` | `same-origin` | то же |
-| `Permissions-Policy` | камера, микрофон, геолокация и т. п. запрещены | то же |
+| `Permissions-Policy` | камера, микрофон и т. п. запрещены; геолокация — `(self)`: только само приложение и только по кнопке «Определить место» в погоде | то же |
 
 В заголовке `Content-Security-Policy` — **только** `frame-ancestors 'none'` (запрет встраивать приложение в чужую страницу). Остальную политику браузер берёт из тега `<meta>` в `index.html`, собранного под ваш проект. Проверить её:
 
@@ -126,7 +126,7 @@ curl -sI "https://ваш-сайт/$(curl -s https://ваш-сайт/ | grep -o '
 curl -s https://ваш-сайт/ | grep -o "connect-src 'self'[^;]*"
 ```
 
-В облачной сборке там должны быть `'self'`, ваш адрес Supabase по `https://` и `wss://` и три источника курсов (`www.nbt.tj`, `cdn.jsdelivr.net`, `latest.currency-api.pages.dev`). Знака `*` и чужих адресов Supabase быть не должно. Если вместо вашего адреса пусто — в сборку не попали переменные `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (шаг 5 «Подключения облака»).
+В облачной сборке там должны быть `'self'`, ваш адрес Supabase по `https://` и `wss://` и три источника курсов (`www.nbt.tj`, `cdn.jsdelivr.net`, `latest.currency-api.pages.dev`) и два адреса погоды (`api.open-meteo.com`, `geocoding-api.open-meteo.com`). Знака `*` и чужих адресов Supabase быть не должно. Если вместо вашего адреса пусто — в сборку не попали переменные `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (шаг 5 «Подключения облака»).
 
 Эти значения проверены только на раздаче, которая берёт заголовки из `vercel.json` (тесты `e2e/sec`), а не на настоящем Vercel, поэтому проверку выше стоит сделать самому. Если заголовки другие, значит `vercel.json` не подхватился: он должен лежать в корне проекта, рядом с `package.json`.
 

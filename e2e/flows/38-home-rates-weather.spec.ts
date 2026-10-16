@@ -105,7 +105,7 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     expect(net.forecastCalls()).toBe(0);
 
     // выбираем город в разделе «Погода»
-    await weatherWidget(page).click();
+    await weatherWidget(page).getByRole('link', { name: 'Выбрать город' }).click();
     await expect(page).toHaveURL(/#\/weather$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Погода' })).toBeVisible();
     await page.getByRole('tab', { name: 'Худжанд' }).click();
@@ -145,5 +145,71 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await expect(weatherWidget(page)).toContainText('Худжанд');
     await expect(ratesWidget(page)).toContainText('1 USD');
     await expect(glance(page)).toBeVisible();
+  });
+
+  test('геолокация: «Определить место» на главной → разрешили → погода в этом месте; в разделе «Погода» оно в списке', async ({ page, context }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    const net = await prepare(page);
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 37.50321, longitude: 70.24987 });
+    await openApp(page);
+    await expect(weatherWidget(page)).toContainText('Определить место');
+    expect(net.forecastCalls()).toBe(0); // без нажатия ни места не спрашиваем, ни прогноз не берём
+
+    await weatherWidget(page).getByRole('button', { name: 'Определить место' }).click();
+    const widget = weatherWidget(page);
+    await expect(widget).toContainText('+23°');
+    await expect(widget).toContainText('Моё местоположение');
+    expect(net.forecastCalls()).toBe(1);
+    await noHorizontalScroll(page);
+    await shot(page, '38-home-weather-located', testInfo);
+
+    // запомнилось с точностью около километра
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('finora:weather:cities:v1') ?? '[]') as { id: string; here?: boolean; lat: number; lon: number }[]);
+    const here = saved.find((c) => c.here);
+    expect(here).toMatchObject({ id: '37.50,70.25', lat: 37.5, lon: 70.25 });
+
+    await widget.click();
+    await expect(page.getByRole('tab', { name: 'Моё местоположение', selected: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: /Погода сейчас: Ясно/ })).toBeVisible();
+  });
+
+  test('геолокация: в доступе отказано → понятное сообщение, в сеть за погодой не ходим, город можно выбрать вручную', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    const net = await prepare(page);
+    // человек нажал «Запретить» в окне браузера: PERMISSION_DENIED (код 1)
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'geolocation', {
+        configurable: true,
+        value: { getCurrentPosition: (_ok: unknown, fail: (e: { code: number }) => void) => setTimeout(() => fail({ code: 1 }), 0) },
+      });
+    });
+    await openApp(page);
+    await weatherWidget(page).scrollIntoViewIfNeeded();
+    await shot(page, '38-home-weather-prompt', testInfo);
+    await weatherWidget(page).getByRole('button', { name: 'Определить место' }).click();
+    await expect(weatherWidget(page).getByRole('alert')).toContainText('Доступ к местоположению не разрешён');
+    expect(net.forecastCalls()).toBe(0);
+    await expect(weatherWidget(page).getByRole('link', { name: 'Выбрать город' })).toBeVisible();
+  });
+
+  test('геолокация из раздела «Погода»: кнопка в окне «Добавить город»', async ({ page, context }) => {
+    await page.clock.install({ time: NOW });
+    await prepare(page);
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 36.1, longitude: 69.2 });
+    await openApp(page, '/weather');
+    await expect(page.getByRole('heading', { level: 1, name: 'Погода' })).toBeVisible();
+    await page.getByRole('button', { name: 'Добавить город' }).click();
+    const dlg = page.getByRole('dialog', { name: 'Добавить город' });
+    await dlg.getByRole('button', { name: 'Определить по геолокации' }).click();
+    await expect(dlg).toBeHidden();
+    await expect(page.getByRole('tab', { name: 'Моё местоположение', selected: true })).toBeVisible();
+    // второе определение заменяет, а не плодит «Моё местоположение»
+    await context.setGeolocation({ latitude: 36.9, longitude: 69.9 });
+    await page.getByRole('button', { name: 'Добавить город' }).click();
+    await page.getByRole('dialog', { name: 'Добавить город' }).getByRole('button', { name: 'Определить по геолокации' }).click();
+    await expect(page.getByRole('dialog', { name: 'Добавить город' })).toBeHidden();
+    await expect(page.getByRole('tab', { name: 'Моё местоположение' })).toHaveCount(1);
   });
 });
