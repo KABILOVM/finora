@@ -21,13 +21,13 @@ test.describe('36. «Что нового» после обновления', () 
 
     await addTx(page, { amount: '25', category: 'Еда' });
     await dismissToasts(page);
-    await pretendUpdated(page, '0.1.0');
+    await pretendUpdated(page, '0.2.0'); // предыдущая версия: показывается запись текущей
     await page.reload();
 
     const news = NEWS(page);
     await expect(news).toBeVisible({ timeout: 10_000 });
-    await expect(news).toContainText('Аналитика');
-    await expect(news).toContainText('Долги');
+    await expect(news).toContainText('курсы: доллар и рубль');
+    await expect(news).toContainText('погода на сегодня');
     await shot(page, '36-whats-new', testInfo);
     const o = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
     expect(o.scroll, 'страница шире экрана').toBeLessThanOrEqual(o.client);
