@@ -56,6 +56,13 @@ export function saveSelected(id: string): void {
   write(SELECTED_KEY, id);
 }
 
+/** Город, который человек сам выбрал (или определил по геолокации). null — ещё не выбирал: на «Главной» погоду не показываем и не запрашиваем. */
+export function loadChosenCity(): City | null {
+  const cities = loadCities();
+  const id = read<unknown>(SELECTED_KEY);
+  return typeof id === 'string' ? (cities.find((c) => c.id === id) ?? null) : null;
+}
+
 export function loadCache(id: string): Forecast | null {
   const f = read<Forecast>(CACHE_PREFIX + id);
   return f && typeof f === 'object' && f.current && Array.isArray(f.days) && Array.isArray(f.hours) ? f : null;

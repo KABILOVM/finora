@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -8,12 +8,11 @@ import { PageHeader } from '@/components/PageHeader';
 import { Sheet } from '@/components/Sheet';
 import { Spinner } from '@/components/Button';
 import { cn } from '@/lib/cn';
-import { fetchForecast, searchCities, type City, type Forecast } from './api';
+import { searchCities, type City } from './api';
 import { conditionOf, formatTemp, skyGradient } from './conditions';
-import { clearCache, loadCache, loadCities, loadSelected, MAX_CITIES, saveCache, saveCities, saveSelected } from './store';
+import { clearCache, loadCities, loadSelected, MAX_CITIES, saveCities, saveSelected } from './store';
+import { useForecast } from './useForecast';
 import { WeatherIcon } from './WeatherIcon';
-
-const FRESH_MS = 20 * 60 * 1000;
 
 function weekday(date: string, index: number): string {
   if (index === 0) return 'Сегодня';
@@ -25,50 +24,6 @@ function weekday(date: string, index: number): string {
 
 function shortDate(date: string): string {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-}
-
-function useForecast(city: City) {
-  const [data, setData] = useState<Forecast | null>(() => loadCache(city.id));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const ctrl = useRef<AbortController | null>(null);
-
-  const load = useCallback(async () => {
-    ctrl.current?.abort();
-    const c = new AbortController();
-    ctrl.current = c;
-    setLoading(true);
-    try {
-      const f = await fetchForecast(city, c.signal);
-      if (c.signal.aborted) return;
-      saveCache(city.id, f);
-      setData(f);
-      setError(null);
-    } catch (e) {
-      if (c.signal.aborted) return;
-      setError(e instanceof Error ? e.message : 'Не удалось получить погоду');
-    } finally {
-      if (!c.signal.aborted) setLoading(false);
-    }
-  }, [city]);
-
-  useEffect(() => {
-    const cached = loadCache(city.id);
-    setData(cached);
-    setError(null);
-    const fresh = cached && Date.now() - Date.parse(cached.fetchedAt) < FRESH_MS;
-    if (fresh) setLoading(false);
-    else void load();
-    return () => ctrl.current?.abort();
-  }, [city, load]);
-
-  useEffect(() => {
-    const onOnline = () => void load();
-    window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
-  }, [load]);
-
-  return { data, loading, error, reload: load };
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

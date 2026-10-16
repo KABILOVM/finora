@@ -19,6 +19,8 @@ import GoalsWidget from './GoalsWidget';
 import { HomeHero } from './HomeHero';
 import { MonthCard } from './MonthCard';
 import { RecentOps } from './RecentOps';
+import RatesWidget from './RatesWidget';
+import WeatherWidget from './WeatherWidget';
 
 /**
  * На телефоне заголовок «Главная» скрыт визуально (остаётся для скринридера): название и так видно внизу в меню,
@@ -124,6 +126,11 @@ export default function HomePage() {
             })}
           </ul>
         </section>
+
+        <div className="grid grid-cols-2 gap-3 md:gap-6" data-testid="home-glance">
+          <RatesWidget base={base} />
+          <WeatherWidget />
+        </div>
 
         <BudgetsWidget />
         <UpcomingWidget />
