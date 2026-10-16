@@ -1,12 +1,13 @@
 /**
  * Атака 9. Часовые пояса и полночь: Asia/Dushanbe (UTC+5), America/Los_Angeles, переход через полночь при вводе
- * «Сегодня/Вчера», границы месяца в итогах. Настоящий шит «Новая операция» и настоящая главная.
+ * «Сегодня/Вчера», границы месяца в итогах. Настоящий шит «Новая операция», настоящая главная (капсулы прихода/расхода) и «Аналитика» (листание месяцев).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '@/App';
 import { makeTestDeps, renderAppRoot } from '@/app/testkit';
 import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import { ensureSeeded } from '@/db';
+import { formatMinor } from '@/domain/money';
 import { clickSave, liveTxs, openAddSheet, opsDeps, pickDate, storeOf, tapAmount } from '@/features/transactions/__fixtures__/opsKit';
 import { addDays, monthKey, todayLocal } from '@/lib/dates';
 
@@ -96,7 +97,11 @@ describe('атака 9: «Сегодня» и «Вчера» в разных п�
   }, 30_000);
 });
 
-describe('атака 9: границы месяца в итогах (интерфейс «Главная»)', () => {
+describe('атака 9: границы месяца в итогах («Главная» и «Аналитика»)', () => {
+  /**
+   * Итоги месяца на «Главной» — две капсулы «приход/расход» за ТЕКУЩИЙ месяц; переключатель месяца, «Разница» и разбивка живут на «Аналитике»,
+   * поэтому границу месяца проверяем в обоих местах: сначала капсулы, потом — переходом по меню — экран «Аналитика» с листанием месяцев.
+   */
   async function homeAt(tz: string, instant: string) {
     setClock(tz, instant);
     const td = makeTestDeps();
@@ -119,37 +124,75 @@ describe('атака 9: границы месяца в итогах (интер�
     await waitFor(() => expect(screen.queryByText('Загрузка…')).toBeNull(), 10_000);
     return td;
   }
-  const card = () => {
-    const el = document.querySelector<HTMLElement>('[aria-label="Итоги месяца"]');
-    if (!el) throw new Error('нет карточки месяца');
+  const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
+  const fmt = (minor: number, sign: 'auto' | 'always' = 'auto') => norm(formatMinor(minor, 'TJS', { sign }));
+  /** Капсулы «приход/расход месяца» в шапке «Главной»: расход со знаком «−», приход со знаком «+». */
+  const flow = (kind: 'income' | 'expense') => norm(document.querySelector(`[data-testid="home-flow-${kind}"]`)?.textContent);
+  const summary = () => {
+    const el = document.querySelector<HTMLElement>('[data-testid="analytics-summary"]');
+    if (!el) throw new Error('нет карточки итогов месяца на «Аналитике»');
     return el;
   };
-  const expensesText = () =>
-    Array.from(card().querySelectorAll('div'))
-      .find((n) => n.querySelector(':scope > dt')?.textContent === 'Расходы')
-      ?.textContent?.replace(/\s/g, ' ') ?? '';
+  /** Крупная сумма «Расходы за …» (первая сумма карточки) и значения строк «Доходы» / «Разница». */
+  const analyticsExpense = () => norm(summary().querySelector('.money')?.textContent);
+  const analyticsRow = (label: string) =>
+    norm(Array.from(summary().querySelectorAll('dl > div')).find((n) => n.querySelector('dt')?.textContent === label)?.querySelector('dd')?.textContent);
+  async function openAnalytics() {
+    await user.click(screen.getAllByRole('link', { name: 'Аналитика' })[0] as HTMLElement);
+    await findByRole('heading', { name: 'Аналитика', level: 1 });
+    await waitFor(() => expect(screen.queryByText('Считаем…')).toBeNull(), 10_000);
+  }
 
-  it('Душанбе, 00:30 1 ноября (в UTC ещё 31 октября): «этот месяц» — ноябрь, расход 44 с.; «предыдущий» — октябрь, 22+33=55 с.', async () => {
+  it('Душанбе, 00:30 1 ноября (в UTC ещё 31 октября): «этот месяц» — ноябрь, расход 44 с.; «предыдущий» — октябрь, 22+33=55 с.; 30 сентября — уже сентябрь', async () => {
     await homeAt('Asia/Dushanbe', '2026-10-31T19:30:00.000Z');
-    await waitFor(() => expect(card().textContent).toMatch(/Ноябрь 2026/));
-    expect(card().textContent).toMatch(/Этот месяц/);
-    await waitFor(() => expect(expensesText()).toMatch(/44/));
-    expect(expensesText()).not.toMatch(/55|33|22|111/);
+    expect(todayLocal()).toBe('2026-11-01');
+    // «Главная»: капсулы показывают ноябрь — только операцию 1 ноября
+    await waitFor(() => expect(flow('expense')).toBe(fmt(-44_00)));
+    expect(flow('income')).toBe(fmt(0, 'always'));
+    expect(flow('expense')).not.toMatch(/55|33|22|111/);
+
+    // «Аналитика»: открывается на текущем месяце — ноябре (дальше вперёд не пускает)
+    await openAnalytics();
+    await waitFor(() => expect(summary().textContent).toMatch(/ноябрь 2026/));
+    expect(analyticsExpense()).toBe(fmt(44_00));
+    expect(analyticsRow('Доходы')).toBe(fmt(0, 'always'));
+    expect(analyticsRow('Разница')).toBe(fmt(-44_00));
+    expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeDisabled();
+
+    // предыдущий месяц — октябрь: 22 (1 окт) + 33 (31 окт) = 55; ни ноябрьские 44, ни сентябрьские 111 сюда не попадают
     await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
-    await waitFor(() => expect(card().textContent).toMatch(/Октябрь 2026/));
-    await waitFor(() => expect(expensesText()).toMatch(/55/));
-    expect(expensesText()).not.toMatch(/44|111/);
-  }, 30_000);
+    await waitFor(() => expect(summary().textContent).toMatch(/октябрь 2026/));
+    await waitFor(() => expect(analyticsExpense()).toBe(fmt(55_00)));
+    expect(analyticsRow('Разница')).toBe(fmt(-55_00));
+    expect(summary().textContent).not.toContain(fmt(44_00));
+    expect(summary().textContent).not.toContain(fmt(111_00));
+    expect(norm(document.querySelector('[data-testid="analytics-trend"]')?.textContent)).toBe('На 50% меньше, чем в прошлом месяце'); // 55 против сентябрьских 111
+    expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeEnabled();
+
+    // ещё месяц назад — сентябрь: 30 сентября лежит там, а не в октябре
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    await waitFor(() => expect(summary().textContent).toMatch(/сентябрь 2026/));
+    await waitFor(() => expect(analyticsExpense()).toBe(fmt(111_00)));
+    expect(summary().textContent).not.toContain(fmt(55_00));
+  }, 40_000);
 
   it('Лос-Анджелес, 22:30 31 октября (в UTC уже 1 ноября): «этот месяц» — октябрь (22+33=55), ноябрьская операция сюда не попадает', async () => {
     await homeAt('America/Los_Angeles', '2026-11-01T05:30:00.000Z');
     expect(todayLocal()).toBe('2026-10-31');
     expect(monthKey(todayLocal())).toBe('2026-10');
-    await waitFor(() => expect(card().textContent).toMatch(/Октябрь 2026/));
-    await waitFor(() => expect(expensesText()).toMatch(/55/));
-    expect(expensesText()).not.toMatch(/44|111|99/);
-    expect(card().textContent).toMatch(/Этот месяц/);
-  }, 30_000);
+    // «Главная»: капсулы — октябрь (сентябрьские 111 и ноябрьские 44 не входят, 99 = 55+44 — признак смешения)
+    await waitFor(() => expect(flow('expense')).toBe(fmt(-55_00)));
+    expect(flow('income')).toBe(fmt(0, 'always'));
+    expect(flow('expense')).not.toMatch(/44|111|99/);
+
+    // «Аналитика»: текущий месяц — октябрь, ноябрь недоступен
+    await openAnalytics();
+    await waitFor(() => expect(summary().textContent).toMatch(/октябрь 2026/));
+    await waitFor(() => expect(analyticsExpense()).toBe(fmt(55_00)));
+    expect(summary().textContent).not.toMatch(/44|111|99/);
+    expect(analyticsRow('Разница')).toBe(fmt(-55_00));
+    expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeDisabled();
+  }, 40_000);
 });
 
 describe('атака 9: переезд между поясами не сдвигает сохранённые даты', () => {

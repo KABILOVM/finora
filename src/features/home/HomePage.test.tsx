@@ -17,13 +17,17 @@ import {
   type History,
   unpinToday,
 } from '@/features/transactions/__fixtures__/opsKit';
-import { computeHomeTotal, sharePercent, topCategories } from './homeData';
+import { computeHomeTotal } from './homeData';
 import HomePage from './HomePage';
+
+const HIDE_KEY = 'finora-hide-balance';
 
 beforeEach(pinToday);
 afterEach(() => {
   unpinToday();
   vi.restoreAllMocks();
+  // выбор «Скрыть суммы» живёт в localStorage и пережил бы тест
+  localStorage.removeItem(HIDE_KEY);
 });
 
 let hist: History = { cash: '', card: '', usd: '', txs: {} };
@@ -57,20 +61,30 @@ const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').tr
 const text = (el: Element | null) => norm(el?.textContent);
 const fmt = (minor: number, currency = 'TJS', sign: 'auto' | 'always' = 'auto') => norm(formatMinor(minor, currency, { sign }));
 const total = () => document.querySelector('[data-testid="home-total"]');
-const monthCard = () => document.querySelector('[aria-label="Итоги месяца"]');
-/** Значение строки итогов месяца по её названию: «Доходы» → «+5 000 с.». */
-const summaryRow = (label: string): string => {
-  const dt = Array.from(monthCard()?.querySelectorAll('dt') ?? []).find((x) => norm(x.textContent) === label);
-  return text(dt?.nextElementSibling ?? null);
-};
+/** Капсулы «приход / расход месяца» в шапке. */
+const flow = (kind: 'income' | 'expense') => text(document.querySelector(`[data-testid="home-flow-${kind}"]`));
 const walletCards = () => Array.from(document.querySelectorAll('section[aria-labelledby="home-wallets"] li')).map((li) => text(li));
+const recentRows = () => Array.from(document.querySelectorAll('section[aria-labelledby="home-recent"] button')).map((b) => text(b));
+
+const NOTES = 'Как посчитан итог';
+const notesButton = () => screen.queryByRole('button', { name: NOTES });
+const notesDialog = () => screen.queryByRole('dialog', { name: NOTES });
+/** Пояснения к итогу: открывает шит по значку ⓘ, читает предложения по одному и закрывает шит. */
+async function readNotes(): Promise<string[]> {
+  await user.click(screen.getByRole('button', { name: NOTES }));
+  const dialog = screen.getByRole('dialog', { name: NOTES });
+  const items = Array.from(dialog.querySelectorAll('li')).map((li) => text(li));
+  const close = Array.from(dialog.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === 'Закрыть');
+  await user.click(close as Element);
+  expect(notesDialog()).toBeNull();
+  return items;
+}
 
 describe('«Всего» и кошельки', () => {
   it('сумма по кошелькам в основной валюте с пометкой «≈»: доллары пересчитаны по курсу, остатки — в своей валюте', async () => {
     await openHome();
     // наличные 4 842,50 + карта 165 + (−10 $ × 10,9 = −109) = 4 898,50
     expect(text(total())).toContain(`≈ ${fmt(489_850)}`);
-    expect(text(total())).toContain('Остатки в других валютах пересчитаны по курсу');
     const cards = walletCards();
     expect(cards).toHaveLength(3);
     expect(cards.find((c) => c.includes('Наличные'))).toContain(fmt(484_250));
@@ -78,17 +92,29 @@ describe('«Всего» и кошельки', () => {
     expect(cards.find((c) => c.includes('Доллары'))).toContain(fmt(-1000, 'USD')); // в долларах, не в сомони
   });
 
+  it('кошельки — лента чипов под заголовком «Кошельки»; каждый чип ведёт в «Кошельки»', async () => {
+    await openHome();
+    expect(screen.getByRole('heading', { name: 'Кошельки', level: 2 })).toBeInTheDocument();
+    const links = Array.from(document.querySelectorAll('section[aria-labelledby="home-wallets"] li a'));
+    expect(links).toHaveLength(3);
+    for (const a of links) expect(a).toHaveAttribute('href', '/wallets');
+    expect(screen.queryByRole('link', { name: 'Все кошельки' })).toBeNull(); // прежней ссылки больше нет
+  });
+
   it('отрицательный остаток показан красным', async () => {
     await openHome();
-    const usd = Array.from(document.querySelectorAll('section[aria-labelledby="home-wallets"] li')).find((li) => li.textContent?.includes('Доллары'));
-    expect(usd?.innerHTML).toContain('text-expense');
+    const chip = (name: string) => Array.from(document.querySelectorAll('section[aria-labelledby="home-wallets"] li')).find((li) => li.textContent?.includes(name));
+    expect(chip('Доллары')?.innerHTML).toContain('text-expense');
+    expect(chip('Наличные')?.innerHTML).not.toContain('text-expense');
   });
 
   it('нет курса доллара: сумма в долларах НЕ входит в итог, это прямо сказано; «≈» нет, раз ничего не пересчитано', async () => {
     await openHome({ tables: [] });
     expect(text(total())).toContain(fmt(500_750));
     expect(text(total())).not.toContain('≈');
-    expect(text(total())).toContain(`Не вошло в итог — нет курса: ${fmt(-1000, 'USD')}`);
+    // снаружи — короткая жёлтая строка, подробности (с суммой) — в пояснении
+    expect(text(total())).toContain('Не вошло в итог: нет курса (USD)');
+    expect(await readNotes()).toEqual([`Не вошло в итог — нет курса: ${fmt(-1000, 'USD')}.`]);
   });
 
   it('пустой кошелёк в валюте без курса ничего не добавляет и не пугает предупреждением', async () => {
@@ -100,17 +126,19 @@ describe('«Всего» и кошельки', () => {
     });
     expect(text(total())).toContain(fmt(0));
     expect(text(total())).not.toContain('Не вошло в итог');
+    expect(notesButton()).toBeNull();
   });
 
   it('устаревший курс (старше 3 суток): предупреждение с датой', async () => {
     await openHome({ tables: [table({ asOf: '2026-10-01' })] });
-    expect(text(total())).toContain('Курс устарел (USD на 01.10.2026)');
     expect(text(total())).toContain('≈');
+    expect(await readNotes()).toContain('Курс устарел (USD на 01.10.2026) — итог может быть неточным.');
   });
 
   it('свежий курс — без предупреждения об устаревании', async () => {
     await openHome();
     expect(text(total())).not.toContain('устарел');
+    expect((await readNotes()).join(' ')).not.toContain('устарел');
   });
 
   it('удалённая операция не видна, а остаток и «Всего» верны', async () => {
@@ -118,130 +146,216 @@ describe('«Всего» и кошельки', () => {
     await write(() => storeOf(td).transactions.softDelete(hist.txs['advance'] ?? ''));
     await waitFor(() => expect(walletCards().find((c) => c.includes('Наличные'))).toContain(fmt(-15_750)));
     expect(text(total())).toContain(fmt(489_850 - 500_000));
-    await waitFor(() => expect(summaryRow('Доходы')).toBe(fmt(0, 'TJS', 'always')));
+    await waitFor(() => expect(flow('income')).toBe(fmt(0, 'TJS', 'always')));
     expect(document.body.textContent).not.toContain('аванс');
     expect(await storeOf(td).db.transactions.count()).toBe(8);
   });
 });
 
-describe('«В среднем в день» в шапке', () => {
-  const avg = () => document.querySelector('[data-testid="home-avg-per-day"]');
-
-  it('расход месяца ÷ прошедшие дни (сегодня 15 октября), округление вниз', async () => {
+describe('приход и расход месяца в шапке', () => {
+  it('две капсулы: приход со знаком «+» и расход с «−»; переводы и сентябрь не считаются', async () => {
     await openHome();
-    // расходы октября 124,50 (см. «Этот месяц») ÷ 15 = 8,30
-    await waitFor(() => expect(avg()).not.toBeNull());
-    expect(text(avg())).toBe(`В среднем в день в этом месяце: ${fmt(830)}`);
+    // расходы октября: 12,50 + 3 + 109 (10 $ по курсу из операции) = 124,50; доход — аванс 5 000
+    await waitFor(() => expect(flow('income')).toBe(fmt(500_000, 'TJS', 'always')));
+    expect(flow('income')).toBe('+5 000 с.');
+    expect(flow('expense')).toBe(fmt(-12_450));
   });
 
-  it('«Скрыть суммы» прячет и среднее', async () => {
-    try {
-      await openHome();
-      await waitFor(() => expect(avg()).not.toBeNull());
-      await user.click(screen.getByRole('button', { name: 'Скрыть суммы' }));
-      expect(text(avg())).toBe('В среднем в день в этом месяце: ••••');
-    } finally {
-      localStorage.removeItem('finora-hide-balance');
-    }
-  });
-
-  it('в месяце нет расходов — строки нет (а не «0 в день»)', async () => {
+  it('в месяце нет операций — в капсулах нули, а не пустое место', async () => {
     await openHome({ setup: async () => undefined });
-    await waitFor(() => expect(summaryRow('Расходы')).toBe(fmt(0)));
-    expect(avg()).toBeNull();
+    await waitFor(() => expect(flow('expense')).toBe(fmt(0)));
+    expect(flow('income')).toBe(fmt(0, 'TJS', 'always'));
+  });
+
+  it('операции в другой основной валюте не смешиваются с остальными: в капсулах нули в новой валюте', async () => {
+    const td = await openHome();
+    await waitFor(() => expect(flow('expense')).toBe(fmt(-12_450)));
+    await write(() => storeOf(td).settings.update({ baseCurrency: 'USD' }));
+    // все операции октября записаны со снимком в сомони — к долларовому итогу они не относятся
+    await waitFor(() => expect(flow('expense')).toBe(fmt(0, 'USD')));
+    expect(flow('income')).toBe(fmt(0, 'USD', 'always'));
+  });
+
+  it('прежних блоков на главной нет: итогов месяца, быстрых кнопок «Расход / Доход / Перевод», «В среднем в день»', async () => {
+    await openHome();
+    await waitFor(() => expect(flow('income')).not.toBe(''));
+    expect(document.querySelector('[aria-label="Итоги месяца"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Предыдущий месяц' })).toBeNull();
+    expect(document.querySelector('[data-testid="home-avg-per-day"]')).toBeNull();
+    expect(text(total())).not.toContain('В среднем в день');
+    expect(text(total())).not.toContain('14 дней');
+    for (const name of ['Расход', 'Доход', 'Перевод']) expect(screen.queryByRole('link', { name })).toBeNull();
   });
 });
 
-describe('«Этот месяц»', () => {
-  it('доходы, расходы и разница в основной валюте; переводы и сентябрь не считаются', async () => {
-    await openHome();
-    const card = text(monthCard());
-    expect(card).toContain('Октябрь 2026');
-    expect(card).toContain('Этот месяц');
-    // расходы: 12,50 + 3 + 109 (10 $ по курсу из операции) = 124,50
-    expect(summaryRow('Доходы')).toBe(fmt(500_000, 'TJS', 'always'));
-    expect(summaryRow('Расходы')).toBe(fmt(-12_450));
-    expect(summaryRow('Разница')).toBe(fmt(487_550, 'TJS', 'always'));
+describe('«Как посчитан итог» (значок ⓘ)', () => {
+  it('нечего пояснять (одна валюта, ничего не пересчитано) — значка нет', async () => {
+    await openHome({ tables: [], setup: async () => undefined });
+    expect(text(total())).toContain(fmt(0));
+    expect(notesButton()).toBeNull();
+    expect(notesDialog()).toBeNull();
   });
 
-  it('стрелки листают месяцы; вперёд дальше текущего не пускают', async () => {
+  it('есть пересчёт по курсу — значок есть; пояснение прячется в шит и не лежит в шапке', async () => {
     await openHome();
-    expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
-    await waitFor(() => expect(text(monthCard())).toContain('Сентябрь 2026'));
-    await waitFor(() => expect(summaryRow('Расходы')).toBe(fmt(-4700)));
-    expect(summaryRow('Доходы')).toBe(fmt(0, 'TJS', 'always'));
-    expect(summaryRow('Разница')).toBe(fmt(-4700));
-    expect(text(monthCard())).not.toContain('Этот месяц');
-    await user.click(screen.getByRole('button', { name: 'Следующий месяц' }));
-    await waitFor(() => expect(text(monthCard())).toContain('Октябрь 2026'));
-    expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeDisabled();
+    expect(notesButton()).not.toBeNull();
+    expect(notesDialog()).toBeNull();
+    expect(text(total())).not.toContain('пересчитаны по курсу'); // раньше стояло строкой под суммой
+    await user.click(screen.getByRole('button', { name: NOTES }));
+    const dialog = notesDialog();
+    expect(dialog).not.toBeNull();
+    expect(Array.from(dialog?.querySelectorAll('li') ?? []).map((li) => text(li))).toEqual(['Остатки в других валютах пересчитаны по курсу.']);
   });
 
-  it('расходы по категориям: названия, суммы и доли', async () => {
+  it('шит закрывается кнопкой «Закрыть» и клавишей Esc', async () => {
     await openHome();
-    const items = Array.from(monthCard()?.querySelectorAll('h3 + ul > li') ?? []).map((li) => text(li));
-    expect(items).toHaveLength(2);
-    expect(items[0]).toContain('Еда');
-    expect(items[0]).toContain(fmt(12_150));
-    expect(items[0]).toContain('98%');
-    expect(items[1]).toContain('Транспорт');
-    expect(items[1]).toContain('2%');
+    await user.click(screen.getByRole('button', { name: NOTES }));
+    expect(notesDialog()).not.toBeNull();
+    await user.click(
+      Array.from(notesDialog()?.querySelectorAll('button') ?? []).find((b) => b.getAttribute('aria-label') === 'Закрыть') as Element,
+    );
+    expect(notesDialog()).toBeNull();
+    await user.click(screen.getByRole('button', { name: NOTES }));
+    expect(notesDialog()).not.toBeNull();
+    await user.keyboard('{Escape}');
+    expect(notesDialog()).toBeNull();
   });
 
-  it('расходы «без категории» — отдельной строкой', async () => {
-    await openHome();
-    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
-    await waitFor(() => expect(text(monthCard())).toContain('Сентябрь 2026'));
-    await waitFor(() => expect(text(monthCard())).toContain('Продукты'));
-    expect(text(monthCard())).toContain('Без категории');
+  it('нет курса: в шапке короткая жёлтая строка, нажатие на неё открывает тот же шит с подробностями', async () => {
+    await openHome({ tables: [] });
+    const amber = screen.getByRole('button', { name: 'Не вошло в итог: нет курса (USD)' });
+    expect(text(total())).not.toContain('Не вошло в итог — нет курса'); // длинной фразы снаружи шита нет
+    expect(notesDialog()).toBeNull();
+    await user.click(amber);
+    const items = Array.from(notesDialog()?.querySelectorAll('li') ?? []).map((li) => text(li));
+    expect(items).toEqual([`Не вошло в итог — нет курса: ${fmt(-1000, 'USD')}.`]);
   });
 
-  it('топ-5 категорий, остальные — одной строкой «ещё N категорий» с общей суммой', async () => {
+  it('жёлтой строки нет, пока все валюты с курсом', async () => {
+    await openHome();
+    expect(text(total())).not.toContain('Не вошло в итог');
+  });
+
+  it('несколько причин сразу: все предложения в шите, по одному на строку', async () => {
     await openHome({
-      setup: async (s) => {
-        const cash = (await s.db.wallets.toArray())[0];
-        const cats = (await s.db.categories.toArray()).filter((c) => c.kind === 'expense');
-        // 7 категорий: 700, 600, ... 100 дирам
-        for (const [i, c] of cats.slice(0, 7).entries()) {
-          await s.transactions.create({ kind: 'expense', walletId: cash?.id ?? '', amountMinor: (7 - i) * 100, categoryId: c.id, occurredOn: '2026-10-10' });
-        }
-      },
-    });
-    const items = Array.from(monthCard()?.querySelectorAll('h3 + ul > li') ?? []).map((li) => text(li));
-    expect(items).toHaveLength(6); // 5 + «ещё»
-    expect(items[5]).toContain('ещё 2 категории');
-    expect(items[5]).toContain(fmt(300)); // 200 + 100
-  });
-
-  it('операции в другой основной валюте не смешиваются с остальными — это объяснено', async () => {
-    const td = await openHome();
-    await write(() => storeOf(td).settings.update({ baseCurrency: 'USD' }));
-    await waitFor(() => expect(text(monthCard())).toContain('Не учтено'));
-    // в октябре 3 расхода и 1 доход (все со снимком в сомони)
-    expect(text(monthCard())).toContain('Не учтено 4 операции');
-    expect(text(monthCard())).toContain('(USD)');
-    // суммы подписаны новой валютой, а не старой
-    expect(summaryRow('Расходы')).toBe(fmt(0, 'USD'));
-  });
-
-  it('в месяце нет расходов — об этом сказано словами', async () => {
-    await openHome({
+      tables: [table({ asOf: '2026-10-01' })],
       setup: async (s) => {
         await seedHistory(s);
+        await s.wallets.create({ name: 'Рубли', currency: 'RUB', kind: 'cash', openingBalanceMinor: 25_000, color: '#dc2626', icon: '₽' });
       },
     });
-    for (let i = 0; i < 3; i++) await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
-    await waitFor(() => expect(text(monthCard())).toContain('Июль 2026'));
-    await waitFor(() => expect(text(monthCard())).toContain('расходов нет'));
+    // рубля в таблице нет — не вошёл; доллар по устаревшему курсу
+    expect(text(total())).toContain('Не вошло в итог: нет курса (RUB)');
+    expect(await readNotes()).toEqual([
+      `Не вошло в итог — нет курса: ${fmt(25_000, 'RUB')}.`,
+      'Курс устарел (USD на 01.10.2026) — итог может быть неточным.',
+    ]);
+  });
+});
+
+describe('«Скрыть суммы»', () => {
+  it('глаз прячет суммы в шапке, на чипах кошельков, в «Можно тратить в день» и в последних операциях — и возвращает их', async () => {
+    await openHome();
+    await waitFor(() => expect(flow('expense')).toBe(fmt(-12_450)));
+    await waitFor(() => expect(document.querySelector('[data-testid="widget-per-day"]')).not.toBeNull());
+    const perDay = () => text(document.querySelector('[data-testid="widget-per-day"]'));
+    const shownTotal = text(total());
+    const shownPerDay = perDay();
+    const shownRecent = recentRows().join('|');
+    expect(screen.getByRole('button', { name: 'Скрыть суммы' })).toHaveAttribute('aria-pressed', 'false');
+    expect(document.querySelectorAll('[aria-label="Сумма скрыта"]')).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Скрыть суммы' }));
+    expect(screen.getByRole('button', { name: 'Показать суммы' })).toHaveAttribute('aria-pressed', 'true');
+    expect(localStorage.getItem(HIDE_KEY)).toBe('1');
+    // шапка: итог и обе капсулы
+    expect(text(total())).toContain('••••');
+    expect(text(total())).not.toMatch(/\d/);
+    expect(flow('income')).toBe('••••');
+    expect(flow('expense')).toBe('••••');
+    // чипы кошельков: названия на месте, остатков нет
+    for (const card of walletCards()) {
+      expect(card).toContain('••••');
+      expect(card).not.toMatch(/\d/);
+    }
+    for (const name of ['Наличные', 'Карта', 'Доллары']) expect(walletCards().some((c) => c.includes(name))).toBe(true);
+    // «Можно тратить в день»
+    expect(perDay()).toContain('••••'); // «≈» перед суммой остаётся, цифр нет
+    expect(perDay()).not.toMatch(/\d/);
+    expect(shownPerDay).toMatch(/\d/);
+    // последние операции: описание видно, суммы — точками
+    const hiddenRecent = recentRows();
+    expect(hiddenRecent).toHaveLength(5);
+    expect(hiddenRecent[0]).toContain('аванс');
+    for (const row of hiddenRecent) expect(row).toContain('••••');
+    expect(hiddenRecent.join('|')).not.toBe(shownRecent);
+    expect(hiddenRecent.join('|')).not.toContain('5 000');
+    expect(document.querySelectorAll('[aria-label="Сумма скрыта"]').length).toBeGreaterThanOrEqual(2 + 1 + 3 + 1 + 5);
+
+    await user.click(screen.getByRole('button', { name: 'Показать суммы' }));
+    expect(screen.getByRole('button', { name: 'Скрыть суммы' })).toHaveAttribute('aria-pressed', 'false');
+    expect(localStorage.getItem(HIDE_KEY)).toBe('0');
+    expect(document.querySelectorAll('[aria-label="Сумма скрыта"]')).toHaveLength(0);
+    expect(text(total())).toBe(shownTotal);
+    expect(flow('income')).toBe(fmt(500_000, 'TJS', 'always'));
+    expect(flow('expense')).toBe(fmt(-12_450));
+    expect(walletCards().find((c) => c.includes('Наличные'))).toContain(fmt(484_250));
+    expect(perDay()).toBe(shownPerDay);
+    expect(recentRows().join('|')).toBe(shownRecent);
+  });
+
+  it('выбор запоминается на устройстве: при следующем открытии суммы уже спрятаны', async () => {
+    localStorage.setItem(HIDE_KEY, '1');
+    await openHome();
+    expect(screen.getByRole('button', { name: 'Показать суммы' })).toHaveAttribute('aria-pressed', 'true');
+    expect(text(total())).toContain('••••');
+    expect(text(total())).not.toMatch(/\d/);
+    expect(recentRows().every((r) => r.includes('••••'))).toBe(true);
+  });
+
+  it('жёлтая строка «нет курса» остаётся и при спрятанных суммах: в ней только коды валют, без сумм', async () => {
+    localStorage.setItem(HIDE_KEY, '1');
+    await openHome({ tables: [] });
+    expect(text(total())).toContain('Не вошло в итог: нет курса (USD)');
+    expect(text(total())).not.toMatch(/\d/);
+  });
+
+  it('пояснение по ⓘ тоже не выдаёт сумму, пока она спрятана: называет только валюту', async () => {
+    localStorage.setItem(HIDE_KEY, '1');
+    await openHome({ tables: [] });
+    expect(await readNotes()).toEqual(['Не вошло в итог — нет курса: USD.']);
+  });
+});
+
+describe('«Требует внимания»', () => {
+  it('ничего не просрочено — строки нет вовсе', async () => {
+    await openHome();
+    // строка появляется после чтения долгов, платежей, лимитов и целей — ждём, пока виджеты ниже дочитались
+    await waitFor(() => expect(document.querySelector('[data-testid="widget-per-day"]')).not.toBeNull());
+    await waitFor(() => expect(flow('income')).not.toBe(''));
+    expect(document.querySelector('[data-testid="attention-row"]')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Требует внимания' })).toBeNull();
+  });
+
+  it('просроченный долг — тонкая строка со ссылкой на этот долг', async () => {
+    let debtId = '';
+    await openHome({
+      setup: async (s) => {
+        hist = await seedHistory(s);
+        debtId = (await s.debts.create({ direction: 'borrowed', counterparty: 'Рустам', principalMinor: 10_000, currency: 'TJS', openedOn: '2026-09-01', dueOn: '2026-10-01' })).id;
+      },
+    });
+    await waitFor(() => expect(document.querySelector('[data-testid="attention-row"]')).not.toBeNull());
+    const row = document.querySelector('[data-testid="attention-row"]');
+    expect(text(row)).toContain('Долг просрочен: Рустам');
+    expect(row?.querySelector('a')).toHaveAttribute('href', `/debts/${debtId}`);
   });
 });
 
 describe('последние операции', () => {
   it('пять последних, новые сверху, и ссылка «Все операции»', async () => {
     await openHome();
-    const section = document.querySelector('section[aria-labelledby="home-recent"]');
-    const rows = Array.from(section?.querySelectorAll('button') ?? []).map((b) => text(b));
+    const rows = recentRows();
     expect(rows).toHaveLength(5);
     expect(rows[0]).toContain('аванс');
     expect(rows[1]).toContain('обед');
@@ -276,7 +390,8 @@ describe('пустые состояния', () => {
     await openHome({ setup: async () => undefined });
     expect(text(total())).toContain(fmt(0));
     expect(walletCards()).toHaveLength(1);
-    expect(summaryRow('Расходы')).toBe(fmt(0));
+    await waitFor(() => expect(flow('expense')).toBe(fmt(0)));
+    expect(flow('income')).toBe(fmt(0, 'TJS', 'always'));
     expect(screen.getByText('Операций пока нет')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Добавить операцию' })).toHaveAttribute('href', '/add');
     expect(screen.queryByRole('link', { name: 'Все операции' })).toBeNull();
@@ -349,57 +464,48 @@ describe('расчёты главной (чистые функции)', () => {
     balances.set('e', 9_000_000_000_000_000);
     expect(computeHomeTotal(two, balances, 'TJS', () => null)).toBeNull();
   });
-
-  it('topCategories и sharePercent', () => {
-    const rows = [5, 4, 3, 2, 1, 1, 1].map((n, i) => ({ categoryId: `c${i}`, totalMinor: n * 100 }));
-    expect(topCategories(rows)).toEqual({ top: rows.slice(0, 5), restCount: 2, restMinor: 200 });
-    expect(topCategories(rows.slice(0, 3))).toEqual({ top: rows.slice(0, 3), restCount: 0, restMinor: 0 });
-    expect(topCategories([])).toEqual({ top: [], restCount: 0, restMinor: 0 });
-    expect(sharePercent(1, 3)).toBe(33);
-    expect(sharePercent(2, 3)).toBe(67);
-    expect(sharePercent(5, 0)).toBe(0);
-    expect(sharePercent(0, 10)).toBe(0);
-    expect(sharePercent(10, 10)).toBe(100);
-  });
 });
 
 describe('«Всего» по курсу, введённому в операции', () => {
   it('курса из сети нет: доллары пересчитаны по введённому курсу, «≈» и пояснение с датой, «нет курса» нет', async () => {
     const td = await openHome({ tables: [] });
-    expect(text(total())).toContain('Не вошло в итог — нет курса'); // пока курс не вводили
+    expect(text(total())).toContain('Не вошло в итог: нет курса (USD)'); // пока курс не вводили
+    expect((await readNotes()).join(' ')).toContain('Не вошло в итог — нет курса');
     await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 11));
     // 500 750 − 10 $ × 11 = 500 750 − 11 000 = 489 750
     await waitFor(() => expect(text(total())).toContain(`≈ ${fmt(489_750)}`));
-    expect(text(total())).toContain('Остаток в USD пересчитан по введённому вами курсу от 10.10');
     expect(text(total())).not.toContain('нет курса');
-    expect(text(total())).not.toContain('Остатки в других валютах пересчитаны по курсу'); // курс не из сети — другая фраза
-    expect(text(total())).not.toContain('устарел');
+    expect(await readNotes()).toEqual(['Остаток в USD пересчитан по введённому вами курсу от 10.10.']);
   });
 
   it('свежий курс Нацбанка сильнее введённого: итог по Нацбанку, пояснения про введённый курс нет', async () => {
     const td = await openHome();
     await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 99));
     expect(text(total())).toContain(`≈ ${fmt(489_850)}`);
-    expect(text(total())).toContain('Остатки в других валютах пересчитаны по курсу');
-    expect(text(total())).not.toContain('введённому');
+    const notes = await readNotes();
+    expect(notes).toEqual(['Остатки в других валютах пересчитаны по курсу.']);
+    expect(notes.join(' ')).not.toContain('введённому');
   });
 
   it('курс Нацбанка устарел: введённый его заменяет, и вместо «Курс устарел» сказано, откуда курс', async () => {
     const td = await openHome({ tables: [table({ asOf: '2026-10-01' })] });
-    expect(text(total())).toContain('Курс устарел (USD на 01.10.2026)');
+    expect(await readNotes()).toContain('Курс устарел (USD на 01.10.2026) — итог может быть неточным.');
     await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 11));
-    await waitFor(() => expect(text(total())).toContain('по введённому вами курсу от 10.10'));
-    expect(text(total())).toContain(`≈ ${fmt(489_750)}`);
-    expect(text(total())).not.toContain('Курс устарел');
+    await waitFor(() => expect(text(total())).toContain(`≈ ${fmt(489_750)}`));
+    const notes = (await readNotes()).join(' ');
+    expect(notes).toContain('по введённому вами курсу от 10.10');
+    expect(notes).not.toContain('Курс устарел');
   });
 
   it('«Сбросить» в Настройках (forget) возвращает «нет курса»', async () => {
     const td = await openHome({ tables: [] });
     await write(async () => td.rates.rememberEnteredRate('USD', 'TJS', 11));
-    await waitFor(() => expect(text(total())).toContain('введённому'));
+    await waitFor(() => expect(text(total())).toContain('≈'));
+    expect((await readNotes()).join(' ')).toContain('введённому');
     await write(async () => td.rates.forgetEnteredRate('USD', 'TJS'));
-    await waitFor(() => expect(text(total())).toContain('Не вошло в итог — нет курса'));
+    await waitFor(() => expect(text(total())).toContain('Не вошло в итог: нет курса (USD)'));
     expect(text(total())).not.toContain('≈');
+    expect((await readNotes()).join(' ')).toContain('Не вошло в итог — нет курса');
   });
 
   it('основная валюта — доллар: «Не вошло в итог» не кончается двойной точкой («4 842,50 с..»)', async () => {
@@ -410,9 +516,12 @@ describe('«Всего» по курсу, введённому в операци
         await s.settings.update({ baseCurrency: 'USD' });
       },
     });
-    await waitFor(() => expect(text(total())).toContain('Не вошло в итог — нет курса'));
-    expect(text(total())).not.toContain('..');
-    expect(text(total())).toMatch(/нет курса: .*с\.$/);
+    await waitFor(() => expect(text(total())).toContain('Не вошло в итог: нет курса (TJS)'));
+    const notes = await readNotes();
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('Не вошло в итог — нет курса');
+    expect(notes[0]).not.toContain('..');
+    expect(notes[0]).toMatch(/нет курса: .*с\.$/);
   });
 });
 

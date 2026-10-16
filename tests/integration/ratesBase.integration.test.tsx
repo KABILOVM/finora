@@ -8,6 +8,7 @@ import { AppRoutes } from '@/App';
 import { ALICE, eventually, fakeAuthClient, makeTestDeps, pick, renderAppRoot } from '@/app/testkit';
 import { findByRole, screen, user, waitFor } from '@/components/testUtils';
 import { ensureSeeded, openStore, type Store } from '@/db';
+import { formatMinor } from '@/domain/money';
 import { tapAmount, RATES_NOW, table } from '@/features/transactions/__fixtures__/opsKit';
 import { todayLocal } from '@/lib/dates';
 import { createRateService } from '@/rates/service';
@@ -20,6 +21,7 @@ vi.mock('virtual:pwa-register/react', () => ({
 }));
 
 const text = () => document.body.textContent ?? '';
+const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
 const rates = (usd: number) =>
   createRateService({
     providers: [],
@@ -140,7 +142,7 @@ describe('атака 8: курсы, снимки и основная валют�
     storeB.close();
   }, 60_000);
 
-  it('смена основной валюты TJS→USD через «Настройки»: старые операции остаются в сомони, итоги месяца их не смешивают и честно говорят «Не учтено»; на втором устройстве то же', async () => {
+  it('смена основной валюты TJS→USD через «Настройки»: старые операции остаются в сомони, итоги месяца (капсула расхода на «Главной» и «Аналитика») их не смешивают, «Аналитика» честно говорит «Не учтено»; на втором устройстве то же', async () => {
     const server = createMemoryServer();
     const a = uiDevice(server, 'dev-a', 10.9);
     const open = a.td.deps.openStore;
@@ -168,19 +170,26 @@ describe('атака 8: курсы, снимки и основная валют�
     expect(olds.map((t) => t.baseCurrency)).toEqual(['TJS', 'TJS']);
     expect(olds.map((t) => t.baseAmountMinor).sort((x, y) => x - y)).toEqual([109_00, 300_00]);
 
-    // главная: итоги месяца только в USD, про остальное сказано вслух
+    // главная: капсула расхода месяца — только в USD, старые 300 с. и 10 $ (=109 с.) в неё не вошли
     await user.click(screen.getAllByRole('link', { name: 'Главная' })[0] as HTMLElement);
     await waitFor(() => screen.getByRole('heading', { name: 'Главная', level: 1 }));
+    const flowExpense = () => norm(document.querySelector('[data-testid="home-flow-expense"]')?.textContent);
+    await waitFor(() => expect(flowExpense()).toBe(norm(formatMinor(-5_00, 'USD'))));
+    expect(flowExpense()).not.toMatch(/300|109|409/);
+    expect(norm(document.querySelector('[data-testid="home-flow-income"]')?.textContent)).toBe(norm(formatMinor(0, 'USD', { sign: 'always' })));
+
+    // «Аналитика»: те же итоги в USD, а про остальное сказано вслух
+    await user.click(screen.getAllByRole('link', { name: 'Аналитика' })[0] as HTMLElement);
+    await waitFor(() => screen.getByRole('heading', { name: 'Аналитика', level: 1 }));
     const month = await waitFor(() => {
-      const el = document.querySelector<HTMLElement>('[aria-label="Итоги месяца"]');
+      const el = document.querySelector<HTMLElement>('[data-testid="analytics-summary"]');
       if (!el) throw new Error('нет карточки итогов');
       return el;
     });
     await waitFor(() => expect(month.textContent).toMatch(/Не учтено 2 операции/));
-    expect(month.textContent).toMatch(/в другой основной валюте/);
-    const expenses = Array.from(month.querySelectorAll('div')).find((n) => n.querySelector('dt')?.textContent === 'Расходы')!;
-    expect(expenses.textContent).toMatch(/5/);
-    expect(expenses.textContent).not.toMatch(/300|109|409/);
+    expect(month.textContent).toMatch(/в другой основной валюте, чем сейчас \(USD\)/);
+    expect(norm(month.querySelector('.money')?.textContent)).toBe(norm(formatMinor(5_00, 'USD'))); // «Расходы за …»
+    expect(month.textContent).not.toMatch(/300|109|409/);
 
     // второе устройство получает те же снимки
     await eventually(async () => expect((await storeA.sync.counts()).pending).toBe(0), 15_000);

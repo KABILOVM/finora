@@ -92,7 +92,7 @@ test.describe('18. Долги и кредиты', () => {
     const expensesBefore = await monthRow(page, 'Расходы');
     const incomeBefore = await monthRow(page, 'Доходы');
     expect(expensesBefore).toMatch(moneyExact('0 с.'));
-    await expect(page.getByTestId('debts-widget')).toHaveCount(0); // долгов нет — виджета нет
+    await expect(page.getByTestId('attention-row')).toHaveCount(0); // долгов нет — строки «Требует внимания» нет
 
     // экран «Долги»: пустое состояние понятно
     await goSection(page, 'Долги');
@@ -129,9 +129,7 @@ test.describe('18. Долги и кредиты', () => {
     expect(await homeTotalText(page)).toMatch(money('500 с.'));
     expect(await monthRow(page, 'Расходы')).toBe(expensesBefore);
     expect(await monthRow(page, 'Доходы')).toBe(incomeBefore);
-    const widget = page.getByTestId('debts-widget');
-    await expect(widget).toBeVisible();
-    await expect(widget.getByTestId('debts-widget-lent')).toContainText(money('500 с.'));
+    await expect(page.getByTestId('attention-row')).toHaveCount(0); // долг не просрочен — на «Главной» о нём тишина
     await shot(page, '18-home-widget', testInfo);
 
     // в журнале операций выдача несёт метку «Долг: Алишер» и не выглядит как «Без категории»
@@ -164,7 +162,6 @@ test.describe('18. Долги и кредиты', () => {
     expect(await homeTotalText(page)).toMatch(money('700 с.'));
     expect(await monthRow(page, 'Расходы')).toBe(expensesBefore);
     expect(await monthRow(page, 'Доходы')).toBe(incomeBefore);
-    await expect(page.getByTestId('debts-widget').getByTestId('debts-widget-lent')).toContainText(money('300 с.'));
 
     // после перезагрузки всё на месте
     await page.reload();
@@ -191,10 +188,10 @@ test.describe('18. Долги и кредиты', () => {
     // просроченный стоит первым
     await expect(page.getByRole('list', { name: 'Мне должны' }).getByRole('link').first()).toContainText('Бобур');
 
-    // «Главная»: ближайшее — просрочка, подсвечена
+    // «Главная»: просрочка попала в строку «Требует внимания»
     await goSection(page, 'Главная');
-    const next = page.getByTestId('debts-widget-next');
-    await expect(next).toContainText('Просрочен на 3 дня: Бобур');
+    const next = page.getByTestId('attention-row').getByRole('link', { name: /Долг просрочен: Бобур/ });
+    await expect(next).toBeVisible();
     await shot(page, '18-home-overdue', testInfo);
     await next.click();
     await expect(page.getByRole('heading', { level: 1, name: 'Бобур' })).toBeVisible();
@@ -233,7 +230,7 @@ test.describe('18. Долги и кредиты', () => {
     await expect(debtLink(page, 'Бобур')).toContainText('Закрыт');
     await shot(page, '18-debts-closed', testInfo);
     await goSection(page, 'Главная');
-    await expect(page.getByTestId('debts-widget-next')).not.toContainText('Бобур'); // закрытый в «ближайших» не участвует
+    await expect(page.getByTestId('attention-row')).toHaveCount(0); // закрытый долг строку «Требует внимания» не вызывает
 
     // открыть снова
     await goSection(page, 'Долги');
@@ -381,7 +378,7 @@ test.describe('18. Долги и кредиты', () => {
     await pay.getByRole('button', { name: 'Закрыть' }).click();
 
     await goSection(page, 'Главная');
-    await expect(page.getByTestId('debts-widget')).toBeVisible();
+    await expect(page.getByTestId('home-total')).toBeVisible();
     await noHorizontalScroll(page, 'Главная');
     await shot(page, '18-layout-home', testInfo);
     await goSection(page, 'Операции');

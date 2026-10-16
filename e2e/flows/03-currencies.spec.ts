@@ -1,5 +1,5 @@
 import {
-  createWallet, dismissToasts, expect, fillTx, goSection, homeTotalText, homeWallet, money, moneyExact, monthRow, norm,
+  createWallet, dismissToasts, expect, fillTx, goSection, homeTotalText, homeWallet, money, moneyExact, monthRow, norm, totalNotes,
   openApp, shot, sheet, test, walletRowText,
 } from '../helpers';
 
@@ -58,7 +58,7 @@ test.describe('3. Кошельки и валюты', () => {
     expect(entered, 'после ввода курса в операции «Всего» больше не просит курс').not.toMatch(/нет курса/i);
     expect(entered).toMatch(/≈/);
     expect(entered).toMatch(money('990 с.')); // 0 с. наличные + 90 $ × 11
-    expect(entered).toContain(`Остаток в USD пересчитан по введённому вами курсу от ${day}`);
+    expect(await totalNotes(page)).toContain(`Остаток в USD пересчитан по введённому вами курсу от ${day}`);
     await shot(page, '03-home-entered-rate', testInfo);
     await goSection(page, 'Кошельки');
     expect(norm(await page.getByTestId('wallets-total').innerText())).toMatch(/≈/);

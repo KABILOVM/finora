@@ -1,7 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Badge } from '@/components/Badge';
-import { Card } from '@/components/Card';
-import { Icon } from '@/components/Icon';
 import { currencyInfo } from '@/domain/currency';
 import type { CurrencyCode } from '@/domain/types';
 import { FlagIcon } from '@/features/converter/FlagIcon';
@@ -21,8 +18,9 @@ function rowText(row: Row, base: CurrencyCode): string | null {
 }
 
 /**
- * Карточка «Курсы» для «Главной»: доллар и рубль к основной валюте, дата курса и пометка «устарел». Нажатие открывает «Курсы и
- * конвертер». Курсы лежат на устройстве, поэтому карточка работает без интернета; нет курса — так и пишем, без выдуманных цифр.
+ * Левая ячейка полосы «Курсы и погода» на «Главной»: доллар и рубль к основной валюте, две строки по 20 px. Нажатие открывает
+ * «Курсы и конвертер». Курсы лежат на устройстве, поэтому работает без интернета; нет курса — так и пишем, без выдуманных цифр.
+ * Дата курса и «устарел» — в имени ссылки и жёлтой точкой, чтобы не занимать место.
  */
 export default function RatesWidget({ base }: { base: CurrencyCode }) {
   const { getRate } = useRates();
@@ -33,7 +31,7 @@ export default function RatesWidget({ base }: { base: CurrencyCode }) {
   const manual = known.some((r) => r.lookup.manual);
 
   const label = known.length
-    ? `Курсы к ${currencyInfo(base).name}: ${known.map((r) => rowText(r, base)).join('; ')}${stale ? '. Курсы устарели' : ''}. Открыть курсы и конвертер`
+    ? `Курсы к ${currencyInfo(base).name}: ${known.map((r) => rowText(r, base)).join('; ')}${asOf ? `, на ${shortAsOf(asOf)}` : ''}${stale ? '. Курсы устарели' : ''}${manual && !stale ? '. Свой курс' : ''}. Открыть курсы и конвертер`
     : 'Курсы валют: пока нет данных. Открыть курсы и конвертер';
 
   return (
@@ -41,44 +39,35 @@ export default function RatesWidget({ base }: { base: CurrencyCode }) {
       to="/rates"
       aria-label={label}
       data-testid="rates-widget"
-      className="block min-w-0 rounded-3xl transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/40"
+      className="press relative flex min-h-[64px] min-w-0 flex-col justify-center gap-0.5 rounded-l-3xl px-3 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand/40"
     >
-      <Card className="h-full !p-3 hover:bg-surface-2 md:!p-5">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-muted">Курсы</h2>
-          <Icon name="chevron" size={18} className="shrink-0 text-muted" />
-        </div>
-        <ul className="mt-1.5 space-y-1.5">
-          {rows.map((r) => (
-            <li key={r.code} className="flex items-center gap-2" data-testid="rates-widget-row">
-              <FlagIcon code={r.code} size={24} />
-              {r.lookup ? (
-                <span className="min-w-0 flex-1 text-sm font-semibold leading-tight">
-                  <span className="block text-muted">
-                    {formatUnits(scaleRate(r.lookup.rate).units)} {r.code}
-                  </span>
-                  <span className="block tabular-nums text-text">
-                    {formatWidgetRate(scaleRate(r.lookup.rate).value)} {currencyInfo(base).symbol}
-                  </span>
-                </span>
-              ) : (
-                <span className="min-w-0 flex-1 text-sm leading-tight text-muted">
-                  <span className="block font-semibold">{r.code}</span>
-                  <span className="block">нет курса</span>
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-        {asOf && (
-          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-            <span>на {shortAsOf(asOf)}</span>
-            {stale && <Badge tone="warning">устарел</Badge>}
-            {manual && !stale && <Badge tone="brand">свой курс</Badge>}
-          </p>
-        )}
-        {!asOf && <p className="mt-2 text-xs text-muted">Нажмите, чтобы обновить</p>}
-      </Card>
+      {rows.map((r, i) => (
+        <span key={r.code} data-testid="rates-widget-row" style={{ '--i': i } as React.CSSProperties} className="pop-spring flex items-center gap-2 text-sm leading-5">
+          <FlagIcon code={r.code} size={18} />
+          {r.lookup ? (
+            <>
+              <span className="text-muted">
+                {formatUnits(scaleRate(r.lookup.rate).units)} {r.code}
+              </span>
+              <span className="ml-auto font-semibold tabular-nums">
+                {formatWidgetRate(scaleRate(r.lookup.rate).value)} {currencyInfo(base).symbol}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-muted">{r.code}</span>
+              <span className="ml-auto text-muted">нет курса</span>
+            </>
+          )}
+        </span>
+      ))}
+      {(stale || manual) && (
+        <span
+          aria-hidden="true"
+          title={stale ? 'Курс устарел' : 'Свой курс'}
+          className={`absolute right-2 top-2 h-2 w-2 rounded-full ${stale ? 'bg-warning' : 'bg-brand'}`}
+        />
+      )}
     </Link>
   );
 }

@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeaderStatus } from '@/app/HeaderStatus';
 import { SyncProvider } from '@/sync/syncContext';
@@ -189,11 +190,14 @@ describe('HeaderStatus: SyncBadge получает ПОЛНЫЙ статус д�
 
   it('локальный режим (без движка): «Только на устройстве», никакой «Синхронизации»', () => {
     render(
-      <SyncProvider engine={null}>
-        <HeaderStatus />
-      </SyncProvider>,
+      <MemoryRouter>
+        <SyncProvider engine={null}>
+          <HeaderStatus />
+        </SyncProvider>
+      </MemoryRouter>,
     );
     expect(screen.getByRole('status')).toHaveTextContent('Только на устройстве');
+    expect(screen.getByRole('link', { name: /Только на устройстве/ })).toHaveAttribute('href', '/settings'); // значок ведёт к копии
     expect(screen.queryByText(/Синхронизировано|Ещё не синхронизировано/)).toBeNull();
   });
 });

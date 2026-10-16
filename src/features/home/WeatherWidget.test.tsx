@@ -70,35 +70,37 @@ async function open(setup?: (s: Store) => Promise<unknown>) {
     td,
     '/',
   );
-  await eventually(() => expect(widget()).not.toBeNull());
+  // пока читаются настройки, на месте карточки мерцающая заглушка (aria-busy): ждём настоящую
+  await eventually(() => {
+    expect(widget()).not.toBeNull();
+    expect(widget()?.hasAttribute('aria-busy')).toBe(false);
+  });
   return td;
 }
 
 describe('виджет «Погода» на «Главной»', () => {
-  it('город не выбран — предлагает выбрать и в сеть не ходит', async () => {
+  it('город не выбран — предлагает определить место или выбрать город и в сеть не ходит', async () => {
     await open();
-    expect(norm(widget()?.textContent)).toContain('Покажем погоду там, где вы');
-    expect(norm(widget()?.textContent)).toContain('Выбрать город');
+    expect(norm(widget()?.textContent)).toContain('Определить место');
+    expect(widget()?.querySelector('a[aria-label="Выбрать город"]')).not.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('город по умолчанию из списка, но не выбранный человеком, считается невыбранным', async () => {
     localStorage.setItem('finora:weather:cities:v1', JSON.stringify([...DEFAULT_CITIES])); // список есть, выбора нет
     await open();
-    expect(norm(widget()?.textContent)).toContain('Выбрать город');
+    expect(widget()?.querySelector('a[aria-label="Выбрать город"]')).not.toBeNull();
     expect(norm(widget()?.textContent)).toContain('Определить место');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('свежий прогноз из памяти устройства — показывает без запроса: температура, состояние, днём и ночью, город', async () => {
+  it('свежий прогноз из памяти устройства — показывает без запроса: температура и город; состояние и «днём/ночью» — в имени ссылки', async () => {
     choose(KHUJAND);
     cacheFor(KHUJAND, 5 * 60 * 1000);
     await open();
     const text = norm(widget()?.textContent);
     expect(text).toContain('+23°');
-    expect(text).toContain('Ясно');
     expect(text).toContain('Худжанд');
-    expect(text).toContain('днём +28°, ночью −1°');
     expect(fetchMock).not.toHaveBeenCalled();
     expect(widget()?.getAttribute('aria-label')).toBe('Погода, Худжанд: +23°, Ясно, днём +28°, ночью −1°. Открыть погоду');
   });
@@ -111,7 +113,7 @@ describe('виджет «Погода» на «Главной»', () => {
     await waitFor(() => expect(norm(widget()?.textContent)).toContain('+25°'));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]![0])).toContain('api.open-meteo.com');
-    expect(norm(widget()?.textContent)).not.toMatch(/на \d\d:\d\d/);
+    expect(widget()?.getAttribute('aria-label')).not.toContain('Данные на ');
   });
 
   it('нет сети, но есть старый прогноз — показывает его и пишет, на какое время данные', async () => {
@@ -119,9 +121,9 @@ describe('виджет «Погода» на «Главной»', () => {
     const f = cacheFor(KHUJAND, 3 * 60 * 60 * 1000);
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
     await open();
-    await waitFor(() => expect(norm(widget()?.textContent)).toMatch(/на \d\d:\d\d/));
+    await waitFor(() => expect(widget()?.getAttribute('aria-label')).toMatch(/Данные на \d\d:\d\d/));
     expect(norm(widget()?.textContent)).toContain('+23°');
-    expect(widget()?.getAttribute('aria-label')).toContain('Данные на ');
+    expect(widget()?.querySelector('[title^="Данные на"]')).not.toBeNull(); // жёлтая точка у карточки
     expect(f.fetchedAt).toBeTruthy();
   });
 
@@ -250,7 +252,7 @@ describe('виджет «Погода» на «Главной»', () => {
       expect(norm(alert.textContent)).toContain('Доступ к местоположению не разрешён');
       expect(fetchMock).not.toHaveBeenCalled();
       expect((await storeOf(td).settings.get())?.weather).toBeNull();
-      expect(norm(widget()?.textContent)).toContain('Выбрать город');
+      expect(widget()?.querySelector('a[aria-label="Выбрать город"]')).not.toBeNull();
     });
 
     it('кнопка занята, пока устройство отвечает: второе нажатие не плодит запросов', async () => {

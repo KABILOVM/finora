@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/Button';
+import { Spinner } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { MoneyText } from '@/components/MoneyText';
+import { Icon } from '@/components/Icon';
 import { useToast } from '@/components/Toast';
 import { useStore, useUpcoming, ValidationError, type UpcomingItem } from '@/db';
 import type { IsoDate } from '@/domain/types';
+import { HomeMoney } from '@/features/home/hideAmounts';
 import { useRates } from '@/rates/hooks';
 import { needsFx, pickAutoRate } from '@/recurring/fx';
 import { viewRule } from '@/recurring/ruleView';
@@ -15,27 +16,32 @@ import { PostSheet } from './PostSheet';
 import { RuleIcon } from './RuleIcon';
 import { useRecurringLookups, type RecurringLookups } from './useRecurringData';
 
+/** Сколько платежей показываем на «Главной»; остальное — по ссылке «Ещё N». */
+export const WIDGET_UPCOMING_ROWS = 2;
+
 function WidgetRow({
   item,
   lookups,
   today,
   busy,
+  index,
   onPost,
 }: {
   item: UpcomingItem;
   lookups: RecurringLookups;
   today: IsoDate;
   busy: boolean;
+  index: number;
   onPost: () => void;
 }) {
   const v = viewRule(item.rule, lookups.wallets, lookups.categories, lookups.base);
   const when = whenText(item.date, today);
   return (
-    <li className="flex items-center gap-3 px-4 py-2">
+    <li style={{ '--i': index } as React.CSSProperties} className="pop-spring flex min-h-[56px] items-center gap-3 px-3 py-1">
       <RuleIcon view={v} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-base font-medium text-text">{v.title}</p>
-        <p className="truncate text-sm">
+        <p className="truncate text-[15px] font-semibold leading-tight text-text">{v.title}</p>
+        <p className="truncate text-xs leading-tight">
           {item.status === 'overdue' ? (
             <span className="font-semibold text-danger">{overdueText(item.date, today)}</span>
           ) : (
@@ -43,30 +49,29 @@ function WidgetRow({
           )}
         </p>
       </div>
-      <div className="flex shrink-0 flex-col items-end">
-        <MoneyText
-          minor={v.signedMinor}
-          currency={v.currency}
-          tone={v.tone}
-          sign={v.tone === 'income' ? 'always' : 'auto'}
-          className="text-base font-semibold"
-        />
-        <Button
-          variant="ghost"
-          loading={busy}
-          className="-mr-3 !min-h-[44px] !px-3"
-          aria-label={`Провести: ${v.title}, ${when}`}
-          onClick={onPost}
-        >
-          Провести
-        </Button>
-      </div>
+      <HomeMoney
+        minor={v.signedMinor}
+        currency={v.currency}
+        tone={v.tone}
+        sign={v.tone === 'income' ? 'always' : 'auto'}
+        className="shrink-0 text-[15px] font-semibold"
+      />
+      <button
+        type="button"
+        disabled={busy}
+        aria-busy={busy}
+        aria-label={`Провести: ${v.title}, ${when}`}
+        onClick={onPost}
+        className="press -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand hover:bg-brand/20 disabled:opacity-60"
+      >
+        {busy ? <Spinner size={18} /> : <Icon name="check" size={22} />}
+      </button>
     </li>
   );
 }
 
 /**
- * «Ближайшие платежи» для «Главной»: просроченные и ближайшие 7 дней, до 4 строк (остальное — «Ещё N»), кнопка «Провести».
+ * «Ближайшие платежи» для «Главной»: просроченные и ближайшие 7 дней, до 2 строк (остальное — «Ещё N»), круглая кнопка «Провести».
  * Если курс не нужен — платёж записывается в одно касание; если нужен (кошелёк в чужой валюте) — открывается окно, где его
  * можно ввести. Нет платежей — виджет ничего не рисует.
  */
@@ -82,7 +87,7 @@ export default function UpcomingWidget() {
   const [posting, setPosting] = useState<{ ruleId: string; date: IsoDate } | null>(null);
 
   if (!items || !lookups) return null;
-  const { rows, more } = widgetRows(items, today);
+  const { rows, more } = widgetRows(items, today, WIDGET_UPCOMING_ROWS);
   if (rows.length === 0) return null;
 
   const post = async (item: UpcomingItem) => {
@@ -126,7 +131,7 @@ export default function UpcomingWidget() {
   return (
     <section aria-labelledby="home-upcoming">
       <div className="-mb-1 -mt-1 flex items-center justify-between gap-3 px-1">
-        <h2 id="home-upcoming" className="text-lg font-bold">
+        <h2 id="home-upcoming" className="text-base font-semibold text-muted">
           Ближайшие платежи
         </h2>
         <Link to="/recurring" className="inline-flex min-h-[44px] shrink-0 items-center text-base font-semibold text-brand">
@@ -135,13 +140,14 @@ export default function UpcomingWidget() {
       </div>
       <Card padding="none">
         <ul className="divide-y divide-border">
-          {rows.map((item) => (
+          {rows.map((item, i) => (
             <WidgetRow
               key={itemKey(item)}
               item={item}
               lookups={lookups}
               today={today}
               busy={busyKeys.has(itemKey(item))}
+              index={i}
               onPost={() => void post(item)}
             />
           ))}

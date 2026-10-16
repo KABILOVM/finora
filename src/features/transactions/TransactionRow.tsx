@@ -13,13 +13,15 @@ export interface TransactionRowProps {
   /** Метку «ждёт отправки» показываем, только если синхронизация вообще включена: в локальном режиме отправлять нечего. */
   syncEnabled: boolean;
   onOpen: (id: string) => void;
+  /** true — суммы скрыты (режим «скрыть суммы» на «Главной»). */
+  maskAmounts?: boolean;
 }
 
 /**
  * Строка операции: значок категории, название, кошелёк и заметка, сумма цветом, метки синхронизации.
  * Операция по долгу несёт метку «Долг: <имя>», операция по расписанию — «Регулярный платёж».
  */
-export function TransactionRow({ tx, wallets, categories, syncEnabled, onOpen }: TransactionRowProps) {
+export function TransactionRow({ tx, wallets, categories, syncEnabled, onOpen, maskAmounts = false }: TransactionRowProps) {
   const v = describeTx(tx, wallets, categories);
   const rejected = tx.syncError !== null;
   const waiting = !rejected && syncEnabled && tx.dirty === 1;
@@ -45,14 +47,20 @@ export function TransactionRow({ tx, wallets, categories, syncEnabled, onOpen }:
       }
       trailing={
         <div className="flex flex-col items-end gap-0.5">
-          <MoneyText
-            minor={v.signedMinor}
-            currency={v.currency}
-            tone={v.tone}
-            sign={v.tone === 'income' ? 'always' : 'auto'}
-            className="text-base font-semibold"
-          />
-          {v.second && <span className="money text-xs text-muted">{v.second}</span>}
+          {maskAmounts ? (
+            <span className="money text-base font-semibold text-muted" aria-label="Сумма скрыта">
+              ••••
+            </span>
+          ) : (
+            <MoneyText
+              minor={v.signedMinor}
+              currency={v.currency}
+              tone={v.tone}
+              sign={v.tone === 'income' ? 'always' : 'auto'}
+              className="text-base font-semibold"
+            />
+          )}
+          {v.second && !maskAmounts && <span className="money text-xs text-muted">{v.second}</span>}
           {rejected && <Badge tone="danger">не принято сервером</Badge>}
           {waiting && <span className="text-xs text-muted">ждёт отправки</span>}
         </div>

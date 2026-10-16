@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addTx, dismissToasts, expect, goSection, money, norm, openApp, sheet, shot, test } from '../helpers';
+import { addTx, dismissToasts, expect, goSection, homeWallet, money, norm, openApp, sheet, shot, test } from '../helpers';
 
 /** «Сегодня» закреплено: 15 октября 2026 (вторая половина месяца — работает подсказка «пора отложить»). */
 const NOW = new Date('2026-10-15T09:00:00Z');
@@ -45,23 +45,19 @@ test.describe('37. Цели накопления', () => {
     await noHorizontalScroll(page);
     await shot(page, '37-wallets-goal', testInfo);
 
-    // виджет «Цели» на «Главной» (вместе с подсказкой)
+    // «Главная»: подсказка «Пора отложить» — в строке «Требует внимания», кошелёк-цель — в ленте чипов
     await goSection(page, 'Главная');
-    const widget = page.getByTestId('goals-widget');
-    await expect(widget).toBeVisible();
-    await expect(widget).toContainText('Отпуск');
-    await expect(widget).toContainText('10%');
-    await expect(page.getByTestId('goals-widget-nudge')).toBeVisible();
+    const attention = page.getByTestId('attention-row');
+    await expect(attention).toContainText('Пора отложить: Отпуск');
+    await expect(homeWallet(page, 'Отпуск')).toBeVisible();
     await noHorizontalScroll(page);
-    await widget.scrollIntoViewIfNeeded();
     await shot(page, '37-home-goals', testInfo);
 
-    // пополнение: доход 900 на «Отпуск» — полоса растёт, подсказка исчезает (отложено достаточно)
+    // пополнение: доход 900 на «Отпуск» — подсказка исчезает (отложено достаточно), строка уходит
     await addTx(page, { kind: 'income', amount: '900', category: 'Зарплата', wallet: 'Отпуск' });
     await dismissToasts(page);
-    await expect(widget).toContainText('40%');
-    await expect(page.getByTestId('goals-widget-nudge')).toHaveCount(0);
-    await widget.getByRole('link', { name: 'Все цели' }).click();
+    await expect(attention).toHaveCount(0);
+    await goSection(page, 'Кошельки');
     await expect(page).toHaveURL(/#\/wallets$/);
     expect(norm(await goalBlock(page).innerText())).toMatch(money('Накоплено 1 200 с. из 3 000 с.'));
     await expect(goalBlock(page).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
@@ -78,7 +74,7 @@ test.describe('37. Цели накопления', () => {
     await expect(dlg).toBeHidden();
     await expect(goalBlock(page)).toHaveCount(0);
     await goSection(page, 'Главная');
-    await expect(page.getByTestId('goals-widget')).toHaveCount(0);
+    await expect(page.getByTestId('attention-row')).toHaveCount(0);
   });
 
   test('цель 0 и срок в прошлом не сохраняются: подсказка у поля, окно остаётся открытым', async ({ page }) => {
@@ -106,7 +102,7 @@ test.describe('37. Цели накопления', () => {
     await expect(goalBlock(page)).toContainText('К 15.10.2026 · срок сегодня');
   });
 
-  test('длинное название и огромные суммы цели не раздвигают страницу ни на «Кошельках», ни на «Главной»', async ({ page }) => {
+  test('длинное название и огромные суммы цели не раздвигают страницу ни на «Кошельках», ни на «Главной» (чипы и строка «Требует внимания»)', async ({ page }) => {
     await page.clock.install({ time: NOW });
     await openApp(page);
     await goSection(page, 'Кошельки');
@@ -125,7 +121,7 @@ test.describe('37. Цели накопления', () => {
     await expect(page.getByTestId('goal-nudge')).toBeVisible();
     await noHorizontalScroll(page);
     await goSection(page, 'Главная');
-    await expect(page.getByTestId('goals-widget')).toBeVisible();
+    await expect(page.getByTestId('attention-row')).toBeVisible();
     await noHorizontalScroll(page);
   });
 });

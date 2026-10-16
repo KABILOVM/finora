@@ -391,31 +391,13 @@ describe('виджет «Можно тратить в день» на «Глав
     expect(screen.queryAllByRole('progressbar')).toHaveLength(0);
   });
 
-  it('«Обычно вы тратите» — средний расход в день; обычно меньше, чем можно, — без предупреждения', async () => {
+  it('пояснительных строк в виджете нет («До … — N дней», «Обычно вы тратите»): они остались на экране бюджетов', async () => {
     await openWidget(baseSetup);
-    const usual = await waitFor(() => {
-      const el = document.querySelector('[data-testid="widget-usual-per-day"]');
-      expect(el).not.toBeNull();
-      return text(el);
-    });
-    expect(usual).toBe(`Обычно вы тратите ${fmt(3_571)} в день`); // 500 ÷ 14 дней с первой операции
-  });
-
-  it('обычно тратите больше, чем можно в день, — об этом сказано', async () => {
-    await openWidget(async (s) => {
-      const i = await ids(s);
-      const income = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
-      await s.transactions.create({ kind: 'income', walletId: i.cash, amountMinor: 300_000, categoryId: income?.id ?? null, occurredOn: '2026-10-01' });
-      await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 280_000, categoryId: i.cats['Покупки'] ?? null, occurredOn: '2026-10-10' });
-    });
-    // на руках 200 с., до конца месяца 17 дней: 11,76 в день; а обычно уходит 2 800 с. ÷ 14 дней = 200 с. в день
-    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(1_176)));
-    expect(text(document.querySelector('[data-testid="widget-usual-per-day"]'))).toBe(`Обычно вы тратите ${fmt(20_000)} в день — больше, чем можно`);
-  });
-
-  it('истории операций ещё нет — строки «Обычно вы тратите» нет (а не «0 в день»)', async () => {
-    await openWidget();
-    await waitFor(() => expect(document.querySelector('[data-testid="widget-per-day"]')).not.toBeNull());
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(14_705)));
+    const widget = text(document.querySelector('[data-testid="budgets-widget"]'));
+    expect(widget).toContain('до 31 октября'); // горизонт — одной короткой подписью в заголовке
+    expect(widget).not.toContain('Обычно вы тратите');
+    expect(widget).not.toMatch(/\d+ (день|дня|дней)/);
     expect(document.querySelector('[data-testid="widget-usual-per-day"]')).toBeNull();
   });
 
@@ -430,13 +412,14 @@ describe('виджет «Можно тратить в день» на «Глав
     const rows = Array.from(list.querySelectorAll('li')).map((li) => text(li));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toContain('Все расходы');
-    expect(rows[0]).toContain('Потрачено 25%');
+    expect(rows[0]).toContain('25%');
     expect(rows[1]).toContain('Еда');
-    expect(rows[1]).toContain('Потрачено 80%');
-    expect(rows[1]).toContain('Внимание');
+    expect(rows[1]).toContain('80%');
+    // слова уровня остались в доступных именах полосок (в строке — только процент и цвет)
+    expect(Array.from(list.querySelectorAll('[role="progressbar"]')).map((b) => b.getAttribute('aria-label'))).toEqual(['Все расходы: Потрачено 25%', 'Еда: Потрачено 80%']);
   });
 
-  it('нет общего лимита: самые «горячие» по категориям, не больше трёх', async () => {
+  it('нет общего лимита: самые «горячие» по категориям, не больше двух', async () => {
     await openWidget(async (s) => {
       const i = await baseSetup(s);
       for (const [name, limit] of [['Еда', 50_000], ['Транспорт', 100_000], ['Жильё', 100_000], ['Покупки', 100_000]] as const) {
@@ -445,10 +428,9 @@ describe('виджет «Можно тратить в день» на «Глав
     });
     const list = await waitFor(() => screen.getByRole('list', { name: 'Лимиты на месяц' }));
     const rows = Array.from(list.querySelectorAll('li')).map((li) => text(li));
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     expect(rows[0]).toContain('Еда'); // 80% — самый горячий
     expect(rows[1]).toContain('Транспорт'); // 10%
-    expect(rows[2]).toMatch(/Жильё|Покупки/); // 0%
   });
 
   it('нет кошельков (все в архиве) — виджет ничего не рисует', async () => {

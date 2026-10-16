@@ -475,6 +475,7 @@
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-delay: 0s !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
@@ -613,12 +614,85 @@
 .stagger > :nth-child(5) {
   animation-delay: 0.24s;
 }
-.stagger > :nth-child(n + 6) {
+.stagger > :nth-child(6) {
   animation-delay: 0.3s;
+}
+.stagger > :nth-child(7) {
+  animation-delay: 0.35s;
+}
+.stagger > :nth-child(8) {
+  animation-delay: 0.4s;
+}
+.stagger > :nth-child(9) {
+  animation-delay: 0.45s;
+}
+.stagger > :nth-child(n + 10) {
+  animation-delay: 0.5s;
 }
 @keyframes rise-in {
   from {
     opacity: 0;
     transform: translateY(16px);
   }
+}
+
+/* ───── Живая главная: пружинное появление, мерцающие заглушки, плавное раскрытие строк ───── */
+/* Элементы внутри карточки (чипы кошельков, капсулы) выскакивают по очереди: задержка = индекс × 55 мс (--i задаёт React). */
+@keyframes pop-spring {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.86);
+  }
+}
+.pop-spring {
+  animation: pop-spring 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms + 120ms);
+}
+/* Заглушка вместо пустоты: блок держит свою высоту, пока читаются данные, и страница не прыгает. */
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background-image: linear-gradient(100deg, rgb(var(--surface-2)) 30%, rgb(var(--border) / 0.55) 50%, rgb(var(--surface-2)) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+/* Строка раскрывается и сворачивается по высоте без прыжков (grid-template-rows 0fr ↔ 1fr). */
+.fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s ease;
+}
+.fold[data-open='false'] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.fold > .fold-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+/* Нажатие «вдавливает» карточку и отпускает пружиной. */
+.press {
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease;
+}
+.press:active {
+  transform: scale(0.97);
+}
+/* Строка проведённого платежа и пункты списка выезжают плавно. */
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+.slide-down {
+  animation: slide-down 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

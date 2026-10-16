@@ -43,8 +43,10 @@ describe('виджет «Курсы» на «Главной»', () => {
   it('доллар за 1 и рубль за 100 к сомони, дата курса', async () => {
     await open([withRub()]);
     expect(rows()).toEqual(['1 USD 10,90 с.', '100 RUB 12,10 с.']);
-    expect(norm(widget()?.textContent)).toContain('на 10.10');
-    expect(widget()?.textContent).not.toContain('устарел');
+    // дата курса и «устарел» не занимают места в полосе: они в имени ссылки (и жёлтой точкой у устаревшего)
+    expect(widget()?.getAttribute('aria-label')).toContain('на 10.10');
+    expect(widget()?.getAttribute('aria-label')).not.toContain('устарел');
+    expect(widget()?.querySelector('[title="Курс устарел"]')).toBeNull();
   });
 
   it('доступное имя ссылки перечисляет курсы и говорит, куда ведёт', async () => {
@@ -55,9 +57,9 @@ describe('виджет «Курсы» на «Главной»', () => {
 
   it('курсу больше 3 суток — пометка «устарел» словами и в имени ссылки', async () => {
     await open([withRub({ asOf: '2026-10-01', fetchedAt: '2026-10-01T08:00:00.000Z' })]);
-    expect(norm(widget()?.textContent)).toContain('на 01.10');
-    expect(norm(widget()?.textContent)).toContain('устарел');
+    expect(widget()?.getAttribute('aria-label')).toContain('на 01.10');
     expect(widget()?.getAttribute('aria-label')).toContain('Курсы устарели');
+    expect(widget()?.querySelector('[title="Курс устарел"]')).not.toBeNull(); // жёлтая точка
   });
 
   it('нет курса рубля — «нет курса» у него, доллар на месте', async () => {
@@ -68,7 +70,6 @@ describe('виджет «Курсы» на «Главной»', () => {
   it('курсов нет совсем — честно «нет курса» и подсказка, без цифр', async () => {
     await open([]);
     expect(rows()).toEqual(['USD нет курса', 'RUB нет курса']);
-    expect(norm(widget()?.textContent)).toContain('Нажмите, чтобы обновить');
     expect(widget()?.getAttribute('aria-label')).toBe('Курсы валют: пока нет данных. Открыть курсы и конвертер');
   });
 

@@ -79,7 +79,7 @@ test.describe('30. Аналитика', () => {
     expect(norm(await page.getByRole('list', { name: 'Самые крупные расходы' }).innerText())).toContain('базар');
   });
 
-  test('с «Главной» ссылка «Подробная аналитика» ведёт на выбранный месяц; пустой экран понятен', async ({ page }, testInfo) => {
+  test('пустой экран понятен; после первой траты «Аналитика» показывает текущий месяц', async ({ page }, testInfo) => {
     await page.clock.install({ time: NOW });
     await openApp(page);
     await goSection(page, 'Аналитика');
@@ -88,8 +88,7 @@ test.describe('30. Аналитика', () => {
 
     await addTx(page, { amount: '80', category: 'Еда' });
     await dismissToasts(page);
-    await goSection(page, 'Главная');
-    await page.getByRole('link', { name: 'Подробная аналитика' }).click();
+    await goSection(page, 'Аналитика');
     await expect(page.getByRole('heading', { level: 1, name: 'Аналитика' })).toBeVisible();
     await expect(summary(page)).toContainText('Расходы за октябрь 2026');
     await expect(summary(page)).toContainText(money('80 с.'));
