@@ -76,14 +76,13 @@ test.describe('38. Курсы и погода на «Главной»', () => {
 
     const widget = ratesWidget(page);
     await expect(widget).toBeVisible();
-    await expect(widget).toContainText('Курсы');
     const rows = widget.getByTestId('rates-widget-row');
     await expect(rows).toHaveCount(2);
     expect(norm(await rows.nth(0).innerText())).toBe('1 USD 10,95 с.');
     expect(norm(await rows.nth(1).innerText())).toBe('100 RUB 12,10 с.');
-    await expect(widget).toContainText('на 15.10');
-    await expect(widget).not.toContainText('устарел');
-    await expect(widget).toHaveAttribute('aria-label', /Курсы к Сомони: 1 USD = 10,95 с\.; 100 RUB = 12,10 с\./);
+    // дата курса и «устарел» не занимают места в полосе — они в имени ссылки (и жёлтой точкой, если курс старый)
+    await expect(widget).toHaveAttribute('aria-label', /Курсы к Сомони: 1 USD = 10,95 с\.; 100 RUB = 12,10 с\., на 15\.10/);
+    await expect(widget).not.toHaveAttribute('aria-label', /устарели/);
     await noHorizontalScroll(page);
     await widget.scrollIntoViewIfNeeded();
     await shot(page, '38-home-glance', testInfo);
@@ -99,9 +98,9 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     const net = await prepare(page);
     await openApp(page);
 
-    // город не выбран → карточка зовёт выбрать, в сеть погоды не ходим
+    // город не выбран → ячейка зовёт определить место или выбрать город, в сеть погоды не ходим
     await goSection(page, 'Главная');
-    await expect(weatherWidget(page)).toContainText('Покажем погоду там, где вы');
+    await expect(weatherWidget(page)).toContainText('Определить место');
     expect(net.forecastCalls()).toBe(0);
 
     // выбираем город в разделе «Погода»
@@ -115,9 +114,7 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await goSection(page, 'Главная');
     const widget = weatherWidget(page);
     await expect(widget).toContainText('+23°');
-    await expect(widget).toContainText('Ясно');
     await expect(widget).toContainText('Худжанд');
-    await expect(widget).toContainText('днём +28°, ночью +9°');
     await expect(widget).toHaveAttribute('aria-label', 'Погода, Худжанд: +23°, Ясно, днём +28°, ночью +9°. Открыть погоду');
     await noHorizontalScroll(page);
     await widget.scrollIntoViewIfNeeded();
