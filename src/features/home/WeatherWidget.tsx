@@ -9,7 +9,7 @@ import { useForecast } from '@/features/weather/useForecast';
 import { usePlaces } from '@/features/weather/usePlaces';
 import { WeatherIcon } from '@/features/weather/WeatherIcon';
 
-const CELL = 'press relative flex min-h-[64px] min-w-0 items-center gap-2 px-3 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand/40';
+const CELL = 'press relative flex min-h-[64px] min-w-0 items-center gap-1.5 px-2.5 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand/40';
 
 function hhmm(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -52,10 +52,10 @@ export default function WeatherWidget() {
             onClick={() => void findMe()}
             disabled={locating}
             aria-busy={locating}
-            className="press inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-brand/10 px-2 text-sm font-semibold leading-tight text-brand hover:bg-brand/15 disabled:opacity-60"
+            className="press inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-brand/10 px-2 py-1 text-center text-sm font-semibold leading-tight text-brand hover:bg-brand/15 disabled:opacity-60"
           >
             {locating && <Spinner size={16} />}
-            <span className="truncate">{locating ? 'Определяем…' : 'Определить место'}</span>
+            <span>{locating ? 'Определяем…' : 'Определить место'}</span>
           </button>
           <Link
             to="/weather"
@@ -111,11 +111,23 @@ export default function WeatherWidget() {
       aria-label={`Погода, ${city.name}: ${formatTemp(data.current.temp)}, ${cond.label}${range ? `, ${range}` : ''}${note ? `. Данные ${note}` : ''}. Открыть погоду`}
       className={CELL}
     >
-      <WeatherIcon kind={cond.kind} isDay={data.current.isDay} size={40} className="pop-spring shrink-0" />
+      <WeatherIcon kind={cond.kind} isDay={data.current.isDay} size={36} className="pop-spring shrink-0" />
       <span className="min-w-0 flex-1">
-        <span className="block text-2xl font-extrabold leading-none tracking-tight tabular-nums">{formatTemp(data.current.temp)}</span>
+        <span className="block text-xl font-extrabold leading-none tracking-tight tabular-nums min-[390px]:text-2xl">{formatTemp(data.current.temp)}</span>
         <span className="mt-0.5 block truncate text-xs text-muted">{city.name}</span>
       </span>
+      {today && (
+        <span aria-hidden="true" data-testid="weather-widget-range" className="flex shrink-0 flex-col gap-0.5 text-xs leading-4 tabular-nums" title="Днём и ночью">
+          <span className="flex items-center gap-1">
+            <span className="text-muted">↑</span>
+            <span className="font-semibold">{formatTemp(today.max)}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-muted">↓</span>
+            <span className="font-semibold">{formatTemp(today.min)}</span>
+          </span>
+        </span>
+      )}
       {note && <span aria-hidden="true" title={`Данные ${note}`} className="absolute right-2 top-2 h-2 w-2 rounded-full bg-warning" />}
     </Link>
   );

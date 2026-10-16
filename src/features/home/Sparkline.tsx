@@ -4,17 +4,17 @@ import { sparkPath } from './homeData';
 export interface SparklineProps {
   points: readonly number[];
   className?: string;
-  /** true — низкий и широкий график (300×64) для подложки карточки; обычный — 300×90. */
-  fit?: boolean;
+  /** true — компактный график 120×64 для узкого места рядом с цифрами карточки; обычный — 300×90. */
+  slot?: boolean;
 }
 
 /**
  * График остатка за две недели: линия рисуется, под ней мягкая заливка, на конце маркер. Декоративный (aria-hidden).
  * Анимация рисования играет заново, когда меняются точки (ключ — сами значения).
  */
-export function Sparkline({ points, className, fit = false }: SparklineProps) {
-  const W = 300;
-  const H = fit ? 64 : 90;
+export function Sparkline({ points, className, slot = false }: SparklineProps) {
+  const W = slot ? 120 : 300;
+  const H = slot ? 64 : 90;
   const { d, lastY } = sparkPath(points, W, H);
   const gradId = `spark-fill-${useId().replace(/:/g, '')}`;
   return (
