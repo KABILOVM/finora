@@ -22,7 +22,7 @@ export interface NavItem {
 }
 
 /** Разделы, которые на телефоне лежат за пунктом «Ещё»: там он остаётся подсвеченным. */
-export const MORE_SECTIONS = ['/more', '/budgets', '/analytics', '/recurring', '/shopping', '/debts', '/settings', '/import'] as const;
+export const MORE_SECTIONS = ['/more', '/budgets', '/analytics', '/recurring', '/shopping', '/debts', '/rates', '/weather', '/settings', '/import'] as const;
 
 /**
  * Пункты меню. На телефоне «+» (добавить операцию) вставляется между вторым и третьим пунктом.
@@ -38,6 +38,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/recurring', label: 'Регулярные платежи', sideLabel: 'Платежи', icon: 'repeat', side: 'main' },
   { to: '/shopping', label: 'Покупки', sideLabel: 'Покупки', icon: 'cart', side: 'main' },
   { to: '/debts', label: 'Долги и кредиты', sideLabel: 'Долги', icon: 'banknote', side: 'main' },
+  { to: '/rates', label: 'Курсы и конвертер', sideLabel: 'Курсы', icon: 'transfer', side: 'main' },
+  { to: '/weather', label: 'Погода', sideLabel: 'Погода', icon: 'cloud', side: 'main' },
   {
     to: '/more',
     label: 'Ещё',
