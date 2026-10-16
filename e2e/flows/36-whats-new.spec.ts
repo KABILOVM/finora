@@ -26,8 +26,8 @@ test.describe('36. «Что нового» после обновления', () 
 
     const news = NEWS(page);
     await expect(news).toBeVisible({ timeout: 10_000 });
-    await expect(news).toContainText('курсы: доллар и рубль');
-    await expect(news).toContainText('погода на сегодня');
+    await expect(news).toContainText('Главная стала короче и живее');
+    await expect(news).toContainText('Требует внимания');
     await shot(page, '36-whats-new', testInfo);
     const o = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
     expect(o.scroll, 'страница шире экрана').toBeLessThanOrEqual(o.client);

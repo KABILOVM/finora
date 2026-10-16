@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import {
-  addTx, createWallet, dismissToasts, expect, goSection, isPhone, money, norm, openApp, shot, sheet, tapAmount, test,
+  addTx, createWallet, dismissToasts, expect, goSection, isPhone, money, moneyExact, monthRow, norm, openApp, shot, sheet, tapAmount, test,
 } from '../helpers';
 
 /**
@@ -98,7 +98,8 @@ test.describe('16. Бюджеты и «сколько можно тратить 
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(0)).toContainText('Все расходы');
     await expect(rows.nth(1)).toContainText('Еда');
-    await expect(rows.nth(1)).toContainText('Потрачено 105%');
+    await expect(rows.nth(1)).toContainText('105%');
+    await expect(rows.nth(1).getByRole('progressbar')).toHaveAttribute('aria-label', 'Еда: Потрачено 105%');
     await shot(page, '16-home-widget', testInfo);
     await widget.getByRole('link', { name: 'Все бюджеты' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Бюджеты' })).toBeVisible();
@@ -163,7 +164,7 @@ test.describe('16. Бюджеты и «сколько можно тратить 
     await expect(limitRow(page, 'Еда')).toContainText('Потрачено 25%');
   });
 
-  test('валюта без курса честно не входит в прогноз; комиссия перевода — «Комиссии» на «Главной» и в «Без лимита»', async ({ page }, testInfo) => {
+  test('валюта без курса честно не входит в прогноз; комиссия перевода — расход месяца на «Главной» и «Комиссии» в «Без лимита»', async ({ page }, testInfo) => {
     await pinClock(page);
     await openApp(page);
     await addTx(page, { kind: 'income', amount: '3000', category: 'Зарплата' });
@@ -185,10 +186,8 @@ test.describe('16. Бюджеты и «сколько можно тратить 
     await dismissToasts(page);
 
     await goSection(page, 'Главная');
-    const fee = page.getByRole('listitem').filter({ hasText: 'Комиссии' });
-    await expect(fee).toHaveCount(1);
-    await expect(fee).toContainText(money('2 с.'));
-    await expect(fee).not.toContainText('Без категории');
+    // сам перевод в расходы не входит, комиссия — расход месяца (по категориям она в «Аналитике» отдельной строкой «Комиссии»)
+    expect(await monthRow(page, 'Расходы')).toMatch(moneyExact('−2 с.'));
 
     await goSection(page, 'Бюджеты');
     const unlimited = page.getByRole('listitem').filter({ hasText: 'Без лимита' });
