@@ -3,7 +3,7 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { dbNameFor } from '@/db/database';
 import { exportBackup, importBackup, openStore } from '@/db';
-import { SYNC_TABLES, fromWire, toWire } from '@/sync/tables';
+import { SYNC_TABLES, TABLE_SPECS, fromWire, toWire, type SyncTableName } from '@/sync/tables';
 import { pickColumns } from '@/db/syncMerge';
 import { USER_A } from './helpers';
 
@@ -223,7 +223,8 @@ describe('обновление базы с версии 3 до 4 (цели на�
     const store = await open(factory);
     try {
       const w = await store.db.wallets.get(WALLET_OLD);
-      expect(w).toMatchObject({ name: 'Копилка', openingBalanceMinor: 1000, dirty: 0, serverSeq: 4, goalMinor: null, goalOn: null });
+      // serverSeq = 0: версия 6 заново забирает кошельки с сервера (там цель могла быть, а прежняя версия её отбросила)
+      expect(w).toMatchObject({ name: 'Копилка', openingBalanceMinor: 1000, dirty: 0, serverSeq: 0, goalMinor: null, goalOn: null });
       expect('goalMinor' in w!).toBe(true);
       // пустая правка не помечает кошелёк изменённым
       const same = await store.wallets.update(WALLET_OLD, { goalMinor: null, goalOn: null });
@@ -302,11 +303,126 @@ describe('обновление базы с версии 4 до 5: города �
     const store = await open(factory);
     try {
       const s = await store.db.settings.get(USER_A);
-      expect(s).toMatchObject({ baseCurrency: 'USD', weekStartsOn: 0, dirty: 0, serverSeq: 7, weather: null });
+      // serverSeq = 0: версия 6 заново забирает настройки с сервера (там города могли быть, а прежняя версия их отбросила)
+      expect(s).toMatchObject({ baseCurrency: 'USD', weekStartsOn: 0, dirty: 0, serverSeq: 0, weather: null });
       expect('weather' in s!).toBe(true);
       expect((await store.settings.update({ weather: null })).dirty).toBe(0); // пустая правка строку не «пачкает»
     } finally {
       store.close();
     }
+  });
+});
+
+describe('обновление базы с версии 5 до 6: кошельки и настройки забираются с сервера заново', () => {
+  const stores5 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions: 'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const W_CLEAN = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa31';
+  const W_RENAMED = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa32';
+  const W_REVERTED = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa33';
+  const W_NEW = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa34';
+  const wallet = (id: string, name: string, local: object) => ({
+    ...sync, id, name, currency: 'TJS', kind: 'savings', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0,
+    archivedAt: null, goalMinor: null, goalOn: null, syncError: null, ...local,
+  });
+  const renameMemory = { dirtyGroups: ['name'], dirtyBase: { name: { b: { name: 'Копилка' }, at: '2026-10-02T00:00:00.000Z' } } };
+
+  it('курсоры кошельков и настроек сброшены, serverSeq = 0 у строк, видевших сервер; правки и память о них на месте', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(5).stores(stores5);
+    await old.open();
+    await old.table('wallets').bulkAdd([
+      wallet(W_CLEAN, 'Копилка', { dirty: 0, serverSeq: 4 }),
+      wallet(W_RENAMED, 'Отпуск', { dirty: 1, serverSeq: 5, ...renameMemory }), // переименован, ещё не отправлен
+      wallet(W_REVERTED, 'Запас', { dirty: 1, serverSeq: 6, dirtyGroups: [], dirtyBase: {} }), // сменил и вернул
+      wallet(W_NEW, 'Новый', { dirty: 1, serverSeq: null }), // создан здесь, сервер его ещё не видел
+    ]);
+    await old.table('settings').add({ ...sync, dirty: 0, serverSeq: 7, syncError: null, id: USER_A, baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, weather: null });
+    await old.table('meta').bulkPut([
+      { key: 'cursor:wallets', value: 9 },
+      { key: 'cursor:settings', value: 7 },
+      { key: 'cursor:transactions', value: 12 },
+      { key: 'initialPullDone', value: true },
+    ]);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      expect(await store.db.meta.get('cursor:wallets')).toBeUndefined();
+      expect(await store.db.meta.get('cursor:settings')).toBeUndefined();
+      expect(await store.sync.getCursor('wallets')).toBe(0);
+      expect(await store.sync.getCursor('settings')).toBe(0);
+      // остальные таблицы не забираются заново
+      expect(await store.sync.getCursor('transactions')).toBe(12);
+      expect(await store.sync.getMeta('initialPullDone')).toBe(true);
+
+      expect(await store.db.wallets.get(W_CLEAN)).toMatchObject({ name: 'Копилка', dirty: 0, serverSeq: 0 });
+      expect(await store.db.wallets.get(W_RENAMED)).toMatchObject({ name: 'Отпуск', dirty: 1, serverSeq: 0, ...renameMemory });
+      expect(await store.db.wallets.get(W_REVERTED)).toMatchObject({ dirty: 1, serverSeq: 0, dirtyGroups: [], dirtyBase: {} });
+      expect(await store.db.wallets.get(W_NEW)).toMatchObject({ dirty: 1, serverSeq: null });
+      expect(await store.db.settings.get(USER_A)).toMatchObject({ dirty: 0, serverSeq: 0 });
+      // правка существующей записи перед отправкой сверится с сервером (serverSeq 0 — «строка на сервере есть»)
+      expect(await store.sync.hasMergeableEdits()).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+});
+
+/**
+ * Страж. Версия приложения, ещё не знающая новой колонки, получает строки без неё (select('*') + отбор по TABLE_SPECS) и
+ * запоминает их серверную версию и курсор. После обновления строка выглядит «без значения», с сервера она больше не придёт,
+ * а первая же правка отправит пустое значение поверх настоящего — у всех устройств (так было с целью и с городами, см. версию 6
+ * в src/db/database.ts). Поэтому колонка в TABLE_SPECS добавляется ВМЕСТЕ с версией базы, которая заново забирает её таблицу.
+ */
+describe('новая колонка договора требует версии базы, которая заново забирает таблицу', () => {
+  /** Поля договора по таблицам; последний сброс курсоров — версия 6 (кошельки, настройки). */
+  const SNAPSHOT: Record<SyncTableName, string[]> = {
+    settings: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather'],
+    wallets: [
+      'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'currency', 'kind', 'openingBalanceMinor', 'color', 'icon',
+      'sortOrder', 'archivedAt', 'goalMinor', 'goalOn',
+    ],
+    categories: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'kind', 'parentId', 'color', 'icon', 'sortOrder', 'archivedAt'],
+    transactions: [
+      'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor',
+      'categoryId', 'occurredOn', 'note', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource', 'debtId', 'recurringRuleId',
+    ],
+    debts: [
+      'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'direction', 'counterparty', 'principalMinor', 'currency', 'openedOn',
+      'dueOn', 'note', 'closedAt', 'archivedAt',
+    ],
+    budgets: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'categoryId', 'amountMinor', 'currency', 'period', 'archivedAt'],
+    recurring_rules: [
+      'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor',
+      'categoryId', 'debtId', 'note', 'frequency', 'intervalN', 'startOn', 'endOn', 'autoPost', 'archivedAt',
+    ],
+    shopping_items: [
+      'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'qtyMilli', 'unit', 'priceMinor', 'checkedAt', 'purchasedAt',
+      'transactionId',
+    ],
+  };
+
+  it.each([...SYNC_TABLES])('%s: поля TABLE_SPECS совпадают со снимком', (table) => {
+    const known = SNAPSHOT[table] as string[] | undefined;
+    expect(known, `Новая таблица «${table}»: добавьте её поля в снимок (прежние версии её не получали — сбрасывать нечего)`).toBeDefined();
+    const fields = TABLE_SPECS[table].columns.map((c) => c.field);
+    const added = fields.filter((f) => !known!.includes(f));
+    const removed = known!.filter((f) => !fields.includes(f));
+    expect(
+      { added, removed },
+      `Поля таблицы «${table}» изменились. Для новой колонки добавьте версию Dexie в src/db/database.ts, которая удаляет meta ` +
+        `'cursor:${table}' и ставит serverSeq = 0 строкам «${table}» с числовым serverSeq (как версия 6), и тест обновления на неё; ` +
+        'затем обновите этот снимок',
+    ).toEqual({ added: [], removed: [] });
   });
 });
