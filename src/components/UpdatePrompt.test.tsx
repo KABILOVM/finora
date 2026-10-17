@@ -1,5 +1,7 @@
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SectionBoundary } from '@/layout/SectionBoundary';
 import { ErrorBoundary } from './ErrorBoundary';
 import { UpdatePrompt, UpdatePromptHost } from './UpdatePrompt';
 import { act, render, screen, user } from './testUtils';
@@ -165,6 +167,30 @@ describe('исправление ставится само, когда прил�
     expect(sw.updateServiceWorker).not.toHaveBeenCalled();
     view.rerender(app(true));
     await act(async () => {});
+    expect(sw.updateServiceWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('упал один раздел («Раздел не загрузился», меню на месте) — исправление тоже ставится само', async () => {
+    const section = (explode: boolean) => (
+      <UpdatePromptHost>
+        <MemoryRouter>
+          <div>
+            <main>
+              <SectionBoundary>
+                <Bomb explode={explode} />
+              </SectionBoundary>
+            </main>
+          </div>
+        </MemoryRouter>
+      </UpdatePromptHost>
+    );
+    const view = mountInRoot(section(false));
+    await act(async () => sw.options?.onNeedRefresh?.());
+    expect(sw.updateServiceWorker).not.toHaveBeenCalled();
+    // карточка раздела появляется глубоко внутри дерева, а не прямо в #root
+    view.rerender(section(true));
+    await act(async () => {});
+    expect(document.querySelector('#root > [role="alert"]')).toBeNull();
     expect(sw.updateServiceWorker).toHaveBeenCalledTimes(1);
   });
 

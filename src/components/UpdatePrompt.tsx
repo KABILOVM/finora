@@ -40,10 +40,11 @@ function userIsBusy(): boolean {
 
 /**
  * Приложение показывает экран «всё сломалось» на весь экран (ErrorBoundary, ошибка хранилища): это role="alert"
- * прямо в корне страницы. Вложенные role="alert" (ошибки полей, уведомления) сюда не попадают.
+ * прямо в корне страницы. Или упал один раздел, а меню осталось (layout/SectionBoundary, метка data-section-error):
+ * на месте страницы тоже терять нечего. Вложенные role="alert" (ошибки полей, уведомления) сюда не попадают.
  */
 function fatalScreenShown(): boolean {
-  return document.querySelector('#root > [role="alert"]') !== null;
+  return document.querySelector('#root > [role="alert"], [data-section-error]') !== null;
 }
 
 /**
@@ -109,7 +110,7 @@ export function UpdatePromptHost({ children }: { children: ReactNode }) {
  * Новая версия приложения скачана и ждёт. Применяется ТОЛЬКО после нажатия «Обновить»
  * (registerType: 'prompt' в vite.config.ts) — чтобы страница не перезагрузилась посреди ввода операции.
  * Исключения, когда ввода терять нечего или человек уже решил сам:
- *  — приложение показывает экран «Что-то пошло не так»: исправленная версия ставится сама;
+ *  — приложение показывает экран «Что-то пошло не так» (или «Раздел не загрузился»): исправленная версия ставится сама;
  *  — «Обновить» нажали в другой вкладке: эта вкладка перезагрузится, как только в ней закончится ввод.
  * Новую версию подсказка ищет и сама: раз в час и при каждом возврате в приложение.
  */
@@ -200,7 +201,8 @@ function UpdateBanner() {
     sync();
     if (!root || typeof MutationObserver === 'undefined') return;
     const observer = new MutationObserver(sync);
-    observer.observe(root, { childList: true });
+    // subtree: карточка упавшего раздела появляется глубоко внутри каркаса, а не в самом корне
+    observer.observe(root, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, []);
 
