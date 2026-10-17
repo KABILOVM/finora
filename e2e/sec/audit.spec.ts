@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { addLink, addTx, createWallet, dismissToasts, expect, goSection, sheet, test, waitReady } from '../helpers';
+import { addLink, addTx, createWallet, dismissInstallPrompt, dismissToasts, expect, goSection, sheet, test, waitReady } from '../helpers';
 import { DIST, ROOT, SEC_TMP, listFiles, startHeaderServer, type HeaderServer } from './helpers';
 
 /* ---------------------------------------------------------------------------------------------
@@ -114,6 +114,8 @@ async function newPage(page: Page): Promise<void> {
   await page.context().route((u) => u.origin !== srv.origin, (r) => r.fulfill({ status: 404, headers: { 'access-control-allow-origin': '*' }, body: '' }));
   await page.goto(`${srv.origin}/#/`);
   await waitReady(page);
+  // на телефоне через полторы секунды всплывает окно «Установить приложение» и перекрывает «+» (как в openApp, закрываем его)
+  await dismissInstallPrompt(page);
 }
 
 const PAYLOADS = [
