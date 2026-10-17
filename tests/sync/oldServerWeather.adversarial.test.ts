@@ -62,6 +62,24 @@ describe('новое приложение, а в облаке нет колон�
     expect(a.engine.getStatus().quarantined).toBe(0);
     expect(a.engine.getStatus().pending).toBeGreaterThan(0);
     expect((await a.store.settings.get())?.weather).toBe(PLACES); // на устройстве выбор цел
+    // статус говорит, что делать (а не «сервер временно недоступен»)
+    expect(a.engine.getStatus()).toMatchObject({ phase: 'error', lastError: expect.stringMatching(/schema\.sql.*раздел 13/) });
+
+    // ждут только настройки: операция, записанная ПОСЛЕ выбора города, доезжает, и чужие правки приходят
+    const cash = (await a.store.db.wallets.toArray())[0]!;
+    await a.store.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 5000, occurredOn: '2026-10-17', note: 'после выбора города' });
+    await a.engine.syncNow();
+    const notes = async () => (await pg.adminRows('transactions')).map((r) => r['note']);
+    expect(await notes()).toContain('после выбора города');
+    expect(a.engine.getStatus()).toMatchObject({ phase: 'error', pending: 1, quarantined: 0 });
+    const c = await device(u, 'dev-c');
+    await c.engine.syncNow();
+    await c.store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 700, occurredOn: '2026-10-17', note: 'с другого устройства' });
+    await c.engine.syncNow();
+    expect(await notes()).toContain('с другого устройства');
+    await a.engine.syncNow();
+    expect((await a.store.db.transactions.toArray()).map((t) => t.note)).toContain('с другого устройства');
+    expect((await a.store.settings.get())?.weather).toBe(PLACES); // чужие настройки (без городов) выбор не затёрли
 
     // облако обновили (schema.sql выполнен заново): выбор доезжает целиком
     await pg.applySchema();

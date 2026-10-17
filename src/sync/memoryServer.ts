@@ -115,6 +115,7 @@ const FAIL_TEXT: Record<TransportErrorKind, { message: string; code?: string }> 
   rejected: { message: 'Сервер отверг запрос (имитация сбоя)', code: '23514' },
   server: { message: 'Сервер недоступен (имитация сбоя)', code: '500' },
   conflict: { message: 'Версия строки на сервере ушла вперёд (имитация сбоя)', code: '40001' },
+  schema: { message: "Could not find the 'weather' column of 'settings' in the schema cache (имитация сбоя)", code: 'PGRST204' },
 };
 
 export function createMemoryServer(opts: MemoryServerOptions = {}): MemoryServer {

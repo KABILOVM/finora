@@ -68,13 +68,27 @@ describe('новое приложение, а в облаке нет колон�
     expect(a.engine.getStatus().pending).toBeGreaterThan(0);
     expect(await walletIds()).not.toContain(goalWallet.id);
     expect((await a.store.db.wallets.get(goalWallet.id))?.goalMinor).toBe(5_000_000); // на устройстве цель цела
+    // статус говорит, что делать (а не «сервер временно недоступен»)
+    expect(a.engine.getStatus()).toMatchObject({ phase: 'error', lastError: expect.stringMatching(/schema\.sql.*раздел 11/) });
+
+    // ждут только кошелёк с целью и его операции: остальное, записанное ПОСЛЕ него, доезжает
+    const notes = async () => (await pg.adminRows('transactions')).map((r) => r['note']);
+    await a.store.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 700, occurredOn: '2026-10-17', note: 'после цели' });
+    await a.store.transactions.create({ kind: 'income', walletId: goalWallet.id, amountMinor: 100_000, occurredOn: '2026-10-17', note: 'в копилку' });
+    const food = await a.store.categories.create({ name: 'Кафе', kind: 'expense', parentId: null, color: '#f97316', icon: '☕' });
+    await a.engine.syncNow();
+    expect(await notes()).toContain('после цели');
+    expect(await notes()).not.toContain('в копилку');
+    expect((await pg.adminRows('categories')).map((r) => r['id'])).toContain(food.id);
+    expect(a.engine.getStatus()).toMatchObject({ phase: 'error', pending: 2, quarantined: 0 }); // кошелёк и операция на нём
 
     // облако обновили (schema.sql выполнен заново): цель доезжает целиком
     await pg.applySchema();
     emu.reloadSchema(); // PostgREST после DDL перечитывает схему
     await a.engine.syncNow();
     await a.engine.syncNow();
-    expect(a.engine.getStatus()).toMatchObject({ pending: 0, quarantined: 0, phase: 'idle' });
+    expect(a.engine.getStatus()).toMatchObject({ pending: 0, quarantined: 0, phase: 'idle', lastError: null });
+    expect(await notes()).toContain('в копилку');
     const onServer = (await pg.adminRows('wallets')).find((r) => r['id'] === goalWallet.id)!;
     expect(onServer['goal_minor']).toBe(5_000_000);
     expect(String(onServer['goal_on'])).toContain('2027-06-01');
