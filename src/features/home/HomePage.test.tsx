@@ -63,6 +63,7 @@ const fmt = (minor: number, currency = 'TJS', sign: 'auto' | 'always' = 'auto') 
 const total = () => document.querySelector('[data-testid="home-total"]');
 /** Капсулы «приход / расход месяца» в шапке. */
 const flow = (kind: 'income' | 'expense') => text(document.querySelector(`[data-testid="home-flow-${kind}"]`));
+const net = () => text(document.querySelector('[data-testid="home-flow-net"]'));
 const walletCards = () => Array.from(document.querySelectorAll('section[aria-labelledby="home-wallets"] li')).map((li) => text(li));
 const recentRows = () => Array.from(document.querySelectorAll('section[aria-labelledby="home-recent"] button')).map((b) => text(b));
 
@@ -161,10 +162,17 @@ describe('приход и расход месяца в шапке', () => {
     expect(flow('expense')).toBe(fmt(-12_450));
   });
 
+  it('в правом верхнем углу — «За месяц»: разница прихода и расхода со знаком (5 000 − 124,50 = +4 875,50)', async () => {
+    await openHome();
+    await waitFor(() => expect(net()).toContain(fmt(487_550, 'TJS', 'always')));
+    expect(net()).toContain('За месяц');
+  });
+
   it('в месяце нет операций — в капсулах нули, а не пустое место', async () => {
     await openHome({ setup: async () => undefined });
     await waitFor(() => expect(flow('expense')).toBe(fmt(0)));
     expect(flow('income')).toBe(fmt(0, 'TJS', 'always'));
+    expect(net()).toContain(fmt(0, 'TJS', 'always'));
   });
 
   it('операции в другой основной валюте не смешиваются с остальными: в капсулах нули в новой валюте', async () => {
@@ -273,6 +281,7 @@ describe('«Скрыть суммы»', () => {
     expect(text(total())).not.toMatch(/\d/);
     expect(flow('income')).toBe('••••');
     expect(flow('expense')).toBe('••••');
+    expect(net()).toBe('За месяц••••');
     // чипы кошельков: названия на месте, остатков нет
     for (const card of walletCards()) {
       expect(card).toContain('••••');

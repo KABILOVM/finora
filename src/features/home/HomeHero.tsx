@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { Sheet } from '@/components/Sheet';
-import { formatMinor } from '@/domain/money';
-import type { CurrencyCode } from '@/domain/types';
+import { addMinor, formatMinor } from '@/domain/money';
+import type { CurrencyCode, Minor } from '@/domain/types';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { ruDate } from '@/features/transactions/txForm';
 import { enteredNote } from '@/rates/enteredText';
@@ -55,6 +55,16 @@ function TotalNotes({ total, hidden }: { total: HomeTotal; hidden: boolean }) {
   );
 }
 
+/** Разница месяца: приход минус расход; null — сумма не поместилась в безопасное целое (тогда блок просто не рисуем). */
+function monthNet(incomeMinor: Minor, expenseMinor: Minor): Minor | null {
+  try {
+    return addMinor(incomeMinor, -expenseMinor);
+  } catch (e) {
+    if (e instanceof RangeError) return null;
+    throw e;
+  }
+}
+
 /**
  * Верхняя карточка главной: «Всего», приход и расход месяца и график остатка за две недели фоном. Пояснения про курсы
  * спрятаны за значок ⓘ; снаружи остаётся только короткая жёлтая строка, если часть денег не вошла в итог.
@@ -66,6 +76,7 @@ export function HomeHero({ total, base }: HomeHeroProps) {
 
   const hasNotes = total !== null && (total.approximate || total.entered.length > 0 || total.missing.length > 0 || total.stale.length > 0);
   const stale = total !== null && total.stale.length > 0;
+  const net = total && flow ? monthNet(flow.incomeMinor, flow.expenseMinor) : null;
 
   return (
     <section
@@ -84,27 +95,35 @@ export function HomeHero({ total, base }: HomeHeroProps) {
       )}
 
       <div className="relative">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium opacity-90">Всего</p>
-          <button
-            type="button"
-            onClick={toggle}
-            aria-pressed={hidden}
-            aria-label={hidden ? 'Показать суммы' : 'Скрыть суммы'}
-            className="press flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
-          >
-            <Icon name={hidden ? 'eye-off' : 'eye'} size={17} />
-          </button>
-          {hasNotes && (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium opacity-90">Всего</p>
             <button
               type="button"
-              onClick={() => setNotesOpen(true)}
-              aria-label="Как посчитан итог"
-              className="press relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+              onClick={toggle}
+              aria-pressed={hidden}
+              aria-label={hidden ? 'Показать суммы' : 'Скрыть суммы'}
+              className="press flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
             >
-              <Icon name="info" size={17} />
-              {stale && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-amber-300 ring-2 ring-hero" />}
+              <Icon name={hidden ? 'eye-off' : 'eye'} size={17} />
             </button>
+            {hasNotes && (
+              <button
+                type="button"
+                onClick={() => setNotesOpen(true)}
+                aria-label="Как посчитан итог"
+                className="press relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+              >
+                <Icon name="info" size={17} />
+                {stale && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-amber-300 ring-2 ring-hero" />}
+              </button>
+            )}
+          </div>
+          {net !== null && (
+            <div data-testid="home-flow-net" className="min-w-0 text-right leading-tight">
+              <p className="text-[11px] font-medium opacity-80">За месяц</p>
+              <HomeMoney minor={net} currency={base} tone="none" sign="always" animated className="block truncate text-sm font-bold" />
+            </div>
           )}
         </div>
 
