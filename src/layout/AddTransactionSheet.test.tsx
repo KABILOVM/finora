@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventually } from '@/app/testkit';
-import { act, screen, user, waitFor } from '@/components/testUtils';
+import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import {
   catBtn,
   catQuery,
@@ -138,6 +138,37 @@ describe('доход', () => {
     await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]?.categoryId).toBeNull();
+  });
+});
+
+describe('компактная форма', () => {
+  it('«Продиктовать расходы» — круглая кнопка в строке «Расход / Доход / Перевод», а не отдельная строка под формой', async () => {
+    await openAddSheet();
+    const mic = screen.getByRole('button', { name: 'Продиктовать расходы' });
+    expect(mic.parentElement?.querySelector('[role="radiogroup"][aria-label="Вид операции"]')).not.toBeNull();
+    expect(mic.textContent).toBe(''); // только значок, подпись — для скринридера
+    await user.click(screen.getByRole('radio', { name: 'Доход' }));
+    expect(screen.queryByRole('button', { name: 'Продиктовать расходы' })).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Расход' }));
+    await user.click(screen.getByRole('button', { name: 'Продиктовать расходы' }));
+    expect(await findByRole('dialog', { name: 'Продиктовать расходы' })).toBeInTheDocument();
+  });
+
+  it('правила невысокого экрана не задевают всплывающую комиссию: шрифт и отступы её поля прежние', async () => {
+    await openAddSheet();
+    await tapAmount('150');
+    await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+    const main = amountField();
+    const fee = screen.getByRole('textbox', { name: /^Комиссия/ }) as HTMLInputElement;
+    expect(main.className).toContain('[@media(max-height:700px)]:text-4xl');
+    expect(fee.className).not.toContain('max-height');
+    // правила по высоте экрана у предков поля комиссии — только для клавиатуры и рамки основной суммы
+    for (let el = fee.parentElement; el; el = el.parentElement) {
+      for (const cls of el.classList) {
+        if (!cls.startsWith('[@media') || !cls.includes(']:[&_')) continue;
+        expect(cls, 'правило задевает панель комиссии').toMatch(/\]:\[&_\[data-(pad|op|amount-card)\]/);
+      }
+    }
   });
 });
 

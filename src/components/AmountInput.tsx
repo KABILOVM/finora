@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { currencyInfo, exponentOf } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { applyKey, clampToCurrency, draftToMinor, formatDraft, minorToDraft, sanitizeAmountText } from './amountText';
-import { acceptExpr, applyExprKey, evalExpr, formatExpr, hasOperator, isOpKey, normalizeExprText } from './amountExpr';
+import { acceptExpr, applyExprKey, evalExpr, formatExpr, hasOperator, hasWords, isOpKey, normalizeExprText } from './amountExpr';
 import { Keypad, type KeypadKey } from './Keypad';
 
 export interface AmountInputProps {
@@ -45,6 +45,13 @@ export interface AmountInputProps {
   onActivate?: () => void;
   /** Перехват клавиш экранной клавиатуры: true — клавишу забрал кто-то другой (например, поле процента). */
   onKeyIntercept?: (key: KeypadKey) => boolean;
+  /**
+   * Сюда поле отдаёт свой обработчик клавиш: чужая экранная клавиатура печатает прямо в это поле (комиссия суммой),
+   * а черновик («2,» или «2,0») остаётся здесь. Пока поля нет на экране — null.
+   */
+  keyRef?: MutableRefObject<((key: KeypadKey) => void) | null>;
+  /** Невысокий экран (до 700 px): потолок шрифта суммы ниже (text-4xl вместо text-5xl), ступени по длине остаются. */
+  compact?: boolean;
 }
 
 const TONE = { neutral: 'text-text', income: 'text-income', expense: 'text-expense' } as const;
@@ -77,6 +84,8 @@ export function AmountInput({
   overlay,
   onActivate,
   onKeyIntercept,
+  keyRef,
+  compact = false,
 }: AmountInputProps) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -164,6 +173,7 @@ export function AmountInput({
 
   const onKey = (key: KeypadKey) => {
     if (onKeyIntercept?.(key)) return;
+    if (!calculator && (isOpKey(key) || key === '=')) return; // без калькулятора выражение не начинается
     if (key === '=') return equals();
     if (isOpKey(key)) {
       const base = expr ?? text;
@@ -177,17 +187,30 @@ export function AmountInput({
     else commitExpr(next);
   };
 
+  // Обработчик отдаётся после каждого рендера (в нём свежий черновик) и забирается, когда поле уходит с экрана:
+  // клавиши не попадут в поле, которого уже нет (комиссию переключили на «%» или закрыли).
+  useLayoutEffect(() => {
+    if (!keyRef) return;
+    keyRef.current = onKey;
+    return () => {
+      keyRef.current = null;
+    };
+  });
+
   // Набор и вставка с системной клавиатуры. Строку, которую нельзя прочитать однозначно («1.234», лишние знаки,
   // два числа), не принимаем целиком — прежняя сумма остаётся. Нажатие лишней цифры молча игнорируется, как на
   // экранной клавиатуре, а вставка чужого текста объясняется сообщением.
+  // Текст со словами (СМС банка «Расход 150 TJS», «-150,00 TJS») — не выражение: из него читается сумма, как без калькулятора.
   const onType = (raw: string) => {
-    if (calculator && (expr !== null || hasOperator(normalizeExprText(raw)))) {
+    if (calculator && !hasWords(raw) && (expr !== null || hasOperator(normalizeExprText(raw)))) {
       const next = acceptExpr(raw);
-      if (next === null) return; // так выражение не записать: прежнее остаётся
-      if (hasOperator(next)) return commitExpr(next);
-      if (expr !== null) leaveExpr(sanitizeAmountText(next, currency));
-      else onTypePlain(next);
-      return;
+      if (next !== null) {
+        if (hasOperator(next)) return commitExpr(next);
+        if (expr !== null) return leaveExpr(sanitizeAmountText(next, currency));
+        return onTypePlain(next);
+      }
+      // так выражение не записать: набранное выражение остаётся, а вставка в обычное число («-150,00») читается как сумма
+      if (expr !== null) return;
     }
     onTypePlain(raw);
   };
@@ -198,11 +221,13 @@ export function AmountInput({
       if (raw.length > shown.length + 1) setNotice('Не удалось прочитать сумму. Введите её вручную.');
       return;
     }
-    commit(next);
+    if (expr !== null) leaveExpr(next); // текст со словами вставили поверх выражения
+    else commit(next);
   };
 
   const message = error || notice || (calc?.kind === 'error' ? calc.message : null);
-  // Чем длиннее число, тем мельче шрифт: самая длинная сумма («9 999 999 999 999,99») помещается на iPhone SE.
+  // Чем длиннее число, тем мельче шрифт. Если сумма всё же не поместилась (узкий экран, кнопки по краям, широкий символ
+  // валюты), поле сужается и прокручивается внутри себя: цифры не наезжают на соседние кнопки.
   const size =
     expr !== null
       ? shown.length <= 10
@@ -217,6 +242,10 @@ export function AmountInput({
           : shown.length <= 15
             ? 'text-3xl'
             : 'text-2xl';
+  // Невысокий экран: крупный шаг на ступень мельче (text-4xl), остальные ступени по длине — как есть.
+  const big = size === 'text-5xl';
+  const font = compact && big ? 'text-5xl [@media(max-height:700px)]:text-4xl' : size;
+  const symbolFont = big ? (compact ? 'text-2xl [@media(max-height:700px)]:text-xl' : 'text-2xl') : 'text-xl';
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
@@ -229,8 +258,8 @@ export function AmountInput({
           const amountRow = (
             <div className={cn('flex items-baseline justify-center gap-2 py-2', TONE[tone])} onClick={() => inputRef.current?.focus()}>
               {/* Невидимая копия текста задаёт ширину поля: символ валюты стоит вплотную к цифрам. */}
-              <span className="inline-grid">
-                <span aria-hidden="true" className={cn('money invisible col-start-1 row-start-1 whitespace-pre px-0.5 font-bold', size)}>
+              <span className="inline-grid min-w-0 grid-cols-[minmax(0,auto)]">
+                <span aria-hidden="true" className={cn('money invisible col-start-1 row-start-1 whitespace-pre px-0.5 font-bold', font)}>
                   {shown || '0'}
                 </span>
                 <input
@@ -255,11 +284,11 @@ export function AmountInput({
                   aria-describedby={message ? `${id}-error` : undefined}
                   className={cn(
                     'money col-start-1 row-start-1 w-0 min-w-full bg-transparent px-0.5 text-center font-bold caret-brand outline-none placeholder:text-muted/60',
-                    size,
+                    font,
                   )}
                 />
               </span>
-              <span className={cn('font-semibold opacity-70', size === 'text-5xl' ? 'text-2xl' : 'text-xl')} aria-hidden="true">
+              <span className={cn('shrink-0 font-semibold opacity-70', symbolFont)} aria-hidden="true">
                 {info.symbol}
               </span>
             </div>
@@ -283,7 +312,7 @@ export function AmountInput({
               )}
             >
               {side && <div className={cn(side, 'flex justify-start')}>{start}</div>}
-              <div className="min-w-0 flex-1">{amountRow}</div>
+              <div className="min-w-0 flex-1 overflow-hidden">{amountRow}</div>
               {side && <div className={cn(side, 'flex justify-end')}>{end}</div>}
             </div>
           );
