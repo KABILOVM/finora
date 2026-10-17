@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptExpr, applyExprKey, evalExpr, formatExpr } from './amountExpr';
+import { acceptExpr, applyExprKey, evalExpr, formatExpr, hasWords } from './amountExpr';
 
 const ok = (minor: number) => ({ kind: 'ok', minor });
 
@@ -57,6 +57,15 @@ describe('acceptExpr (набор с клавиатуры ПК)', () => {
   });
   it('ведущие нули убираются, «,5» → «0,5»', () => {
     expect(acceptExpr('007+,5')).toBe('7+0,5');
+  });
+});
+
+describe('hasWords (вставка текста, а не выражения)', () => {
+  it('одиночная «x» или «х» между числами — знак умножения, не слово', () => {
+    for (const s of ['12x3', '12 X 3', '12х3', '5 Х 2', '1 250 + 340', '-150,00', '']) expect(hasWords(s), s).toBe(false);
+  });
+  it('слова из СМС банка — текст: буква «х» в «Расход» не умножение', () => {
+    for (const s of ['Расход 150 TJS', '-150,00 TJS', '150 с.', 'Taxi 150', '150 TJS Taxi 2', 'abc12.5q']) expect(hasWords(s), s).toBe(true);
   });
 });
 

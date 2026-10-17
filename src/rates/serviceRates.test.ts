@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { RateTable } from '@/domain/types';
 import { NOW, fail, makeTable, ok, setup, stubProvider } from './__fixtures__/testkit';
 import { STALE_AFTER_DAYS, createRateService, type RateServiceOptions } from './service';
@@ -183,5 +183,37 @@ describe('subscribe, статус, список валют', () => {
     await service.refresh();
     service.setManualRate('GBP', 'USD', 1.3);
     expect(service.listKnownCurrencies()).toEqual(['EUR', 'GBP', 'TJS', 'USD']);
+  });
+});
+
+describe('«сегодня» — по часам Душанбе, а не по UTC', () => {
+  const ORIGINAL_TZ = process.env['TZ'];
+  afterEach(() => {
+    if (ORIGINAL_TZ === undefined) delete process.env['TZ'];
+    else process.env['TZ'] = ORIGINAL_TZ;
+  });
+  // 01:30 17 октября в Душанбе (UTC+5), а по UTC ещё 16 октября
+  const AFTER_MIDNIGHT = new Date('2026-10-16T20:30:00.000Z');
+
+  it('«Свой курс», заданный после полуночи, датирован местным днём; пара валюты с собой — тоже', () => {
+    process.env['TZ'] = 'Asia/Dushanbe';
+    const { service } = setup([], { now: () => AFTER_MIDNIGHT });
+    service.setManualRate('USD', 'TJS', 11.2);
+    expect(service.getRate('USD', 'TJS')).toMatchObject({ rate: 11.2, manual: true, asOf: '2026-10-17' });
+    expect(service.getRate('USD', 'USD')?.asOf).toBe('2026-10-17');
+  });
+
+  it('устаревание считается от местной даты: курс от 13.10 в ночь на 17.10 уже устарел (по UTC вышло бы ровно 3 дня)', async () => {
+    process.env['TZ'] = 'Asia/Dushanbe';
+    const { service } = setup([stubProvider('nbt', ok({ asOf: '2026-10-13' }))], { now: () => AFTER_MIDNIGHT });
+    await service.refresh();
+    expect(service.getRate('USD', 'TJS')).toMatchObject({ asOf: '2026-10-13', stale: true });
+  });
+
+  it('до полуночи по Душанбе курс от 13.10 ещё свежий (3 дня)', async () => {
+    process.env['TZ'] = 'Asia/Dushanbe';
+    const { service } = setup([stubProvider('nbt', ok({ asOf: '2026-10-13' }))], { now: () => new Date('2026-10-16T18:59:00.000Z') });
+    await service.refresh();
+    expect(service.getRate('USD', 'TJS')).toMatchObject({ asOf: '2026-10-13', stale: false });
   });
 });

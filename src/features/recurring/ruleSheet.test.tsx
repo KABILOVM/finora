@@ -93,6 +93,21 @@ describe('новый регулярный платёж', () => {
     expect(screen.getByText('Платёж добавлен')).toBeInTheDocument();
   });
 
+  it('невысокий экран: шрифт суммы на ступень мельче, но длинная сумма по-прежнему мельчает по длине', async () => {
+    await openPage();
+    await openNew();
+    const amount = screen.getByRole('textbox', { name: /^Сумма/ }) as HTMLInputElement;
+    await user.type(amount, '500');
+    expect(amount.className).toContain('[@media(max-height:700px)]:text-4xl');
+    await user.type(amount, '123456789'); // «500 123 456 789» — 15 знаков
+    expect(amount.className).toContain('text-3xl');
+    expect(amount.className).not.toContain('text-4xl');
+    // правила невысокого экрана больше не задают шрифт суммы через !important
+    for (let el = amount.parentElement; el; el = el.parentElement) {
+      for (const cls of el.classList) expect(cls).not.toContain('.money]:');
+    }
+  });
+
   it('без суммы не сохраняется: подсказка у поля, ничего не создано', async () => {
     const td = await openPage();
     await openNew();

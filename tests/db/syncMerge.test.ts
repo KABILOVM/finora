@@ -406,3 +406,37 @@ describe('смешанная страница и атомарность', () => 
     expect(await store.sync.getCursor('wallets')).toBe(1);
   });
 });
+
+describe('строка, полученная прежней версией приложения без новой колонки (версия базы 6: serverSeq = 0)', () => {
+  // Прежняя версия получила серверную версию 1, но отбросила цель; версия 6 ставит такой строке serverSeq = 0 и сбрасывает курсор,
+  // и та же серверная версия приходит заново — уже с целью.
+  const GOAL = { goalMinor: 500_000, goalOn: '2027-01-01' };
+  const again = () => page(remote({ ...GOAL, clientUpdatedAt: stamp(T0 - 60_000) }), 1);
+
+  it('чистая строка принимает ту же серверную версию заново: цель на месте', async () => {
+    const store = await withCleanWallet();
+    await store.db.wallets.update('w-1', { serverSeq: 0 });
+    expect(await store.sync.applyRemotePage('wallets', again(), 1)).toEqual({ applied: 1, keptLocal: 0, lostLocal: 0, merged: 0 });
+    expect(await row(store)).toMatchObject({ ...GOAL, dirty: 0, serverSeq: 1 });
+  });
+
+  it('переименованная, но не отправленная: имя наше, цель с сервера — уйдёт уже с целью', async () => {
+    const store = await withCleanWallet();
+    await store.wallets.update('w-1', { name: 'Отпуск' });
+    await store.db.wallets.update('w-1', { serverSeq: 0 });
+    expect((await store.sync.applyRemotePage('wallets', again(), 1)).merged).toBe(1);
+    expect(await row(store)).toMatchObject({ name: 'Отпуск', ...GOAL, dirty: 1, serverSeq: 1, dirtyGroups: ['name'] });
+  });
+
+  it.each([
+    ['0 (версия 6): принимает серверную, цель на месте', 0, { ...GOAL, dirty: 0 }],
+    // поэтому версия 6 ставит 0, а не null: с null строка сочлась бы созданной здесь и ушла бы целиком, стерев цель
+    ['null: решает правило «целиком», наша более новая строка без цели осталась бы', null, { goalMinor: null, dirty: 1 }],
+  ] as const)('правленная и возвращённая назад (группы пусты), serverSeq %s', async (_name, seq, expected) => {
+    const store = await withCleanWallet();
+    const edit = { dirty: 1, serverSeq: seq, clientUpdatedAt: stamp(T0), deviceId: 'device-local-0001', dirtyGroups: [], dirtyBase: {} };
+    await store.db.wallets.update('w-1', edit as never);
+    await store.sync.applyRemotePage('wallets', again(), 1);
+    expect(await row(store)).toMatchObject(expected);
+  });
+});

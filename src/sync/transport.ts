@@ -33,17 +33,26 @@ export type TransportErrorKind =
    * и отправить заново. Повтор тех же данных без этого не поможет.
    */
   | 'conflict'
+  /**
+   * У сервера нет колонки, в которой у строки задано значение (supabase/schema.sql не выполнен заново после обновления приложения).
+   * Без колонки строку не отправить, не потеряв значение: она ждёт обновления схемы на устройстве (не карантин), остальное
+   * отправляется. Какие колонки — в columns.
+   */
+  | 'schema'
   /** 5xx / перегрузка. Повторять с задержкой. */
   | 'server';
 
 export class TransportError extends Error {
   readonly kind: TransportErrorKind;
   readonly code?: string;
-  constructor(kind: TransportErrorKind, message: string, code?: string) {
+  /** 'schema': колонки, которых нет на сервере (имена колонок, как в TABLE_SPECS). */
+  readonly columns?: readonly string[];
+  constructor(kind: TransportErrorKind, message: string, code?: string, columns?: readonly string[]) {
     super(message);
     this.name = 'TransportError';
     this.kind = kind;
     this.code = code;
+    this.columns = columns;
   }
   get retryable(): boolean {
     return this.kind === 'network' || this.kind === 'server';

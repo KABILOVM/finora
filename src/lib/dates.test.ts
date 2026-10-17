@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { addDays, formatDayLabel, isValidIsoDate, monthKey, monthTitle, todayLocal } from './dates';
+import { addDays, formatDayInline, formatDayLabel, isValidIsoDate, monthKey, monthTitle, todayLocal } from './dates';
 
 /**
  * todayLocal зависит от часового пояса процесса, поэтому в тестах его задаём явно.
@@ -125,6 +125,23 @@ describe('isValidIsoDate', () => {
     expect(isValidIsoDate(null)).toBe(false);
     expect(isValidIsoDate(undefined)).toBe(false);
     expect(isValidIsoDate(20261010)).toBe(false);
+  });
+});
+
+describe('formatDayInline: подпись дня посреди фразы', () => {
+  const today = '2026-10-10';
+
+  it('«сегодня» и «вчера» — со строчной: «Курс устарел: USD (от вчера)», «НБТ · на сегодня»', () => {
+    expect(formatDayInline('2026-10-10', today)).toBe('сегодня');
+    expect(formatDayInline('2026-10-09', today)).toBe('вчера');
+    expect(`Курс устарел: USD (от ${formatDayInline('2026-10-09', today)})`).toBe('Курс устарел: USD (от вчера)');
+  });
+
+  it('остальное — как в formatDayLabel (день недели и так со строчной), заглавные в начале строки не трогаются', () => {
+    expect(formatDayInline('2026-10-05', today)).toBe('пн, 5 окт');
+    expect(formatDayInline('2025-10-05', today)).toBe('вс, 5 окт 2025');
+    expect(formatDayInline('мусор', today)).toBe('мусор');
+    expect(formatDayLabel('2026-10-10', today)).toBe('Сегодня');
   });
 });
 

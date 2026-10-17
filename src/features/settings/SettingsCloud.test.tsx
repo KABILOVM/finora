@@ -221,7 +221,7 @@ describe('Настройки: смена пароля', () => {
     await user.type(first, '12345');
     await user.type(second, '12345');
     await user.click(screen.getAllByRole('button', { name: 'Сменить пароль' }).at(-1) as HTMLElement);
-    expect(await findByRole('alert')).toHaveTextContent('не короче 6 символов');
+    expect(await findByRole('alert')).toHaveTextContent('не короче 8 символов');
     await user.clear(first);
     await user.clear(second);
     await user.type(first, 'правильный-пароль');

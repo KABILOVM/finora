@@ -5,7 +5,6 @@ import { Button } from '@/components/Button';
 import { Floating, useDismiss } from '@/components/Floating';
 import { Icon } from '@/components/Icon';
 import { isOpKey } from '@/components/amountExpr';
-import { applyKey, draftToMinor, minorToDraft, type AmountKey } from '@/components/amountText';
 import { cn } from '@/lib/cn';
 import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
@@ -27,12 +26,14 @@ const KINDS: readonly SegmentOption<TxKind>[] = [
 /**
  * Невысокий экран (iPhone в Safari с панелями): клавиши и поле суммы чуть компактнее, чтобы цифры и категории помещались
  * без прокрутки. Высота клавиш не меньше 44 px — это минимум для касания. Диапазоны высоты не пересекаются.
+ * Правила касаются только клавиатуры ([data-pad], [data-op]) и рамки суммы ([data-amount-card]): всплывающая над суммой
+ * комиссия живёт внутри того же AmountInput, и её поле и кнопки не должны меняться. Шрифт суммы уменьшает сам AmountInput (compact).
  */
 const COMPACT_KEYPAD =
-  '[@media(min-height:701px)_and_(max-height:800px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[46px] ' +
-  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-op]]:!h-8 [@media(min-height:701px)_and_(max-height:800px)]:[&_.items-baseline]:!py-1 [@media(min-height:701px)_and_(max-height:800px)]:!gap-3 ' +
-  '[@media(max-height:700px)]:[&_button:not([data-op]):not([data-side])]:!min-h-[44px] [@media(max-height:700px)]:[&_[data-op]]:!h-8 [@media(max-height:700px)]:!gap-1 ' +
-  '[@media(max-height:700px)]:[&_.items-baseline]:!py-0 [@media(max-height:700px)]:[&_.money]:!text-4xl';
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-pad]_button]:!min-h-[46px] ' +
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-op]]:!h-8 [@media(min-height:701px)_and_(max-height:800px)]:[&_[data-amount-card]_.items-baseline]:!py-1 [@media(min-height:701px)_and_(max-height:800px)]:!gap-3 ' +
+  '[@media(max-height:700px)]:[&_[data-pad]_button]:!min-h-[44px] [@media(max-height:700px)]:[&_[data-op]]:!h-8 [@media(max-height:700px)]:!gap-1 ' +
+  '[@media(max-height:700px)]:[&_[data-amount-card]_.items-baseline]:!py-0';
 
 export interface TxFormFieldsProps {
   c: TxFormController;
@@ -40,6 +41,8 @@ export interface TxFormFieldsProps {
   wallets: readonly LocalRow<Wallet>[];
   /** Категории нужного вида, уже упорядоченные: самые частые первыми. */
   categories: readonly ChipOption[];
+  /** Кнопка справа от переключателя вида (например, «Продиктовать расходы»): не удлиняет форму. */
+  kindAction?: ReactNode;
 }
 
 /** Круглая кнопка у края суммы (комиссия слева, заметка справа). */
@@ -76,7 +79,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -122,20 +125,34 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
   // На телефоне комиссию печатает экранная клавиатура; на компьютере остаётся физическая, а экранные клавиши — для суммы.
   const [coarse] = useState(isCoarsePointer);
   const feeTyping = coarse && feeShown && target === 'fee';
+  // Сумму комиссии клавиши печатают прямо в её поле: черновик («2,» или «2,0») живёт там, а не собирается заново из числа
+  const feeKeyRef = useRef<((key: KeypadKey) => void) | null>(null);
   const feeKey = (key: KeypadKey): boolean => {
     if (!feeTyping) return false;
     if (isOpKey(key) || key === '=') return true;
     if (percentOpen) c.set({ feePct: applyPctKey(form.feePct, key) });
-    else {
-      const next = applyKey(minorToDraft(form.feeAmount, c.currency), key as AmountKey, c.currency);
-      c.set({ feeAmount: draftToMinor(next, c.currency) });
-    }
+    else feeKeyRef.current?.(key);
     return true;
   };
 
   return (
     <div className="flex flex-col gap-3 md:gap-5">
-      <Segmented ariaLabel="Вид операции" options={KINDS} value={form.kind} onChange={c.setKind} />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <Segmented
+            ariaLabel="Вид операции"
+            options={KINDS}
+            value={form.kind}
+            onChange={c.setKind}
+            disabled={c.kindLocked}
+            className="min-w-0 flex-1"
+          />
+          {kindAction}
+        </div>
+        {c.kindLocked && (
+          <p className="text-xs text-muted">Вид операции по долгу не меняется: удалите её и запишите заново со страницы долга.</p>
+        )}
+      </div>
 
       {/* Кошелёк и дата видны над клавиатурой: человек всегда знает, куда запишется операция */}
       <div className="flex flex-col gap-3">
@@ -159,6 +176,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
           tone={form.kind === 'expense' ? 'expense' : form.kind === 'income' ? 'income' : 'neutral'}
           error={errors.amount}
           className={COMPACT_KEYPAD}
+          compact
           calculator
           autoFocus
           start={
@@ -176,7 +194,7 @@ export function TxFormFields({ c, wallets, categories }: TxFormFieldsProps) {
           overlay={
             feeShown ? (
               <Floating side="above">
-                <FeeField c={c} active={feeTyping} onActivate={() => setTarget('fee')} onRemove={removeFee} />
+                <FeeField c={c} active={feeTyping} onActivate={() => setTarget('fee')} onRemove={removeFee} keyRef={feeKeyRef} />
               </Floating>
             ) : showNote ? (
               <Floating side="above">

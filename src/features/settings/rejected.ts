@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useStore } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { TxKind } from '@/domain/types';
-import { formatDayLabel } from '@/lib/dates';
+import { formatDayInline } from '@/lib/dates';
 import type { SyncTableName } from '@/sync/tables';
 
 export interface RejectedItem {
@@ -44,7 +44,7 @@ export function useRejectedItems(enabled = true): RejectedItem[] | undefined {
       out.push({
         table: 'transactions',
         id: r.id,
-        label: `${KIND_LABEL[r.kind]} ${amount}, ${formatDayLabel(r.occurredOn)}${r.deletedAt ? ' (удалена)' : ''}`,
+        label: `${KIND_LABEL[r.kind]} ${amount}, ${formatDayInline(r.occurredOn)}${r.deletedAt ? ' (удалена)' : ''}`,
         error: r.syncError ?? '',
       });
     }

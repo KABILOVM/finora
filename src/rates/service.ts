@@ -2,7 +2,7 @@ import type { CurrencyCode, RateTable } from '@/domain/types';
 import { isValidCurrencyCode } from '@/domain/currency';
 import { pickRate } from '@/domain/rates';
 import { describeRateError } from './http';
-import { MAX_PER_UNIT, MIN_PER_UNIT, boundWarnings, daysBetween, isFutureDate, isRateValue, isoDateOf } from './parseUtil';
+import { MAX_PER_UNIT, MIN_PER_UNIT, boundWarnings, daysBetween, isFutureDate, isRateValue } from './parseUtil';
 import { assessRateTable, pickComparable, withoutCodes } from './sanity';
 import { todayLocal } from '@/lib/dates';
 import { cleanTable, emptyState, isOwnerId, isStoredState, mergeTables, normalizeStored, pairKey, putTable, serializeState, stamp, trimEntered, type EnteredRate, type ManualRate, type RatesState } from './state';
@@ -311,11 +311,13 @@ export function createRateService(options: RateServiceOptions): RateService {
     const f = normCode(from);
     const t = normCode(to);
     if (!isValidCurrencyCode(f) || !isValidCurrencyCode(t)) return null;
-    const today = isoDateOf(now());
+    // «Сегодня» — по часам устройства (Душанбе), а не по UTC: с 00:00 до 05:00 по UTC было бы ещё вчера, и курс
+    // устаревал бы на 5 часов позже, а «Свой курс», заданный ночью, датировался бы вчерашним днём.
+    const today = todayLocal(now());
     if (f === t) return { rate: 1, source: 'same', asOf: today, stale: false, manual: false };
     // (1) «Свой курс» из Настроек перекрывает всё
     const manual = manualOf(owner)[pairKey(f, t)];
-    if (manual) return { rate: manual.rate, source: 'manual', asOf: manual.setAt.slice(0, 10), stale: false, manual: true };
+    if (manual) return { rate: manual.rate, source: 'manual', asOf: todayLocal(new Date(manual.setAt)), stale: false, manual: true };
     // (2) свежий автоматический курс
     const hit = pickRate(state.tables, f, t);
     const auto: RateLookup | null =

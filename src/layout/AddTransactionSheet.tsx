@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
@@ -243,12 +244,18 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       }
     >
       <div ref={formRef}>
-        <TxFormFields c={c} wallets={walletsRanked} categories={categoryOptions} />
-        {kind === 'expense' && (
-          <Button variant="ghost" icon="mic" fullWidth className="mt-2" onClick={() => setDictating(true)}>
-            Продиктовать расходы
-          </Button>
-        )}
+        {/* Диктовка — круглая кнопка рядом с «Расход / Доход / Перевод»: отдельная строка под формой удлиняла окно */}
+        <TxFormFields
+          c={c}
+          wallets={walletsRanked}
+          categories={categoryOptions}
+          kindAction={
+            // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
+            <span className="h-11 w-11 shrink-0">
+              {kind === 'expense' && <IconButton icon="mic" variant="secondary" label="Продиктовать расходы" onClick={() => setDictating(true)} />}
+            </span>
+          }
+        />
       </div>
     </Sheet>
   );
