@@ -58,10 +58,12 @@ describe('обновление базы с версии 1 до 2', () => {
         expect(t.debtId).toBeNull();
         expect(t.recurringRuleId).toBeNull();
       }
-      expect(txs[0]).toMatchObject({ id: T1, amountMinor: 1200, note: 'плов', dirty: 0, serverSeq: 7 });
+      // serverSeq 0 и сброшенный курсор: версия 6 заново забирает операции (прежняя версия отбрасывала debtId и recurringRuleId)
+      expect(txs[0]).toMatchObject({ id: T1, amountMinor: 1200, note: 'плов', dirty: 0, serverSeq: 0 });
       expect(txs[1]).toMatchObject({ id: T2, amountMinor: 300, dirty: 1, serverSeq: null, deletedAt: '2026-10-06T00:00:00.000Z' });
-      // служебные записи (курсор синхронизации, метка часов) не потеряны
-      expect(await store.sync.getCursor('transactions')).toBe(7);
+      expect(await store.sync.getCursor('transactions')).toBe(0);
+      expect(await store.sync.needsResync('transactions')).toBe(true);
+      // метка часов не потеряна
       expect(await store.sync.getMeta('lastStamp')).toBe('2026-10-05T12:00:00.000Z');
       // новые таблицы есть, пустые
       expect(await store.db.budgets.count()).toBe(0);
@@ -313,7 +315,7 @@ describe('обновление базы с версии 4 до 5: города �
   });
 });
 
-describe('обновление базы с версии 5 до 6: кошельки и настройки забираются с сервера заново', () => {
+describe('обновление базы с версии 5 до 6: кошельки, настройки и операции забираются с сервера заново', () => {
   const stores5 = {
     settings: 'id, dirty, [dirty+clientUpdatedAt]',
     wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
@@ -329,13 +331,15 @@ describe('обновление базы с версии 5 до 6: кошельк
   const W_RENAMED = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa32';
   const W_REVERTED = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa33';
   const W_NEW = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa34';
+  const TX_SEEN = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa35';
+  const TX_LOCAL = '0a3a28c0-5fdc-4385-8fca-7c24d9aaaa36';
   const wallet = (id: string, name: string, local: object) => ({
     ...sync, id, name, currency: 'TJS', kind: 'savings', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0,
     archivedAt: null, goalMinor: null, goalOn: null, syncError: null, ...local,
   });
   const renameMemory = { dirtyGroups: ['name'], dirtyBase: { name: { b: { name: 'Копилка' }, at: '2026-10-02T00:00:00.000Z' } } };
 
-  it('курсоры кошельков и настроек сброшены, serverSeq = 0 у строк, видевших сервер; правки и память о них на месте', async () => {
+  it('курсоры кошельков, настроек и операций сброшены, serverSeq = 0 у строк, видевших сервер; правки и память о них на месте', async () => {
     const factory = new IDBFactory();
     const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
     old.version(5).stores(stores5);
@@ -347,6 +351,10 @@ describe('обновление базы с версии 5 до 6: кошельк
       wallet(W_NEW, 'Новый', { dirty: 1, serverSeq: null }), // создан здесь, сервер его ещё не видел
     ]);
     await old.table('settings').add({ ...sync, dirty: 0, serverSeq: 7, syncError: null, id: USER_A, baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, weather: null });
+    await old.table('transactions').bulkAdd([
+      { ...sync, id: TX_SEEN, kind: 'expense', walletId: W_CLEAN, toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: null, occurredOn: '2026-10-01', note: '', baseCurrency: 'TJS', baseAmountMinor: 100, fxRate: null, fxSource: null, debtId: null, recurringRuleId: null, dirty: 0, serverSeq: 11, syncError: null },
+      { ...sync, id: TX_LOCAL, kind: 'expense', walletId: W_CLEAN, toWalletId: null, amountMinor: 200, toAmountMinor: null, categoryId: null, occurredOn: '2026-10-02', note: '', baseCurrency: 'TJS', baseAmountMinor: 200, fxRate: null, fxSource: null, debtId: null, recurringRuleId: null, dirty: 1, serverSeq: null, syncError: null },
+    ]);
     await old.table('meta').bulkPut([
       { key: 'cursor:wallets', value: 9 },
       { key: 'cursor:settings', value: 7 },
@@ -357,13 +365,17 @@ describe('обновление базы с версии 5 до 6: кошельк
 
     const store = await open(factory);
     try {
-      expect(await store.db.meta.get('cursor:wallets')).toBeUndefined();
-      expect(await store.db.meta.get('cursor:settings')).toBeUndefined();
-      expect(await store.sync.getCursor('wallets')).toBe(0);
-      expect(await store.sync.getCursor('settings')).toBe(0);
+      for (const t of ['wallets', 'settings', 'transactions'] as const) {
+        expect(await store.db.meta.get(`cursor:${t}`), t).toBeUndefined();
+        expect(await store.sync.getCursor(t), t).toBe(0);
+        // метка держит повтор, даже если вкладка со старым кодом запишет курсор поверх сброса
+        expect(await store.sync.needsResync(t), t).toBe(true);
+      }
       // остальные таблицы не забираются заново
-      expect(await store.sync.getCursor('transactions')).toBe(12);
+      expect(await store.sync.needsResync('categories')).toBe(false);
       expect(await store.sync.getMeta('initialPullDone')).toBe(true);
+      expect(await store.db.transactions.get(TX_SEEN)).toMatchObject({ dirty: 0, serverSeq: 0 });
+      expect(await store.db.transactions.get(TX_LOCAL)).toMatchObject({ dirty: 1, serverSeq: null });
 
       expect(await store.db.wallets.get(W_CLEAN)).toMatchObject({ name: 'Копилка', dirty: 0, serverSeq: 0 });
       expect(await store.db.wallets.get(W_RENAMED)).toMatchObject({ name: 'Отпуск', dirty: 1, serverSeq: 0, ...renameMemory });
@@ -385,7 +397,7 @@ describe('обновление базы с версии 5 до 6: кошельк
  * в src/db/database.ts). Поэтому колонка в TABLE_SPECS добавляется ВМЕСТЕ с версией базы, которая заново забирает её таблицу.
  */
 describe('новая колонка договора требует версии базы, которая заново забирает таблицу', () => {
-  /** Поля договора по таблицам; последний сброс курсоров — версия 6 (кошельки, настройки). */
+  /** Поля договора по таблицам; последний сброс курсоров — версия 6 (кошельки, настройки, операции). */
   const SNAPSHOT: Record<SyncTableName, string[]> = {
     settings: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather'],
     wallets: [

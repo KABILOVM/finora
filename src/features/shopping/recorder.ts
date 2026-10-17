@@ -43,19 +43,24 @@ export function policyBlocksMicrophone(): boolean {
   }
 }
 
-/** iPhone/iPad (iPadOS называет себя Mac, но у него сенсорный экран): там микрофон разрешают в «Safari → Микрофон». */
+/** iPhone/iPad (iPadOS называет себя Mac, но у него сенсорный экран). */
 function onIos(): boolean {
   const ua = navigator.userAgent ?? '';
   return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1);
 }
 
+/** Другой браузер или встроенное окно приложения на iPhone: у них свой переключатель «Микрофон» в настройках iOS, не у Safari. */
+const OTHER_IOS_BROWSER = /CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|GSA\/|FBAN|FBAV|Instagram|Line\/|YaBrowser|Telegram/;
+
 function describe(e: unknown): RecorderError {
   const name = (e as { name?: unknown } | null)?.name;
   if (name === 'NotAllowedError' || name === 'SecurityError')
     return new RecorderError(
-      onIos()
-        ? 'Нет доступа к микрофону. Разрешите его в настройках телефона (Safari → Микрофон) и повторите.'
-        : 'Нет доступа к микрофону. Разрешите его в настройках браузера для этого сайта и повторите.',
+      !onIos()
+        ? 'Нет доступа к микрофону. Разрешите его в настройках браузера для этого сайта и повторите.'
+        : OTHER_IOS_BROWSER.test(navigator.userAgent ?? '')
+          ? 'Нет доступа к микрофону. Разрешите его в настройках телефона (Настройки → ваш браузер → Микрофон) и повторите.'
+          : 'Нет доступа к микрофону. Разрешите его в настройках телефона (Safari → Микрофон) и повторите.',
     );
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return new RecorderError('Микрофон не найден.');
   if (name === 'NotReadableError') return new RecorderError('Микрофон занят другим приложением.');

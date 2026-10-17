@@ -250,9 +250,10 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           wallets={walletsRanked}
           categories={categoryOptions}
           kindAction={
-            kind === 'expense' ? (
-              <IconButton icon="mic" variant="secondary" label="Продиктовать расходы" onClick={() => setDictating(true)} />
-            ) : undefined
+            // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
+            <span className="h-11 w-11 shrink-0">
+              {kind === 'expense' && <IconButton icon="mic" variant="secondary" label="Продиктовать расходы" onClick={() => setDictating(true)} />}
+            </span>
           }
         />
       </div>

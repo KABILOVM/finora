@@ -202,6 +202,10 @@ export function AmountInput({
   // экранной клавиатуре, а вставка чужого текста объясняется сообщением.
   // Текст со словами (СМС банка «Расход 150 TJS», «-150,00 TJS») — не выражение: из него читается сумма, как без калькулятора.
   const onType = (raw: string) => {
+    // Одна набранная буква внутри выражения («12 + б» — русская раскладка на месте запятой) — опечатка: выражение остаётся как было.
+    // Заменить выражение может только вставка, текст длиннее набранного больше чем на символ.
+    const pasted = raw.length > shown.length + 1;
+    if (calculator && expr !== null && hasWords(raw) && !pasted) return;
     if (calculator && !hasWords(raw) && (expr !== null || hasOperator(normalizeExprText(raw)))) {
       const next = acceptExpr(raw);
       if (next !== null) {
@@ -209,8 +213,8 @@ export function AmountInput({
         if (expr !== null) return leaveExpr(sanitizeAmountText(next, currency));
         return onTypePlain(next);
       }
-      // так выражение не записать: набранное выражение остаётся, а вставка в обычное число («-150,00») читается как сумма
-      if (expr !== null) return;
+      // так выражение не записать: набранное остаётся, а вставка («-150,00» из банка) читается как сумма — и поверх выражения
+      if (expr !== null && !pasted) return;
     }
     onTypePlain(raw);
   };

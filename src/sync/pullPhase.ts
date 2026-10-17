@@ -29,11 +29,18 @@ export interface PullResult {
 async function pullTable(ctx: PhaseCtx, table: SyncTableName, watch: Watch): Promise<{ unreadable: boolean; applied: number; merged: number }> {
   let applied = 0;
   let merged = 0;
-  let cursor = await ctx.store.sync.getCursor(table);
+  // После обновления базы таблица забирается с нуля, а не с курса (его могла переписать вкладка со старым кодом); метку снимает
+  // только полный проход до конца таблицы.
+  const resync = await ctx.store.sync.needsResync(table);
+  let cursor = resync ? 0 : await ctx.store.sync.getCursor(table);
+  const done = async () => {
+    if (resync) await ctx.store.sync.finishResync(table);
+    return { unreadable: false, applied, merged };
+  };
   for (;;) {
     ctx.check();
     const raw = await ctx.transport.pull(table, cursor, PULL_PAGE);
-    if (raw.length === 0) return { unreadable: false, applied, merged };
+    if (raw.length === 0) return done();
 
     // Разбираем строки по порядку. Нечитаемую НЕ пропускаем: останавливаемся перед ней, а принятое до неё сохраняем.
     const good: RemoteRow<SyncTableName>[] = [];
@@ -65,7 +72,7 @@ async function pullTable(ctx: PhaseCtx, table: SyncTableName, watch: Watch): Pro
       cursor = maxSeq;
     }
     if (unreadable) return { unreadable: true, applied, merged };
-    if (raw.length < PULL_PAGE) return { unreadable: false, applied, merged };
+    if (raw.length < PULL_PAGE) return done();
   }
 }
 

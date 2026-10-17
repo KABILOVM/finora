@@ -12,6 +12,11 @@ export interface MetaRow {
 export const META_LAST_STAMP = 'lastStamp';
 export const META_LAST_SYNCED_AT = 'lastSyncedAt';
 export const cursorKey = (table: SyncTableName): string => `cursor:${table}`;
+/**
+ * Метка «таблицу надо забрать с сервера целиком». Пока она стоит, получение идёт с нуля, а не с курса: курс может переписать вкладка
+ * со старой версией приложения, которая про метку не знает. Снимает метку только полный проход до конца таблицы (syncOps.finishResync).
+ */
+export const resyncKey = (table: SyncTableName): string => `resync:${table}`;
 
 export function dbNameFor(userId: string): string {
   return `finora-v1-${userId}`;
@@ -107,11 +112,15 @@ export class FinoraDB extends Dexie {
     // Прежняя версия отбросила при получении незнакомые колонки, но запомнила курсор и серверную версию строки: без сброса повтор
     // отсёкся бы как уже виденный. serverSeq = 0, а не null: «строка на сервере есть» — правка сначала сверится с сервером
     // (base_seq 0 → конфликт → слияние по группам полей, см. syncMerge.ts), а с null ушла бы целиком, как созданная здесь.
+    // Кошельки (цель накопления), настройки (города погоды) и операции (debtId и recurringRuleId — их не знала самая первая версия
+    // с облаком). Метка resync держит повтор, даже если вкладка со старым кодом успеет записать курсор поверх сброса.
     this.version(6)
       .stores({})
       .upgrade(async (tx) => {
-        await tx.table('meta').bulkDelete(['cursor:wallets', 'cursor:settings']);
-        for (const name of ['wallets', 'settings']) {
+        const tables = ['wallets', 'settings', 'transactions'] as const;
+        await tx.table('meta').bulkDelete(tables.map((t) => cursorKey(t)));
+        await tx.table('meta').bulkPut(tables.map((t) => ({ key: resyncKey(t), value: true })));
+        for (const name of tables) {
           await tx
             .table(name)
             .toCollection()

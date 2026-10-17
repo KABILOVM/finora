@@ -48,6 +48,14 @@ function fatalScreenShown(): boolean {
 }
 
 /**
+ * Только экран сбоя на весь экран: на нём ничего не набрать, перезагрузка не потеряет ввод. Карточка упавшего раздела сюда не
+ * входит — меню работает, и поверх неё может быть открыта форма (например, «+» над упавшей «Аналитикой»).
+ */
+function rootFatalShown(): boolean {
+  return document.querySelector('#root > [role="alert"]') !== null;
+}
+
+/**
  * Страница собрана из одной версии, а управляет ею уже воркер другой: файла самой страницы нет ни в одном кэше.
  * Так бывает, если воркер поменялся ровно в момент загрузки страницы (событие смены мы бы пропустили). Дальше такая
  * страница рано или поздно не найдёт нужный кусок кода, поэтому её надо перезагрузить.
@@ -139,7 +147,7 @@ function UpdateBanner() {
   const updateReady = needRefresh || waitingSeen;
 
   reloadDecision.current = () => {
-    if (decided.current || fatalScreenShown() || !userIsBusy()) window.location.reload();
+    if (decided.current || rootFatalShown() || !userIsBusy()) window.location.reload();
     else setStale(true);
   };
 

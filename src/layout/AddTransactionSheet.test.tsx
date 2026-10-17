@@ -145,10 +145,16 @@ describe('компактная форма', () => {
   it('«Продиктовать расходы» — круглая кнопка в строке «Расход / Доход / Перевод», а не отдельная строка под формой', async () => {
     await openAddSheet();
     const mic = screen.getByRole('button', { name: 'Продиктовать расходы' });
-    expect(mic.parentElement?.querySelector('[role="radiogroup"][aria-label="Вид операции"]')).not.toBeNull();
+    const kinds = screen.getByRole('radiogroup', { name: 'Вид операции' });
+    const row = kinds.parentElement!;
+    expect(row.contains(mic)).toBe(true);
     expect(mic.textContent).toBe(''); // только значок, подпись — для скринридера
+    const slot = row.lastElementChild!;
     await user.click(screen.getByRole('radio', { name: 'Доход' }));
     expect(screen.queryByRole('button', { name: 'Продиктовать расходы' })).toBeNull();
+    // место под кнопку остаётся: переключатель не меняет ширину и «Доход»/«Перевод» не прыгают
+    expect(row.lastElementChild).toBe(slot);
+    expect(slot.className).toContain('w-11');
     await user.click(screen.getByRole('radio', { name: 'Расход' }));
     await user.click(screen.getByRole('button', { name: 'Продиктовать расходы' }));
     expect(await findByRole('dialog', { name: 'Продиктовать расходы' })).toBeInTheDocument();

@@ -14,4 +14,5 @@ export function alertMessage(a: BudgetAlert, name: string): string {
 }
 
 /** Когда лимитов на исходе много сразу — одна общая подсказка вместо вороха. */
-export const summaryMessage = (n: number): string => `${n} ${pluralRu(n, 'лимит', 'лимита', 'лимитов')} на исходе или превышены`;
+export const summaryMessage = (n: number): string =>
+  `${n} ${pluralRu(n, 'лимит', 'лимита', 'лимитов')} на исходе или ${pluralRu(n, 'превышен', 'превышены', 'превышены')}`;

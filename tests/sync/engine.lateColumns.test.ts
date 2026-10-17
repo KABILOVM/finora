@@ -93,6 +93,25 @@ describe('обновление приложения после получени�
     expect(await a.store.settings.get()).toMatchObject({ weekStartsOn: 0, weather: PLACES });
   });
 
+  it('вкладка со старым кодом записала курсор поверх сброса: метка всё равно забирает таблицы с нуля, синхронизация не зацикливается', async () => {
+    const server = createMemoryServer();
+    const { goalId } = await cloudWithGoalAndWeather(server);
+    const b = await openDevice(server, 'dev-b', { factory: await oldDeviceDb(server) });
+    // старая вкладка (обновления ждут кнопки) дописала курсоры в конец таблиц уже после обновления базы
+    const last = (t: string) => server.dump(USER, t as never).reduce((m, r) => Math.max(m, r.server_seq), 0);
+    await b.store.db.meta.bulkPut(['wallets', 'settings', 'transactions'].map((t) => ({ key: `cursor:${t}`, value: last(t) })));
+    expect(await b.store.sync.needsResync('wallets')).toBe(true);
+
+    await b.store.wallets.update(goalId, { name: 'Отпуск' });
+    await b.engine.syncNow();
+    expect(b.engine.getStatus()).toMatchObject({ phase: 'idle', pending: 0, quarantined: 0 });
+    expect(server.dump(USER, 'wallets').find((r) => r['id'] === goalId)).toMatchObject({ name: 'Отпуск', goal_minor: GOAL.goalMinor, goal_on: GOAL.goalOn });
+    expect(await b.store.db.wallets.get(goalId)).toMatchObject({ name: 'Отпуск', ...GOAL, dirty: 0 });
+    expect(await b.store.settings.get()).toMatchObject({ weather: PLACES });
+    // полный проход прошёл — метки сняты, дальше получение снова идёт от курса
+    for (const t of ['wallets', 'settings', 'transactions'] as const) expect(await b.store.sync.needsResync(t), t).toBe(false);
+  });
+
   it('правка до первой синхронизации, и отправка ушла раньше получения (base_seq 0): конфликт, слияние — цель и города целы', async () => {
     const server = createMemoryServer();
     const { goalId } = await cloudWithGoalAndWeather(server);

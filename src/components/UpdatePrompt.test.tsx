@@ -281,6 +281,23 @@ describe('новый воркер взял управление (onNeedReload)',
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('раздел упал, но поверх открыта форма («+» над упавшей страницей) — перезагрузка ждёт, ввод не теряется', () => {
+    render(<UpdatePrompt />);
+    const card = document.body.appendChild(document.createElement('div'));
+    card.setAttribute('role', 'alert');
+    card.setAttribute('data-section-error', '');
+    const dialog = document.body.appendChild(document.createElement('div'));
+    dialog.setAttribute('role', 'dialog');
+    try {
+      act(() => sw.options?.onNeedReload?.());
+      expect(reload).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent(/Приложение обновлено/);
+    } finally {
+      card.remove();
+      dialog.remove();
+    }
+  });
+
   it('воркер сменился (событие браузера), человек ничего не вводит — перезагрузка', () => {
     const { container } = fakeServiceWorker();
     render(<UpdatePrompt />);

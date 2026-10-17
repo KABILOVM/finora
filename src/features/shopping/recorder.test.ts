@@ -64,6 +64,8 @@ describe('запись голоса', () => {
 
   it.each([
     ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', 0, /Safari → Микрофон/],
+    ['Chrome на iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0 Mobile/15E148 Safari/604.1', 0, /Настройки → ваш браузер → Микрофон/],
+    ['Telegram на iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Telegram-iOS', 0, /Настройки → ваш браузер → Микрофон/],
     ['iPad (называет себя Mac)', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 5, /Safari → Микрофон/],
     ['Android', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/126.0 Mobile', 5, /настройках браузера/],
   ])('отказ в доступе на %s: подсказка про нужные настройки', async (_, userAgent, maxTouchPoints, hint) => {

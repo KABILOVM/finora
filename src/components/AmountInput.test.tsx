@@ -474,6 +474,27 @@ describe('AmountInput: калькулятор', () => {
     expect(input().value).toBe('150');
     expect(screen.queryByRole('button', { name: /^=/ })).toBeNull();
   });
+
+  it('набранная буква внутри выражения — опечатка: «12+» остаётся, следующая цифра продолжает выражение (12+3 = 15, а не 123)', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '12+');
+    await user.type(input(), 'б');
+    expect(input().value.replace(/\s/g, '')).toBe('12+');
+    expect(onValue).toHaveBeenLastCalledWith(null);
+    await user.type(input(), '3');
+    expect(onValue).toHaveBeenLastCalledWith(1500);
+  });
+
+  it('число со знаком из банка («-150,00»), вставленное поверх выражения, заменяет его суммой', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '5+2');
+    input().setSelectionRange(0, input().value.length);
+    await user.paste('-150,00');
+    expect(onValue).toHaveBeenLastCalledWith(15_000);
+    expect(input().value).toBe('150,00');
+  });
 });
 
 describe('AmountInput: клавиши из чужой клавиатуры (keyRef)', () => {
