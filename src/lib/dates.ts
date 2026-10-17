@@ -101,6 +101,15 @@ export function formatDayLabel(date: IsoDate, today: IsoDate = todayLocal()): st
   return `${weekday}, ${ymd.d} ${month}${year}`;
 }
 
+/**
+ * Та же подпись дня, но для середины фразы: «сегодня» и «вчера» со строчной буквы («Курс устарел: USD (от вчера)»,
+ * «НБТ · на сегодня»). В начале строки (заголовки дней в списках, отдельные подписи) — formatDayLabel.
+ */
+export function formatDayInline(date: IsoDate, today: IsoDate = todayLocal()): string {
+  const label = formatDayLabel(date, today);
+  return label === 'Сегодня' || label === 'Вчера' ? label.toLowerCase() : label;
+}
+
 /** '2026-10-05' → '2026-10'. Бросает RangeError на некорректной дате. */
 export function monthKey(date: IsoDate): string {
   const { y, m } = requireYmd(date);

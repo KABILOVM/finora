@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useStore, type DebtDeleteMode } from '@/db';
 import type { CurrencyCode, LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
-import { opsCount, previewDebtDelete, previewText } from './debtDeleteText';
+import { deleteHint, keepHint, previewDebtDelete } from './debtDeleteText';
 
 interface Props {
   open: boolean;
@@ -60,17 +60,7 @@ export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, bas
               </label>
             ))}
           </div>
-          {mode === 'keep-operations' ? (
-            <p data-testid="debt-delete-hint">
-              {preview.count > 0 ? `${opsCount(preview.count)} останутся` : 'Операций по этому долгу нет.'}
-              {preview.count > 0 &&
-                ' в истории как обычные: деньги в кошельках не меняются, но теперь они считаются обычными доходами и расходами месяца и попадут в итоги и бюджеты.'}
-            </p>
-          ) : (
-            <p data-testid="debt-delete-hint">
-              Будет удалено: {previewText(preview)} Остатки кошельков вернутся такими, как были до этого долга.
-            </p>
-          )}
+          <p data-testid="debt-delete-hint">{mode === 'keep-operations' ? keepHint(preview.count) : deleteHint(preview)}</p>
           {rules !== undefined && rules > 0 && (
             <p>Регулярные платежи по этому долгу ({rules}) уйдут в архив, чтобы не проводиться как обычные расходы.</p>
           )}

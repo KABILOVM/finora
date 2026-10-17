@@ -12,7 +12,7 @@ import { useToast } from '@/components/Toast';
 import { useBalances, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { LocalRow, Wallet } from '@/domain/types';
-import { formatDayLabel } from '@/lib/dates';
+import { formatDayInline } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { enteredNote } from '@/rates/enteredText';
 import { useRates } from '@/rates/hooks';
@@ -137,7 +137,7 @@ export default function WalletsPage() {
               {total.stale.length > 0 && (
                 <p role="alert" className="mt-1 text-sm text-warning">
                   Курс устарел:{' '}
-                  {total.stale.map((s) => `${s.currency} (от ${formatDayLabel(s.asOf)})`).join(', ')}. Обновите курсы в Настройках.
+                  {total.stale.map((s) => `${s.currency} (от ${formatDayInline(s.asOf)})`).join(', ')}. Обновите курсы в Настройках.
                 </p>
               )}
               {total.missing.length > 0 && (

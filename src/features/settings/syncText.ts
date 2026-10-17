@@ -1,4 +1,4 @@
-import { formatDayLabel, todayLocal } from '@/lib/dates';
+import { formatDayInline, todayLocal } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import type { SyncStatus } from '@/sync/transport';
 
@@ -68,12 +68,15 @@ export function describeSync(status: SyncStatus): SyncDescription {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/** '2026-10-10T11:40:00.000Z' → «Сегодня, 16:40» (по местным часам). Некорректное значение → «неизвестно». */
+/**
+ * '2026-10-10T11:40:00.000Z' → «сегодня, 16:40» (по местным часам). Некорректное значение → «неизвестно».
+ * Стоит после двоеточия («Обновлены: сегодня, 16:40»), поэтому «сегодня» и «вчера» — со строчной.
+ */
 export function formatDateTime(iso: string | null, now: Date = new Date()): string {
   if (iso === null) return 'неизвестно';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return 'неизвестно';
   const today = todayLocal(now);
-  const day = formatDayLabel(todayLocal(d), today);
+  const day = formatDayInline(todayLocal(d), today);
   return `${day}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
