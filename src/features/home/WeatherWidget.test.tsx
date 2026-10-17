@@ -105,6 +105,16 @@ describe('виджет «Погода» на «Главной»', () => {
     expect(widget()?.getAttribute('aria-label')).toBe('Погода, Худжанд: +23°, Ясно, днём +28°, ночью −1°. Открыть погоду');
   });
 
+  it('справа от температуры — две строки: максимум «↑» и минимум «↓» за сегодня (декор, скринридеру хватает имени ссылки)', async () => {
+    choose(KHUJAND);
+    cacheFor(KHUJAND, 5 * 60 * 1000);
+    await open();
+    const range = widget()?.querySelector('[data-testid="weather-widget-range"]');
+    expect(range).not.toBeNull();
+    expect(range?.getAttribute('aria-hidden')).toBe('true');
+    expect(norm(range?.textContent)).toBe('↑+28°↓−1°');
+  });
+
   it('старый прогноз — берёт новый с сайта погоды и показывает его', async () => {
     choose(KHUJAND);
     cacheFor(KHUJAND, 3 * 60 * 60 * 1000);
