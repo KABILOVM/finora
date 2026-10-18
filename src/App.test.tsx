@@ -22,7 +22,7 @@ describe('маршруты', () => {
     ['/more', 'Ещё'],
     ['/budgets', 'Бюджеты'],
     ['/recurring', 'Регулярные платежи'],
-    ['/debts', 'Долги и кредиты'],
+    ['/debts', 'Долги'],
     ['/import', 'Импорт из Дзен-мани'],
     ['/settings', 'Настройки'],
     ['/settings/categories', 'Категории'],
@@ -61,13 +61,13 @@ describe('маршруты', () => {
 });
 
 describe('навигация', () => {
-  it('нижняя панель телефона: Главная, Операции, «+», Кошельки, Ещё', async () => {
+  it('нижняя панель телефона: Главная, Операции, «+», Аналитика, Ещё', async () => {
     renderAt('/');
     await findByRole('heading', { name: 'Главная', level: 1 });
     const bottom = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.className.includes('fixed') && n.className.includes('bottom-'));
     expect(bottom).toBeDefined();
     const labels = Array.from((bottom as HTMLElement).querySelectorAll('a')).map((a) => a.getAttribute('aria-label') ?? a.textContent);
-    expect(labels).toEqual(['Главная', 'Операции', 'Добавить операцию', 'Кошельки', 'Ещё']);
+    expect(labels).toEqual(['Главная', 'Операции', 'Добавить операцию', 'Аналитика', 'Ещё']);
   });
 
   it('боковая панель ПК: основные пункты, внизу «Настройки» (без «Ещё»), и кнопка «Добавить операцию»', async () => {
@@ -76,7 +76,7 @@ describe('навигация', () => {
     const side = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.closest('aside'));
     expect(side).toBeDefined();
     const labels = Array.from((side as HTMLElement).querySelectorAll('a')).map((a) => a.textContent);
-    expect(labels).toEqual(['Главная', 'Операции', 'Кошельки', 'Бюджеты', 'Аналитика', 'Платежи', 'Покупки', 'Долги', 'Курсы', 'Погода', 'Настройки']);
+    expect(labels).toEqual(['Главная', 'Операции', 'Аналитика', 'Кошельки', 'Долги', 'Бюджеты', 'Регулярные платежи', 'Покупки', 'Курсы валют', 'Погода', 'Настройки']);
     const aside = (side as HTMLElement).closest('aside') as HTMLElement;
     expect(aside.querySelector('a[href="#/add"], a[href="/add"]')?.textContent).toContain('Добавить операцию');
   });
@@ -85,8 +85,8 @@ describe('навигация', () => {
     renderAt('/wallets');
     await findByRole('heading', { name: 'Кошельки', level: 1 });
     const current = Array.from(document.querySelectorAll('[aria-current="page"]')).map((a) => a.textContent);
-    expect(current.every((t) => t?.includes('Кошельки'))).toBe(true);
-    expect(current.length).toBeGreaterThan(0);
+    // ПК: «Кошельки»; телефон: «Ещё» (кошельки лежат за ним)
+    expect(current.sort()).toEqual(['Ещё', 'Кошельки']);
   });
 
   it('на странице категорий подсвечены «Ещё» (телефон) и «Настройки» (ПК)', async () => {

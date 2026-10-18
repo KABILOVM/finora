@@ -221,7 +221,7 @@ test.describe('18. Долги и кредиты', () => {
     await expect(remaining(page)).toContainText(money('200 с.'));
     await dismissToasts(page);
     await page.getByRole('link', { name: 'Все долги' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Долги и кредиты' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeVisible();
     await expect(debtLink(page, 'Бобур')).toHaveCount(0);
     const fold = page.getByRole('button', { name: 'Закрытые · 1' });
     await expect(fold).toHaveAttribute('aria-expanded', 'false');

@@ -32,7 +32,7 @@ test('офлайн: /more, /budgets, /recurring, /debts, /import, /settings/cate
     ['#/more', 'Ещё'],
     ['#/budgets', 'Бюджеты'],
     ['#/recurring', 'Регулярные платежи'],
-    ['#/debts', 'Долги и кредиты'],
+    ['#/debts', 'Долги'],
     ['#/import', 'Импорт из Дзен-мани'],
     ['#/settings/categories', 'Категории'],
     ['#/settings', 'Настройки'],
@@ -45,7 +45,7 @@ test('офлайн: /more, /budgets, /recurring, /debts, /import, /settings/cate
   // и перезагрузка прямо на новой странице без сети
   await page.goto(`${srv.url}#/debts`);
   await page.reload();
-  await expect(page.getByRole('heading', { level: 1, name: 'Долги и кредиты' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeVisible();
   expect(errors).toEqual([]);
   await ctx.close();
 });

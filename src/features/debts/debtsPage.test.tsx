@@ -41,7 +41,7 @@ async function openPage(setup?: Setup, path = '/debts', tables = [table()]) {
     td,
     path,
   );
-  await findByRole('heading', { name: 'Долги и кредиты', level: 1 });
+  await findByRole('heading', { name: 'Долги', level: 1 });
   await waitFor(() => expect(screen.queryByText('Загрузка…')).toBeNull());
   return td;
 }

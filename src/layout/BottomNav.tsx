@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
 import { cn } from '@/lib/cn';
-import { ADD_LABEL, isNavActive, NAV_ITEMS, useAddLink, type NavItem } from './nav';
+import { ADD_LABEL, isNavActive, PHONE_ITEMS, useAddLink, type NavItem } from './nav';
 
 function Item({ item }: { item: NavItem }) {
   const { pathname } = useLocation();
@@ -24,7 +24,7 @@ function Item({ item }: { item: NavItem }) {
 /** Нижняя панель телефона (< 768px): 2 пункта, большая «+», 2 пункта. Уважает «чёлку» снизу (safe-area). */
 export function BottomNav() {
   const addLink = useAddLink();
-  const [first, second, third, fourth] = NAV_ITEMS.filter((item) => item.phone);
+  const [first, second, third, fourth] = PHONE_ITEMS;
   return (
     <nav
       aria-label="Основная навигация"

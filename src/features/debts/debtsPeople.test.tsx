@@ -46,7 +46,7 @@ function App() {
   );
 }
 
-async function open(setup: Setup | undefined, path: string, heading = 'Долги и кредиты') {
+async function open(setup: Setup | undefined, path: string, heading = 'Долги') {
   const td = opsDeps([table()], { setup: setup ? async (s) => void (await setup(s)) : undefined });
   await showApp(<App />, td, path);
   await findByRole('heading', { name: heading, level: 1 });

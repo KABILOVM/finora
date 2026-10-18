@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { isInSection, isNavActive, MORE_SECTIONS, NAV_ITEMS } from './nav';
+import { isInSection, isNavActive, MORE_SECTIONS, PHONE_ITEMS, SIDE_ITEMS } from './nav';
 
 const item = (to: string) => {
-  const found = NAV_ITEMS.find((i) => i.to === to);
+  const found = [...PHONE_ITEMS, ...SIDE_ITEMS].find((i) => i.to === to);
   if (!found) throw new Error(`нет пункта ${to}`);
   return found;
 };
@@ -28,20 +28,26 @@ describe('isNavActive: нижняя панель телефона', () => {
   it.each([...MORE_SECTIONS, '/settings/categories', '/more/'])('«Ещё» подсвечен на %s', (path) => {
     expect(isNavActive(item('/more'), path, 'phone')).toBe(true);
   });
-  it.each(['/', '/transactions', '/wallets'])('«Ещё» не подсвечен на %s', (path) => {
+  it.each(['/', '/transactions', '/analytics'])('«Ещё» не подсвечен на %s', (path) => {
     expect(isNavActive(item('/more'), path, 'phone')).toBe(false);
   });
   it('«Главная» только на «/»', () => {
     expect(isNavActive(item('/'), '/', 'phone')).toBe(true);
     expect(isNavActive(item('/'), '/more', 'phone')).toBe(false);
   });
-  it('в нижней панели четыре пункта: Главная, Операции, Кошельки, Ещё', () => {
-    expect(NAV_ITEMS.filter((i) => i.phone).map((i) => i.label)).toEqual(['Главная', 'Операции', 'Кошельки', 'Ещё']);
+  it('в нижней панели четыре пункта: Главная, Операции, Аналитика, Ещё', () => {
+    expect(PHONE_ITEMS.map((i) => i.label)).toEqual(['Главная', 'Операции', 'Аналитика', 'Ещё']);
+  });
+  it('«Аналитика» горит только на своём разделе, кошельки лежат за «Ещё»', () => {
+    expect(isNavActive(item('/analytics'), '/analytics', 'phone')).toBe(true);
+    expect(isNavActive(item('/analytics'), '/wallets', 'phone')).toBe(false);
+    expect(isNavActive(item('/more'), '/wallets', 'phone')).toBe(true);
+    expect(isNavActive(item('/more'), '/analytics', 'phone')).toBe(false);
   });
 });
 
 describe('isNavActive: боковая панель ПК', () => {
-  const active = (path: string) => NAV_ITEMS.filter((i) => i.side && isNavActive(i, path, 'side')).map((i) => i.sideLabel);
+  const active = (path: string) => SIDE_ITEMS.filter((i) => isNavActive(i, path, 'side')).map((i) => i.label);
 
   it.each([
     ['/', ['Главная']],
@@ -49,9 +55,11 @@ describe('isNavActive: боковая панель ПК', () => {
     ['/wallets', ['Кошельки']],
     ['/budgets', ['Бюджеты']],
     ['/analytics', ['Аналитика']],
-    ['/recurring', ['Платежи']],
+    ['/recurring', ['Регулярные платежи']],
     ['/shopping', ['Покупки']],
     ['/debts', ['Долги']],
+    ['/rates', ['Курсы валют']],
+    ['/weather', ['Погода']],
     ['/more', []], // на ПК пункта «Ещё» нет
     ['/import', ['Настройки']],
     ['/settings/categories', ['Настройки']],

@@ -185,7 +185,7 @@ test.describe('21. Напоминания: настоящий приём push в
     expect(worker, 'сервис-воркер виден Playwright').toBeTruthy();
     await clickNotification(worker!, 'debt-1');
     await expect(page).toHaveURL(/#\/debts$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Долги и кредиты' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeVisible();
     await expect.poll(async () => (await notifications(page)).length, { timeout: 10_000 }).toBe(0);
     // и вредный адрес из уведомления ведёт только на «Главную»
     await showPush(page, deliver, JSON.stringify({ title: 'Чужое', tag: 'evil', url: '//evil.com' }));

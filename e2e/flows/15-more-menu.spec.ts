@@ -1,15 +1,17 @@
 import type { Page } from '@playwright/test';
 import { expect, goSection, isPhone, mainNav, openApp, openFromMore, shot, test } from '../helpers';
 
-/** Разделы за пунктом «Ещё»: (название в списке, заголовок страницы, адрес). */
+/** Разделы за пунктом «Ещё» по группам реестра: (название в списке, заголовок страницы, адрес). Аналитика теперь в нижней панели. */
 const MORE: ReadonlyArray<readonly [string, string, string]> = [
+  ['Кошельки', 'Кошельки', '#/wallets'],
+  ['Долги', 'Долги', '#/debts'],
   ['Бюджеты', 'Бюджеты', '#/budgets'],
-  ['Аналитика', 'Аналитика', '#/analytics'],
   ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
   ['Покупки', 'Покупки', '#/shopping'],
-  ['Долги и кредиты', 'Долги и кредиты', '#/debts'],
-  ['Курсы и конвертер', 'Курсы валют', '#/rates'],
+  ['Курсы валют', 'Курсы валют', '#/rates'],
   ['Погода', 'Погода', '#/weather'],
+  ['Категории', 'Категории', '#/settings/categories'],
+  ['Импорт из Дзен-мани', 'Импорт из Дзен-мани', '#/import'],
   ['Настройки', 'Настройки', '#/settings'],
 ];
 
@@ -31,6 +33,9 @@ test.describe('15. Меню «Ещё»', () => {
     const main = page.getByRole('main');
     await expect(main.getByRole('link')).toHaveCount(MORE.length);
     for (const [name] of MORE) await expect(main.getByRole('link', { name, exact: true })).toBeVisible();
+    // четыре смысловых группы; аналитики здесь нет — она в нижней панели
+    await expect(main.getByRole('heading', { level: 2 })).toHaveText(['Деньги', 'Планирование', 'Инструменты', 'Приложение']);
+    await expect(main.getByRole('link', { name: 'Аналитика', exact: true })).toHaveCount(0);
     await shot(page, '15-more', testInfo);
   });
 
@@ -50,7 +55,7 @@ test.describe('15. Меню «Ещё»', () => {
     for (const [hash, title, real] of [
       ['/budgets', 'Бюджеты', (p: Page) => p.getByRole('heading', { level: 2, name: 'Лимиты на месяц' })],
       ['/recurring', 'Регулярные платежи', (p: Page) => p.getByRole('button', { name: 'Добавить платёж' })],
-      ['/debts', 'Долги и кредиты', (p: Page) => p.getByRole('button', { name: 'Новый долг' })],
+      ['/debts', 'Долги', (p: Page) => p.getByRole('button', { name: 'Новый долг' })],
       ['/import', 'Импорт из Дзен-мани', (p: Page) => p.getByLabel('Файл Дзен-мани')],
     ] as const) {
       await openApp(page, hash);
@@ -64,12 +69,14 @@ test.describe('15. Меню «Ещё»', () => {
 
   test('телефон: на всех разделах из «Ещё» подсвечен «Ещё»; на «Главной» нет', async ({ page }) => {
     test.skip(!isPhone(page), 'нижняя панель только на телефоне');
-    for (const hash of ['/more', '/budgets', '/recurring', '/debts', '/import', '/settings', '/settings/categories']) {
+    for (const hash of ['/more', '/wallets', '/budgets', '/recurring', '/debts', '/import', '/settings', '/settings/categories']) {
       await openApp(page, hash);
       expect(await lit(page), hash).toEqual(['Ещё']);
     }
     await openApp(page, '/');
     expect(await lit(page)).toEqual(['Главная']);
+    await openApp(page, '/analytics');
+    expect(await lit(page)).toEqual(['Аналитика']); // аналитика в нижней панели — «Ещё» на ней не горит
   });
 
   test('ПК: основные пункты в боковой панели ведут на свои разделы, подсвечен один пункт', async ({ page }, testInfo) => {
@@ -77,9 +84,10 @@ test.describe('15. Меню «Ещё»', () => {
     await openApp(page);
     for (const [name, title, hash] of [
       ['Бюджеты', 'Бюджеты', '#/budgets'],
-  ['Аналитика', 'Аналитика', '#/analytics'],
-      ['Платежи', 'Регулярные платежи', '#/recurring'],
-      ['Долги', 'Долги и кредиты', '#/debts'],
+      ['Аналитика', 'Аналитика', '#/analytics'],
+      ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
+      ['Долги', 'Долги', '#/debts'],
+      ['Кошельки', 'Кошельки', '#/wallets'],
       ['Настройки', 'Настройки', '#/settings'],
     ] as const) {
       await mainNav(page).getByRole('link', { name, exact: true }).click();
