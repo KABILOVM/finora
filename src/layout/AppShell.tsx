@@ -35,7 +35,7 @@ export function AppShell({ status }: AppShellProps) {
   return (
     <div className="min-h-dvh">
       <SideNav status={status} />
-      <div className="md:pl-60">
+      <div className="md:pl-64">
         <div className="sticky top-0 z-20 bg-bg/55 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
           <div className="flex min-h-[52px] items-center justify-between gap-2 px-4">
             <div className="flex shrink-0 items-center gap-2">

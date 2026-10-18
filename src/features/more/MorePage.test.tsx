@@ -53,17 +53,23 @@ describe('MorePage', () => {
     }
   });
 
-  it('статус «Требует внимания» стоит рядом со своей строкой и не мешает ссылке; без статуса строка чистая', () => {
+  it('статус стоит в своей строке — под названием раздела — и не меняет имя ссылки; для долга и накоплений адреса ведут в свой раздел', () => {
     show([
-      { id: 'debts', kind: 'debt', text: 'Просрочено долгов: 3', to: '/debts', tone: 'danger' },
+      { id: 'debts', kind: 'debt', text: 'Долг просрочен: Рустам', to: '/debts/abc', tone: 'danger' },
       { id: 'payments', kind: 'payment', text: 'Просрочен платёж: Аренда', to: '/recurring', tone: 'danger' },
-      { id: 'budgets', kind: 'budget', text: 'Лимит превышен: Еда', to: '/budgets', tone: 'danger' },
+      { id: 'budgets', kind: 'budget', text: 'Лимит превышен: Еда', to: '/budgets', tone: 'warning' },
+      { id: 'saving', kind: 'saving', text: 'Пора отложить: Отпуск', to: '/wallets', tone: 'warning' },
     ]);
-    expect(screen.getByText('Просрочено долгов: 3')).toBeTruthy();
-    expect(screen.getByText('Просрочен платёж: Аренда')).toBeTruthy();
-    expect(screen.getByText('Лимит превышен: Еда')).toBeTruthy();
+    const rowOf = (title: string) => screen.getByRole('link', { name: title }).closest('li') as HTMLElement;
+    expect(rowOf('Долги').textContent).toContain('Долг просрочен: Рустам'); // /debts/<id> → «Долги»
+    expect(rowOf('Регулярные платежи').textContent).toContain('Просрочен платёж: Аренда');
+    expect(rowOf('Бюджеты').textContent).toContain('Лимит превышен: Еда');
+    expect(rowOf('Кошельки').textContent).toContain('Пора отложить: Отпуск');
+    // у остальных строк статуса нет, имя ссылки — только название
+    expect(rowOf('Покупки').textContent).toBe('Покупки');
     expect(screen.getByRole('link', { name: 'Долги' }).textContent).toBe('Долги');
-    expect(screen.queryByText(/Покупки.*\d/)).toBeNull();
+    // статус не налезает на соседей: он обычный текст в потоке, не абсолютный слой
+    expect(screen.getByText('Долг просрочен: Рустам').className).not.toContain('absolute');
   });
 
   it('данные ещё читаются — статусов нет, список на месте', () => {

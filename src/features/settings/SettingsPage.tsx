@@ -38,7 +38,7 @@ function SyncProblems() {
 /** Блок настроек с адресом: `/settings?section=security` прокручивает страницу к нему. */
 function Block({ id, children }: { id: string; children: ReactNode }) {
   return (
-    <div id={`settings-${id}`} className="scroll-mt-16">
+    <div id={`settings-${id}`} className="scroll-mt-[calc(4rem+env(safe-area-inset-top))] md:scroll-mt-4">
       {children}
     </div>
   );

@@ -52,7 +52,7 @@ describe('виджет «Курсы» на «Главной»', () => {
   it('доступное имя ссылки перечисляет курсы и говорит, куда ведёт', async () => {
     await open([withRub()]);
     const link = screen.getByRole('link', { name: /Курсы к Сомони: 1 USD = 10,90 с\.; 100 RUB = 12,10 с\./ });
-    expect(norm(link.getAttribute('aria-label'))).toMatch(/Открыть курсы и конвертер$/);
+    expect(norm(link.getAttribute('aria-label'))).toMatch(/Открыть курсы валют$/);
   });
 
   it('курсу больше 3 суток — пометка «устарел» словами и в имени ссылки', async () => {
@@ -70,7 +70,7 @@ describe('виджет «Курсы» на «Главной»', () => {
   it('курсов нет совсем — честно «нет курса» и подсказка, без цифр', async () => {
     await open([]);
     expect(rows()).toEqual(['USD нет курса', 'RUB нет курса']);
-    expect(widget()?.getAttribute('aria-label')).toBe('Курсы валют: пока нет данных. Открыть курсы и конвертер');
+    expect(widget()?.getAttribute('aria-label')).toBe('Курсы валют: пока нет данных. Открыть курсы валют');
   });
 
   it('основная валюта — доллар: показываем рубль и евро к доллару', async () => {
@@ -81,7 +81,7 @@ describe('виджет «Курсы» на «Главной»', () => {
     expect(rows().join(' ')).not.toContain('USD');
   });
 
-  it('нажатие открывает раздел «Курсы и конвертер»', async () => {
+  it('нажатие открывает раздел «Курсы валют»', async () => {
     await open([withRub()]);
     expect(currentPath()).toBe('/');
     await user.click(widget() as HTMLElement);
