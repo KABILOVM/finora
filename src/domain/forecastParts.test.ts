@@ -418,6 +418,26 @@ describe('computeDailyForecast: лимит месяца заранее откл�
     expect(after.effective).toMatchObject({ by: 'budget', perDayMinor: 3_000, todayLimitMinor: 3_000 });
   });
 
+  it('регулярный расход в долларах при известном курсе — отложен по курсу, но «часть не учтена» не пишем; без курса — пишем', () => {
+    const usd = { wallets: [wallet('cash'), wallet('usd', { currency: 'USD' })], balances: new Map([['cash', 100_000], ['usd', 0]]) };
+    const rules = [rule('sub', { walletId: 'usd', amountMinor: 1_000, startOn: '2026-10-25' })];
+    const withRate = calc({ ...usd, rules, totalBudget: budget(), getRate: rates({ 'USD>TJS': 10.9 }) });
+    expect(withRate.budget).toMatchObject({ scheduledMinor: 10_900, partial: false });
+    const noRate = calc({ ...usd, rules, totalBudget: budget() });
+    expect(noRate.budget).toMatchObject({ scheduledMinor: 0, partial: true });
+  });
+
+  it('у регулярного перевода в лимит ляжет комиссия — она отложена заранее', () => {
+    const r = calc({
+      wallets: [wallet('cash'), wallet('box', { kind: 'savings' })],
+      balances: new Map([['cash', 100_000], ['box', 0]]),
+      totalBudget: budget(),
+      rules: [rule('save', { kind: 'transfer', toWalletId: 'box', amountMinor: 30_000, toAmountMinor: 28_500, startOn: '2026-10-25' })],
+    });
+    expect(r.budget?.scheduledMinor).toBe(1_500);
+    expect(r.paymentsMinor).toBe(30_000); // а с рук уходит весь перевод
+  });
+
   it('регулярный расход с неизвестного кошелька — лимит помечен «часть не учтена»', () => {
     const r = calc({ totalBudget: budget(), rules: [rule('ghost', { walletId: 'нет-такого', startOn: '2026-10-25' })] });
     expect(r.budget?.partial).toBe(true);

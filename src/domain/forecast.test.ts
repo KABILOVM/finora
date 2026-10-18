@@ -579,6 +579,112 @@ describe('computeDailyForecast: мелкий доход не прячет аре
   });
 });
 
+describe('computeDailyForecast: «зарплата» — самый крупный регулярный доход', () => {
+  const income = (id: string, over: Partial<ForecastRule> = {}) => rule(id, { kind: 'income', ...over });
+
+  it('крохотный новый доход после конца месяца и разовая премия больше зарплаты горизонт до зарплаты не обрезают', () => {
+    const base = [
+      income('bonus', { startOn: '2026-10-28', endOn: '2026-10-28', amountMinor: 6_000_000 }),
+      income('salary', { startOn: '2026-11-05', amountMinor: 5_000_000 }),
+      rule('rent', { amountMinor: 10_000_000, startOn: '2026-11-01' }),
+    ];
+    for (const extra of [income('tip', { startOn: '2026-11-01', endOn: '2026-11-01', amountMinor: 1_000 }), income('cashback', { startOn: '2026-11-02', amountMinor: 500 })]) {
+      const r = calc({ balances: new Map([['cash', 500_000]]), rules: [...base, extra] });
+      expect(r).toMatchObject({ notEnough: true, perDayMinor: 0, paymentsMinor: 10_000_000 }); // аренда 1-го учтена
+    }
+  });
+
+  it('разовая премия после конца месяца, но до зарплаты, аренду перед зарплатой не прячет', () => {
+    const r = calc({
+      balances: new Map([['cash', 500_000]]),
+      rules: [
+        income('bonus', { startOn: '2026-11-02', endOn: '2026-11-02', amountMinor: 6_000_000 }),
+        income('salary', { startOn: '2026-11-05', amountMinor: 5_000_000 }),
+        rule('rent', { amountMinor: 10_000_000, startOn: '2026-11-03' }),
+      ],
+    });
+    expect(r).toMatchObject({ notEnough: true, horizonEnd: '2026-11-04', shortfallMinor: 3_500_000 });
+  });
+
+  it('редкий мелкий доход (дивиденды раз в квартал) не тянет горизонт через зарплату внутри месяца', () => {
+    const r = calc({
+      today: '2026-10-18',
+      balances: new Map([['cash', 1_000_000]]),
+      rules: [
+        income('salary', { startOn: '2026-09-25', amountMinor: 1_000_000 }),
+        rule('rent', { amountMinor: 300_000, startOn: '2026-11-01' }),
+        income('dividend', { frequency: 'monthly', intervalN: 3, startOn: '2026-12-01', amountMinor: 5_000 }),
+      ],
+    });
+    expect(r).toMatchObject({ horizonEnd: '2026-10-24', incomeDate: '2026-10-25', perDayMinor: 142_857 });
+  });
+
+  it('провели сегодняшний аванс — горизонт и цифра те же, что утром', () => {
+    const rules = [
+      income('advance', { startOn: '2026-09-10', amountMinor: 600_000 }),
+      income('salary', { startOn: '2026-09-25', amountMinor: 1_000_000 }),
+      rule('rent', { amountMinor: 300_000, startOn: '2026-11-01' }),
+    ];
+    const morning = calc({ today: '2026-10-10', balances: new Map([['cash', 300_000]]), rules });
+    const posted = calc({ today: '2026-10-10', balances: new Map([['cash', 900_000]]), rules, doneOccurrences: new Set([occurrenceKey('advance', '2026-10-10')]) });
+    expect(morning).toMatchObject({ horizonEnd: '2026-10-24', perDayMinor: 60_000 });
+    expect(posted).toMatchObject({ horizonEnd: morning.horizonEnd, perDayMinor: morning.perDayMinor });
+  });
+
+  it('утро дня зарплаты, когда сегодня же аренда (или срок долга): не «Денег не хватает», а не больше того, что на руках', () => {
+    const rules = [income('salary', { startOn: '2026-10-22', amountMinor: 1_000_000 }), rule('rent', { amountMinor: 50_000, startOn: '2026-10-22' })];
+    const r = calc({ balances: new Map([['cash', 10_000]]), rules });
+    expect(r).toMatchObject({ notEnough: false, perDayMinor: 10_000, horizonEnd: '2026-10-22', incomeDate: '2026-10-22', todayLimitMinor: 10_000 });
+    const spent = calc({ balances: new Map([['cash', 10_000]]), spentTodayMinor: 5_000, rules });
+    expect(spent.todayLimitMinor).toBe(15_000); // с утра на руках было 150
+    const debt = calc({
+      balances: new Map([['cash', 50_000]]),
+      rules: [income('salary', { startOn: '2026-10-22', amountMinor: 1_000_000 })],
+      debts: [{ id: 'd', direction: 'borrowed', currency: 'TJS', dueOn: '2026-10-22', remainingMinor: 200_000, closedAt: null, archivedAt: null }],
+    });
+    expect(debt.notEnough).toBe(false);
+    // а просроченное с утра — уже нехватка: его надо было отдать из того, что есть
+    const overdue = calc({ balances: new Map([['cash', 10_000]]), rules: [...rules, rule('old', { amountMinor: 30_000, startOn: '2026-10-20', endOn: '2026-10-20', overdueFrom: '2026-10-01' })] });
+    expect(overdue).toMatchObject({ notEnough: true, shortfallMinor: 20_000 });
+  });
+
+  it('зарплата в другой валюте сравнивается по курсу, а не по «сырым» цифрам', () => {
+    const r = calc({
+      wallets: [wallet('cash'), wallet('usd', { currency: 'USD' })],
+      balances: new Map([['cash', 100_000], ['usd', 0]]),
+      getRate: rates({ 'USD>TJS': 10.9 }),
+      rules: [
+        income('side', { startOn: '2026-11-02', amountMinor: 150_000 }), // 1 500 с.
+        income('salary', { walletId: 'usd', startOn: '2026-11-10', amountMinor: 100_000 }), // 1 000 $ ≈ 10 900 с.
+        rule('rent', { amountMinor: 500_000, startOn: '2026-11-05' }),
+      ],
+    });
+    expect(r).toMatchObject({ horizonEnd: '2026-11-09', notEnough: true, shortfallMinor: 250_000 });
+  });
+});
+
+describe('computeDailyForecast: регулярные переводы', () => {
+  it('комиссия перевода между своими обычными кошельками вычитается заранее', () => {
+    const r = calc({
+      today: '2026-10-15',
+      wallets: [wallet('cash'), wallet('card', { kind: 'card' })],
+      balances: new Map([['cash', 100_000], ['card', 0]]),
+      rules: [rule('move', { kind: 'transfer', toWalletId: 'card', amountMinor: 30_000, toAmountMinor: 20_000, startOn: '2026-10-20' })],
+    });
+    expect(r).toMatchObject({ paymentsMinor: 10_000, perDayMinor: 5_294 }); // (1000 − 100) ÷ 17
+  });
+
+  it('перевод на архивный кошелёк уносит деньги с рук целиком (как и в календаре)', () => {
+    const r = calc({
+      today: '2026-10-15',
+      wallets: [wallet('cash'), wallet('old', { kind: 'card', archivedAt: '2026-01-01T00:00:00.000Z' })],
+      balances: new Map([['cash', 30_000], ['old', 0]]),
+      rules: [rule('t', { kind: 'transfer', toWalletId: 'old', amountMinor: 25_000, startOn: '2026-10-25' })],
+    });
+    expect(r).toMatchObject({ paymentsMinor: 25_000, perDayMinor: 294 }); // 5 000 ÷ 17
+  });
+});
+
 describe('computeDailyForecast: предупреждения собираются со всех контрольных дней', () => {
   it('долг без курса со сроком после зарплаты: число помечено «≈», долг назван, хотя самый тесный день — до зарплаты', () => {
     const r = calc({
@@ -590,6 +696,26 @@ describe('computeDailyForecast: предупреждения собираютс�
     expect(r.horizonEnd).toBe('2026-10-24');
     expect(r.skipped).toEqual([{ source: 'debt', currency: 'USD', amountMinor: 100_000 }]);
     expect(r.approximate).toBe(true);
+  });
+
+  it('пересчёт по курсу на другом контрольном дне — тоже «≈»; долг и его плановый платёж в одной валюте не называются дважды', () => {
+    const fx = calc({
+      today: '2026-10-18',
+      wallets: [wallet('cash'), wallet('usd', { currency: 'USD' })],
+      balances: new Map([['cash', 300_000], ['usd', 0]]),
+      getRate: rates({ 'USD>TJS': 10.9 }),
+      rules: [rule('salary', { kind: 'income', startOn: '2026-10-25', amountMinor: 1_000_000 }), rule('sub', { walletId: 'usd', amountMinor: 1_000, startOn: '2026-10-28' })],
+    });
+    expect(fx.horizonEnd).toBe('2026-10-24');
+    expect(fx.approximate).toBe(true);
+    const twice = calc({
+      today: '2026-10-18',
+      wallets: [wallet('cash'), wallet('usd', { currency: 'USD' })],
+      balances: new Map([['cash', 300_000], ['usd', 0]]),
+      rules: [rule('salary', { kind: 'income', startOn: '2026-11-05', amountMinor: 10_000_000 }), rule('pay', { walletId: 'usd', debtId: 'loan', amountMinor: 10_000, startOn: '2026-10-25' })],
+      debts: [{ id: 'loan', direction: 'borrowed', currency: 'USD', dueOn: '2026-11-03', remainingMinor: 100_000, closedAt: null, archivedAt: null }],
+    });
+    expect(twice.skipped).toEqual([{ source: 'debt', currency: 'USD', amountMinor: 100_000 }]);
   });
 
   it('платёж с неизвестного кошелька после зарплаты — тоже сказано', () => {
@@ -704,29 +830,43 @@ describe('computeDailyForecast: свойства (fast-check)', () => {
     );
   });
 
-  it('если тратить «в день» каждый день до конца горизонта, денег хватает на всё обязательное (проверка по дням)', () => {
+  it('если тратить «в день» каждый день до дня перед зарплатой (не меньше конца месяца / недели), денег хватает на всё (проверка по дням)', () => {
     fc.assert(
       fc.property(arbCase, (c) => {
         const inp = build(c);
         const r = ok(computeDailyForecast(inp));
         if (r.notEnough) return;
-        const yesterday = addDaysIso(inp.today, -1);
-        for (let k = 0; k < r.daysLeft; k++) {
-          const d = addDaysIso(inp.today, k);
-          let balance = c.money - r.perDayMinor * (k + 1);
-          for (const rr of inp.rules) {
-            if (rr.kind === 'income') {
-              // сегодняшний доход ещё не проведён — в сегодняшний день его не берём
-              balance += occurrencesBetween(rr, addDaysIso(inp.today, k === 0 ? 1 : 0), d).length * rr.amountMinor;
-            } else {
-              const due = occurrencesBetween(rr, inp.today, d).length + occurrencesBetween(rr, rr.overdueFrom ?? inp.today, yesterday).length;
-              balance -= due * rr.amountMinor;
-            }
+        const { today } = inp;
+        const yesterday = addDaysIso(today, -1);
+        // горизонт считаем сами, не по ответу: конец месяца (не меньше недели) или день перед ближайшей датой самого крупного дохода
+        const monthEnd = endOfMonth(today);
+        const week = addDaysIso(today, 6);
+        let end = monthEnd > week ? monthEnd : week;
+        let salary: { amount: number; next: string } | undefined;
+        for (const rr of inp.rules) {
+          if (rr.kind !== 'income') continue;
+          const next = occurrencesBetween(rr, addDaysIso(today, 1), addDaysIso(today, 45))[0];
+          if (next !== undefined && (salary === undefined || rr.amountMinor > salary.amount || (rr.amountMinor === salary.amount && next < salary.next))) {
+            salary = { amount: rr.amountMinor, next };
           }
-          expect(balance, `день ${d}`).toBeGreaterThanOrEqual(0);
+        }
+        if (salary !== undefined && addDaysIso(salary.next, -1) > end) end = addDaysIso(salary.next, -1);
+        const overdue = inp.rules
+          .filter((rr) => rr.kind === 'expense')
+          .reduce((sum, rr) => sum + occurrencesBetween(rr, rr.overdueFrom ?? today, yesterday).length * rr.amountMinor, 0);
+        const between = (kind: 'income' | 'expense', from: string, to: string) =>
+          inp.rules.filter((rr) => rr.kind === kind).reduce((sum, rr) => sum + occurrencesBetween(rr, from, to).length * rr.amountMinor, 0);
+        // утро сегодняшнего дня: пока сегодняшний доход не проведён — только то, что на руках, минус просроченное
+        if (between('income', today, today) > 0) {
+          expect(c.money - overdue - r.perDayMinor, 'утро дня дохода').toBeGreaterThanOrEqual(0);
+          expect(r.todayLimitMinor, '«сегодня можно» утром дня дохода').toBeLessThanOrEqual(Math.max(0, c.money - overdue + c.spent));
+        }
+        for (let d = today, k = 1; d <= end; d = addDaysIso(d, 1), k++) {
+          const balance = c.money - overdue + between('income', today, d) - between('expense', today, d) - r.perDayMinor * k;
+          expect(balance, `конец дня ${d}`).toBeGreaterThanOrEqual(0);
         }
       }),
-      { numRuns: 400 },
+      { numRuns: 500 },
     );
   });
 

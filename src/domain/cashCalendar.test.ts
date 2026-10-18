@@ -201,9 +201,11 @@ describe('просроченные платежи', () => {
     ]);
   });
 
-  it('просроченный платёж по долгу, уже учтённому остатком, второй раз не берётся', () => {
+  it('просроченный платёж по долгу до его срока — сегодня, а в срок отдаётся остаток за его вычетом (второй раз не берётся)', () => {
     const c = ok(computeCashCalendar(input({ debts: [debt('d')], rules: [rule('pay', { debtId: 'd', startOn: '2026-10-10', overdueFrom: '2026-09-15' })] })));
-    expect(day(c, TODAY).events).toEqual([]);
+    expect(day(c, TODAY).events.map((e) => [e.kind, e.deltaMinor, e.overdue])).toEqual([['payment', -10_000, true]]);
+    expect(day(c, '2026-10-25').events.map((e) => [e.kind, e.deltaMinor])).toEqual([['debt-pay', -10_000]]);
+    expect(c.endMinor).toBe(80_000); // весь долг 200 — один раз
   });
 });
 
@@ -251,6 +253,26 @@ describe('доходы, которые на руки не придут, и во�
     );
     const kinds = c.days.flatMap((d) => d.events.map((e) => `${e.kind}:${e.id}:${e.date}`));
     expect(kinds).toEqual(['payment:give:2026-10-15', 'payment:give:2026-11-01', 'debt-receive:lent:2026-11-05']);
+  });
+});
+
+describe('регулярные переводы с комиссией', () => {
+  it('между обычными кошельками — минус комиссия; с накоплений — плюс то, что придёт', () => {
+    const wallets = [wallet('cash'), wallet('card', { kind: 'card' }), wallet('box', { kind: 'savings' })];
+    const fee = ok(computeCashCalendar(input({ wallets, rules: [rule('move', { kind: 'transfer', toWalletId: 'card', amountMinor: 30_000, toAmountMinor: 20_000 })] })));
+    expect(day(fee, '2026-10-20').events.map((e) => e.deltaMinor)).toEqual([-10_000]);
+    const take = ok(computeCashCalendar(input({ wallets, rules: [rule('take', { kind: 'transfer', walletId: 'box', toWalletId: 'cash', amountMinor: 30_000, toAmountMinor: 20_000 })] })));
+    expect(day(take, '2026-10-20').events.map((e) => e.deltaMinor)).toEqual([20_000]);
+  });
+});
+
+describe('возвраты «мне должны» по расписанию', () => {
+  it('по закрытому или погашенному долгу не ждём; больше остатка — тоже', () => {
+    const rules = [rule('back', { kind: 'income', debtId: 'lent', amountMinor: 20_000, frequency: 'weekly', startOn: '2026-10-16' })];
+    const closed = ok(computeCashCalendar(input({ includeReceivables: true, rules, debts: [debt('lent', { direction: 'lent', dueOn: null, closedAt: '2026-10-01T00:00:00.000Z' })] })));
+    expect(closed.endMinor).toBe(100_000);
+    const capped = ok(computeCashCalendar(input({ includeReceivables: true, rules, debts: [debt('lent', { direction: 'lent', dueOn: null, remainingMinor: 30_000 })] })));
+    expect(capped.endMinor).toBe(130_000); // 200 + 100, а не 200 × 5
   });
 });
 

@@ -361,6 +361,19 @@ describe('лимит месяца и регулярные платежи', () =>
     expect(text(card())).not.toContain('Сегодня потрачено больше нормы');
   });
 
+  it('виджет: остаток лимита уйдёт на регулярные платежи — 0 красным и та же фраза', async () => {
+    await openWidget(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 80_000 });
+      await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-25' });
+    });
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(0)));
+    expect(document.querySelector('[data-testid="widget-per-day"] .text-expense')).not.toBeNull();
+    const widget = text(document.querySelector('[data-testid="budgets-widget"]'));
+    expect(widget).toContain('Остаток лимита месяца уйдёт на регулярные платежи');
+    expect(widget).not.toContain('по лимиту месяца');
+  });
+
   it('остаток лимита весь уйдёт на регулярные платежи — 0 красным и сказано почему', async () => {
     await openPage(async (s) => {
       const i = await baseSetup(s);

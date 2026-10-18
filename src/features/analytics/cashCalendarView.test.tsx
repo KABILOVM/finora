@@ -132,19 +132,21 @@ describe('вкладка «Календарь» на экране «Аналит
     expect(text(tid('calendar-verdict'))).toContain(`Меньше всего будет ${fmt(START - 30_000)} (20 октября)`);
   });
 
-  it('«я должен» со сроком уменьшает деньги в день срока; уже платежи по долгу не дублируются платежом по правилу', async () => {
+  it('«я должен» со сроком: платёж частями до срока — в свою дату, в срок — остаток за его вычетом; вместе не больше долга', async () => {
     await openCalendar({
       setup: async (s) => {
         const i = await seedHistory(s);
         const debt = await s.debts.create({ direction: 'borrowed', counterparty: 'Сосед', principalMinor: 20_000, currency: 'TJS', openedOn: '2026-09-01', dueOn: '2026-10-25' });
-        // «платить частями» по этому же долгу: срок долга уже говорит, что вернуть надо всё к 25-му — второй раз не вычитаем
+        // «платить частями» по этому же долгу: 22-го — 50, к сроку 25-го — оставшиеся 150 (и следующий плановый уже внутри срока)
         await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 5_000, frequency: 'monthly', startOn: '2026-10-22', debtId: debt.id });
       },
     });
     const events = all('cal-event');
-    expect(events).toHaveLength(1);
-    expect(text(events[0])).toContain('Сосед');
-    expect(text(events[0])).toContain('вернуть долг');
+    expect(events).toHaveLength(2);
+    expect(text(tid('cal-day-2026-10-22'))).toContain(`−${fmt(5_000)}`);
+    expect(text(tid('cal-day-2026-10-25'))).toContain('Сосед');
+    expect(text(tid('cal-day-2026-10-25'))).toContain('вернуть долг');
+    expect(text(tid('cal-day-2026-10-25'))).toContain(`−${fmt(15_000)}`);
     expect(text(tid('calendar-end'))).toBe(`К 13 ноя будет ${fmt(START - 20_000)}`);
   });
 

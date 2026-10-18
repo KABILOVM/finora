@@ -1,5 +1,14 @@
 import { addDays } from '@/lib/dates';
-import { isSpendableWallet, SPENDABLE_KINDS, type ForecastDebt, type ForecastRule, type ForecastSkipped, type ForecastWallet, occurrenceKey } from './forecast';
+import {
+  isSpendableWallet,
+  occurrenceKey,
+  SPENDABLE_KINDS,
+  transferFeeMinor,
+  type ForecastDebt,
+  type ForecastRule,
+  type ForecastSkipped,
+  type ForecastWallet,
+} from './forecast';
 import { addMinor, convertMinor, isMinor } from './money';
 import { isScheduleDate, occurrencesBetween } from './schedule';
 import { totalInBase } from './totals';
@@ -11,11 +20,14 @@ import type { CurrencyCode, IsoDate, Minor, UUID, WalletKind } from './types';
  *
  * На каждый день ставятся:
  *  - регулярные платежи и доходы по расписанию, ещё не проведённые и не пропущенные (расход с обычного кошелька и перевод с него
- *    на накопления — минус; доход на обычный кошелёк и перевод с накоплений на обычный — плюс; остальное на деньги на руках не влияет);
+ *    на накопления — минус; комиссия перевода между обычными — минус; доход на обычный неархивный кошелёк и перевод с накоплений
+ *    на него — плюс (зачисленная сумма); остальное на деньги на руках не влияет);
  *  - просроченные платежи (прошлые даты не раньше overdueFrom правила, не проведённые и не пропущенные) — одним событием на сегодня;
  *    просроченный доход не ставится: обещать деньги, которые могут и не прийти, нельзя;
- *  - срок долга «я должен» (минус остаток; просроченный — сегодня); платёж по долгу, уже учтённый остатком, второй раз не берётся;
- *  - по желанию: «мне должны» к сроку (плюс остаток; просроченный — сегодня) — это только ожидание, поэтому включается отдельно;
+ *  - срок долга «я должен» (минус остаток за вычетом плановых платежей до срока; просроченный — сегодня); плановые платежи по нему
+ *    с даты срока уже внутри остатка и второй раз не берутся;
+ *  - по желанию: «мне должны» к сроку (плюс остаток; просроченный — сегодня) и плановые возвраты по открытым таким долгам (не больше
+ *    остатка) — это только ожидание, поэтому включается отдельно;
  *  - по желанию: обычные траты — каждый день минус usualPerDay (за сегодня — то, что ещё не потрачено).
  * Деньги, платежи и долги в валюте без курса в расчёт не входят (skipped), цифры помечаются как приблизительные.
  */
@@ -105,19 +117,39 @@ export type CashCalendar = CashCalendarOk | { status: 'no-wallets' } | { status:
 
 const isSpendableKind = (kind: WalletKind | undefined): boolean => kind !== undefined && SPENDABLE_KINDS.includes(kind);
 
+/** Сколько денег правила за одну дату уходит с «денег на руках» ('out') или приходит на них ('in'), в какой валюте. */
+interface Move {
+  flow: 'out' | 'in';
+  amountMinor: Minor;
+  currency: CurrencyCode;
+}
+
 /**
- * 'out' — деньги уходят с «денег на руках», 'in' — приходят, 'none' — не влияет, 'unknown' — кошелёк не найден, понять нельзя.
+ * Движение денег правила: 'none' — на деньги на руках не влияет, 'unknown' — кошелёк не найден, понять нельзя.
  * Приходят — только на обычный НЕархивный кошелёк: деньги архивного в «деньги на руках» не входят (как и в прогнозе «в день»).
+ * Перевод между обычными кошельками уносит только комиссию; с накоплений приходит зачисленная сумма.
  */
-function flowOf(r: ForecastRule, walletOf: ReadonlyMap<UUID, ForecastWallet>): 'out' | 'in' | 'none' | 'unknown' {
+function moveOf(r: ForecastRule, walletOf: ReadonlyMap<UUID, ForecastWallet>): Move | 'none' | 'unknown' {
   const from = walletOf.get(r.walletId);
-  if (r.kind === 'expense') return from === undefined ? 'unknown' : isSpendableKind(from.kind) ? 'out' : 'none';
-  if (r.kind === 'income') return from !== undefined && isSpendableWallet(from) ? 'in' : 'none';
+  if (r.kind === 'expense') {
+    if (from === undefined) return 'unknown';
+    return isSpendableKind(from.kind) ? { flow: 'out', amountMinor: r.amountMinor, currency: from.currency } : 'none';
+  }
+  if (r.kind === 'income') return from !== undefined && isSpendableWallet(from) ? { flow: 'in', amountMinor: r.amountMinor, currency: from.currency } : 'none';
   if (!r.toWalletId) return 'none';
   const to = walletOf.get(r.toWalletId);
   if (from === undefined || to === undefined) return 'unknown';
-  if (isSpendableKind(from.kind) && !isSpendableWallet(to)) return 'out';
-  if (!isSpendableKind(from.kind) && isSpendableWallet(to)) return 'in';
+  if (isSpendableKind(from.kind) && !isSpendableWallet(to)) return { flow: 'out', amountMinor: r.amountMinor, currency: from.currency };
+  if (!isSpendableKind(from.kind) && isSpendableWallet(to)) {
+    const received = r.toAmountMinor;
+    return received !== null && received !== undefined && isMinor(received)
+      ? { flow: 'in', amountMinor: received, currency: to.currency }
+      : { flow: 'in', amountMinor: r.amountMinor, currency: from.currency };
+  }
+  if (isSpendableKind(from.kind) && isSpendableWallet(to)) {
+    const fee = transferFeeMinor(r, from, to);
+    return fee > 0 ? { flow: 'out', amountMinor: fee, currency: from.currency } : 'none';
+  }
   return 'none';
 }
 
@@ -134,7 +166,6 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
   try {
     const endDate = addDays(today, nDays - 1);
     const walletOf = new Map(input.wallets.map((w) => [w.id, w] as const));
-    const currencyOf = new Map(input.wallets.map((w) => [w.id, w.currency] as const));
     const skippedBy = new Map<string, ForecastSkipped>();
     let converted = false;
     let unknownWalletPayments = 0;
@@ -183,50 +214,56 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
       isMinor(d.remainingMinor) &&
       d.remainingMinor > 0;
 
-    // Долг к сроку учтён остатком — его плановые ВОЗВРАТЫ второй раз не берём: «я должен» — мои платежи, «мне должны» — мне.
-    const coveredDebts = new Map<UUID, ForecastDebt['direction']>();
+    // Долг к сроку учтён остатком: «я должен» — мои плановые платежи С ДАТЫ СРОКА второй раз не берём (до срока — платятся как
+    // обычно, и остаток к сроку на них меньше), «мне должны» (если включено) — плановые возвраты мне не берём совсем.
+    const coveredDebts = new Map<UUID, ForecastDebt>();
     for (const d of input.debts) {
-      if (openDue(d, 'borrowed')) {
-        coveredDebts.set(d.id, 'borrowed');
-        const delta = inBase(d.remainingMinor, d.currency, 'debt');
-        if (delta !== null && d.dueOn !== null) {
-          put({ kind: 'debt-pay', id: d.id, label: label(d.id, 'Возврат долга'), date: dueDate(d.dueOn), deltaMinor: -delta, ...(d.dueOn < today ? { overdue: true } : {}) });
-        }
-      } else if (input.includeReceivables && openDue(d, 'lent')) {
-        coveredDebts.set(d.id, 'lent');
-        const delta = inBase(d.remainingMinor, d.currency, 'debt');
-        if (delta !== null && d.dueOn !== null) {
-          put({ kind: 'debt-receive', id: d.id, label: label(d.id, 'Вернут долг'), date: dueDate(d.dueOn), deltaMinor: delta, ...(d.dueOn < today ? { overdue: true } : {}) });
-        }
-      }
+      if (openDue(d, 'borrowed') || (input.includeReceivables && openDue(d, 'lent'))) coveredDebts.set(d.id, d);
     }
+    const debtOf = new Map(input.debts.map((d) => [d.id, d] as const));
+    /** Плановые платежи по долгу «я должен» до его срока (в основной валюте): на столько меньше отдать в день срока. */
+    const paidBeforeDue = new Map<UUID, Minor>();
+    /** Сколько плановых возвратов «мне должны» уже поставлено (в валюте кошелька правила): больше остатка не ждём. */
+    const expectedBack = new Map<UUID, Minor>();
 
     const yesterday = addDays(today, -1);
-    const directionOf = new Map(input.debts.map((d) => [d.id, d.direction] as const));
     for (const r of input.rules) {
       if (r.deletedAt !== null || r.archivedAt !== null) continue;
-      const flow = flowOf(r, walletOf);
-      if (flow === 'none') continue;
+      const move = moveOf(r, walletOf);
+      if (move === 'none') continue;
+      const flow = move === 'unknown' ? 'unknown' : move.flow;
+      const debt = r.debtId === null ? undefined : debtOf.get(r.debtId);
       const covered = r.debtId === null ? undefined : coveredDebts.get(r.debtId);
-      if ((covered === 'borrowed' && flow !== 'in') || (covered === 'lent' && flow === 'in')) continue; // уже учтено остатком долга
-      // возврат «мне должны» по расписанию — только ожидание: как и остаток такого долга, ставится, лишь если включено
-      if (r.kind === 'income' && r.debtId !== null && directionOf.get(r.debtId) !== 'borrowed' && !input.includeReceivables) continue;
-      const currency = currencyOf.get(r.walletId);
-      const known = flow !== 'unknown' && currency !== undefined;
+      if (covered?.direction === 'lent' && flow === 'in') continue; // уже учтено остатком долга
+      // возврат «мне должны» по расписанию — только ожидание: как и остаток такого долга, ставится, лишь если включено,
+      // и только пока долг открыт и не больше остатка
+      const receivable = r.kind === 'income' && r.debtId !== null && debt?.direction !== 'borrowed';
+      if (receivable && (!input.includeReceivables || debt === undefined || debt.closedAt !== null || debt.archivedAt !== null || !(debt.remainingMinor > 0))) continue;
+      /** Дата позже срока долга «я должен», учтённого остатком: этот платёж уже внутри остатка. */
+      const insideDebt = (date: IsoDate): boolean => covered?.direction === 'borrowed' && flow !== 'in' && covered.dueOn !== null && date >= covered.dueOn;
+
       for (const date of occurrencesBetween(r, today, endDate)) {
-        if (input.doneOccurrences.has(occurrenceKey(r.id, date))) continue;
-        if (!known) {
+        if (input.doneOccurrences.has(occurrenceKey(r.id, date)) || insideDebt(date)) continue;
+        if (move === 'unknown') {
           if (r.kind !== 'income') unknownWalletPayments++;
           continue;
         }
-        const amount = inBase(r.amountMinor, currency, 'payment');
+        let amountMinor = move.amountMinor;
+        if (receivable && debt !== undefined && move.currency === debt.currency) {
+          const left = addMinor(debt.remainingMinor, -(expectedBack.get(debt.id) ?? 0));
+          if (left <= 0) break;
+          if (amountMinor > left) amountMinor = left;
+          expectedBack.set(debt.id, addMinor(expectedBack.get(debt.id) ?? 0, amountMinor));
+        }
+        const amount = inBase(amountMinor, move.currency, 'payment');
         if (amount === null) continue;
+        if (covered?.direction === 'borrowed' && move.flow === 'out') paidBeforeDue.set(covered.id, addMinor(paidBeforeDue.get(covered.id) ?? 0, amount));
         put({
-          kind: flow === 'out' ? 'payment' : 'income',
+          kind: move.flow === 'out' ? 'payment' : 'income',
           id: r.id,
-          label: label(r.id, flow === 'out' ? 'Платёж' : 'Доход'),
+          label: label(r.id, move.flow === 'out' ? 'Платёж' : 'Доход'),
           date,
-          deltaMinor: flow === 'out' ? -amount : amount,
+          deltaMinor: move.flow === 'out' ? -amount : amount,
         });
       }
 
@@ -235,17 +272,34 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
       const from = r.overdueFrom;
       if (from === undefined || from === null || !isScheduleDate(from) || from > yesterday) continue;
       let overdueCount = 0;
-      for (const date of occurrencesBetween(r, from, yesterday)) if (!input.doneOccurrences.has(occurrenceKey(r.id, date))) overdueCount++;
+      for (const date of occurrencesBetween(r, from, yesterday)) {
+        if (!input.doneOccurrences.has(occurrenceKey(r.id, date)) && !insideDebt(date)) overdueCount++;
+      }
       if (overdueCount === 0) continue;
-      if (!known) {
+      if (move === 'unknown') {
         unknownWalletPayments += overdueCount;
         continue;
       }
       let sum: Minor = 0;
-      for (let i = 0; i < overdueCount; i++) sum = addMinor(sum, r.amountMinor);
-      const amount = inBase(sum, currency, 'payment');
+      for (let i = 0; i < overdueCount; i++) sum = addMinor(sum, move.amountMinor);
+      const amount = inBase(sum, move.currency, 'payment');
       if (amount === null) continue;
+      if (covered?.direction === 'borrowed') paidBeforeDue.set(covered.id, addMinor(paidBeforeDue.get(covered.id) ?? 0, amount));
       put({ kind: 'payment', id: r.id, label: label(r.id, 'Платёж'), date: today, deltaMinor: -amount, overdue: true, overdueCount });
+    }
+
+    for (const d of coveredDebts.values()) {
+      if (d.dueOn === null) continue;
+      const remaining = inBase(d.remainingMinor, d.currency, 'debt');
+      if (remaining === null) continue;
+      const overdue = d.dueOn < today ? { overdue: true } : {};
+      if (d.direction === 'borrowed') {
+        // к сроку отдать остаток за вычетом плановых платежей до срока (не меньше нуля)
+        const delta = addMinor(remaining, -(paidBeforeDue.get(d.id) ?? 0));
+        if (delta > 0) put({ kind: 'debt-pay', id: d.id, label: label(d.id, 'Возврат долга'), date: dueDate(d.dueOn), deltaMinor: -delta, ...overdue });
+      } else {
+        put({ kind: 'debt-receive', id: d.id, label: label(d.id, 'Вернут долг'), date: dueDate(d.dueOn), deltaMinor: remaining, ...overdue });
+      }
     }
 
     // 3. дни: остаток на конец каждого

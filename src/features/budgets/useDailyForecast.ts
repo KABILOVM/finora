@@ -47,7 +47,8 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
   const base = settings.baseCurrency;
   const wallets = walletRows.filter((w) => w.deletedAt === null);
   // Прошлые даты правила, не проведённые и не пропущенные, прогноз вычитает как просроченные — но не старше месяца и не раньше
-  // создания правила (recurring/plan.ts). Правка правила их не отменяет: «Просроченные» на экране платежей тоже их показывают.
+  // создания правила (recurring/plan.ts). Правка правила их не отменяет — так же, как «Просроченные» на экране платежей
+  // (там, в отличие от прогноза, видны и даты до создания правила).
   const rules: ForecastRule[] = ruleRows
     .filter((r) => r.deletedAt === null && r.archivedAt === null)
     .map((r) => ({ ...r, overdueFrom: historyFrom(r, today, FORECAST_OVERDUE_MAX_AGE_DAYS, localDateOf, { sinceEdit: false }) }));
@@ -87,9 +88,9 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
     const isScheduled = (t: LocalRow<Transaction>): boolean => t.recurringRuleId !== null && t.recurringRuleId !== undefined;
     const spendableKind = (walletId: string | null | undefined): boolean =>
       SPENDABLE_KINDS.includes(walletById.get(walletId ?? '')?.kind ?? 'savings');
-    // Операция по регулярному платежу, которую прогноз до проведения уже вычитал как обязательную: расход и перевод в накопления.
-    // Комиссия регулярного перевода между своими обычными кошельками обязательной не была — это обычная трата.
-    const preCounted = (t: LocalRow<Transaction>): boolean => isScheduled(t) && (t.kind !== 'transfer' || !spendableKind(t.toWalletId));
+    // Операция по регулярному платежу, которую прогноз до проведения уже вычитал как обязательную: расход, перевод в накопления
+    // и комиссия перевода между своими обычными кошельками.
+    const preCounted = (t: LocalRow<Transaction>): boolean => isScheduled(t) && t.kind !== 'income';
     // «Сегодня потрачено» — только из тех кошельков, чьи деньги входят в «деньги на руках»: трата с накопления их не уменьшила
     // и в «можно было потратить сегодня» (деньги на руках + потрачено сегодня) попасть не должна. Без того, что прогноз уже
     // вычитал как обязательное: проведённая аренда не делает день «перерасходом».
@@ -127,9 +128,10 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
             limitMinor: total.amountMinor,
             currency: total.currency,
             spentMonthMinor: month.expenseMinor,
-            // как «потрачено за месяц» (все кошельки), но без проведённых регулярных расходов: до проведения прогноз уже отложил их из лимита
+            // как «потрачено за месяц» (все кошельки), но без проведённых регулярных расходов и комиссий: до проведения прогноз уже
+            // отложил их из лимита
             spentTodayMinor: summarizeDay(
-              txs.filter((t) => t.occurredOn === today && !(isScheduled(t) && t.kind === 'expense')),
+              txs.filter((t) => t.occurredOn === today && !preCounted(t)),
               base,
             ).expenseMinor,
             excludedCount: month.excludedCount,
@@ -148,6 +150,18 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
     for (const date of occurrencesBetween(r, from, horizonEnd)) {
       if (existingIds.has(await uuidV5(r.id, date))) doneOccurrences.add(occurrenceKey(r.id, date));
     }
+  }
+  // Сегодняшний доход по правилу внесли обычной операцией («+», а не «Провести»): деньги уже в остатке — второй раз его не ждём.
+  // Опознаём по кошельку и сумме не меньше плановой; одна операция закрывает одно правило.
+  const plainIncomesToday = txs.filter(
+    (t) => t.deletedAt === null && t.kind === 'income' && t.occurredOn === today && t.debtId == null && t.recurringRuleId == null,
+  );
+  for (const r of rules) {
+    if (r.kind !== 'income' || doneOccurrences.has(occurrenceKey(r.id, today)) || occurrencesBetween(r, today, today).length === 0) continue;
+    const i = plainIncomesToday.findIndex((t) => t.walletId === r.walletId && t.amountMinor >= r.amountMinor);
+    if (i < 0) continue;
+    plainIncomesToday.splice(i, 1);
+    doneOccurrences.add(occurrenceKey(r.id, today));
   }
   // Подписи для списков (календарь): у правила — заметка или название категории, у долга — с кем.
   const categoryName = new Map(categoryRows.map((c) => [c.id, c.name] as const));

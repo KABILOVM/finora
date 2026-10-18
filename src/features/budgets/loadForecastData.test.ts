@@ -98,7 +98,7 @@ describe('loadForecastData: просроченные после правки п�
     expect(data.rules.find((r) => r.id === rule.id)?.overdueFrom).toBe('2026-10-10');
   });
 
-  it('комиссия регулярного перевода между своими обычными кошельками — обычная трата: входит в «сегодня» и в «обычно»', async () => {
+  it('комиссия регулярного перевода между своими кошельками вычтена заранее: после проведения в «сегодня» и «обычно» не входит', async () => {
     const s = await freshStore();
     const cash = await cashId(s);
     const card = await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' });
@@ -107,8 +107,29 @@ describe('loadForecastData: просроченные после правки п�
     await s.transactions.createFromRule(move.id, '2026-10-05');
     const today = await s.recurring.create({ kind: 'transfer', walletId: cash, toWalletId: card.id, amountMinor: 10_500, toAmountMinor: 10_000, frequency: 'monthly', startOn: TODAY });
     await s.transactions.createFromRule(today.id, TODAY);
+    await s.budgets.create({ categoryId: null, amountMinor: 1_000_000 });
     const data = await load(s);
-    expect(data.spentTodayMinor).toBe(500);
-    expect(data.usualPerDayMinor).toBe(221); // (1 400 + 1 700) ÷ 14
+    expect(data.spentTodayMinor).toBe(0);
+    expect(data.usualPerDayMinor).toBe(100); // 1 400 ÷ 14
+    expect(data.totalBudget?.spentTodayMinor).toBe(0);
+    expect(data.totalBudget?.spentMonthMinor).toBe(3_600); // в лимит комиссии легли: 1 400 + 1 700 + 500
+    expect(data.rules.find((r) => r.id === today.id)?.toAmountMinor).toBe(10_000); // прогноз видит комиссию заранее
+  });
+
+  it('зарплату сегодня внесли обычной операцией, а не «Провести»: второй раз её не ждём', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, TODAY))).toBe(false);
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, occurredOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, TODAY))).toBe(true);
+  });
+
+  it('мелкий доход сегодня зарплату не «закрывает»', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: TODAY });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 5_000, occurredOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, TODAY))).toBe(false);
   });
 });
