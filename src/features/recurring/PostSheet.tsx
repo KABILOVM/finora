@@ -122,13 +122,12 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
     setBusy(true);
     setErrors({});
     try {
+      // Сумму не трогали — репозиторий сам сверит её с остатком долга на момент записи (fitToDebt). Введённая руками
+      // записывается как есть (без fitToDebt), даже если совпала с суммой плана.
       let opts: FromRuleOptions = prepared.opts;
       if (!amountTouched) {
-        // сумму не трогали — репозиторий сам сверит её с остатком долга на момент записи (fitToDebt)
         const { amountMinor: _auto, ...rest } = prepared.opts;
         opts = { ...rest, fitToDebt: true };
-      } else if (rule.debtId !== null && form.amountMinor !== null) {
-        opts = { ...prepared.opts, amountMinor: form.amountMinor }; // своя сумма по долгу — как есть, даже если равна плану
       }
       const tx = await store.transactions.createFromRule(rule.id, date, opts);
       if (tx.deletedAt !== null) {

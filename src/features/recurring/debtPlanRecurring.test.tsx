@@ -212,13 +212,17 @@ describe('«Провести» план по долгу (окно «Провес
       storeOf(td).transactions.create({ kind: 'income', walletId: ids.cash, amountMinor: 12_000, occurredOn: day(-1), debtId: ids.debt }),
     );
     await waitFor(() => expect(amountValue()).toBe('30'));
+    await write(() =>
+      storeOf(td).transactions.create({ kind: 'income', walletId: ids.cash, amountMinor: 1_000, occurredOn: day(-1), debtId: ids.debt }),
+    );
+    await waitFor(() => expect(amountValue()).toBe('20')); // и дальше за остатком, а не только с суммы плана
     const amount = screen.getByRole('textbox', { name: /^Сумма/ });
     await user.clear(amount);
     await user.type(amount, '40');
     await write(() =>
       storeOf(td).transactions.create({ kind: 'income', walletId: ids.cash, amountMinor: 1_000, occurredOn: day(-1), debtId: ids.debt }),
     );
-    await waitFor(() => expect(norm(dlg.textContent)).toContain('Остаток долга: 20 с.'));
+    await waitFor(() => expect(norm(dlg.textContent)).toContain('Остаток долга: 10 с.'));
     expect(amountValue()).toBe('40');
   });
 
