@@ -111,11 +111,13 @@ describe('атака: регулярный перевод из тратимых 
     expect(f.perDayMinor).toBe(10_000);
   });
 
-  it('перевод ИЗ копилки на руки в расчёт не входит (ни как платёж, ни как доход)', () => {
+  it('перевод ИЗ копилки на руки — ожидаемый приход (как и в календаре), но не «зарплата»: горизонт не обрывает', () => {
     const f = calc({ wallets, balances, rules: [transfer('take', { walletId: 'box', toWalletId: 'cash' })] });
     expect(f.paymentsMinor).toBe(0);
+    expect(f.incomeMinor).toBe(40_000);
     expect(f.incomeDate).toBeNull();
-    expect(f.perDayMinor).toBe(10_000);
+    expect(f.horizonEnd).toBe('2026-10-31');
+    expect(f.perDayMinor).toBe(14_000); // (1 000 + 400) ÷ 10
   });
 
   it('перевод с долларового кошелька в копилку: сумма в долларах, пересчёт по курсу, число приблизительное', () => {
@@ -129,8 +131,12 @@ describe('атака: регулярный перевод из тратимых 
     expect(f.approximate).toBe(true);
   });
 
-  it('перевод после конца горизонта (раньше придёт доход) не вычитается', () => {
-    const f = calc({ wallets, balances, rules: [transfer('late', { startOn: '2026-10-28' }), rule('salary', { kind: 'income', startOn: '2026-10-25' })] });
+  it('перевод после конца горизонта (раньше придёт крупный доход) не вычитается', () => {
+    const f = calc({
+      wallets,
+      balances,
+      rules: [transfer('late', { startOn: '2026-10-28' }), rule('salary', { kind: 'income', amountMinor: 1_000_000, startOn: '2026-10-25' })],
+    });
     expect(f.horizonEnd).toBe('2026-10-24');
     expect(f.paymentsMinor).toBe(0);
   });
@@ -161,25 +167,27 @@ describe('атака: регулярный перевод из тратимых 
     expect(f.perDayMinor).toBe(0);
   });
 
-  it('перевод на копилку в последний день месяца: сегодня 31-е, платёж сегодня же', () => {
+  it('перевод на копилку в последний день месяца: сегодня 31-е, платёж сегодня же — остаток делим на неделю', () => {
     const f = calc({ today: '2026-10-31', wallets, balances, rules: [transfer('last', { startOn: '2026-10-31' })] });
-    expect(f.daysLeft).toBe(1);
-    expect(f.perDayMinor).toBe(60_000);
+    expect(f.daysLeft).toBe(7);
+    expect(f.paymentsMinor).toBe(40_000); // следующий — 30 ноября, за горизонтом
+    expect(f.perDayMinor).toBe(8_571);
   });
 });
 
 describe('держится: границы календаря', () => {
-  it('29 февраля високосного года: 28 февраля — 2 дня, а 29-го — 1', () => {
-    expect(calc({ today: '2028-02-28' }).daysLeft).toBe(2);
-    expect(calc({ today: '2028-02-29' }).daysLeft).toBe(1);
-    expect(calc({ today: '2027-02-28' }).daysLeft).toBe(1);
+  it('конец февраля: неделя считается через 29-е в високосный год и без него в обычный', () => {
+    expect(calc({ today: '2028-02-28' })).toMatchObject({ horizonEnd: '2028-03-05', daysLeft: 7 });
+    expect(calc({ today: '2028-02-29' })).toMatchObject({ horizonEnd: '2028-03-06', daysLeft: 7 });
+    expect(calc({ today: '2027-02-28' })).toMatchObject({ horizonEnd: '2027-03-06', daysLeft: 7 });
   });
 
-  it('31 декабря и конец года: день считается один, следующий год не подмешивается', () => {
+  it('31 декабря и конец года: неделя уходит в январь, платёж 1 января вычитается', () => {
     const f = calc({ today: '2026-12-31', rules: [rule('r', { startOn: '2027-01-01' })] });
-    expect(f.daysLeft).toBe(1);
-    expect(f.horizonEnd).toBe('2026-12-31');
-    expect(f.paymentsMinor).toBe(0);
+    expect(f.daysLeft).toBe(7);
+    expect(f.horizonEnd).toBe('2027-01-06');
+    expect(f.paymentsMinor).toBe(10_000);
+    expect(f.perDayMinor).toBe(12_857); // (1 000 − 100) ÷ 7
   });
 
   it('ежемесячное правило с 31-м числом в 30-дневном месяце срабатывает 30-го (вычитается)', () => {
@@ -188,9 +196,9 @@ describe('держится: границы календаря', () => {
     expect(f.paymentsCount).toBe(1);
   });
 
-  it('сегодня — последний день месяца, а платёж в тот же день: вычитается, делить не на что — на 1 день', () => {
+  it('сегодня — последний день месяца, а платёж в тот же день: вычитается, остаток делим на неделю', () => {
     const f = calc({ today: '2026-10-31', rules: [rule('r', { startOn: '2026-10-31', amountMinor: 30_000 })] });
-    expect(f.perDayMinor).toBe(70_000);
+    expect(f.perDayMinor).toBe(10_000);
   });
 });
 

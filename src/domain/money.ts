@@ -121,6 +121,33 @@ export function convertMinor(minor: Minor, from: CurrencyCode, to: CurrencyCode,
   return minor < 0 && out !== 0n ? -Number(out) : Number(out);
 }
 
+/** Знаков после запятой в процентах (как в поле комиссии): '1,1234' — можно, '1,12345' — нет. */
+const PERCENT_DIGITS = 4;
+const PERCENT_SCALE = 10n ** BigInt(PERCENT_DIGITS);
+
+/**
+ * Процент от суммы: percentOfMinor(3000, '1,15') → 35 (1,15% от 30 с. = 0,345 → 0,35). Строка — как в поле ввода: запятая или
+ * точка, не больше PERCENT_DIGITS знаков после запятой, строго больше 0 и меньше 100; иначе null.
+ * Считается ТОЧНО, целыми числами (BigInt): дробные числа на половинках ошибались на дирам (30 × 1,15 / 100 давало 0,34).
+ * Округление — «от нуля» на половинке, как у convertMinor.
+ */
+export function percentOfMinor(amountMinor: Minor, percentText: string): Minor | null {
+  assertMinor(amountMinor);
+  if (typeof percentText !== 'string') return null;
+  const s = percentText.replace(/\s/g, '').replace(',', '.');
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(s)) return null;
+  const [intRaw = '', frac = ''] = s.split('.');
+  if (frac.length > PERCENT_DIGITS) return null;
+  // процент × 10^PERCENT_DIGITS — целое число: '1,15' → 11500
+  const scaled = BigInt((intRaw === '' ? '0' : intRaw) + frac.padEnd(PERCENT_DIGITS, '0'));
+  if (scaled <= 0n || scaled >= 100n * PERCENT_SCALE) return null;
+  const den = 100n * PERCENT_SCALE;
+  const num = BigInt(Math.abs(amountMinor)) * scaled;
+  const out = (2n * num + den) / (2n * den); // округление «от нуля» на половинке
+  // процент меньше 100, значит результат не больше суммы и в безопасное целое помещается всегда
+  return amountMinor < 0 && out !== 0n ? -Number(out) : Number(out);
+}
+
 const RATE_SCALE_DIGITS = 12;
 const RATE_SCALE = 10n ** BigInt(RATE_SCALE_DIGITS);
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);

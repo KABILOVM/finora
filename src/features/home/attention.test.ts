@@ -23,6 +23,12 @@ describe('buildAttention: что требует внимания на «Глав
     expect(r).toEqual([{ id: 'debts', kind: 'debt', text: 'Долг просрочен: Рустам', to: '/debts/d1', tone: 'danger' }]);
   });
 
+  it('ссылка на долг всегда внутренняя: id из данных кодируется и не может увести на чужой адрес', () => {
+    const r = buildAttention(input({ debts: [debt('//evil.example/x?y=1', 'Рустам', '2026-10-10')] }));
+    expect(r[0]!.to).toBe('/debts/%2F%2Fevil.example%2Fx%3Fy%3D1');
+    expect(r[0]!.to.startsWith('/debts/')).toBe(true);
+  });
+
   it('несколько просроченных долгов: счёт и ссылка на список долгов', () => {
     const r = buildAttention(input({ debts: [debt('d1', 'А', '2026-10-01'), debt('d2', 'Б', '2026-10-14'), debt('d3', 'В', '2026-09-01')] }));
     expect(r[0]).toMatchObject({ text: 'Просрочено долгов: 3', to: '/debts', tone: 'danger' });

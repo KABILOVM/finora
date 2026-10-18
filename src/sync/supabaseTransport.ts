@@ -222,8 +222,8 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
       const send = (payload: WireRow[]) =>
         request<PostgrestResult>((signal) => client.from(remote).upsert(payload, { onConflict: 'id' }).abortSignal(signal));
       // Строки с заданным значением в поздней колонке без неё не отправить, не потеряв его: такая пачка всегда идёт с колонками (даже
-      // если раньше они были отключены), а ошибка «нет колонки» для неё наружу — правка остаётся на устройстве и уйдёт, когда схему
-      // обновят.
+      // если раньше они были отключены), а ошибка «нет колонки» для неё наружу видом 'schema' — правка остаётся на устройстве и уйдёт,
+      // когда схему обновят, а остальные строки движок отправит без неё (см. pushPhase.ts).
       const filled = LATE_COLUMN_SETS.map((cols) => wire.some((r) => hasValue(r, cols)));
       const prepare = (r: WireRow): WireRow => {
         let x = versionCheck ? r : withoutBase(r);
@@ -244,7 +244,14 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
         }
         res = await send(wire.map(prepare));
       }
-      if (res.error) throw classifyPostgrestError(res.error, res.status);
+      if (!res.error) return;
+      const miss = LATE_COLUMN_SETS.findIndex((cols, k) => filled[k] && isMissingColumnOf(res.error, cols));
+      if (miss >= 0) {
+        const cols = LATE_COLUMN_SETS[miss] as readonly string[];
+        const why = textOf(res.error as PostgrestFailure, 'нет колонки');
+        throw new TransportError('schema', `В облаке нет колонки ${cols.join(' / ')} (supabase/schema.sql не выполнен заново): ${why}`, 'PGRST204', cols);
+      }
+      throw classifyPostgrestError(res.error, res.status);
     },
 
     /** Чей токен supabase-js возьмёт для следующего запроса (он читает ту же сессию). */

@@ -7,6 +7,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { useOnline } from '@/components/OnlineBadge';
 import { cn } from '@/lib/cn';
 import { BottomNav } from './BottomNav';
+import { SectionBoundary } from './SectionBoundary';
 import { SideNav } from './SideNav';
 
 /** Крутилка, пока подгружается код страницы (навигация при этом остаётся на месте). */
@@ -52,11 +53,13 @@ export function AppShell({ status }: AppShellProps) {
           id="main"
           className="mx-auto w-full max-w-3xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 md:px-8 md:pb-12 md:pt-8"
         >
-          {/* key — по пути страницы: при переходе новая страница плавно «всплывает» */}
+          {/* key — по пути страницы: при переходе новая страница плавно «всплывает», а граница сбоя раздела начинает с чистого листа */}
           <div key={pathname} className="animate-rise">
-            <Suspense fallback={<PageFallback />}>
-              <Outlet />
-            </Suspense>
+            <SectionBoundary>
+              <Suspense fallback={<PageFallback />}>
+                <Outlet />
+              </Suspense>
+            </SectionBoundary>
           </div>
         </main>
       </div>

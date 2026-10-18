@@ -126,6 +126,9 @@ test.describe('39. Главная: компактная, с «Требует в�
     await expect(wallets.getByRole('listitem')).toHaveCount(2);
     await expect(page.getByTestId('budgets-widget')).toContainText('Можно тратить в день');
     await expect(page.getByTestId('widget-per-day')).toBeVisible();
+    // общий лимит превышен: крупно 0, а не цифра по деньгам на руках, и сказано почему
+    await expect.poll(async () => norm(await page.getByTestId('widget-per-day').innerText())).toBe('0 с.');
+    await expect(page.getByTestId('budgets-widget')).toContainText('Лимит месяца превышен на');
     await expect(page.getByRole('region', { name: 'Ближайшие платежи' })).toBeVisible();
     await expect(page.getByTestId('debts-widget')).toHaveCount(0);
     await expect(page.getByTestId('goals-widget')).toHaveCount(0);

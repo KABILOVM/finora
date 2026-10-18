@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RecorderError, recordingSupported, startRecorder } from './recorder';
+import { RecorderError, policyBlocksMicrophone, recordingSupported, startRecorder } from './recorder';
 
 class FakeRecorder {
   static types = ['audio/mp4'];
@@ -26,8 +26,8 @@ class FakeRecorder {
 }
 
 const track = () => ({ stop: vi.fn() });
-function mic(getUserMedia: () => Promise<unknown>) {
-  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+function mic(getUserMedia: () => Promise<unknown>, nav: Record<string, unknown> = {}) {
+  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia }, ...nav });
   vi.stubGlobal('MediaRecorder', FakeRecorder);
 }
 
@@ -60,6 +60,52 @@ describe('запись голоса', () => {
       throw Object.assign(new Error('x'), { name });
     });
     await expect(startRecorder(() => {})).rejects.toThrow(text);
+  });
+
+  it.each([
+    ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', 0, /Safari → Микрофон/],
+    ['Chrome на iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0 Mobile/15E148 Safari/604.1', 0, /Настройки → ваш браузер → Микрофон/],
+    ['Telegram на iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Telegram-iOS', 0, /Настройки → ваш браузер → Микрофон/],
+    ['iPad (называет себя Mac)', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 5, /Safari → Микрофон/],
+    ['Android', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/126.0 Mobile', 5, /настройках браузера/],
+  ])('отказ в доступе на %s: подсказка про нужные настройки', async (_, userAgent, maxTouchPoints, hint) => {
+    mic(
+      async () => {
+        throw Object.assign(new Error('x'), { name: 'NotAllowedError' });
+      },
+      { userAgent, maxTouchPoints },
+    );
+    const err = startRecorder(() => {});
+    await expect(err).rejects.toThrow(/^Нет доступа к микрофону/);
+    await expect(err).rejects.toThrow(hint);
+  });
+
+  it('микрофон запрещён заголовком сайта (Permissions-Policy): getUserMedia не зовём, текст честный, без совета про Safari', async () => {
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [track()] }));
+    mic(getUserMedia, { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' });
+    Object.defineProperty(document, 'featurePolicy', { value: { allowsFeature: (f: string) => f !== 'microphone' }, configurable: true });
+    try {
+      expect(policyBlocksMicrophone()).toBe(true);
+      await expect(startRecorder(() => {})).rejects.toThrow(new RecorderError('Микрофон отключён настройками сайта.'));
+      expect(getUserMedia).not.toHaveBeenCalled();
+    } finally {
+      delete (document as unknown as { featurePolicy?: unknown }).featurePolicy;
+    }
+  });
+
+  it('заголовок сайта разрешает микрофон (или браузер не говорит) — запись идёт как обычно', async () => {
+    expect(policyBlocksMicrophone()).toBe(false);
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [track()] }));
+    mic(getUserMedia);
+    Object.defineProperty(document, 'permissionsPolicy', { value: { allowsFeature: (f: string) => f === 'microphone' }, configurable: true });
+    try {
+      expect(policyBlocksMicrophone()).toBe(false);
+      const rec = await startRecorder(() => {});
+      expect(getUserMedia).toHaveBeenCalledOnce();
+      rec.cancel();
+    } finally {
+      delete (document as unknown as { permissionsPolicy?: unknown }).permissionsPolicy;
+    }
   });
 
   it('пишет, останавливает, отпускает микрофон и отдаёт запись в формате iPhone (mp4)', async () => {

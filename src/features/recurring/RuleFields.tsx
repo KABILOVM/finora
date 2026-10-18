@@ -28,11 +28,14 @@ const WRAP_CATEGORIES =
 /** Длинное название (кошелёк, долг) в чипе сокращается многоточием, а не растягивает окно вбок. */
 export const FIT_CHIPS = '[&_button]:max-w-full [&_button>span:last-child]:min-w-0 [&_button>span:last-child]:truncate';
 
-/** Невысокий экран: клавиши чуть ниже (не меньше 44 px — минимум для касания), как в окне «Новая операция». */
+/**
+ * Невысокий экран: клавиши чуть ниже (не меньше 44 px — минимум для касания), как в окне «Новая операция».
+ * Шрифт суммы уменьшает сам AmountInput (проп compact): так длинная сумма по-прежнему мельчает по длине.
+ */
 const COMPACT_KEYPAD =
   '[@media(min-height:701px)_and_(max-height:800px)]:[&_button]:!min-h-[48px] ' +
   '[@media(max-height:700px)]:[&_button]:!min-h-[44px] [@media(max-height:700px)]:!gap-1 ' +
-  '[@media(max-height:700px)]:[&_.items-baseline]:!py-0 [@media(max-height:700px)]:[&_.money]:!text-4xl';
+  '[@media(max-height:700px)]:[&_.items-baseline]:!py-0';
 
 type Panel = 'wallet' | 'toWallet' | 'debt' | null;
 
@@ -199,6 +202,7 @@ export function RuleFields(p: RuleFieldsProps) {
         tone={form.kind === 'expense' ? 'expense' : form.kind === 'income' ? 'income' : 'neutral'}
         error={errors.amount}
         className={COMPACT_KEYPAD}
+        compact
       />
 
       <Field

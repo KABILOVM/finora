@@ -85,7 +85,7 @@ describe('экран входа', () => {
       await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
       await fill(NEW.email, 'abc');
       await user.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
-      expect(await findByRole('alert')).toHaveTextContent('не короче 6 символов');
+      expect(await findByRole('alert')).toHaveTextContent('не короче 8 символов');
       expect(fake.calls.signUp).toBe(0);
     });
 

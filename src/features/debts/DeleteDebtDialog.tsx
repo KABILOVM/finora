@@ -5,7 +5,7 @@ import { useStore, type DebtDeleteMode } from '@/db';
 import type { CurrencyCode, LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
-import { keepText, opsCount, previewDebtDelete, previewText, type DeletePreview } from './debtDeleteText';
+import { deleteHint, keepHint, keepText, opsCount, previewDebtDelete, type DeletePreview } from './debtDeleteText';
 
 interface Props {
   open: boolean;
@@ -83,21 +83,19 @@ export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, bas
             </div>
           )}
           {!choose ? (
-            <p data-testid="debt-delete-hint">Операций по этому долгу нет.</p>
+            <p data-testid="debt-delete-hint">{keepHint(0)}</p>
           ) : mode === null ? (
             <p data-testid="debt-delete-hint">
               Выберите, что сделать с {count} {pluralRu(count, 'операцией', 'операциями', 'операциями')} этого долга.
             </p>
           ) : mode === 'keep-operations' ? (
             <p data-testid="debt-delete-hint">
-              {endSentence(
-                `${opsCount(count)} ${pluralRu(count, 'останется', 'останутся', 'останутся')} в истории как ${count === 1 ? 'обычная' : 'обычные'}: деньги в кошельках не меняются, но ${count === 1 ? 'она попадёт' : 'они попадут'} в итоги и бюджеты${keep ? ` — ${keep}` : ''}`,
-              )}{' '}
-              Операциям без заметки допишем «Долг «{counterparty}» (удалён)».
+              {keepHint(count)}
+              {keep ? ` ${keep[0]?.toUpperCase()}${endSentence(keep).slice(1)}` : ''} Операциям без заметки допишем «Долг «{counterparty}» (удалён)».
             </p>
           ) : (
             <p data-testid="debt-delete-hint">
-              Будет удалено: {preview ? previewText(preview) : `${opsCount(count)}.`} Остатки кошельков вернутся такими, как были до этого долга.
+              {preview ? deleteHint(preview) : `Будет удалено: ${opsCount(count)}. Остатки кошельков вернутся такими, как были до этого долга.`}
             </p>
           )}
           {rules !== undefined && rules > 0 && (

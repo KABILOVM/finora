@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, user, waitFor } from '@/components/testUtils';
 import {
   allTxs,
+  amountField,
   balancesOf,
   clickSave,
   contextChip,
@@ -241,6 +242,71 @@ describe('переводы', () => {
       await user.click(screen.getByRole('textbox', { name: 'Сумма списания, Сомони' }));
       await tapAmount('0');
       expect(fee.value).toBe('5');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('на телефоне комиссия суммой с копейками: «2 , 5» — это 2,50, а не 25; запятая видна сразу, «⌫» стирает по знаку', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('coarse'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    try {
+      const td = opsDeps([], { setup: withCard });
+      const { onClose } = await openAddSheet(td);
+      await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+      await tapAmount('200');
+      await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+      const fee = screen.getByRole('textbox', { name: /^Комиссия/ }) as HTMLInputElement;
+      await tapAmount('2,');
+      expect(fee.value).toBe('2,');
+      await tapAmount('5');
+      expect(fee.value).toBe('2,5');
+      expect(screen.getByText('Получит: 197,50 с.')).toBeInTheDocument();
+      await tapAmount('⌫');
+      expect(fee.value).toBe('2,');
+      await tapAmount('05');
+      expect(fee.value).toBe('2,05');
+      expect(screen.getByText('Получит: 197,95 с.')).toBeInTheDocument();
+      // клавиши снова у основной суммы: комиссия остаётся прежней
+      await user.click(screen.getByRole('textbox', { name: 'Сумма списания, Сомони' }));
+      await tapAmount('0');
+      expect(fee.value).toBe('2,05');
+      expect(amountField().value).toBe('2\u00A0000');
+      await clickSave();
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect((await liveTxs(td))[0]).toMatchObject({ kind: 'transfer', amountMinor: 200_000, toAmountMinor: 199_795 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('на телефоне расход с комиссией «0 , 5»: в поле 0,5, в итоге и в операции +50 дирамов', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('coarse'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    try {
+      const td = opsDeps([], { setup: withCard });
+      const { onClose } = await openAddSheet(td);
+      await tapAmount('100');
+      await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+      const fee = screen.getByRole('textbox', { name: /^Комиссия/ }) as HTMLInputElement;
+      await tapAmount('0,5');
+      expect(fee.value).toBe('0,5');
+      expect(screen.getByText('Итого спишется: 100,50 с.')).toBeInTheDocument();
+      // знаки калькулятора в комиссию не попадают
+      await user.click(screen.getByRole('button', { name: 'Плюс' }));
+      expect(fee.value).toBe('0,5');
+      expect(amountField().value).toBe('100');
+      await clickSave();
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect((await liveTxs(td))[0]).toMatchObject({ kind: 'expense', amountMinor: 10_050 });
     } finally {
       vi.unstubAllGlobals();
     }

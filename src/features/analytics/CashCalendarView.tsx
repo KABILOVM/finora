@@ -55,12 +55,15 @@ function Days({ c }: { c: CashCalendarOk }) {
           </div>
           <ul className="mt-1 divide-y divide-border rounded-2xl bg-surface-2/60 px-3">
             {d.events.map((e) => (
-              <li key={`${e.kind}-${e.id}-${e.date}`} className="flex items-center gap-3 py-2" data-testid="cal-event">
+              <li key={`${e.kind}-${e.id}-${e.date}${e.overdue ? '-overdue' : ''}`} className="flex items-center gap-3 py-2" data-testid="cal-event">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{e.label}</span>
                   <span className="block text-xs text-muted">
                     {KIND_WORD[e.kind]}
-                    {e.overdue && ' · просрочен, считаем на сегодня'}
+                    {e.overdue &&
+                      (e.overdueCount !== undefined && e.overdueCount > 1
+                        ? ` · просрочено ${e.overdueCount} ${pluralRu(e.overdueCount, 'раз', 'раза', 'раз')}, считаем на сегодня`
+                        : ' · просрочен, считаем на сегодня')}
                   </span>
                 </span>
                 <MoneyText minor={e.deltaMinor} currency={c.base} tone="auto" sign="always" className="shrink-0 font-semibold" />
@@ -138,7 +141,7 @@ export function CashCalendarView() {
           disabled={!usualKnown}
           onChange={setIncludeUsual}
           label="Тратить как обычно"
-          hint={usualKnown ? `Каждый день минус ${formatMinor(c.usualPerDayMinor ?? 0, c.base)}: столько в среднем уходит за день` : 'Пока нет истории расходов, считать нечем'}
+          hint={usualKnown ? `Каждый день минус ${formatMinor(c.usualPerDayMinor ?? 0, c.base)}: столько в среднем уходит на повседневные траты (без регулярных платежей)` : 'Пока нет истории расходов, считать нечем'}
         />
         <Check id="cal-receivables" checked={includeReceivables} onChange={setIncludeReceivables} label="Мне вернут долги в срок" hint="Остаток долга «мне должны» придёт в день срока. Это только ожидание" />
       </Card>

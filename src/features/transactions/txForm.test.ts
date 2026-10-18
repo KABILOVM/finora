@@ -6,6 +6,7 @@ import { describeTx, endSentence, MISSING_WALLET } from './txDisplay';
 import {
   changedFields,
   checkDate,
+  computeFee,
   emptyForm,
   errorField,
   firstOtherWallet,
@@ -362,5 +363,33 @@ describe('endSentence: точка в конце предложения', () => {
   });
   it('пустая строка не ломает', () => {
     expect(endSentence('')).toBe('');
+  });
+});
+
+describe('computeFee: комиссия в процентах', () => {
+  const pct = (feePct: string) => ({ feeMode: 'percent' as const, feeAmount: null, feePct });
+
+  it('считается точно: на половинке дирама округляется вверх (1,15% от 30 с. = 0,345 → 0,35, а не 0,34)', () => {
+    expect(computeFee(pct('1,15'), 3000)).toBe(35);
+    expect(computeFee(pct('0,7'), 5500)).toBe(39); // 0,385 → 0,39
+    expect(computeFee(pct('1.15'), 13000)).toBe(150); // 1,495 → 1,50
+  });
+
+  it('без половинок — как раньше', () => {
+    expect(computeFee(pct('1,5'), 1000)).toBe(15);
+    expect(computeFee(pct('1,5'), 2900)).toBe(44); // 0,435 → 0,44
+    expect(computeFee(pct('2'), 10_000)).toBe(200);
+  });
+
+  it('пустое поле — 0; неверный процент — null; суммы ещё нет — 0', () => {
+    expect(computeFee(pct(''), 3000)).toBe(0);
+    expect(computeFee(pct('100'), 3000)).toBeNull();
+    expect(computeFee(pct('1,23456'), 3000)).toBeNull();
+    expect(computeFee(pct('abc'), null)).toBeNull();
+    expect(computeFee(pct('1,15'), null)).toBe(0);
+  });
+
+  it('режим «сумма» берёт сумму как есть', () => {
+    expect(computeFee({ feeMode: 'amount', feeAmount: 120, feePct: '1,15' }, 3000)).toBe(120);
   });
 });

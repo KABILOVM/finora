@@ -17,6 +17,7 @@ import {
 } from '@/features/transactions/__fixtures__/opsKit';
 import BudgetsPage from './BudgetsPage';
 import BudgetsWidget from './BudgetsWidget';
+import { HideAmountsProvider } from '@/features/home/hideAmounts';
 
 /** «Сегодня» = четверг 15 октября 2026 (pinToday): до конца месяца 17 дней (15…31), основная валюта TJS. */
 beforeEach(pinToday);
@@ -151,16 +152,30 @@ describe('экран «Бюджеты»: прогноз', () => {
     expect(perDay()).toBe(fmt(11_764));
   });
 
-  it('доход по регулярному правилу обрывает горизонт: считаем до дня перед ним', async () => {
+  it('крупный доход по регулярному правилу обрывает горизонт: считаем до дня перед ним', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      const salary = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+      await s.recurring.create({ kind: 'income', walletId: i.cash, amountMinor: 3_000_000, categoryId: salary?.id ?? null, frequency: 'monthly', startOn: '2026-10-20' });
+    });
+    const c = text(card());
+    expect(c).toContain('До 19 октября · 5 дней');
+    expect(c).toContain('20 октября ждём доход');
+    expect(perDay()).toBe(fmt(50_000)); // 250 000 ÷ 5
+    expect(detail('Доходы до')).toBe(''); // до горизонта доходов нет — плитки нет
+  });
+
+  it('мелкий доход горизонт не обрывает: считаем до конца месяца вместе с ним, и это видно', async () => {
     await openPage(async (s) => {
       const i = await baseSetup(s);
       const salary = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
       await s.recurring.create({ kind: 'income', walletId: i.cash, amountMinor: 100_000, categoryId: salary?.id ?? null, frequency: 'monthly', startOn: '2026-10-20' });
     });
     const c = text(card());
-    expect(c).toContain('До 19 октября · 5 дней');
-    expect(c).toContain('20 октября ждём доход');
-    expect(perDay()).toBe(fmt(50_000)); // 250 000 ÷ 5
+    expect(c).toContain('До 31 октября · 17 дней');
+    expect(c).not.toContain('ждём доход');
+    expect(detail('Доходы до 31 октября')).toBe(`+${fmt(100_000)}`);
+    expect(perDay()).toBe(fmt(20_588)); // (250 000 + 100 000) ÷ 17
   });
 
   it('денег не хватает: 0 в день и честная сумма нехватки', async () => {
@@ -202,13 +217,190 @@ describe('экран «Бюджеты»: прогноз', () => {
     expect(text(card())).toContain('Сегодня потрачено больше нормы');
   });
 
-  it('по общему бюджету — вторая цифра «в день»', async () => {
+  it('общий лимит свободнее денег — крупно цифра по деньгам, по лимиту — второй плиткой', async () => {
+    await openPage(async (s) => {
+      await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 1_000_000 });
+    });
+    // по деньгам 250 000 ÷ 17 = 147,05; по лимиту (10 000 − 500) ÷ 17 = 558,82
+    expect(perDay()).toBe(fmt(14_705));
+    expect(detail('По бюджету на месяц')).toBe(`${fmt(55_882)} в день`);
+    expect(text(card())).not.toContain('по лимиту месяца');
+  });
+
+  it('общий лимит теснее денег — крупно цифра по лимиту (как на «Главной»), по деньгам — второй плиткой', async () => {
     await openPage(async (s) => {
       await baseSetup(s);
       await s.budgets.create({ categoryId: null, amountMinor: 200_000 });
     });
-    // лимит 2 000 − потрачено 500 = 1 500 на 17 дней = 88,23
-    expect(detail('По бюджету на месяц')).toBe(`${fmt(8_823)} в день`);
+    // лимит 2 000 − потрачено 500 = 1 500 на 17 дней = 88,23 — меньше, чем 147,05 по деньгам
+    expect(perDay()).toBe(fmt(8_823));
+    const c = text(card());
+    expect(c).toContain('по лимиту месяца');
+    expect(c).toContain('До 31 октября · 17 дней');
+    expect(detail('По деньгам на руках')).toBe(`${fmt(14_705)} в день`);
+    expect(detail('По бюджету на месяц')).toBe('');
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(8_823)}`);
+  });
+
+  it('общий лимит превышен — 0 в день красным и «Лимит месяца превышен на …», хотя деньги на руках есть', async () => {
+    await openPage(async (s) => {
+      await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 40_000 });
+    });
+    expect(perDay()).toBe(fmt(0));
+    expect(document.querySelector('[data-testid="forecast-per-day"] .text-expense')).not.toBeNull();
+    expect(text(card())).toContain(`Лимит месяца превышен на ${fmt(10_000)}`);
+    expect(text(card())).not.toContain('Обычно тратите больше');
+    expect(detail('По деньгам на руках')).toBe(`${fmt(14_705)} в день`);
+  });
+
+  it('аренда, проведённая сегодня, не делает день «перерасходом» и не меняет цифру', async () => {
+    let ruleId = '';
+    const td = await openPage(async (s) => {
+      const i = await baseSetup(s);
+      ruleId = (await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-15' })).id;
+    });
+    // (250 000 − 30 000) ÷ 17 = 12 941,17
+    expect(perDay()).toBe(fmt(12_941));
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(12_941)}`);
+
+    await write(() => storeOf(td).transactions.createFromRule(ruleId, '2026-10-15'));
+    await eventually(() => expect(detail('Деньги на руках')).toBe(fmt(220_000)));
+    expect(perDay()).toBe(fmt(12_941));
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(12_941)}`);
+    expect(text(card())).not.toContain('Сегодня потрачено больше нормы');
+  });
+
+  it('«Обычно вы тратите» — без регулярных платежей и трат с накоплений', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      const rule = await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 100_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-05' });
+      await s.transactions.createFromRule(rule.id, '2026-10-05');
+      const box = await s.wallets.create({ name: 'Копилка', currency: 'TJS', kind: 'savings', openingBalanceMinor: 500_000, color: '#2563eb', icon: '🪙' });
+      await s.transactions.create({ kind: 'expense', walletId: box.id, amountMinor: 200_000, categoryId: i.cats['Покупки'] ?? null, occurredOn: '2026-10-06' });
+    });
+    expect(detail('Обычно вы тратите')).toBe(`${fmt(3_571)} в день`); // те же 500 ÷ 14
+  });
+
+  it('просроченный платёж (правило создано раньше, дату не провели и не пропустили) вычитается и назван', async () => {
+    let ruleId = '';
+    const td = await openPage(async (s) => {
+      const i = await baseSetup(s);
+      ruleId = (await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-10', note: 'Аренда' })).id;
+      // правило заведено 1 октября (часы базы монотонные — назад их не перевести, поэтому метку ставим прямо)
+      const stamp = '2026-10-01T07:00:00.000Z';
+      await s.db.recurring_rules.update(ruleId, { createdAt: stamp, clientUpdatedAt: stamp });
+    });
+    // (250 000 − 30 000) ÷ 17 = 12 941,17
+    expect(perDay()).toBe(fmt(12_941));
+    expect(text(card())).toContain(`Из них просрочен 1 платёж на ${fmt(30_000)} Провести или пропустить`);
+    expect(text(card())).not.toContain('..');
+    expect(screen.getByRole('link', { name: 'Провести или пропустить' }).getAttribute('href')).toBe('/recurring');
+
+    // пропустили — цифра вернулась
+    await write(() => storeOf(td).transactions.skipOccurrence(ruleId, '2026-10-10'));
+    await eventually(() => expect(perDay()).toBe(fmt(14_705)));
+    expect(text(card())).not.toContain('Из них просроч');
+  });
+
+  it('правило создано сегодня с датой начала в прошлом — прошлые даты не вычитаются', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-10' });
+    });
+    expect(perDay()).toBe(fmt(14_705));
+    expect(text(card())).not.toContain('Из них просроч');
+  });
+});
+
+describe('лимит теснее денег, а крупная зарплата обрывает горизонт по деньгам', () => {
+  const setup = async (s: Store) => {
+    const i = await baseSetup(s);
+    await s.budgets.create({ categoryId: null, amountMinor: 200_000 });
+    const salary = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+    await s.recurring.create({ kind: 'income', walletId: i.cash, amountMinor: 3_000_000, categoryId: salary?.id ?? null, frequency: 'monthly', startOn: '2026-10-20' });
+  };
+
+  it('карточка: дни и горизонт — по лимиту (до конца месяца), без «ждём доход»', async () => {
+    await openPage(setup);
+    expect(perDay()).toBe(fmt(8_823)); // (2 000 − 500) ÷ 17, а по деньгам 250 000 ÷ 5 = 500
+    const c = text(card());
+    expect(c).toContain('До 31 октября · 17 дней');
+    expect(c).toContain('по лимиту месяца');
+    expect(c).not.toContain('ждём доход');
+    expect(detail('По деньгам на руках')).toBe(`${fmt(50_000)} в день`);
+  });
+
+  it('виджет: та же цифра и «до 31 октября»', async () => {
+    await openWidget(setup);
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(8_823)));
+    const widget = text(document.querySelector('[data-testid="budgets-widget"]'));
+    expect(widget).toContain('до 31 октября');
+    expect(widget).not.toContain('до 19 октября');
+  });
+});
+
+describe('утро дня зарплаты', () => {
+  it('аренду уже провели, а зарплату ещё нет: 0 на сегодня без «Денег не хватает», и сказано почему', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      const salary = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+      await s.recurring.create({ kind: 'income', walletId: i.cash, amountMinor: 3_000_000, categoryId: salary?.id ?? null, frequency: 'monthly', startOn: '2026-10-15' });
+      const rent = await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 300_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-15' });
+      await s.transactions.createFromRule(rent.id, '2026-10-15'); // на руках −500
+    });
+    expect(perDay()).toBe(fmt(0));
+    const c = text(card());
+    expect(c).not.toContain('Денег не хватает');
+    expect(c).toContain('15 октября ждём доход');
+    expect(c).toContain('Сегодня ждём доход — пока он не проведён, считаем только то, что на руках.');
+    expect(detail('Просроченные платежи и долги')).toBe(fmt(0));
+  });
+});
+
+describe('лимит месяца и регулярные платежи', () => {
+  it('аренда сегодня по лимиту отложена заранее: после «Провести» — ни «перерасхода», ни другой цифры', async () => {
+    let ruleId = '';
+    const td = await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 200_000 });
+      ruleId = (await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-15' })).id;
+    });
+    // по лимиту: (2 000 − 500 − 300) ÷ 17 = 70,58 — меньше, чем по деньгам (2 500 − 300) ÷ 17 = 129,41
+    expect(perDay()).toBe(fmt(7_058));
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(7_058)}`);
+    expect(text(card())).toContain(`осталось ${fmt(150_000)}, из них ${fmt(30_000)} — на регулярные платежи.`);
+
+    await write(() => storeOf(td).transactions.createFromRule(ruleId, '2026-10-15'));
+    await eventually(() => expect(detail('Деньги на руках')).toBe(fmt(220_000)));
+    expect(perDay()).toBe(fmt(7_058));
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(7_058)}`);
+    expect(text(card())).not.toContain('Сегодня потрачено больше нормы');
+  });
+
+  it('виджет: остаток лимита уйдёт на регулярные платежи — 0 красным и та же фраза', async () => {
+    await openWidget(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 80_000 });
+      await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-25' });
+    });
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(0)));
+    expect(document.querySelector('[data-testid="widget-per-day"] .text-expense')).not.toBeNull();
+    const widget = text(document.querySelector('[data-testid="budgets-widget"]'));
+    expect(widget).toContain('Остаток лимита месяца уйдёт на регулярные платежи');
+    expect(widget).not.toContain('по лимиту месяца');
+  });
+
+  it('остаток лимита весь уйдёт на регулярные платежи — 0 красным и сказано почему', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 80_000 });
+      await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-25' });
+    });
+    expect(perDay()).toBe(fmt(0));
+    expect(document.querySelector('[data-testid="forecast-per-day"] .text-expense')).not.toBeNull();
+    expect(text(card())).toContain('Остаток лимита месяца уйдёт на регулярные платежи');
   });
 });
 
@@ -417,6 +609,84 @@ describe('виджет «Можно тратить в день» на «Глав
     expect(rows[1]).toContain('80%');
     // слова уровня остались в доступных именах полосок (в строке — только процент и цвет)
     expect(Array.from(list.querySelectorAll('[role="progressbar"]')).map((b) => b.getAttribute('aria-label'))).toEqual(['Все расходы: Потрачено 25%', 'Еда: Потрачено 80%']);
+  });
+
+  it('общий лимит теснее денег — та же цифра, что на экране бюджетов, с подписью «по лимиту месяца»', async () => {
+    await openWidget(async (s) => {
+      await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 200_000 });
+    });
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(8_823)));
+    const widget = text(document.querySelector('[data-testid="budgets-widget"]'));
+    expect(widget).toContain('до 31 октября');
+    expect(widget).toContain('по лимиту месяца');
+  });
+
+  it('общий лимит превышен — 0 красным и «Лимит месяца превышен на …», хотя деньги на руках есть', async () => {
+    await openWidget(async (s) => {
+      await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 40_000 });
+    });
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(0)));
+    expect(document.querySelector('[data-testid="widget-per-day"] .text-expense')).not.toBeNull();
+    expect(text(document.querySelector('[data-testid="budgets-widget"]'))).toContain(`Лимит месяца превышен на ${fmt(10_000)}`);
+  });
+
+  it('«Скрыть суммы»: сумма в строке «Лимит месяца превышен» тоже спрятана', async () => {
+    localStorage.setItem('finora-hide-balance', '1');
+    try {
+      const td = opsDeps([table()], {
+        setup: quiet(async (s) => {
+          await baseSetup(s);
+          await s.budgets.create({ categoryId: null, amountMinor: 40_000 });
+        }),
+      });
+      await showApp(
+        <HideAmountsProvider>
+          <BudgetsWidget />
+        </HideAmountsProvider>,
+        td,
+        '/',
+      );
+      const widget = await waitFor(() => {
+        const w = document.querySelector('[data-testid="budgets-widget"]');
+        expect(text(w)).toContain('Лимит месяца превышен на');
+        return w;
+      });
+      expect(text(widget)).toContain('Лимит месяца превышен на ••••');
+      expect(text(widget)).not.toContain(fmt(10_000));
+      expect(text(widget)).not.toContain(' с.'); // ни одной суммы — только даты и проценты
+    } finally {
+      localStorage.removeItem('finora-hide-balance');
+    }
+  });
+
+  it('«Скрыть суммы»: сумма в строке «Денег не хватает» тоже спрятана', async () => {
+    localStorage.setItem('finora-hide-balance', '1');
+    try {
+      const td = opsDeps([table()], {
+        setup: quiet(async (s) => {
+          await baseSetup(s);
+          await s.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 400_000, currency: 'TJS', openedOn: '2026-09-01', dueOn: '2026-10-30' });
+        }),
+      });
+      await showApp(
+        <HideAmountsProvider>
+          <BudgetsWidget />
+        </HideAmountsProvider>,
+        td,
+        '/',
+      );
+      const widget = await waitFor(() => {
+        const w = document.querySelector('[data-testid="budgets-widget"]');
+        expect(text(w)).toContain('Денег не хватает: нужно ещё ••••');
+        return w;
+      });
+      expect(text(widget)).not.toContain(fmt(150_000));
+      expect(text(widget)).not.toContain(' с.');
+    } finally {
+      localStorage.removeItem('finora-hide-balance');
+    }
   });
 
   it('нет общего лимита: самые «горячие» по категориям, не больше двух', async () => {

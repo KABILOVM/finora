@@ -31,6 +31,12 @@ export interface PhaseCtx {
 export interface PushCtx extends PhaseCtx {
   /** Остаток запросов на поиск виновных в этом цикле. */
   budget: { left: number };
+  /**
+   * Строки, которые ждут обновления схемы в облаке (таблица → id): у них задано значение в колонке, которой у сервера ещё нет
+   * (отказ 'schema'). Они остаются «грязными», не уходят в карантин и до конца цикла больше не отправляются (иначе тот же отказ
+   * повторялся бы на каждом проходе); остальное уходит как обычно. Операции на таком кошельке ждут вместе с ним (splitByParents).
+   */
+  waiting: Map<SyncTableName, Set<string>>;
 }
 
 export interface PushStats {
@@ -78,6 +84,22 @@ export function describeRejection(err: TransportError): string {
   return code === '' ? head : `${head} (код ${code})`;
 }
 
+/** Что ждёт обновления схемы (по таблице строк из PushCtx.waiting) и какой раздел supabase/schema.sql добавляет нужные колонки. */
+const SCHEMA_WAIT: ReadonlyArray<{ table: SyncTableName; section: string; what: string }> = [
+  { table: 'wallets', section: 'раздел 11 — цели накопления', what: 'кошельки с целью и их операции' },
+  { table: 'settings', section: 'раздел 13 — города для погоды', what: 'настройки' },
+];
+
+/** Понятное человеку объяснение, почему часть записей ждёт: схема в облаке устарела. Без точки в конце (её ставит текст статуса). */
+export function describeSchemaWait(tables: Iterable<SyncTableName>): string {
+  const set = new Set(tables);
+  const known = SCHEMA_WAIT.filter((p) => set.has(p.table));
+  const what = known.map((p) => p.what);
+  if (what.length === 0 || known.length < set.size) what.push(known.length > 0 ? 'другие записи' : 'некоторые записи');
+  const where = known.length > 0 ? ` (${known.map((p) => p.section).join('; ')})` : '';
+  return `В облаке устарела схема: выполните supabase/schema.sql целиком${where}; пока ${what.join(', ')} остаются только на этом устройстве`;
+}
+
 interface Versioned {
   id: string;
   clientUpdatedAt: string;
@@ -101,22 +123,35 @@ const refOf = (r: Versioned) => ({ id: r.id, clientUpdatedAt: r.clientUpdatedAt,
 
 type Row = LocalRow<Versioned & Record<string, unknown>>;
 
-/** Отправляет пачку; при отказе 'rejected' делит пополам и ищет виновных. Остальные виды ошибок уходят наверх. */
+/**
+ * Отправляет пачку; при отказе 'rejected' делит пополам и ищет виновных. При отказе 'schema' строки со значением в недостающей
+ * колонке откладываются до обновления схемы (PushCtx.waiting), остальные отправляются. Остальные виды ошибок уходят наверх.
+ */
 async function pushBatch(ctx: PushCtx, table: SyncTableName, rows: readonly Row[], depth: number, stats: PushStats): Promise<void> {
   ctx.check();
   if (depth > 0) {
     if (ctx.budget.left <= 0) throw new BisectBudgetError();
     ctx.budget.left--;
   }
+  // Каждая правка несёт версию сервера, поверх которой сделана (0 — строки на сервере ещё нет): если там уже записали
+  // другое, сервер отвергнет пачку, и мы сначала заберём чужое и объединим (см. PushStats.conflicted).
+  const wire = rows.map((r) => toWire(table, r as never, r.serverSeq ?? 0));
   try {
-    // Каждая правка несёт версию сервера, поверх которой сделана (0 — строки на сервере ещё нет): если там уже записали
-    // другое, сервер отвергнет пачку, и мы сначала заберём чужое и объединим (см. PushStats.conflicted).
-    await ctx.transport.push(
-      table,
-      rows.map((r) => toWire(table, r as never, r.serverSeq ?? 0)),
-    );
+    await ctx.transport.push(table, wire);
   } catch (e) {
     if (e instanceof TransportError && e.kind === 'conflict') throw new ConflictSignal();
+    if (e instanceof TransportError && e.kind === 'schema') {
+      // Без колонки строку со значением не отправить, не потеряв его: ждёт на устройстве. Остальным колонка не нужна (пусто).
+      const cols = e.columns ?? [];
+      const held = wire.map((w) => cols.some((c) => w[c] !== null && w[c] !== undefined));
+      if (!held.includes(true)) throw e;
+      const waiting = ctx.waiting.get(table) ?? new Set<string>();
+      rows.forEach((r, i) => held[i] && waiting.add(r.id));
+      ctx.waiting.set(table, waiting);
+      const rest = rows.filter((_, i) => !held[i]);
+      if (rest.length > 0) await pushBatch(ctx, table, rest, depth + 1, stats);
+      return;
+    }
     if (!(e instanceof TransportError) || e.kind !== 'rejected') throw e;
     if (rows.length === 1) {
       const row = rows[0] as Row;
@@ -280,11 +315,11 @@ async function pushTable(ctx: PushCtx, table: SyncTableName, stats: PushStats): 
   const skip = new Set<string>();
   for (let guard = 0; guard < MAX_BATCHES_PER_TABLE; guard++) {
     ctx.check();
-    // отложенные строки всегда в начале очереди (она идёт от старых к новым): просим на столько больше
-    const want = PUSH_BATCH + skip.size;
+    // отложенные и ждущие схему строки снова придут в выборке (очередь идёт от старых к новым): просим на столько больше
+    const want = PUSH_BATCH + skip.size + (ctx.waiting.get(table)?.size ?? 0);
     if (want > LIST_LIMIT_MAX) break;
     const dirty = (await ctx.store.sync.listDirty(table, want)) as unknown as Row[];
-    const fresh = dirty.filter((r) => !skip.has(r.id));
+    const fresh = dirty.filter((r) => !skip.has(r.id) && !ctx.waiting.get(table)?.has(r.id));
     if (fresh.length === 0) break;
     const batch = dedupById(fresh).slice(0, PUSH_BATCH);
 

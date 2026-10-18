@@ -7,6 +7,7 @@ import {
   fxSnapshot,
   minorToInputString,
   parseAmountToMinor,
+  percentOfMinor,
   sumMinor,
 } from './money';
 import { computeBalances, findBalanceIssues } from './balances';
@@ -116,6 +117,63 @@ describe('сложение и пересчёт', () => {
     expect(s.fxRate).toBe(Number((1 / 10.9).toFixed(10)));
     expect(s.baseAmountMinor).toBe(convertMinor(10000, 'TJS', 'USD', s.fxRate));
     expect(() => fxSnapshot(1, 'USD', 'TJS', 1e-12)).toThrow(RangeError);
+  });
+});
+
+describe('percentOfMinor: процент от суммы целыми числами', () => {
+  it('половинка дирама округляется от нуля точно, без ошибки дробных чисел', () => {
+    expect(percentOfMinor(3000, '1,15')).toBe(35); // 0,345 → 0,35 (дробными числами выходило 0,34)
+    expect(percentOfMinor(5500, '0,7')).toBe(39); // 0,385 → 0,39
+    expect(percentOfMinor(13000, '1,15')).toBe(150); // 1,495 → 1,50
+    expect(percentOfMinor(-3000, '1,15')).toBe(-35);
+    expect(Object.is(percentOfMinor(-1, '1'), 0)).toBe(true); // не «минус ноль»
+  });
+
+  it('без половинок и на краях', () => {
+    expect(percentOfMinor(1000, '1,5')).toBe(15);
+    expect(percentOfMinor(2900, '1,5')).toBe(44);
+    expect(percentOfMinor(0, '5')).toBe(0);
+    expect(percentOfMinor(1, '49,9999')).toBe(0);
+    expect(percentOfMinor(1, '50')).toBe(1);
+    expect(percentOfMinor(Number.MAX_SAFE_INTEGER, '99,9999')).toBe(9_007_190_247_541_736); // точно, без переполнения
+  });
+
+  it('строка — как в поле: запятая или точка, пробелы, не больше 4 знаков после запятой, строго от 0 до 100', () => {
+    expect(percentOfMinor(10_000, '1.5')).toBe(150);
+    expect(percentOfMinor(10_000, ' 1,5 ')).toBe(150);
+    expect(percentOfMinor(10_000, ',5')).toBe(50);
+    expect(percentOfMinor(10_000, '2,')).toBe(200);
+    expect(percentOfMinor(10_000, '1,1234')).toBe(112);
+    for (const bad of ['', '0', '0,0000', '100', '150', '1,12345', '-1', '1e1', '1,2,3', 'abc', '1 ,5x']) {
+      expect(percentOfMinor(10_000, bad), bad).toBeNull();
+    }
+    expect(() => percentOfMinor(0.5, '1')).toThrow(RangeError);
+  });
+
+  it('свойство: результат — ближайшее целое к сумме × процент / 100 (половинка — от нуля), не больше суммы', () => {
+    const amount = fc.integer({ min: 0, max: 1e13 });
+    const percent = fc.integer({ min: 1, max: 999_999 }); // процент × 10 000: от 0,0001 до 99,9999
+    fc.assert(
+      fc.property(amount, percent, (a, p) => {
+        const text = `${Math.floor(p / 10_000)},${String(p % 10_000).padStart(4, '0')}`;
+        const r = percentOfMinor(a, text);
+        if (r === null) return false;
+        // 2·a·p лежит в [(2r − 1)·10^6, (2r + 1)·10^6): r — округление a·p / 10^6 «от нуля» на половинке
+        const twice = 2n * BigInt(a) * BigInt(p);
+        const den = 1_000_000n;
+        return twice >= (2n * BigInt(r) - 1n) * den && twice < (2n * BigInt(r) + 1n) * den && r <= a;
+      }),
+    );
+  });
+
+  it('свойство: запятая и точка, лишние нули в конце дают одно и то же; знак суммы только меняет знак', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 1e12 }), fc.integer({ min: 1, max: 99 }), fc.integer({ min: 0, max: 99 }), (a, whole, frac) => {
+        const f = String(frac).padStart(2, '0');
+        const r = percentOfMinor(a, `${whole},${f}`);
+        return r === percentOfMinor(a, `${whole}.${f}`) && r === percentOfMinor(a, `${whole},${f}00`) && -(r ?? 0) === percentOfMinor(-a, `${whole},${f}`);
+      }),
+    );
   });
 });
 

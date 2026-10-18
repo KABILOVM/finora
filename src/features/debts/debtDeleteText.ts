@@ -34,6 +34,25 @@ const sums = (m: ReadonlyMap<CurrencyCode, Minor>): string => [...m].map(([c, v]
 
 export const opsCount = (n: number): string => `${n} ${pluralRu(n, 'операция', 'операции', 'операций')}`;
 
+/** Нет операций — удалять, кроме самого долга, нечего (и в обоих вариантах удаления это одно и то же). */
+const NO_OPERATIONS = 'Операций по этому долгу нет: удалится только сам долг.';
+
+/** Пояснение к «Удалить только долг»: «1 операция останется…» / «2 операции останутся…». */
+export function keepHint(count: number): string {
+  if (count === 0) return NO_OPERATIONS;
+  const many = 'останутся в истории как обычные';
+  const stay = pluralRu(count, 'останется в истории как обычная', many, many);
+  const they = 'они считаются обычными доходами и расходами месяца и попадут';
+  const counted = pluralRu(count, 'она считается обычным доходом или расходом месяца и попадёт', they, they);
+  return `${opsCount(count)} ${stay}: деньги в кошельках не меняются, но теперь ${counted} в итоги и бюджеты.`;
+}
+
+/** Пояснение к «Удалить долг и его операции». */
+export function deleteHint(p: DeletePreview): string {
+  if (p.count === 0) return NO_OPERATIONS;
+  return `Будет удалено: ${previewText(p)} Остатки кошельков вернутся такими, как были до этого долга.`;
+}
+
 /** «3 операции: расходов на 400 с., доходов на 100 с.» */
 export function previewText(p: DeletePreview): string {
   if (p.count === 0) return 'Операций по этому долгу нет.';

@@ -390,6 +390,25 @@ describe('экран «Кошельки»', () => {
     expect(text).not.toContain(formatMinor(99_999, 'TJS')); // удалённая не считается
     expect(await waitFor(() => screen.getByText('Совпадает с остатком на экране «Кошельки».'))).toBeInTheDocument();
   });
+
+  it('«Сверка» с операцией с некорректной суммой говорит, где её найти, а не отправляет в несуществующий раздел', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const cash = (await s.db.wallets.toArray())[0];
+    if (!cash) throw new Error('нет кошелька');
+    const bad = await write(() => s.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 500, occurredOn: '2026-10-05' }));
+    // так бывает только с повреждёнными данными: все пути записи такую сумму не пропускают
+    await write(() => s.db.transactions.update(bad.id, { amountMinor: 0 }));
+
+    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
+    await waitFor(() => expect(dialog).toHaveTextContent('Пропущено операций с некорректной суммой: 1'));
+    const text = (dialog.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Найти их можно в «Операциях»: период «Всё время», в «Фильтрах» — этот кошелёк');
+    expect(text).toContain('введите верную сумму или удалите её');
+    expect(text).not.toContain('Проверка данных');
+    expect(text).not.toContain('Сообщите');
+  });
 });
 
 describe('cleanName / sameName — невидимые символы по краям', () => {

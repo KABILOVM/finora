@@ -20,6 +20,8 @@ export interface SegmentedProps<T extends string> {
   ariaLabel: string;
   /** Тонкий вариант для строки в 48 px: меньше отступы и шрифт, кнопки по-прежнему 44 px. */
   compact?: boolean;
+  /** Выбор закрыт: остальные варианты видны, но недоступны; выбранный остаётся выбранным. */
+  disabled?: boolean;
   className?: string;
 }
 
@@ -30,10 +32,19 @@ const ACTIVE: Record<SegmentTone, string> = {
 };
 
 /** Переключатель из 2–4 вариантов (Расход / Доход / Перевод). Стрелки ←/→ переключают, Tab — выходит из группы. */
-export function Segmented<T extends string>({ options, value, onChange, ariaLabel, compact = false, className }: SegmentedProps<T>) {
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+  compact = false,
+  disabled = false,
+  className,
+}: SegmentedProps<T>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const move = (from: number, delta: number) => {
+    if (disabled) return;
     const n = options.length;
     const next = options[(from + delta + n) % n];
     if (!next) return;
@@ -72,12 +83,13 @@ export function Segmented<T extends string>({ options, value, onChange, ariaLabe
             aria-label={opt.ariaLabel}
             // Roving tabindex: в группу заходим одним Tab, внутри — стрелками.
             tabIndex={selected ? 0 : -1}
+            disabled={disabled && !selected}
             onClick={() => onChange(opt.value)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
               'min-h-[44px] rounded-xl font-semibold transition-colors',
               compact ? 'px-1 text-sm' : 'px-3 text-base',
-              selected ? ACTIVE[opt.tone ?? 'brand'] : 'text-muted hover:text-text',
+              selected ? ACTIVE[opt.tone ?? 'brand'] : disabled ? 'cursor-not-allowed text-muted opacity-50' : 'text-muted hover:text-text',
             )}
           >
             {opt.label}

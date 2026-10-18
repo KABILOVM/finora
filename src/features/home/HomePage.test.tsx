@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { write } from '@/app/testkit';
-import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { findByRole, fire, screen, user, waitFor } from '@/components/testUtils';
 import { formatMinor } from '@/domain/money';
 import type { RateLookup } from '@/rates/types';
 import type { Store } from '@/db';
@@ -166,6 +166,32 @@ describe('приход и расход месяца в шапке', () => {
     await openHome();
     await waitFor(() => expect(net()).toContain(fmt(487_550, 'TJS', 'always')));
     expect(net()).toContain('За месяц');
+  });
+
+  it('операция этого месяца с датой позже сегодняшней тоже входит в «За месяц» (как в бюджетах)', async () => {
+    await openHome({
+      setup: async (s) => {
+        hist = await seedHistory(s);
+        const cats = await s.db.categories.toArray();
+        const food = cats.find((c) => c.name === 'Еда' && c.kind === 'expense')?.id ?? null;
+        await s.transactions.create({ kind: 'expense', walletId: hist.cash, amountMinor: 10_000, categoryId: food, occurredOn: '2026-10-25', note: 'заранее' });
+      },
+    });
+    // 5 000 − 124,50 − 100 (запись на 25 октября) = +4 775,50
+    await waitFor(() => expect(net()).toContain(fmt(477_550, 'TJS', 'always')));
+    expect(flow('expense')).toBe(fmt(-22_450));
+  });
+
+  it('за полночь в новый месяц «За месяц» переключается сам, без перезапуска', async () => {
+    await openHome();
+    await waitFor(() => expect(net()).toContain(fmt(487_550, 'TJS', 'always')));
+    // 1 ноября, 00:00:05: в ноябре операций нет. Экран узнаёт о смене даты по таймеру, возврату на вкладку или фокусу.
+    vi.setSystemTime(new Date(2026, 10, 1, 0, 0, 5));
+    fire(window, new Event('focus'));
+    // суммы в капсулах «набегают» к новому значению — ждём, пока доедут
+    await waitFor(() => expect(flow('expense')).toBe(fmt(0)));
+    await waitFor(() => expect(flow('income')).toBe(fmt(0, 'TJS', 'always')));
+    expect(net()).toContain(fmt(0, 'TJS', 'always'));
   });
 
   it('в месяце нет операций — в капсулах нули, а не пустое место', async () => {

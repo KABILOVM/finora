@@ -4,14 +4,17 @@ import { isOwing, type DebtItem } from '@/features/debts/debtSummary';
 
 export type AttentionKind = 'debt' | 'payment' | 'budget' | 'saving';
 
+/** Адреса, куда ведёт строка «Требует внимания». */
+export type AttentionPath = '/debts' | '/recurring' | '/budgets' | '/wallets' | `/debts/${string}`;
+
 export interface AttentionItem {
   /** Стабильный ключ для списка. */
   id: string;
   kind: AttentionKind;
   /** Короткая фраза для строки: «Долг просрочен: Рустам». */
   text: string;
-  /** Куда ведёт нажатие. */
-  to: string;
+  /** Куда ведёт нажатие: только внутренние разделы приложения (id долга кодируется, на чужой адрес ссылка не уйдёт). */
+  to: AttentionPath;
   /** Красная ('danger') или жёлтая ('warning') — по важности. */
   tone: 'danger' | 'warning';
 }
@@ -48,7 +51,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       id: 'debts',
       kind: 'debt',
       text: listed((n) => `Долг просрочен: ${n}`, (n) => `Просрочено долгов: ${n}`, lateDebts.map((it) => it.debt.counterparty)),
-      to: lateDebts.length === 1 ? `/debts/${lateDebts[0]!.debt.id}` : '/debts',
+      to: lateDebts.length === 1 ? `/debts/${encodeURIComponent(lateDebts[0]!.debt.id)}` : '/debts',
       tone: 'danger',
     });
   }

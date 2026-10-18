@@ -121,15 +121,40 @@ describe('правка операции по долгу', () => {
     expect((await stateOf(td, ids.debt)).remainingMinor).toBe(30_000);
   });
 
-  it('превратить операцию по долгу в перевод нельзя: связь не пропадает молча, а приходит ошибка', async () => {
+  it('вид операции по долгу закрыт: платёж не стать выдачей или переводом, рядом подсказка; сохранение ничего не меняет', async () => {
     const { td, ids, onClose } = await openEdit((i) => i.payment);
     const before = await row(td, ids.payment);
-    await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+    const radio = (name: string) => screen.getByRole('radio', { name }) as HTMLButtonElement;
+    expect(radio('Доход')).toHaveAttribute('aria-checked', 'true');
+    expect(radio('Расход').disabled).toBe(true);
+    expect(radio('Перевод').disabled).toBe(true);
+    expect(screen.getByText(/Вид операции по долгу не меняется/)).toBeInTheDocument();
+    await user.click(radio('Перевод'));
+    await user.click(radio('Расход'));
+    radio('Доход').focus();
+    await user.keyboard('{ArrowRight}');
+    expect(radio('Доход')).toHaveAttribute('aria-checked', 'true');
     await save();
-    const alert = await waitFor(() => screen.getByRole('alert'));
-    expect(norm(alert.textContent)).toContain('У перевода не бывает долга');
-    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(await row(td, ids.payment)).toEqual(before);
+    expect((await stateOf(td, ids.debt)).remainingMinor).toBe(30_000);
+  });
+
+  it('у обычной операции вид меняется, подсказки про долг нет', async () => {
+    await openEdit((i) => i.plain);
+    expect((screen.getByRole('radio', { name: 'Доход' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/Вид операции по долгу не меняется/)).toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Доход' }));
+    expect(screen.getByRole('radio', { name: 'Доход' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('если вид всё же пришёл другим (репозиторий), операция по долгу не меняется: понятная ошибка', async () => {
+    const { td, ids } = await openEdit((i) => i.issue);
+    const before = await row(td, ids.issue);
+    await expect(storeOf(td).transactions.update(ids.issue, { kind: 'income', debtId: ids.debt })).rejects.toThrow(
+      'Вид операции по долгу менять нельзя',
+    );
+    expect(await row(td, ids.issue)).toEqual(before);
     expect((await stateOf(td, ids.debt)).remainingMinor).toBe(30_000);
   });
 

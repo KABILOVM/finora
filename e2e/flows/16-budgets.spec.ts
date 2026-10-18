@@ -92,8 +92,9 @@ test.describe('16. Бюджеты и «сколько можно тратить 
     const widget = page.getByTestId('budgets-widget');
     await expect(widget).toBeVisible();
     await expect(widget).toContainText('Можно тратить в день');
-    // 3 000 − 525 = 2 475 на 17 дней = 145,58 (вниз)
-    await expect(page.getByTestId('widget-per-day')).toContainText(money('145,58 с.'));
+    // по деньгам 3 000 − 525 = 2 475 на 17 дней = 145,58, но общий лимит теснее: (2 000 − 525) ÷ 17 = 86,76 — крупно цифра по лимиту
+    await expect(page.getByTestId('widget-per-day')).toContainText(money('86,76 с.'));
+    await expect(widget).toContainText('по лимиту месяца');
     const rows = widget.getByRole('list', { name: 'Лимиты на месяц' }).getByRole('listitem');
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(0)).toContainText('Все расходы');

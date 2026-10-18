@@ -163,8 +163,9 @@ describe('describeSync — «Всё отправлено» только когд
 describe('formatDateTime', () => {
   const now = new Date(2026, 9, 10, 18, 0, 0);
   it('сегодня и вчера по местному времени', () => {
-    expect(formatDateTime(new Date(2026, 9, 10, 9, 5).toISOString(), now)).toBe('Сегодня, 09:05');
-    expect(formatDateTime(new Date(2026, 9, 9, 23, 59).toISOString(), now)).toBe('Вчера, 23:59');
+    // стоит после двоеточия («Обновлены: сегодня, 09:05») — со строчной
+    expect(formatDateTime(new Date(2026, 9, 10, 9, 5).toISOString(), now)).toBe('сегодня, 09:05');
+    expect(formatDateTime(new Date(2026, 9, 9, 23, 59).toISOString(), now)).toBe('вчера, 23:59');
   });
   it('давнее — с датой', () => {
     expect(formatDateTime(new Date(2026, 9, 5, 16, 40).toISOString(), now)).toBe('пн, 5 окт, 16:40');

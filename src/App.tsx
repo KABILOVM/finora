@@ -13,6 +13,7 @@ import {
 import { AppRoot } from '@/app/AppRoot';
 import { HeaderStatus } from '@/app/HeaderStatus';
 import { PageNotices } from '@/app/PageNotices';
+import { canRescueExport, exportLocalBackup } from '@/app/rescueExport';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/Toast';
@@ -161,7 +162,8 @@ export default function App() {
   // Облако настраивается переменными VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY; без них — локальный режим.
   const client = useMemo(() => getDefaultClient(), []);
   return (
-    <ErrorBoundary>
+    // В локальном режиме записи есть только на этом устройстве: экран сбоя предлагает сохранить их копию в файл.
+    <ErrorBoundary onExport={client ? undefined : exportLocalBackup} canExport={canRescueExport}>
       <ToastProvider>
         <HashRouter>
           <AppRoot client={client}>
