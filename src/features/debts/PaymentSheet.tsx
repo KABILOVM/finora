@@ -7,7 +7,7 @@ import { TextInput } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { ValidationError, newId, useSettings, useStore, useUpcoming, useWallets } from '@/db';
-import { isLivePlanOf, type DebtState } from '@/domain/debts';
+import { isLivePlanOf, PLAN_PAID_NOTE, type DebtState } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, IsoDate, LocalRow, Minor } from '@/domain/types';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
@@ -16,10 +16,11 @@ import { endSentence } from '@/features/transactions/txDisplay';
 import { NOTE_MAX } from '@/features/transactions/txForm';
 import { longDate } from '@/features/budgets/budgetText';
 import { todayLocal } from '@/lib/dates';
-import { relativeText } from '@/recurring/upcoming';
+import { daysBetween, relativeText } from '@/recurring/upcoming';
 import { savePayment } from './debtActions';
 import { overpayOf, validatePayment, type PaymentFormErrors } from './debtForm';
 import { DayField } from './DebtDates';
+import { ruDateShort } from './debtText';
 import { rankWallets, usePopularity } from '@/features/transactions/popularity';
 import { useWalletFx } from './useWalletFx';
 
@@ -37,7 +38,8 @@ export interface PaymentSheetProps {
  * Платёж по долгу: кошелёк той же валюты, сумма (по умолчанию — весь остаток), дата, заметка. Больше остатка — только после явного
  * подтверждения «Это переплата». Сам платёж — обычная операция с debtId (для «мне должны» доход, для «я должен» расход).
  * Есть план «Платить частями» и непроведённая плановая дата (просроченная, сегодня или в ближайшие дни) — отметка «Это плановый
- * платёж» (включена) после записи пропускает эту дату, чтобы план не провёл платёж второй раз.
+ * платёж» (включена) после записи пропускает ближайшую к платежу дату с заметкой PLAN_PAID_NOTE, чтобы план не провёл платёж
+ * второй раз, а «Пропущенные» не предлагали его «Вернуть».
  */
 export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) {
   const store = useStore();
@@ -57,8 +59,13 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
   const txId = useRef(newId());
   const [today] = useState(() => todayLocal());
   const upcoming = useUpcoming(PLANNED_AHEAD_DAYS, { today });
-  // самая ранняя непроведённая дата плана этого долга: ручной платёж закрывает долг по порядку
-  const planned = upcoming?.filter((i) => !i.alreadyExists && isLivePlanOf(i.rule, debt)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))[0] ?? null;
+  // непроведённая дата плана этого долга, ближайшая к дате платежа (при равенстве — более ранняя): за неё платёж и засчитывается.
+  // Старые даты (например, прошедшие, пока план стоял) остаются в «Просроченных» — решать по ним человеку.
+  const distance = (d: IsoDate) => Math.abs(daysBetween(d, date));
+  const planned =
+    upcoming
+      ?.filter((i) => !i.alreadyExists && isLivePlanOf(i.rule, debt))
+      .sort((a, b) => distance(a.date) - distance(b.date) || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))[0] ?? null;
   const [markPlanned, setMarkPlanned] = useState(true);
 
   const pop = usePopularity();
@@ -107,7 +114,10 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
       if (planned !== null && markPlanned) {
         try {
           // повтор безопасен: уже пропущенная дата возвращается как есть
-          await store.transactions.skipOccurrence(planned.rule.id, planned.date, resolved.fx ? { fx: resolved.fx } : {});
+          await store.transactions.skipOccurrence(planned.rule.id, planned.date, {
+            note: `${PLAN_PAID_NOTE} ${ruDateShort(date)}`,
+            ...(resolved.fx ? { fx: resolved.fx } : {}),
+          });
           toast.success(`Платёж записан, плановый за ${longDate(planned.date)} закрыт`);
         } catch (e) {
           console.error('Плановая дата не отмечена (платёж записан):', e);

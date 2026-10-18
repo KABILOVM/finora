@@ -5,8 +5,9 @@ import { TextInput } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { MoneyText } from '@/components/MoneyText';
-import { useDebtView, useStore, ValidationError } from '@/db';
+import { useDebtView, useStore, ValidationError, type FromRuleOptions } from '@/db';
 import { paymentKind } from '@/domain/debts';
+import { formatMinor } from '@/domain/money';
 import type { IsoDate, LocalRow, Minor, RecurringRule } from '@/domain/types';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { FxNotice } from '@/features/transactions/FxNotice';
@@ -54,15 +55,14 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
   const [form, setForm] = useState<PostFormState>(initial);
   const debtView = useDebtView(rule.debtId);
   const debtLeft = debtView?.ok && rule.kind === paymentKind(debtView.debt.direction) ? debtView.state.remainingMinor : null;
-  const fitted = useRef(false);
+  // Платёж по долгу: в поле сумма плана, но не больше остатка. Пока человек сам сумму не менял, она идёт за остатком
+  // (его могут изменить на другом устройстве, пока окно открыто); введённая руками сумма записывается как есть.
+  const [amountTouched, setAmountTouched] = useState(false);
+  const fittedAmount = debtLeft !== null && debtLeft > 0 && debtLeft < rule.amountMinor ? debtLeft : rule.amountMinor;
   useEffect(() => {
-    // Платёж по долгу: последний взнос — на остаток, а не на всю сумму плана (если человек ещё не менял сумму сам)
-    if (fitted.current || debtLeft === null) return;
-    fitted.current = true;
-    if (debtLeft > 0 && debtLeft < rule.amountMinor) {
-      setForm((f) => (f.amountMinor === rule.amountMinor ? { ...f, amountMinor: debtLeft } : f));
-    }
-  }, [debtLeft, rule.amountMinor]);
+    if (debtLeft === null || amountTouched) return;
+    setForm((f) => (f.amountMinor === fittedAmount ? f : { ...f, amountMinor: fittedAmount }));
+  }, [debtLeft, fittedAmount, amountTouched]);
   const [errors, setErrors] = useState<PostErrors>({});
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -99,6 +99,7 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
   };
 
   const setAmount = (value: Minor | null) => {
+    setAmountTouched(true);
     setForm((f) => {
       const next: PostFormState = { ...f, amountMinor: value };
       // «Получено» идёт за суммой, пока человек сам его не менял (иначе пара «списано / получено» молча разошлась бы)
@@ -121,8 +122,15 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
     setBusy(true);
     setErrors({});
     try {
-      // сумма не менялась — репозиторий сам сверит её с остатком долга на момент записи (fitToDebt)
-      const tx = await store.transactions.createFromRule(rule.id, date, { fitToDebt: true, ...prepared.opts });
+      let opts: FromRuleOptions = prepared.opts;
+      if (!amountTouched) {
+        // сумму не трогали — репозиторий сам сверит её с остатком долга на момент записи (fitToDebt)
+        const { amountMinor: _auto, ...rest } = prepared.opts;
+        opts = { ...rest, fitToDebt: true };
+      } else if (rule.debtId !== null && form.amountMinor !== null) {
+        opts = { ...prepared.opts, amountMinor: form.amountMinor }; // своя сумма по долгу — как есть, даже если равна плану
+      }
+      const tx = await store.transactions.createFromRule(rule.id, date, opts);
       if (tx.deletedAt !== null) {
         // Эту дату уже пропустили (на другом устройстве или в другой вкладке): операции нет, и молчать об этом нельзя.
         setErrors({ form: 'Этот платёж уже пропущен или удалён, поэтому в операции он не попал. Верните его в разделе «Пропущенные».' });
@@ -135,7 +143,11 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
           console.error('Введённый курс не запомнен (платёж проведён):', err);
         }
       }
-      toast.success(`Платёж проведён: ${view.title}`);
+      toast.success(
+        rule.debtId !== null && !amountTouched && tx.amountMinor < rule.amountMinor
+          ? `Проведено ${formatMinor(tx.amountMinor, view.currency)} — остаток долга: ${view.title}`
+          : `Платёж проведён: ${view.title}`,
+      );
       onClose();
     } catch (e) {
       if (e instanceof ValidationError) {

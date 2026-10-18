@@ -12,7 +12,7 @@ import type {
   UUID,
   Wallet,
 } from '@/domain/types';
-import { FxRequiredError, ValidationError } from './errors';
+import { DebtPlanStoppedError, FxRequiredError, ValidationError } from './errors';
 import { isUuid, newId, uuidV5 } from './ids';
 import {
   cleanPatch,
@@ -104,11 +104,12 @@ export interface TransactionsRepo {
    * «Пропустить» платёж за дату: создаёт операцию с тем же детерминированным id СРАЗУ удалённой (deletedAt) — другие устройства
    * увидят, что за эту дату платёж не нужен, и не проведут его. Уже пропущенная дата — вернёт имеющуюся строку; дата, за которую
    * платёж уже проведён (операция жива), — ошибка. Для кошелька в небазовой валюте нужен курс (fx), как для обычной операции.
+   * note — своя заметка пропуска (иначе — из правила), например PLAN_PAID_NOTE.
    */
   skipOccurrence(
     rule: Pick<RecurringRule, 'id'> | UUID,
     date: IsoDate,
-    opts?: { fx?: { rate: number; source: string } },
+    opts?: { fx?: { rate: number; source: string }; note?: string },
   ): Promise<LocalRow<Transaction>>;
   /**
    * Снимок базовой валюты пересчитывается ТОЛЬКО при смене суммы/кошелька/вида или при новом fx.
@@ -340,10 +341,17 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     const debt = await db.debts.get(rule.debtId);
     // нет долга, удалён или в архиве — понятную ошибку даст checkDebtLink
     if (!debt || debt.deletedAt !== null || rule.kind !== paymentKind(debt.direction)) return undefined;
-    if (debt.closedAt !== null) throw new ValidationError(`Долг «${debt.counterparty}» закрыт: платёж не проведён`);
+    if (debt.closedAt !== null) throw new DebtPlanStoppedError(`Долг «${debt.counterparty}» закрыт: платёж не проведён`);
     const [txs, wallets] = await Promise.all([db.transactions.where('debtId').equals(debt.id).toArray(), db.wallets.toArray()]);
-    const { remainingMinor } = computeDebtState(debt, txs, wallets);
-    if (remainingMinor <= 0) throw new ValidationError(`Долг «${debt.counterparty}» уже погашен: платёж не проведён`);
+    let remainingMinor: Minor;
+    try {
+      remainingMinor = computeDebtState(debt, txs, wallets).remainingMinor;
+    } catch (e) {
+      // остаток не посчитать — сколько платить, неизвестно: не проводим, а говорим почему (не «непредвиденный сбой»)
+      if (e instanceof RangeError) throw new ValidationError(`Суммы по долгу «${debt.counterparty}» слишком большие, проверьте данные`);
+      throw e;
+    }
+    if (remainingMinor <= 0) throw new DebtPlanStoppedError(`Долг «${debt.counterparty}» уже погашен: платёж не проведён`);
     return remainingMinor < rule.amountMinor ? remainingMinor : undefined;
   }
 
@@ -392,7 +400,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     async skipOccurrence(rule, date, opts = {}) {
       const ruleId = ruleIdOf(rule);
       const day = reqDate(date, 'Дата платежа');
-      const o = cleanPatch(opts, ['fx'] as const, 'Пропуск платежа');
+      const o = cleanPatch(opts, ['fx', 'note'] as const, 'Пропуск платежа');
       const fx = o.fx === undefined ? undefined : parseFx(o.fx);
       const id = await uuidV5(ruleId, day);
       return writeTx(ctx, scope(), async () => {
@@ -401,7 +409,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
           if (existing.deletedAt !== null) return existing; // уже пропущен (или проведён и удалён)
           throw new ValidationError('За эту дату платёж уже проведён: чтобы пропустить, удалите операцию');
         }
-        return insertNew(await fieldsFromRule(ruleId, day), fx ?? null, id, true);
+        return insertNew(await fieldsFromRule(ruleId, day, o.note === undefined ? {} : { note: o.note }), fx ?? null, id, true);
       });
     },
 

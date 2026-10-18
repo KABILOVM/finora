@@ -10,6 +10,7 @@ import {
   isAllowedPushEndpoint,
   parseDebtRow,
   parseDebtTxRow,
+  parsePlanDebtRow,
   parseRuleRow,
   parseSettingsRow,
   parseSubscriptionRow,
@@ -236,7 +237,27 @@ describe('разбор строк базы (имена колонок — как
   });
 
   it('правила, долги, операции долга, подписки', () => {
-    expect(parseRuleRow({ id: RULE, note: 'N', frequency: 'weekly', interval_n: 2, start_on: '2026-01-01', end_on: null })).toEqual({ id: RULE, note: 'N', frequency: 'weekly', intervalN: 2, startOn: '2026-01-01', endOn: null });
+    expect(parseRuleRow({ id: RULE, note: 'N', frequency: 'weekly', interval_n: 2, start_on: '2026-01-01', end_on: null })).toEqual({ id: RULE, note: 'N', kind: null, debtId: null, frequency: 'weekly', intervalN: 2, startOn: '2026-01-01', endOn: null });
+    // вид и долг правила: долг — только у дохода и расхода; неизвестный вид или неверный debt_id — правило не про долг, но не отбрасывается
+    const ruleRow = (kind: unknown, debtId: unknown) => parseRuleRow({ id: RULE, note: 'N', kind, debt_id: debtId, frequency: 'monthly', interval_n: 1, start_on: '2026-01-01', end_on: null });
+    expect(ruleRow('income', U.toUpperCase())).toMatchObject({ kind: 'income', debtId: U });
+    expect(ruleRow('expense', U)).toMatchObject({ kind: 'expense', debtId: U });
+    expect(ruleRow('expense', null)).toMatchObject({ kind: 'expense', debtId: null });
+    for (const bad of ['не-uuid', 5, '', {}]) expect(ruleRow('expense', bad), String(bad)).toMatchObject({ kind: 'expense', debtId: null });
+    for (const kind of ['transfer', 'gift', null, undefined, 5]) expect(ruleRow(kind, U), String(kind)).toMatchObject({ kind: null, debtId: null });
+    expect(parsePlanDebtRow({ id: RULE.toUpperCase(), direction: 'borrowed', principal_minor: 5, currency: 'TJS', deleted_at: null, archived_at: '2026-10-01T10:00:00+00:00', closed_at: null })).toEqual({
+      id: RULE,
+      direction: 'borrowed',
+      principalMinor: 5,
+      currency: 'TJS',
+      deletedAt: null,
+      archivedAt: '2026-10-01T10:00:00+00:00',
+      closedAt: null,
+    });
+    expect(parsePlanDebtRow({ id: RULE, direction: 'lent', principal_minor: 5, currency: 'TJS' })).toMatchObject({ deletedAt: null, archivedAt: null, closedAt: null });
+    for (const bad of [null, { id: 'x', direction: 'lent', principal_minor: 5, currency: 'TJS' }, { id: RULE, direction: 'gift', principal_minor: 5, currency: 'TJS' }, { id: RULE, direction: 'lent', principal_minor: '5', currency: 'TJS' }]) {
+      expect(parsePlanDebtRow(bad)).toBeNull();
+    }
     expect(parseRuleRow({ id: RULE, frequency: 'hourly', interval_n: 1, start_on: '2026-01-01', end_on: null })).toBeNull();
     expect(parseRuleRow({ id: RULE, frequency: 'daily', interval_n: '1', start_on: '2026-01-01', end_on: null })).toBeNull();
     expect(parseRuleRow({ id: 'x', frequency: 'daily', interval_n: 1, start_on: '2026-01-01', end_on: null })).toBeNull();

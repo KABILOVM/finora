@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useStore } from '@/db';
+import { PLAN_PAID_NOTE } from '@/domain/debts';
 import type { IsoDate, LocalRow, RecurringRule, Transaction } from '@/domain/types';
 import { addDays } from '@/lib/dates';
 
@@ -12,6 +13,8 @@ export interface SkippedItem {
   tx: LocalRow<Transaction>;
   /** true — «Пропустить» (строка создана сразу удалённой); false — операцию провели и потом удалили. */
   skipped: boolean;
+  /** Дату плана по долгу закрыл отдельный платёж (PLAN_PAID_NOTE): «Вернуть» записал бы те же деньги второй раз. */
+  paidSeparately: boolean;
 }
 
 /**
@@ -42,6 +45,9 @@ export function useSkipped(rules: readonly LocalRow<RecurringRule>[], today: Iso
     return rows
       .sort((a, b) => (a.occurredOn !== b.occurredOn ? (a.occurredOn < b.occurredOn ? 1 : -1) : a.id < b.id ? -1 : 1))
       .slice(0, SKIPPED_MAX)
-      .map((tx): SkippedItem => ({ tx, skipped: wasSkipped(tx) }));
+      .map((tx): SkippedItem => {
+        const skipped = wasSkipped(tx);
+        return { tx, skipped, paidSeparately: skipped && tx.note.startsWith(PLAN_PAID_NOTE) };
+      });
   }, [store, key, since]);
 }

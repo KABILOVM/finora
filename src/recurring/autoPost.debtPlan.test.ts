@@ -116,6 +116,22 @@ describe('план по долгу: последний платёж — на о�
     expect(await remainingOf(store, debt.id)).toBe(0);
   });
 
+  it('погашен посреди прохода: даты после погашения не проводятся и не становятся ошибкой «уже погашен»; правило разобрано', async () => {
+    const { store, cash } = await setup();
+    const debt = await borrowed(store);
+    const plan = await mkRule(store, { walletId: cash.id, debtId: debt.id, startOn: '2026-10-08' });
+    const r = await run(store, TODAY); // 08, 09 — по 5 000, 10 — 2 000, 11 — долг уже погашен
+    expect(r.posted).toBe(3);
+    expect(r.failures.has(plan.id)).toBe(false);
+    expect(r.examined.has(plan.id)).toBe(true); // старая пометка об ошибке по правилу снимется
+    expect(await postedBy(store, plan.id)).toEqual([
+      ['2026-10-08', 5_000],
+      ['2026-10-09', 5_000],
+      ['2026-10-10', 2_000],
+    ]);
+    expect(await hasRow(store, plan.id, '2026-10-11')).toBe(false);
+  });
+
   it('ручной платёж погасил долг раньше плана: план не участвует, ошибки нет, обычный платёж рядом проводится', async () => {
     const { store, cash, food } = await setup();
     const debt = await borrowed(store);

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useStore, type DebtDeleteMode } from '@/db';
 import type { CurrencyCode, LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
+import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
 import { keepText, opsCount, previewDebtDelete, previewText, type DeletePreview } from './debtDeleteText';
 
@@ -89,8 +90,10 @@ export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, bas
             </p>
           ) : mode === 'keep-operations' ? (
             <p data-testid="debt-delete-hint">
-              {opsCount(count)} останутся в истории как обычные: деньги в кошельках не меняются, но они попадут в итоги и бюджеты
-              {keep ? ` — ${keep}` : ''}. Операциям без заметки допишем «Долг «{counterparty}» (удалён)».
+              {endSentence(
+                `${opsCount(count)} ${pluralRu(count, 'останется', 'останутся', 'останутся')} в истории как ${count === 1 ? 'обычная' : 'обычные'}: деньги в кошельках не меняются, но ${count === 1 ? 'она попадёт' : 'они попадут'} в итоги и бюджеты${keep ? ` — ${keep}` : ''}`,
+              )}{' '}
+              Операциям без заметки допишем «Долг «{counterparty}» (удалён)».
             </p>
           ) : (
             <p data-testid="debt-delete-hint">

@@ -7,7 +7,7 @@ import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
 import { useDebtView, useRecurringRules, useStore, type DebtDeleteMode, type DebtDeletion } from '@/db';
-import { debtPlanStop, isLivePlanOf, type DebtPayment } from '@/domain/debts';
+import { debtPlanStop, isLivePlanOf, planFinished, type DebtPayment } from '@/domain/debts';
 import type { LocalRow, RecurringRule } from '@/domain/types';
 import { formatMinor } from '@/domain/money';
 import { RuleSheet } from '@/features/recurring/RuleSheet';
@@ -114,7 +114,7 @@ export default function DebtDetailPage() {
   const hasOthers = person !== undefined && person.open.some((it) => it.debt.id !== debt.id);
   const plans = (rules ?? []).filter((r) => isLivePlanOf(r, debt));
   // при закрытии остановятся планы, которые сейчас идут
-  const running = plans.filter((r) => debtPlanStop(r, debt, state) === null).length;
+  const running = plans.filter((r) => debtPlanStop(r, debt, state) === null && !planFinished(r, today)).length;
   const planNote =
     running === 0
       ? ''
@@ -223,7 +223,7 @@ export default function DebtDetailPage() {
       )}
 
       <DebtSummaryCard debt={debt} state={state} today={today} />
-      <DebtPlanCard debt={debt} state={state} plans={plans} busy={busy} onEdit={setEditingPlan} onStop={(r) => void stopPlan(r)} />
+      <DebtPlanCard debt={debt} state={state} plans={plans} today={today} busy={busy} onEdit={setEditingPlan} onStop={(r) => void stopPlan(r)} />
 
       <div className="mt-4 flex flex-col gap-2">
         {!archived && (

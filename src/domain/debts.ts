@@ -168,6 +168,15 @@ export const isLivePlanOf = (
   debt: Pick<Debt, 'id' | 'direction'>,
 ): boolean => rule.debtId === debt.id && rule.kind === paymentKind(debt.direction) && rule.deletedAt === null && rule.archivedAt === null;
 
+/**
+ * Заметка пропущенной даты плана, которую закрыл отдельный платёж по долгу («Это плановый платёж за …»). По ней «Пропущенные»
+ * не предлагают «Вернуть»: деньги уже записаны отдельным платежом, второй раз их записывать нельзя.
+ */
+export const PLAN_PAID_NOTE = 'Оплачено отдельным платежом';
+
+/** План закончился: дата окончания прошла (новых дат не будет), даже если долг не погашен. today — местная дата. */
+export const planFinished = (rule: Pick<RecurringRule, 'endOn'>, today: IsoDate): boolean => rule.endOn !== null && rule.endOn < today;
+
 /** Почему план платежей по долгу стоит: долг удалён, в архиве, закрыт или погашен. */
 export type DebtPlanStop = 'deleted' | 'archived' | 'closed' | 'settled';
 

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually, renderAppRoot, write } from '@/app/testkit';
 import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { RecurringInput, Store } from '@/db';
-import { computeDebtState } from '@/domain/debts';
+import { computeDebtState, PLAN_PAID_NOTE } from '@/domain/debts';
+import { occurrencesBetween } from '@/domain/schedule';
 import type { UUID } from '@/domain/types';
 import { HideAmountsProvider } from '@/features/home/hideAmounts';
 import { addDays } from '@/lib/dates';
@@ -138,7 +139,8 @@ describe('«Провести» план по долгу (окно «Провес
     expect(norm(dlg.textContent)).toContain('Остаток долга: 30 с.');
 
     await user.click(button(dlg, 'Провести'));
-    await waitFor(() => expect(screen.getByText(`Платёж проведён: ${PLAN}`)).toBeInTheDocument());
+    // записано меньше плана — сумма названа
+    await waitFor(() => expect(screen.getByText(new RegExp(`^Проведено 30\\sс\\. — остаток долга: ${PLAN}$`))).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     const rows = await postedBy(td, ids.plan);
@@ -185,6 +187,39 @@ describe('«Провести» план по долгу (окно «Провес
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect((await postedBy(td, ids.plan)).map((t) => t.amountMinor)).toEqual([4_500]);
     expect(await stateOf(storeOf(td), ids.debt)).toMatchObject({ remainingMinor: 0, overpaidMinor: 1_500 });
+  });
+
+  it('человек сам вводит полную сумму плана (50 с.) при подставленном остатке 30 с. — записывается 50 с., переплата 20 с.', async () => {
+    const { td, ids } = await openRecurring({ principal: 20_000, paid: 17_000, plan: 5_000 });
+    const dlg = await openPost();
+    await waitFor(() => expect(amountValue()).toBe('30'));
+    const amount = screen.getByRole('textbox', { name: /^Сумма/ });
+    await user.clear(amount);
+    await user.type(amount, '50');
+    await user.click(button(dlg, 'Провести'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((await postedBy(td, ids.plan)).map((t) => t.amountMinor)).toEqual([5_000]);
+    expect(await stateOf(storeOf(td), ids.debt)).toMatchObject({ remainingMinor: 0, overpaidMinor: 2_000 });
+    expect(screen.getByText('Платёж проведён: Алишер: частями')).toBeInTheDocument();
+  });
+
+  it('сумму не трогали — она идёт за остатком: пришёл платёж, и в поле вместо 50 стало 30; руками введённую сумму остаток не меняет', async () => {
+    const { td, ids } = await openRecurring({ principal: 20_000, paid: 5_000, plan: 5_000 });
+    const dlg = await openPost();
+    await waitFor(() => expect(norm(dlg.textContent)).toContain('Остаток долга: 150 с.'));
+    expect(amountValue()).toBe('50');
+    await write(() =>
+      storeOf(td).transactions.create({ kind: 'income', walletId: ids.cash, amountMinor: 12_000, occurredOn: day(-1), debtId: ids.debt }),
+    );
+    await waitFor(() => expect(amountValue()).toBe('30'));
+    const amount = screen.getByRole('textbox', { name: /^Сумма/ });
+    await user.clear(amount);
+    await user.type(amount, '40');
+    await write(() =>
+      storeOf(td).transactions.create({ kind: 'income', walletId: ids.cash, amountMinor: 1_000, occurredOn: day(-1), debtId: ids.debt }),
+    );
+    await waitFor(() => expect(norm(dlg.textContent)).toContain('Остаток долга: 20 с.'));
+    expect(amountValue()).toBe('40');
   });
 
   it('пока окно открыто, пришёл платёж на 120 с.: сумма в поле не менялась — записывается остаток на момент записи (30 с.)', async () => {
@@ -400,5 +435,26 @@ describe('«Все правила»: план по долгу, который с
     const row = norm(ruleRow(PLAN).textContent);
     expect(row).toContain('Ждёт подтверждения');
     expect(row).not.toContain('Остановлен');
+  });
+});
+
+describe('«Пропущенные»: дата плана, закрытая отдельным платежом', () => {
+  it('«Оплачен отдельным платежом» без «Вернуть»; обычный пропуск по-прежнему можно вернуть', async () => {
+    await openRecurring({
+      principal: 20_000,
+      paid: 5_000,
+      more: async (s, ids) => {
+        // прошлый месяц закрыл ручной платёж («Это плановый платёж»), позапрошлый пропустили обычным «Пропустить»
+        await s.db.recurring_rules.update(ids.plan, { startOn: day(-62) });
+        const rule = (await s.db.recurring_rules.get(ids.plan))!;
+        const dates = occurrencesBetween(rule, day(-62), day(-1));
+        await s.transactions.skipOccurrence(ids.plan, dates[dates.length - 1]!, { note: `${PLAN_PAID_NOTE} ${dates[dates.length - 1]!}` });
+        await s.transactions.skipOccurrence(ids.plan, dates[0]!);
+      },
+    });
+    await user.click(await waitFor(() => screen.getByRole('button', { name: /^Пропущенные · 2/ })));
+    await waitFor(() => expect(screen.getByText(/^Оплачен отдельным платежом ·/)).toBeInTheDocument());
+    expect(screen.getAllByText(/^Пропущен ·/)).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^Вернуть платёж: / })).toHaveLength(1);
   });
 });

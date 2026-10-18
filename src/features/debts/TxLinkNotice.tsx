@@ -28,7 +28,8 @@ export function TxLinkNotice({ tx }: { tx: Linked }) {
               <>
                 Эта операция относится к долгу «{found.debt.counterparty}». Связь сохранится; кошелёк — только в валюте долга (
                 {found.debt.currency}).{' '}
-                {found.role === 'entry' && 'Сумма долга хранится в самом долге: правка здесь изменит только кошелёк и «Выдано деньгами». '}
+                {found.role === 'entry' &&
+                  'Сумма долга хранится в самом долге: другая сумма здесь изменит только кошелёк и «Выдано деньгами», а не долг. '}
                 <Link to={`/debts/${debtId}`} className="inline-flex min-h-[44px] items-center font-semibold text-brand">
                   Открыть долг
                 </Link>

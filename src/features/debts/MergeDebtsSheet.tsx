@@ -8,7 +8,7 @@ import { formatMinor } from '@/domain/money';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
-import { mergeCandidates, mergePreview } from './debtMatch';
+import { mergeCandidates, mergePreview, normName } from './debtMatch';
 import type { DebtItem } from './debtSummary';
 import { ruDateShort } from './debtText';
 
@@ -39,11 +39,11 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
   const busy = useRef(false);
 
   const chosen = candidates.filter((c) => picked.has(c.item.debt.id)).map((c) => c.item);
-  // имена, которые после объединения пропадут (без повторов, как их видно в списке)
-  const lostNames = [
-    ...new Set(candidates.filter((c) => !c.sameName && picked.has(c.item.debt.id)).map((c) => c.item.debt.counterparty.trim())),
-  ];
+  // долги с другим именем и имена, которые после объединения пропадут (одно имя — один раз, как его видно в первом долге)
+  const lostDebts = candidates.filter((c) => !c.sameName && picked.has(c.item.debt.id)).map((c) => c.item.debt);
+  const lostNames = [...new Map(lostDebts.map((d) => [normName(d.counterparty), d.counterparty.trim()] as const)).values()];
   const namesText = lostNames.map((n) => `«${n}»`).join(', ');
+  const many = lostDebts.length > 1;
   const preview = chosen.length > 0 ? mergePreview([target, ...chosen]) : null;
   const cur = target.debt.currency;
 
@@ -184,7 +184,7 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
       <ConfirmDialog
         open={confirming}
         title="Объединить разных людей?"
-        message={`${lostNames.length === 1 ? 'Долг' : 'Долги'} ${namesText} ${lostNames.length === 1 ? 'перейдёт' : 'перейдут'} к «${target.debt.counterparty}»: в списке останется только это имя. Сразу после объединения его можно отменить.`}
+        message={`${many ? 'Долги' : 'Долг'} ${namesText} ${many ? 'перейдут' : 'перейдёт'} к «${target.debt.counterparty}»: в списке останется только это имя. Сразу после объединения его можно отменить.`}
         confirmLabel="Объединить"
         loading={saving}
         onConfirm={() => void save()}

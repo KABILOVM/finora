@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { summarizeDay, summarizeMonth, uuidV5, useStore, type Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
-import { computeDebtState } from '@/domain/debts';
+import { computeDebtState, debtPlanStop } from '@/domain/debts';
 import {
   computeDailyForecast,
   endOfMonth,
@@ -41,7 +41,7 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
   ]);
   const base = settings.baseCurrency;
   const wallets = walletRows.filter((w) => w.deletedAt === null);
-  const rules = ruleRows.filter((r) => r.deletedAt === null && r.archivedAt === null);
+  let rules = ruleRows.filter((r) => r.deletedAt === null && r.archivedAt === null);
 
   const byDebt = new Map<string, LocalRow<Transaction>[]>();
   const existingIds = new Set<string>();
@@ -73,6 +73,15 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
         closedAt: d.closedAt,
         archivedAt: d.archivedAt,
       }));
+
+    // План по долгу, который стоит (долг погашен, закрыт, в архиве или удалён), денег больше не тратит — как в «Предстоящих»
+    const debtRowById = new Map(debtRows.map((d) => [d.id, d] as const));
+    const remainingById = new Map(debts.map((d) => [d.id, d.remainingMinor] as const));
+    rules = rules.filter((r) => {
+      if (r.debtId === null) return true;
+      const left = remainingById.get(r.debtId);
+      return debtPlanStop(r, debtRowById.get(r.debtId), left === undefined ? null : { remainingMinor: left }) === null;
+    });
 
     const month = summarizeMonth(txs, today.slice(0, 7), base);
     // «Сегодня потрачено» — только из тех кошельков, чьи деньги входят в «деньги на руках»: трата с накопления их не уменьшила

@@ -4,7 +4,7 @@ export { openStore, type Store, type OpenStoreOptions } from './store';
 export { StoreProvider, useOptionalStore, useStore } from './storeContext';
 
 export { FinoraDB, META_LAST_SYNCED_AT, type MetaRow, type MetaValue } from './database';
-export { FxRequiredError, ValidationError } from './errors';
+export { DebtPlanStoppedError, FxRequiredError, ValidationError } from './errors';
 
 export { createClock, type Clock, type ClockOptions } from './clock';
 export { getDeviceId } from './deviceId';

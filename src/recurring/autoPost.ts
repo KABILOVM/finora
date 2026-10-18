@@ -1,4 +1,4 @@
-import { FxRequiredError, stoppedDebtPlans, uuidV5, ValidationError, type Store } from '@/db';
+import { DebtPlanStoppedError, FxRequiredError, stoppedDebtPlans, uuidV5, ValidationError, type Store } from '@/db';
 import { paymentKind } from '@/domain/debts';
 import type { CurrencyCode, IsoDate, LocalRow, RecurringRule } from '@/domain/types';
 import type { RateLookup } from '@/rates/types';
@@ -181,6 +181,9 @@ export async function runAutoPost(opts: RunAutoPostOptions): Promise<AutoPostRes
       }
       if (e instanceof FxRequiredError) {
         noRate(rule.id, e.walletCurrency, e.baseCurrency, 'missing');
+      } else if (e instanceof DebtPlanStoppedError) {
+        // долг погасили (или закрыли) по ходу прохода — например, предыдущей датой этого же плана: план стоит, это не ошибка
+        stopped.add(rule.id);
       } else if (e instanceof ValidationError) {
         result.failures.set(rule.id, { kind: 'error', message: e.message });
         stopped.add(rule.id);

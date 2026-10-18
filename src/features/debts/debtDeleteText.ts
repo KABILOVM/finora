@@ -1,5 +1,6 @@
 import { addMinor, formatMinor } from '@/domain/money';
 import type { CurrencyCode, LocalRow, Minor, Transaction, UUID, Wallet } from '@/domain/types';
+import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
 
 export interface DeletePreview {
@@ -39,7 +40,7 @@ export function previewText(p: DeletePreview): string {
   const parts: string[] = [];
   if (p.expenses.size > 0) parts.push(`расходов на ${sums(p.expenses)}`);
   if (p.incomes.size > 0) parts.push(`доходов на ${sums(p.incomes)}`);
-  return `${opsCount(p.count)}${parts.length > 0 ? `: ${parts.join(', ')}` : ''}.`;
+  return endSentence(`${opsCount(p.count)}${parts.length > 0 ? `: ${parts.join(', ')}` : ''}`); // «100 с.» уже с точкой
 }
 
 /** «Только долг»: что добавится в итоги — «в расходы добавится 400 с., в доходы — 100 с.». Пусто — операций нет. */

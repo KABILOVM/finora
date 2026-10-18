@@ -234,6 +234,62 @@ describe('настоящая схема: что напоминается, а ч�
     expect(r.body).toMatchObject({ users: 2, skippedBadTimezone: 1, sent: 1, errors: 0 });
     expect(state.send.calls.map((c) => c.subId)).toEqual(['33333333-3333-4333-8333-333333333333']);
   });
+
+  it('план платежей по долгу: долг закрыт, в архиве, удалён или погашен — молчит; открыт с остатком и выдача по расписанию — напоминают', async () => {
+    await settings(USER_A, { debts: false });
+    await subscription(USER_A, '11111111-1111-4111-8111-111111111111');
+    const w = await wallet(USER_A);
+    const wUsd = await wallet(USER_A, 'USD');
+    // план «возврата»: мне должны → доход, я должен → расход; выдача по расписанию — другой вид
+    const plan = async (d: string, kind: 'income' | 'expense' = 'income') => rule(USER_A, { walletId: w, kind, debtId: d, startOn: '2026-01-10' });
+    const debts = {
+      open: await debt(USER_A, { dueOn: null, principal: 1000 }),
+      closed: await debt(USER_A, { dueOn: null, closed: true }),
+      archived: await debt(USER_A, { dueOn: null, archived: true }),
+      deleted: await debt(USER_A, { dueOn: null, deleted: true }),
+      settled: await debt(USER_A, { dueOn: null, principal: 1000 }),
+      usdPaid: await debt(USER_A, { dueOn: null, principal: 1000 }),
+      borrowedOpen: await debt(USER_A, { dueOn: null, direction: 'borrowed', principal: 1000 }),
+      borrowedSettled: await debt(USER_A, { dueOn: null, direction: 'borrowed', principal: 1000 }),
+    };
+    await tx(USER_A, { walletId: w, occurredOn: '2026-10-01', kind: 'income', debtId: debts.open, amount: 400 }); // остаток 600
+    await tx(USER_A, { walletId: w, occurredOn: '2026-10-01', kind: 'income', debtId: debts.settled, amount: 1000 }); // погашен
+    await tx(USER_A, { walletId: wUsd, occurredOn: '2026-10-01', kind: 'income', debtId: debts.usdPaid, amount: 1000 }); // другая валюта: не гасит
+    await tx(USER_A, { walletId: w, occurredOn: '2026-10-01', kind: 'income', debtId: debts.borrowedOpen, amount: 1000 }); // получение, а не платёж
+    await tx(USER_A, { walletId: w, occurredOn: '2026-10-01', kind: 'expense', debtId: debts.borrowedSettled, amount: 1000 }); // погашен
+    const rules = {
+      plain: await rule(USER_A, { walletId: w, startOn: '2026-01-10' }),
+      open: await plan(debts.open),
+      closed: await plan(debts.closed),
+      archived: await plan(debts.archived),
+      deleted: await plan(debts.deleted),
+      settled: await plan(debts.settled),
+      usdPaid: await plan(debts.usdPaid),
+      borrowedOpen: await plan(debts.borrowedOpen, 'expense'),
+      borrowedSettled: await plan(debts.borrowedSettled, 'expense'),
+      issueOnClosed: await plan(debts.closed, 'expense'), // выдача по расписанию: закрытие её не останавливает
+      issueOnArchived: await plan(debts.archived, 'expense'),
+      issueOnDeleted: await plan(debts.deleted, 'expense'), // долг удалён — стоит любое правило
+    };
+    const r = await cron();
+    expect(r.body).toMatchObject({ sent: 1, errors: 0 });
+    expect(bodies()).toEqual([{ title: 'Sumoima', body: 'Сегодня 6 платежей.', url: '/recurring', tag: 'finora-payments' }]);
+    const reminded = [rules.plain, rules.open, rules.usdPaid, rules.borrowedOpen, rules.issueOnClosed, rules.issueOnArchived];
+    expect((await logRows(USER_A)).map((l) => `${l.kind}:${l.ref}`).sort()).toEqual(reminded.map((id) => `payment:${id}:2026-10-10`).sort());
+    // долги прочитаны по id, без отбора по сроку и отметкам; операции — только у открытых долгов
+    const debtReads = emu.log.filter((c) => c.method === 'GET' && c.table === 'debts').map((c) => decodeURIComponent(c.query));
+    expect(debtReads).toHaveLength(1);
+    expect(debtReads[0]).toMatch(/^\?select=id,direction,principal_minor,currency,deleted_at,archived_at,closed_at&user_id=eq\.[0-9a-f-]{36}&id=in\.\([0-9a-f,-]+\)&limit=8$/);
+  });
+
+  it('план платежей по долгу: нет ни одного правила с долгом — долги, их операции и кошельки не читаются', async () => {
+    await settings(USER_A, { debts: false });
+    await subscription(USER_A, '11111111-1111-4111-8111-111111111111');
+    const w = await wallet(USER_A);
+    await rule(USER_A, { walletId: w, startOn: '2026-01-10' });
+    expect((await cron()).body).toMatchObject({ sent: 1, errors: 0 });
+    expect(emu.log.filter((c) => ['debts', 'wallets'].includes(c.table) || (c.table === 'transactions' && decodeURIComponent(c.query).includes('debt_id')))).toEqual([]);
+  });
 });
 
 describe('отправка: сбои, мёртвые подписки, чужие адреса', () => {

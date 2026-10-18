@@ -152,6 +152,20 @@ describe('«Объединить» с другим именем — только
     expect((await liveDebts(td)).map((d) => d.counterparty).sort()).toEqual(['Алишер', 'АЛИШЕР', 'Бобур', 'алишер'].sort());
   });
 
+  it('два долга одного другого человека («Бобур» и « бобур »): имя названо один раз, но «Долги … перейдут»', async () => {
+    await show(async (s) => {
+      await s.debts.create({ direction: 'lent', counterparty: 'Бобур', principalMinor: 10_000, currency: 'TJS', openedOn: '2026-03-05' });
+      await s.debts.create({ direction: 'lent', counterparty: ' бобур ', principalMinor: 5_000, currency: 'TJS', openedOn: '2026-04-05' });
+    });
+    await openMerge();
+    await user.click(box(/^Бобур от 05\.03\.2026/));
+    await user.click(box(/бобур от 05\.04\.2026/));
+    expect(text(tid('merge-names'))).toBe('Имя «Бобур» пропадёт из списка: долг останется на имя «Алишер». В заметке долга сохранится, с кем он объединён.');
+    await user.click(button(/^Объединить: 3 долга$/));
+    const dlg = await findByRole('alertdialog', { name: CONFIRM });
+    expect(text(dlg)).toContain('Долги «Бобур» перейдут к «Алишер»');
+  });
+
   it('Escape закрывает только окно подтверждения: лист выбора остаётся, ничего не объединено', async () => {
     const td = await show(people);
     await openMerge();
