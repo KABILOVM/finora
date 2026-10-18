@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { addDays } from '@/lib/dates';
-import { AUTO_POST_MAX_AGE_DAYS, autoPostDates, autoPostWindow, collectCandidates, isAutoPostRule, localDateOf } from './plan';
+import { AUTO_POST_MAX_AGE_DAYS, autoPostDates, autoPostWindow, collectCandidates, debtPlanFloor, isAutoPostRule, localDateOf } from './plan';
 
 /** Для проверок задаём «местную дату создания» напрямую: результат не должен зависеть от часового пояса машины. */
 const created = (day: string) => () => day;
@@ -217,5 +217,45 @@ describe('collectCandidates / isAutoPostRule', () => {
 
   it('пустой список правил — пустой результат', () => {
     expect(collectCandidates([], TODAY)).toEqual([]);
+  });
+});
+
+describe('debtPlanFloor: даты, прошедшие, пока план по долгу стоял, само не проводится', () => {
+  const REOPENED = '2026-10-08T08:00:00.000Z';
+
+  it('обычная метка правки долга — её местная дата (открыли снова 8-го — граница 8-е)', () => {
+    expect(debtPlanFloor({ clientUpdatedAt: REOPENED }, TODAY, byStamp({ [REOPENED]: '2026-10-08' }))).toBe('2026-10-08');
+    // правили сегодня — граница сегодня
+    expect(debtPlanFloor({ clientUpdatedAt: REOPENED }, TODAY, byStamp({ [REOPENED]: TODAY }))).toBe(TODAY);
+    // давняя правка границу не сдвигает вперёд: остаётся днём правки, окно правила режет историю отдельно
+    expect(debtPlanFloor({ clientUpdatedAt: REOPENED }, TODAY, byStamp({ [REOPENED]: '2025-03-01' }))).toBe('2025-03-01');
+  });
+
+  it('метка из будущего (часы убегали вперёд) — не позже сегодняшнего дня', () => {
+    const FUTURE = '2026-11-30T08:00:00.000Z';
+    expect(debtPlanFloor({ clientUpdatedAt: FUTURE }, TODAY, byStamp({ [FUTURE]: '2026-11-30' }))).toBe(TODAY);
+    expect(debtPlanFloor({ clientUpdatedAt: FUTURE }, TODAY, byStamp({ [FUTURE]: '2026-10-12' }))).toBe(TODAY);
+  });
+
+  it('метку не прочитать — только сегодняшний день', () => {
+    expect(debtPlanFloor({ clientUpdatedAt: 'мусор' }, TODAY)).toBe(TODAY);
+    expect(debtPlanFloor({ clientUpdatedAt: '' }, TODAY)).toBe(TODAY);
+    expect(debtPlanFloor({ clientUpdatedAt: REOPENED }, TODAY, () => null)).toBe(TODAY);
+  });
+
+  it('по умолчанию дата считается по местным часам, а не по UTC', () => {
+    const saved = process.env['TZ'];
+    try {
+      process.env['TZ'] = 'Asia/Dushanbe'; // UTC+5: 20:00 UTC уже следующий день
+      expect(debtPlanFloor({ clientUpdatedAt: '2026-10-09T20:00:00.000Z' }, TODAY)).toBe('2026-10-10');
+      process.env['TZ'] = 'America/Los_Angeles';
+      expect(debtPlanFloor({ clientUpdatedAt: '2026-10-09T20:00:00.000Z' }, TODAY)).toBe('2026-10-09');
+      // 20:00 UTC 11-го в Душанбе уже 12-е — «завтра» по местным часам: граница не позже сегодняшнего дня
+      process.env['TZ'] = 'Asia/Dushanbe';
+      expect(debtPlanFloor({ clientUpdatedAt: '2026-10-11T20:00:00.000Z' }, TODAY)).toBe(TODAY);
+    } finally {
+      if (saved === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = saved;
+    }
   });
 });

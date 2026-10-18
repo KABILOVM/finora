@@ -239,3 +239,65 @@ describe('DebtsRepo.undoMerge', () => {
     await expect(store.debts.undoMerge(res)).rejects.toThrow(/удалён/);
   });
 });
+
+describe('DebtsRepo.merge: с кем объединён (другое имя в заметке)', () => {
+  it('другое имя — строка «Объединён с: Бобур (от 05.03.2026)» сразу после своей заметки, перед заметками источников', async () => {
+    const { store, d1 } = await setup();
+    const bobur = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 10_000, openedOn: '2026-03-05', note: 'за телефон' });
+    const res = await store.debts.merge(d1.id, [bobur.id]);
+    expect(res.after.note).toBe('на ремонт\nОбъединён с: Бобур (от 05.03.2026)\nза телефон');
+    expect((await store.db.debts.get(d1.id))!.note).toBe('на ремонт\nОбъединён с: Бобур (от 05.03.2026)\nза телефон');
+    expect(res.after.counterparty).toBe('Али'); // имя основного долга остаётся
+  });
+
+  it('тот же человек (регистр, лишние пробелы, ё/е) — строки «Объединён с» нет', async () => {
+    const { store } = await setup();
+    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01', note: 'первый' });
+    const b = await store.debts.create({ ...base, counterparty: '  АЛИШЁР ', principalMinor: 200, openedOn: '2026-03-05', note: 'второй' });
+    const res = await store.debts.merge(a.id, [b.id]);
+    expect(res.after.note).toBe('первый\nвторой');
+    expect(res.after.note).not.toContain('Объединён с');
+  });
+
+  it('без заметок у всех — в заметке только строка про другое имя; одноимённый источник строки не добавляет', async () => {
+    const { store } = await setup();
+    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01' });
+    const same = await store.debts.create({ ...base, counterparty: 'алишер', principalMinor: 100, openedOn: '2026-10-02' });
+    const other = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05' });
+    const res = await store.debts.merge(a.id, [same.id, other.id]);
+    expect(res.after.note).toBe('Объединён с: Бобур (от 05.03.2026)');
+  });
+
+  it('несколько других имён — по строке на каждый долг в порядке выбора, совпадающие строки не дублируются', async () => {
+    const { store } = await setup();
+    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01' });
+    const vali = await store.debts.create({ ...base, counterparty: 'Вали', principalMinor: 100, openedOn: '2026-09-15', note: 'на свадьбу' });
+    const b1 = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05' });
+    const b2 = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05' });
+    const b3 = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-04-10' });
+    const res = await store.debts.merge(a.id, [vali.id, b1.id, b2.id, b3.id]);
+    expect(res.after.note).toBe(
+      ['Объединён с: Вали (от 15.09.2026)', 'Объединён с: Бобур (от 05.03.2026)', 'Объединён с: Бобур (от 10.04.2026)', 'на свадьбу'].join('\n'),
+    );
+    expect(res.after.principalMinor).toBe(500);
+  });
+
+  it('длинные заметки: строка «Объединён с» стоит сразу после заметки основного и при обрезке не теряется', async () => {
+    const { store } = await setup();
+    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01', note: 'а'.repeat(400) });
+    const b = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05', note: 'б'.repeat(400) });
+    const res = await store.debts.merge(a.id, [b.id]);
+    expect(res.after.note.length).toBeLessThanOrEqual(500);
+    expect(res.after.note.startsWith(`${'а'.repeat(400)}\nОбъединён с: Бобур (от 05.03.2026)\nб`)).toBe(true);
+    expect(res.after.note.endsWith('…')).toBe(true);
+  });
+
+  it('отмена объединения возвращает прежнюю заметку основного долга, без строки «Объединён с»', async () => {
+    const { store, d1 } = await setup();
+    const bobur = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 10_000, openedOn: '2026-03-05', note: 'за телефон' });
+    const res = await store.debts.merge(d1.id, [bobur.id]);
+    await store.debts.undoMerge(res);
+    expect(await store.db.debts.get(d1.id)).toMatchObject({ note: 'на ремонт', counterparty: 'Али', principalMinor: 40_000, openedOn: '2026-10-05' });
+    expect(await store.db.debts.get(bobur.id)).toMatchObject({ note: 'за телефон', counterparty: 'Бобур', deletedAt: null });
+  });
+});
