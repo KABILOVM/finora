@@ -47,6 +47,7 @@ export {
   useDebtState,
   useDebtView,
   useUpcoming,
+  useStoppedDebtPlans,
   BALANCES_OVERFLOW_MESSAGE,
   DEBT_OVERFLOW_MESSAGE,
   type BalancesState,
@@ -54,6 +55,7 @@ export {
   type UpcomingItem,
 } from './hooks';
 
+export { stoppedDebtPlans } from './debtPlans';
 export { ensureSeeded } from './seed';
 export { countUserData } from './localData';
 export { exportBackup, exportTransactionsCsv, importBackup, type BackupFile, type ImportOptions, type ImportResult } from './backup';

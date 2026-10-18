@@ -1,10 +1,12 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
-import { useStore, ValidationError } from '@/db';
+import { MoneyText } from '@/components/MoneyText';
+import { useDebtView, useStore, ValidationError } from '@/db';
+import { paymentKind } from '@/domain/debts';
 import type { IsoDate, LocalRow, Minor, RecurringRule } from '@/domain/types';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { FxNotice } from '@/features/transactions/FxNotice';
@@ -50,6 +52,17 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
 
   const [initial] = useState(() => initialPostForm(rule, wallet?.currency, toWallet?.currency));
   const [form, setForm] = useState<PostFormState>(initial);
+  const debtView = useDebtView(rule.debtId);
+  const debtLeft = debtView?.ok && rule.kind === paymentKind(debtView.debt.direction) ? debtView.state.remainingMinor : null;
+  const fitted = useRef(false);
+  useEffect(() => {
+    // Платёж по долгу: последний взнос — на остаток, а не на всю сумму плана (если человек ещё не менял сумму сам)
+    if (fitted.current || debtLeft === null) return;
+    fitted.current = true;
+    if (debtLeft > 0 && debtLeft < rule.amountMinor) {
+      setForm((f) => (f.amountMinor === rule.amountMinor ? { ...f, amountMinor: debtLeft } : f));
+    }
+  }, [debtLeft, rule.amountMinor]);
   const [errors, setErrors] = useState<PostErrors>({});
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -108,7 +121,8 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
     setBusy(true);
     setErrors({});
     try {
-      const tx = await store.transactions.createFromRule(rule.id, date, prepared.opts);
+      // сумма не менялась — репозиторий сам сверит её с остатком долга на момент записи (fitToDebt)
+      const tx = await store.transactions.createFromRule(rule.id, date, { fitToDebt: true, ...prepared.opts });
       if (tx.deletedAt !== null) {
         // Эту дату уже пропустили (на другом устройстве или в другой вкладке): операции нет, и молчать об этом нельзя.
         setErrors({ form: 'Этот платёж уже пропущен или удалён, поэтому в операции он не попал. Верните его в разделе «Пропущенные».' });
@@ -185,6 +199,11 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
             showKeypad={false}
             error={errors.amount}
           />
+          {debtLeft !== null && (
+            <p className="text-sm text-muted">
+              Остаток долга: <MoneyText minor={debtLeft} currency={debtView?.ok ? debtView.debt.currency : base} />
+            </p>
+          )}
         </FieldGroup>
 
         {isTransfer && received && (

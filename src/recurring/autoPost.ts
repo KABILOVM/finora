@@ -1,9 +1,10 @@
-import { FxRequiredError, uuidV5, ValidationError, type Store } from '@/db';
+import { FxRequiredError, stoppedDebtPlans, uuidV5, ValidationError, type Store } from '@/db';
+import { paymentKind } from '@/domain/debts';
 import type { CurrencyCode, IsoDate, LocalRow, RecurringRule } from '@/domain/types';
 import type { RateLookup } from '@/rates/types';
 import type { AutoPostFailure } from './autoPostState';
 import { needsFx, pairText, pickAutoRate } from './fx';
-import { AUTO_POST_MAX_PER_PASS, collectCandidates, isAutoPostRule, type LocalDateOf } from './plan';
+import { AUTO_POST_MAX_PER_PASS, collectCandidates, debtPlanFloor, isAutoPostRule, type LocalDateOf } from './plan';
 
 /**
  * Один проход автопроведения: находит платежи «Проводить само», которым пора, и записывает их через createFromRule.
@@ -15,6 +16,8 @@ import { AUTO_POST_MAX_PER_PASS, collectCandidates, isAutoPostRule, type LocalDa
  *    не меняет: причина попадает в failures;
  *  - небазовая валюта: только свежий курс или «Свой курс» (см. pickAutoRate); нет курса — платёж не проводится и остаётся
  *    в «Просроченных»/«Сегодня», пара валют попадает в missingRates;
+ *  - план по долгу, который погашен, закрыт, в архиве или удалён, стоит (debtPlanStop) и в проход не попадает; даты, прошедшие,
+ *    пока он стоял, само не проводится (debtPlanFloor); последний платёж записывается не больше остатка долга (fitToDebt);
  *  - перед КАЖДОЙ записью проверяется isCurrent(): вышел из аккаунта / сменился — не пишем ничего;
  *  - не больше `limit` записей за проход (остальное — на следующем проходе, capped: true).
  */
@@ -83,9 +86,20 @@ export async function runAutoPost(opts: RunAutoPostOptions): Promise<AutoPostRes
   if (!settings) return result; // до первой загрузки базовой валюты нет — проводить нечего
   const base = settings.baseCurrency;
 
-  const rules = (await store.db.recurring_rules.toArray()).filter(isAutoPostRule);
+  const live = (await store.db.recurring_rules.toArray()).filter(isAutoPostRule);
+  const planStopped = await stoppedDebtPlans(store.db, live);
+  const rules = live.filter((r) => !planStopped.has(r.id));
   for (const r of rules) result.eligible.add(r.id);
-  const candidates = collectCandidates(rules, today, opts.toLocal);
+  const floor = new Map<string, IsoDate>(); // платёж по долгу: не раньше последней правки долга
+  for (const r of rules) {
+    if (r.debtId === null) continue;
+    const debt = await store.db.debts.get(r.debtId);
+    if (debt && r.kind === paymentKind(debt.direction)) floor.set(r.id, debtPlanFloor(debt, today, opts.toLocal));
+  }
+  const candidates = collectCandidates(rules, today, opts.toLocal).filter((c) => {
+    const from = floor.get(c.rule.id);
+    return from === undefined || c.date >= from;
+  });
 
   // Что из этого уже есть в базе (проведено или пропущено): определяем по детерминированному id.
   const have = new Set<string>();
@@ -158,7 +172,7 @@ export async function runAutoPost(opts: RunAutoPostOptions): Promise<AutoPostRes
         continue;
       }
       attempts++;
-      const row = await store.transactions.createFromRule(rule.id, item.date, fx ? { fx } : {});
+      const row = await store.transactions.createFromRule(rule.id, item.date, { fitToDebt: true, ...(fx ? { fx } : {}) });
       if (row.deletedAt === null) result.posted++; // удалённая = пропущена на другом устройстве; не считаем проведённой
     } catch (e) {
       if (!isCurrent()) {

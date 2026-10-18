@@ -1,27 +1,21 @@
-import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/Icon';
-import { useOptionalStore } from '@/db';
 import type { Transaction } from '@/domain/types';
+import { useDebtTxRole, type DebtTxLink } from './useDebtTxRole';
 
-type Linked = Pick<Transaction, 'debtId' | 'recurringRuleId'>;
+type Linked = DebtTxLink & Pick<Transaction, 'recurringRuleId'>;
 
 /**
  * Пояснение в шите правки операции, которая связана с долгом или с регулярным платежом: что связь есть, что она сохранится
  * и какие правки репозиторий не пропустит (кошелёк только в валюте долга, перевод из такой операции сделать нельзя).
  * Саму связь форма не меняет — поля для неё нет, поэтому потерять или подменить её случайно нельзя.
+ * У выдачи (исходная операция или «добавить ещё») отдельная оговорка: сумма долга хранится в самом долге, правка операции
+ * меняет только кошелёк и «Выдано деньгами».
  */
 export function TxLinkNotice({ tx }: { tx: Linked }) {
-  const store = useOptionalStore();
   const debtId = tx.debtId;
-  // Обёртка в объект: «долга нет» (debt: null) отличается от «ещё читается» (undefined)
-  const found = useLiveQuery(
-    async () => {
-      const d = debtId && store ? await store.db.debts.get(debtId) : undefined;
-      return { debt: d && d.deletedAt === null ? d : null }; // удалённый долг — как отсутствующий
-    },
-    [store, debtId],
-  );
+  // «долга нет» (debt: null) отличается от «ещё читается» (undefined)
+  const found = useDebtTxRole(tx);
   if (!debtId && !tx.recurringRuleId) return null;
 
   return (
@@ -34,6 +28,7 @@ export function TxLinkNotice({ tx }: { tx: Linked }) {
               <>
                 Эта операция относится к долгу «{found.debt.counterparty}». Связь сохранится; кошелёк — только в валюте долга (
                 {found.debt.currency}).{' '}
+                {found.role === 'entry' && 'Сумма долга хранится в самом долге: правка здесь изменит только кошелёк и «Выдано деньгами». '}
                 <Link to={`/debts/${debtId}`} className="inline-flex min-h-[44px] items-center font-semibold text-brand">
                   Открыть долг
                 </Link>

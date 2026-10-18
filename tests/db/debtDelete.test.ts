@@ -39,7 +39,7 @@ describe('DebtsRepo.softDelete: только долг', () => {
     const { store, debt } = await setup();
     await store.debts.softDelete(debt.id, 'keep-operations');
     const snap = JSON.stringify([await store.db.debts.toArray(), await store.db.transactions.toArray(), await store.db.recurring_rules.toArray()]);
-    expect(await store.debts.softDelete(debt.id, 'with-operations')).toEqual({ debtId: debt.id, mode: 'with-operations', txIds: [], ruleIds: [] });
+    expect(await store.debts.softDelete(debt.id, 'with-operations')).toEqual({ debtId: debt.id, mode: 'with-operations', txIds: [], ruleIds: [], notedTxIds: [] });
     expect(JSON.stringify([await store.db.debts.toArray(), await store.db.transactions.toArray(), await store.db.recurring_rules.toArray()])).toBe(snap);
   });
 

@@ -1,11 +1,11 @@
 import { addMinor } from '@/domain/money';
+import { normName } from '@/domain/names';
 import type { CurrencyCode, Debt, DebtDirection, IsoDate, Minor } from '@/domain/types';
 import type { DebtItem } from './debtSummary';
 
 /** Поиск одного и того же человека среди долгов и расчёты для объединения (без React и без базы). */
 
-/** «  Алишер  Ё » и «алишер е» — один человек: пробелы схлопываются, регистр и «ё/е» не различаются. */
-export const normName = (s: string): string => s.replace(/\s+/g, ' ').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
+export { normName };
 
 export interface DebtMatchQuery {
   direction: DebtDirection;

@@ -355,7 +355,8 @@ describe('автопроведение: ошибка одного правила
     const s = await setup();
     const debt = await s.store.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 1_000, currency: 'TJS', openedOn: '2026-09-01' });
     const byCategory = await mkRule(s.store, { walletId: s.cash.id, categoryId: s.food.id, note: 'кат' });
-    const byDebt = await mkRule(s.store, { walletId: s.cash.id, debtId: debt.id, note: 'долг' });
+    // «я должен»: доход по долгу — получение (выдача по расписанию), такой план не останавливается, а падает с причиной
+    const byDebt = await mkRule(s.store, { kind: 'income', walletId: s.cash.id, debtId: debt.id, note: 'долг' });
     const byWallet = await mkRule(s.store, { walletId: s.cash.id, note: 'кош' });
     await s.store.db.categories.update(s.food.id, { deletedAt: '2026-10-01T00:00:00.000Z' });
     await s.store.debts.archive(debt.id);
@@ -378,13 +379,17 @@ describe('автопроведение: ошибка одного правила
     expect(r.failures.get(rule.id)?.message).toMatch(/Категория «Еда» удалена/);
   });
 
-  it('долг в архиве — понятная причина', async () => {
+  it('долг в архиве: план платежей стоит молча (не проводится, не ошибка); получение по расписанию — понятная причина', async () => {
     const s = await setup();
     const debt = await s.store.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 1_000, currency: 'TJS', openedOn: '2026-09-01' });
-    const rule = await mkRule(s.store, { walletId: s.cash.id, debtId: debt.id });
+    const plan = await mkRule(s.store, { walletId: s.cash.id, debtId: debt.id });
+    const issue = await mkRule(s.store, { kind: 'income', walletId: s.cash.id, debtId: debt.id });
     await s.store.debts.archive(debt.id);
     const r = await run(s.store);
-    expect(r.failures.get(rule.id)?.message).toMatch(/Долг «Банк» в архиве/);
+    expect(r.failures.has(plan.id)).toBe(false);
+    expect(r.eligible.has(plan.id)).toBe(false);
+    expect(r.failures.get(issue.id)?.message).toMatch(/Долг «Банк» в архиве/);
+    expect(r.posted).toBe(0);
   });
 
   it('непредвиденный сбой записи: пометка без технических слов, остальные правила проводятся, в консоль — подробности', async () => {

@@ -13,12 +13,16 @@ describe('validateNetting', () => {
 });
 
 describe('validatePayInParts', () => {
-  const ok = { amountMinor: 15_000, walletId: 'w', startOn: '2026-10-15', today: '2026-10-15', openedOn: '2026-10-01' };
+  const ok = { amountMinor: 15_000, walletId: 'w', startOn: '2026-10-15', today: '2026-10-15', openedOn: '2026-10-01', remainingMinor: 50_000 };
   it('нормальный ввод; первый платёж сегодня — можно', () => expect(validatePayInParts(ok)).toEqual({ errors: {}, ok: true }));
   it('сумма: пусто и не больше нуля', () => {
     expect(validatePayInParts({ ...ok, amountMinor: null }).errors.amount).toBe('Введите сумму платежа');
     expect(validatePayInParts({ ...ok, amountMinor: 0 }).errors.amount).toBe('Сумма платежа должна быть больше нуля');
     expect(validatePayInParts({ ...ok, amountMinor: -5 }).ok).toBe(false);
+  });
+  it('платёж в месяц больше остатка — не нужен; ровно остаток — можно (один платёж)', () => {
+    expect(validatePayInParts({ ...ok, amountMinor: 50_001 }).errors.amount).toBe('Больше остатка долга: хватит одного платежа на остаток');
+    expect(validatePayInParts({ ...ok, amountMinor: 50_000 }).ok).toBe(true);
   });
   it('нет кошелька', () => expect(validatePayInParts({ ...ok, walletId: null }).errors.wallet).toBe('Выберите кошелёк'));
   it('первый платёж в прошлом — нельзя: правило сразу «просрочено»', () => {

@@ -13,6 +13,8 @@ export interface ConfirmDialogProps {
   danger?: boolean;
   /** Идёт выполнение: кнопки заблокированы, закрыть нельзя. */
   loading?: boolean;
+  /** Подтвердить пока нельзя (например, не выбран вариант): кнопка недоступна, «Отмена» работает. */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -26,6 +28,7 @@ export function ConfirmDialog({
   cancelLabel = 'Отмена',
   danger = false,
   loading = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -42,7 +45,7 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={onCancel} disabled={loading} data-autofocus>
             {cancelLabel}
           </Button>
-          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={loading}>
+          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={loading} disabled={confirmDisabled}>
             {confirmLabel}
           </Button>
         </div>

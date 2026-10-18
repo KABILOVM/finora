@@ -1,5 +1,5 @@
-import { newId, type DebtInput, type Store } from '@/db';
-import { issueKind, paymentKind } from '@/domain/debts';
+import { newId, ValidationError, type DebtInput, type Store } from '@/db';
+import { isLivePlanOf, issueKind, paymentKind } from '@/domain/debts';
 import type { Debt, DebtDirection, IsoDate, LocalRow, Minor, RecurringRule, Transaction, UUID } from '@/domain/types';
 
 /** Движение денег, которое сопровождает новый долг: исходная операция (выдача/получение). */
@@ -216,8 +216,21 @@ export interface PayInPartsPlan {
   autoPost: boolean;
 }
 
-/** «Платить частями»: регулярный платёж «раз в месяц» по долгу (для «мне должны» — доход, для «я должен» — расход), с датой окончания. */
+/**
+ * «Платить частями»: регулярный платёж «раз в месяц» по долгу (для «мне должны» — доход, для «я должен» — расход), с датой окончания.
+ * У долга один план: если живой план уже есть — ошибка (второй задвоил бы платежи). Повтор с тем же id безопасен.
+ */
 export function savePayInParts(store: Store, p: PayInPartsPlan, id: UUID): Promise<LocalRow<RecurringRule>> {
+  const { db } = store;
+  return db.transaction('rw', [db.debts, db.transactions, db.wallets, db.categories, db.settings, db.recurring_rules, db.meta], async () => {
+    const debt = { id: p.debtId, direction: p.direction };
+    const other = (await db.recurring_rules.toArray()).some((r) => r.id !== id && isLivePlanOf(r, debt));
+    if (other) throw new ValidationError('У долга уже есть план платежей: измените его на странице долга');
+    return createPlan(store, p, id);
+  });
+}
+
+function createPlan(store: Store, p: PayInPartsPlan, id: UUID): Promise<LocalRow<RecurringRule>> {
   return store.recurring.create(
     {
       kind: paymentKind(p.direction),

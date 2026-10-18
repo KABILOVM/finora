@@ -1,4 +1,4 @@
-import { formatMinor } from '@/domain/money';
+import { addMinor, formatMinor } from '@/domain/money';
 import type { CurrencyCode, LocalRow, Minor, Transaction, UUID, Wallet } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 
@@ -9,7 +9,10 @@ export interface DeletePreview {
   incomes: Map<CurrencyCode, Minor>;
 }
 
-/** Что пропадёт при «Удалить долг и его операции»: только живые операции долга (расход/доход; валюта — по кошельку). */
+/**
+ * Живые операции долга (расход/доход; валюта — по кошельку): что пропадёт при «Удалить долг и его операции» или что станет
+ * обычными доходами и расходами при «Удалить только долг». Суммы складываются через addMinor (переполнение — RangeError).
+ */
 export function previewDebtDelete(
   txs: ReadonlyMap<UUID, Pick<LocalRow<Transaction>, 'kind' | 'walletId' | 'amountMinor' | 'deletedAt'>>,
   wallets: ReadonlyMap<UUID, Pick<Wallet, 'currency'>>,
@@ -21,7 +24,7 @@ export function previewDebtDelete(
     p.count += 1;
     const cur = wallets.get(t.walletId)?.currency ?? fallback;
     const bucket = t.kind === 'income' ? p.incomes : t.kind === 'expense' ? p.expenses : null;
-    if (bucket) bucket.set(cur, (bucket.get(cur) ?? 0) + t.amountMinor);
+    if (bucket) bucket.set(cur, addMinor(bucket.get(cur) ?? 0, t.amountMinor));
   }
   return p;
 }
@@ -37,4 +40,12 @@ export function previewText(p: DeletePreview): string {
   if (p.expenses.size > 0) parts.push(`расходов на ${sums(p.expenses)}`);
   if (p.incomes.size > 0) parts.push(`доходов на ${sums(p.incomes)}`);
   return `${opsCount(p.count)}${parts.length > 0 ? `: ${parts.join(', ')}` : ''}.`;
+}
+
+/** «Только долг»: что добавится в итоги — «в расходы добавится 400 с., в доходы — 100 с.». Пусто — операций нет. */
+export function keepText(p: DeletePreview): string {
+  const parts: string[] = [];
+  if (p.expenses.size > 0) parts.push(`в расходы добавится ${sums(p.expenses)}`);
+  if (p.incomes.size > 0) parts.push(`${parts.length > 0 ? 'в доходы — ' : 'в доходы добавится '}${sums(p.incomes)}`);
+  return parts.join(', ');
 }

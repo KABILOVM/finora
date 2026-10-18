@@ -1,5 +1,5 @@
 import { occurrencesBetween } from '@/domain/schedule';
-import type { IsoDate, RecurringRule } from '@/domain/types';
+import type { Debt, IsoDate, RecurringRule } from '@/domain/types';
 import { addDays, isValidIsoDate, todayLocal } from '@/lib/dates';
 
 /**
@@ -45,6 +45,17 @@ export function autoPostWindow(rule: RuleLike, today: IsoDate, toLocal: LocalDat
   const changed = changedOn > today ? today : changedOn;
   const from = later(later(later(rule.startOn, created), changed), addDays(today, -AUTO_POST_MAX_AGE_DAYS));
   return from > today ? null : { from, to: today };
+}
+
+/**
+ * План платежей по долгу стоит, пока долг закрыт или погашен (debtPlanStop). Когда долг открыли снова или пополнили, даты,
+ * прошедшие за это время, автоматика не проводит — они ждут в «Просроченных». Граница — день последней правки долга (закрыть,
+ * открыть снова, пополнить, объединить — всё это правка), не позже сегодняшнего. Метку не прочитать — только сегодняшний день.
+ * Цена та же, что у правки правила: правка долга с другого устройства раньше прохода оставит пропущенный день в «Просроченных».
+ */
+export function debtPlanFloor(debt: Pick<Debt, 'clientUpdatedAt'>, today: IsoDate, toLocal: LocalDateOf = localDateOf): IsoDate {
+  const changed = toLocal(debt.clientUpdatedAt) ?? today;
+  return changed > today ? today : changed;
 }
 
 /** Даты расписания правила, которые автопроведение может провести (по возрастанию). */

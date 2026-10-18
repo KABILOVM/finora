@@ -178,6 +178,8 @@ export interface PayInPartsFormInput {
   today: IsoDate;
   /** Дата долга: платёж раньше неё не принимаем. */
   openedOn: IsoDate;
+  /** Остаток долга: платёж в месяц больше него не нужен. */
+  remainingMinor: Minor;
 }
 
 export interface PayInPartsFormErrors {
@@ -186,11 +188,15 @@ export interface PayInPartsFormErrors {
   startOn?: string;
 }
 
-/** «Платить частями»: сумма больше нуля, кошелёк, первый платёж — сегодня или позже (иначе правило сразу «просрочено») и не раньше долга. */
+/**
+ * «Платить частями»: сумма больше нуля и не больше остатка долга, кошелёк, первый платёж — сегодня или позже (иначе правило сразу
+ * «просрочено») и не раньше долга.
+ */
 export function validatePayInParts(f: PayInPartsFormInput): { errors: PayInPartsFormErrors; ok: boolean } {
   const errors: PayInPartsFormErrors = {};
   if (f.amountMinor === null) errors.amount = 'Введите сумму платежа';
   else if (f.amountMinor <= 0) errors.amount = 'Сумма платежа должна быть больше нуля';
+  else if (f.amountMinor > f.remainingMinor) errors.amount = 'Больше остатка долга: хватит одного платежа на остаток';
   if (f.walletId === null) errors.wallet = 'Выберите кошелёк';
   const dateError = checkDate(f.startOn);
   if (dateError) errors.startOn = dateError;

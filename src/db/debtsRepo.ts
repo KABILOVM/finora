@@ -1,4 +1,5 @@
 import { addMinor, isMinor } from '@/domain/money';
+import { normName } from '@/domain/names';
 import type { CurrencyCode, Debt, DebtDirection, IsoDate, LocalRow, Minor, Transaction, UUID } from '@/domain/types';
 import { ValidationError } from './errors';
 import { newId } from './ids';
@@ -34,7 +35,12 @@ export interface DebtDeletion {
   txIds: UUID[];
   /** Регулярные платежи по этому долгу, которые ушли в архив. */
   ruleIds: UUID[];
+  /** «Только долг»: операции без заметки, которым дописано «Долг «X» (удалён)» (отмена стирает её, если заметку не меняли). */
+  notedTxIds: UUID[];
 }
+
+/** Заметка отвязанной операции без своей заметки: по ней видно, откуда в итогах взялись бывшие операции долга. */
+export const deletedDebtNote = (counterparty: string): string => `Долг «${counterparty.trim()}» (удалён)`;
 
 /**
  * Что сделало объединение долгов: по этому описанию его можно отменить (undoMerge).
@@ -82,6 +88,7 @@ export interface DebtsRepo {
    * Мягкое удаление долга (deletedAt) вместе с последствиями, ОДНОЙ транзакцией базы: либо всё, либо ничего.
    * Регулярные платежи по долгу уходят в архив (debtId сохраняется: вернуть платёж из архива можно, но проводиться как обычный
    * расход он не станет — автопроведение скажет «долг удалён»). Уже удалённый долг — ничего не меняет (пустой результат).
+   * «Только долг»: операции отвязываются, а тем, у кого заметки нет, дописывается «Долг «X» (удалён)» (deletedDebtNote).
    */
   softDelete(id: UUID, mode: DebtDeleteMode): Promise<DebtDeletion>;
   /** Отмена удаления: возвращает долг и то, что затронуло удаление (то, что с тех пор успели изменить иначе, не трогает). Повтор безопасен. */
@@ -132,6 +139,14 @@ function joinNotes(notes: readonly string[]): string {
   const last = cut.charCodeAt(cut.length - 1);
   if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1); // «голова» пары без «хвоста»
   return `${cut.trimEnd()}…`;
+}
+
+const ruDay = (iso: IsoDate): string => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+
+/** Строки «Объединён с: Бобур (от 05.03.2026)» для долгов с другим именем, чем у основного. */
+function mergedWith(target: Pick<Debt, 'counterparty'>, sources: readonly Pick<Debt, 'counterparty' | 'openedOn'>[]): string[] {
+  const name = normName(target.counterparty);
+  return sources.filter((s) => normName(s.counterparty) !== name).map((s) => `Объединён с: ${s.counterparty.trim()} (от ${ruDay(s.openedOn)})`);
 }
 
 export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
@@ -236,7 +251,8 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
           principalMinor: principal,
           openedOn: all.reduce((min, d) => (d.openedOn < min ? d.openedOn : min), target.openedOn),
           dueOn: dues.length > 0 ? dues.reduce((min, d) => (d < min ? d : min)) : null,
-          note: joinNotes(all.map((d) => d.note)),
+          // другое имя пропадёт из списка — в заметке остаётся, с кем объединён (сразу после своей заметки: при обрезке не теряется)
+          note: joinNotes([target.note, ...mergedWith(target, sources), ...sources.map((d) => d.note)]),
           // открыт хотя бы один — общий долг открыт; все закрыты — остаётся закрытым
           closedAt: all.some((d) => d.closedAt === null) ? null : target.closedAt,
         });
@@ -323,12 +339,19 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
       return writeTx(ctx, [db.debts, db.transactions, db.recurring_rules], async () => {
         const cur = await db.debts.get(id);
         if (!cur) throw new ValidationError('Долг не найден');
-        if (cur.deletedAt !== null) return { debtId: id, mode, txIds: [], ruleIds: [] };
+        if (cur.deletedAt !== null) return { debtId: id, mode, txIds: [], ruleIds: [], notedTxIds: [] };
 
         const txs = (await db.transactions.where('debtId').equals(id).toArray()).filter((t) => t.deletedAt === null);
+        const autoNote = deletedDebtNote(cur.counterparty);
+        const notedTxIds: UUID[] = [];
         for (const t of txs) {
           const { stamp, fields } = touch(ctx);
-          const next: LocalRow<Transaction> = mode === 'with-operations' ? { ...t, deletedAt: stamp, ...fields } : { ...t, debtId: null, ...fields };
+          let next: LocalRow<Transaction>;
+          if (mode === 'with-operations') next = { ...t, deletedAt: stamp, ...fields };
+          else if (t.note.trim() === '') {
+            next = { ...t, debtId: null, note: autoNote, ...fields };
+            notedTxIds.push(t.id);
+          } else next = { ...t, debtId: null, ...fields };
           await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, next));
         }
         const rules = (await db.recurring_rules.toArray()).filter((r) => r.debtId === id && r.deletedAt === null && r.archivedAt === null);
@@ -338,7 +361,7 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
         }
         const { stamp, fields } = touch(ctx);
         await db.debts.put(withDirtyGroups<LocalRow<Debt>>('debts', cur, { ...cur, deletedAt: stamp, ...fields }));
-        return { debtId: id, mode, txIds: txs.map((t) => t.id), ruleIds: rules.map((r) => r.id) };
+        return { debtId: id, mode, txIds: txs.map((t) => t.id), ruleIds: rules.map((r) => r.id), notedTxIds };
       });
     },
 
@@ -348,6 +371,8 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
         const cur = await db.debts.get(debtId);
         if (!cur) throw new ValidationError('Долг не найден');
         if (cur.deletedAt === null) return cur; // уже возвращён
+        const noted = new Set(deletion.notedTxIds ?? []);
+        const autoNote = deletedDebtNote(cur.counterparty);
         for (const txId of deletion.txIds) {
           const t = await db.transactions.get(txId);
           if (!t) continue;
@@ -356,7 +381,9 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
             await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, { ...t, deletedAt: null, ...touch(ctx).fields }));
           } else {
             if (t.deletedAt !== null || t.debtId !== null) continue; // с тех пор удалена или привязана к другому долгу
-            await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, { ...t, debtId, ...touch(ctx).fields }));
+            // дописанную заметку убираем, только если её не меняли
+            const note = noted.has(t.id) && t.note === autoNote ? '' : t.note;
+            await db.transactions.put(withDirtyGroups<LocalRow<Transaction>>('transactions', t, { ...t, debtId, note, ...touch(ctx).fields }));
           }
         }
         for (const ruleId of deletion.ruleIds) {

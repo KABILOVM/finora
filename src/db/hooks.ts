@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { computeBalances } from '@/domain/balances';
-import { computeDebtState, type DebtState } from '@/domain/debts';
+import { computeDebtState, type DebtPlanStop, type DebtState } from '@/domain/debts';
 import { upcomingOccurrences, type UpcomingStatus } from '@/domain/schedule';
 import type {
   Budget,
@@ -18,6 +18,7 @@ import type {
   Wallet,
 } from '@/domain/types';
 import { todayLocal } from '@/lib/dates';
+import { stoppedDebtPlans } from './debtPlans';
 import { uuidV5 } from './ids';
 import { filterTransactions, summarizeMonth, type MonthSummary, type TxFilter } from './queries';
 import { sortByOrderThenName } from './sort';
@@ -232,16 +233,16 @@ export type DebtView =
   | { ok: false; error: 'overflow'; message: typeof DEBT_OVERFLOW_MESSAGE };
 
 /**
- * Остаток и платежи долга (считаются из операций с debtId, см. domain/debts.ts). undefined — ещё считается.
+ * Остаток и платежи долга (считаются из операций с debtId, см. domain/debts.ts). undefined — ещё считается; debtId null — «не найден».
  * Не бросает: переполнение сумм становится значением (error: 'overflow'), как у useBalancesState.
  */
-export function useDebtView(debtId: UUID): DebtView | undefined {
+export function useDebtView(debtId: UUID | null): DebtView | undefined {
   const store = useStore();
   return useLiveQuery(async (): Promise<DebtView> => {
-    const debt = await store.db.debts.get(debtId);
+    const debt = debtId === null ? undefined : await store.db.debts.get(debtId);
     if (!debt || debt.deletedAt !== null) return { ok: false, error: 'not-found', message: 'Долг не найден' };
     const [txs, wallets] = await Promise.all([
-      store.db.transactions.where('debtId').equals(debtId).toArray(),
+      store.db.transactions.where('debtId').equals(debt.id).toArray(),
       store.db.wallets.toArray(),
     ]);
     try {
@@ -271,7 +272,8 @@ export interface UpcomingItem {
 
 /**
  * Предстоящие и просроченные платежи по живым (не архивным) правилам: сегодня, ближайшие daysAhead дней и просроченные за
- * последние lookbackDays (по умолчанию 366) дней. Проведённые и пропущенные тоже в списке — с alreadyExists: true; экран решает,
+ * последние lookbackDays (по умолчанию 366) дней. Планы по долгам, которые стоят (долг погашен, закрыт, в архиве или удалён —
+ * см. debtPlanStop), в список не попадают. Проведённые и пропущенные тоже в списке — с alreadyExists: true; экран решает,
  * показывать ли их. Наличие определяется по детерминированному id операции v5(правило, дата), поэтому правка даты проведённой
  * операции не создаёт «призрачный» долг. today — для тестов; по умолчанию сегодняшняя дата устройства. undefined — считается.
  */
@@ -283,7 +285,9 @@ export function useUpcoming(
   const today = opts.today ?? todayLocal();
   const lookbackDays = opts.lookbackDays;
   return useLiveQuery(async () => {
-    const rules = (await store.db.recurring_rules.toArray()).filter((r) => r.deletedAt === null && r.archivedAt === null);
+    const live = (await store.db.recurring_rules.toArray()).filter((r) => r.deletedAt === null && r.archivedAt === null);
+    const stopped = await stoppedDebtPlans(store.db, live);
+    const rules = live.filter((r) => !stopped.has(r.id));
     if (rules.length === 0) return [];
     const have = new Set<string>();
     for (const r of rules) {
@@ -300,4 +304,13 @@ export function useUpcoming(
       })),
     );
   }, [store, daysAhead, today, lookbackDays]);
+}
+
+/** Планы платежей по долгам, которые стоят: id правила → причина (см. debtPlanStop). undefined — считается. */
+export function useStoppedDebtPlans(): Map<UUID, DebtPlanStop> | undefined {
+  const store = useStore();
+  return useLiveQuery(async () => {
+    const rules = (await store.db.recurring_rules.toArray()).filter((r) => r.deletedAt === null && r.debtId !== null);
+    return stoppedDebtPlans(store.db, rules);
+  }, [store]);
 }

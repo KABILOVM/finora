@@ -1,3 +1,4 @@
+import { computeDebtState, paymentKind } from '@/domain/debts';
 import { fxSnapshot } from '@/domain/money';
 import { isOccurrence } from '@/domain/schedule';
 import type {
@@ -78,6 +79,13 @@ export interface FromRuleOptions {
   toAmountMinor?: Minor | null;
   note?: string;
   fx?: { rate: number; source: string };
+  /**
+   * Платёж по долгу (правило того же вида, что «возврат долга»): не больше остатка. Долг закрыт или уже погашен — ошибка,
+   * операция не пишется; последний платёж записывается на остаток, а не на полную сумму плана. Работает, только если сумма
+   * не передана явно: своя сумма — сознательный выбор человека (в том числе переплата). Выдачи по расписанию не ограничиваются.
+   * Два устройства без связи могут записать одну операцию (тот же id) с разной суммой — при обмене побеждает поздняя правка.
+   */
+  fitToDebt?: boolean;
 }
 
 export interface TransactionsRepo {
@@ -325,6 +333,20 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     });
   }
 
+  /** fitToDebt: сумма платежа по долгу, если она меньше суммы правила (остаток долга); undefined — сумма из правила. Внутри writeTx. */
+  async function debtFit(ruleId: UUID): Promise<Minor | undefined> {
+    const rule = await db.recurring_rules.get(ruleId);
+    if (!rule || rule.debtId === null) return undefined;
+    const debt = await db.debts.get(rule.debtId);
+    // нет долга, удалён или в архиве — понятную ошибку даст checkDebtLink
+    if (!debt || debt.deletedAt !== null || rule.kind !== paymentKind(debt.direction)) return undefined;
+    if (debt.closedAt !== null) throw new ValidationError(`Долг «${debt.counterparty}» закрыт: платёж не проведён`);
+    const [txs, wallets] = await Promise.all([db.transactions.where('debtId').equals(debt.id).toArray(), db.wallets.toArray()]);
+    const { remainingMinor } = computeDebtState(debt, txs, wallets);
+    if (remainingMinor <= 0) throw new ValidationError(`Долг «${debt.counterparty}» уже погашен: платёж не проведён`);
+    return remainingMinor < rule.amountMinor ? remainingMinor : undefined;
+  }
+
   return {
     async create(input, opts) {
       const clean = cleanPatch(input, KEYS, 'Операция');
@@ -356,13 +378,14 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     async createFromRule(rule, date, opts = {}) {
       const ruleId = ruleIdOf(rule);
       const day = reqDate(date, 'Дата платежа');
-      const o = cleanPatch(opts, ['amountMinor', 'toAmountMinor', 'note', 'fx'] as const, 'Операция по расписанию');
+      const o = cleanPatch(opts, ['amountMinor', 'toAmountMinor', 'note', 'fx', 'fitToDebt'] as const, 'Операция по расписанию');
       const fx = o.fx === undefined ? undefined : parseFx(o.fx);
       const id = await uuidV5(ruleId, day);
       return writeTx(ctx, scope(), async () => {
         const existing = await db.transactions.get(id);
         if (existing) return existing;
-        return insertNew(await fieldsFromRule(ruleId, day, o), fx ?? null, id, false);
+        const fitted = o.fitToDebt === true && o.amountMinor === undefined ? await debtFit(ruleId) : undefined;
+        return insertNew(await fieldsFromRule(ruleId, day, fitted === undefined ? o : { ...o, amountMinor: fitted }), fx ?? null, id, false);
       });
     },
 

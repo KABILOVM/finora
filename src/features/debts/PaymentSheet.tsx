@@ -6,20 +6,25 @@ import { ChipPicker } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
-import { ValidationError, newId, useSettings, useStore, useWallets } from '@/db';
-import type { DebtState } from '@/domain/debts';
+import { ValidationError, newId, useSettings, useStore, useUpcoming, useWallets } from '@/db';
+import { isLivePlanOf, type DebtState } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, IsoDate, LocalRow, Minor } from '@/domain/types';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { FxNotice } from '@/features/transactions/FxNotice';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { NOTE_MAX } from '@/features/transactions/txForm';
+import { longDate } from '@/features/budgets/budgetText';
 import { todayLocal } from '@/lib/dates';
+import { relativeText } from '@/recurring/upcoming';
 import { savePayment } from './debtActions';
 import { overpayOf, validatePayment, type PaymentFormErrors } from './debtForm';
 import { DayField } from './DebtDates';
 import { rankWallets, usePopularity } from '@/features/transactions/popularity';
 import { useWalletFx } from './useWalletFx';
+
+/** Плановую дату ближе стольких дней вперёд ручной платёж может закрыть («Это плановый платёж»). */
+export const PLANNED_AHEAD_DAYS = 3;
 
 export interface PaymentSheetProps {
   debt: LocalRow<Debt>;
@@ -31,6 +36,8 @@ export interface PaymentSheetProps {
 /**
  * Платёж по долгу: кошелёк той же валюты, сумма (по умолчанию — весь остаток), дата, заметка. Больше остатка — только после явного
  * подтверждения «Это переплата». Сам платёж — обычная операция с debtId (для «мне должны» доход, для «я должен» расход).
+ * Есть план «Платить частями» и непроведённая плановая дата (просроченная, сегодня или в ближайшие дни) — отметка «Это плановый
+ * платёж» (включена) после записи пропускает эту дату, чтобы план не провёл платёж второй раз.
  */
 export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) {
   const store = useStore();
@@ -48,6 +55,11 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
   const txId = useRef(newId());
+  const [today] = useState(() => todayLocal());
+  const upcoming = useUpcoming(PLANNED_AHEAD_DAYS, { today });
+  // самая ранняя непроведённая дата плана этого долга: ручной платёж закрывает долг по порядку
+  const planned = upcoming?.filter((i) => !i.alreadyExists && isLivePlanOf(i.rule, debt)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))[0] ?? null;
+  const [markPlanned, setMarkPlanned] = useState(true);
 
   const pop = usePopularity();
   const candidates = (wallets ?? []).filter((w) => w.currency === debt.currency);
@@ -92,7 +104,18 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
         ...(resolved.fx ? { fx: resolved.fx } : {}),
       });
       resolved.remember();
-      toast.success('Платёж записан');
+      if (planned !== null && markPlanned) {
+        try {
+          // повтор безопасен: уже пропущенная дата возвращается как есть
+          await store.transactions.skipOccurrence(planned.rule.id, planned.date, resolved.fx ? { fx: resolved.fx } : {});
+          toast.success(`Платёж записан, плановый за ${longDate(planned.date)} закрыт`);
+        } catch (e) {
+          console.error('Плановая дата не отмечена (платёж записан):', e);
+          toast.error(`Платёж записан, но плановый за ${longDate(planned.date)} не отмечен: пропустите его в «Регулярных платежах».`);
+        }
+      } else {
+        toast.success('Платёж записан');
+      }
       onClose();
     } catch (e) {
       if (e instanceof ValidationError) setErrors({ form: e.message });
@@ -197,6 +220,21 @@ export function PaymentSheet({ debt, state, base, onClose }: PaymentSheetProps) 
                   </p>
                 )}
               </div>
+            )}
+
+            {planned !== null && (
+              <label className="flex min-h-[44px] cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={markPlanned}
+                  onChange={(e) => setMarkPlanned(e.target.checked)}
+                  className="mt-0.5 h-6 w-6 shrink-0 accent-brand"
+                />
+                <span>
+                  <span className="block font-medium">Это плановый платёж за {longDate(planned.date)}</span>
+                  <span className="block text-sm text-muted">Срок: {relativeText(planned.date, today)}. Отметьте, чтобы план не провёл его ещё раз.</span>
+                </span>
+              </label>
             )}
 
             <FieldGroup label={debt.direction === 'lent' ? 'На какой кошелёк' : 'С какого кошелька'} error={errors.wallet}>
