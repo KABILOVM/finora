@@ -12,24 +12,24 @@ let dirA: string;
 let dirB: string;
 let dirCrash: string;
 
-const NAV = 'src/layout/nav.ts';
+const NAV = 'src/app/sections.ts'; // MORE_TITLE — подпись «Ещё» в нижней панели
 const WALLETS = 'src/features/wallets/WalletsPage.tsx';
 
 test.beforeAll(async ({ browserName: _b }, info) => {
   if (info.project.name !== 'desktop') return; // сборки тяжёлые: только для проекта desktop
   test.setTimeout(240_000);
   const copy = makeWorkCopy('upd');
-  patchFile(join(copy, NAV), "label: 'Ещё'", "label: 'Ещё A'");
+  patchFile(join(copy, NAV), "MORE_TITLE = 'Ещё'", "MORE_TITLE = 'Ещё A'");
   patchFile(join(copy, WALLETS), 'title="Кошельки"', 'title="Кошельки A"');
   dirA = join(copy, '..', 'upd-dist-A');
   buildCopy(copy, dirA);
-  patchFile(join(copy, NAV), "label: 'Ещё A'", "label: 'Ещё B'");
+  patchFile(join(copy, NAV), "MORE_TITLE = 'Ещё A'", "MORE_TITLE = 'Ещё B'");
   patchFile(join(copy, WALLETS), 'title="Кошельки A"', 'title="Кошельки B"');
   dirB = join(copy, '..', 'upd-dist-B');
   buildCopy(copy, dirB);
   // Версия A2: как A, но «падает» при отрисовке, если в localStorage стоит finora-test-crash=1 (имитация ошибки в выпущенной версии).
   const copy2 = makeWorkCopy('upd2');
-  patchFile(join(copy2, NAV), "label: 'Ещё'", "label: 'Ещё A'");
+  patchFile(join(copy2, NAV), "MORE_TITLE = 'Ещё'", "MORE_TITLE = 'Ещё A'");
   patchFile(
     join(copy2, 'src/App.tsx'),
     'export function AppRoutes() {',
