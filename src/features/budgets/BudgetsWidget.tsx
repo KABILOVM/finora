@@ -11,7 +11,7 @@ import { monthKey } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
 import { BudgetBar, LEVEL_TEXT } from './BudgetBar';
 import { budgetLabel, fitFontSize, longDate, spentWord } from './budgetText';
-import { perDayChars, spendBlocked } from './ForecastCard';
+import { BUDGET_SCHEDULED_TEXT, perDayChars, spendBlocked } from './ForecastCard';
 import { useBudgetsData, type BudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
 
@@ -33,6 +33,8 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
       </>
     ) : b.leftMinor === 0 ? (
       'Лимит месяца исчерпан'
+    ) : forecast.effective.budgetState === 'scheduled' ? (
+      BUDGET_SCHEDULED_TEXT
     ) : null;
   return (
     <>

@@ -51,7 +51,7 @@ describe('loadForecastData: проведённые даты правил', () =>
 });
 
 describe('loadForecastData: «сегодня потрачено» и «обычно»', () => {
-  it('операция по регулярному платежу не входит ни в «сегодня потрачено», ни в «обычно»; в «потрачено» по лимиту — входит', async () => {
+  it('операция по регулярному платежу не входит ни в «сегодня потрачено», ни в «обычно»; в лимит месяца — входит, но не в «сегодня» лимита', async () => {
     const s = await freshStore();
     const cash = await cashId(s);
     await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 1_000, occurredOn: '2026-10-01' });
@@ -65,7 +65,7 @@ describe('loadForecastData: «сегодня потрачено» и «обыч�
     const data = await load(s);
     expect(data.spentTodayMinor).toBe(2_000);
     expect(data.usualPerDayMinor).toBe(71); // 1 000 ÷ 14 дней с первой операции
-    expect(data.totalBudget?.spentTodayMinor).toBe(52_000);
+    expect(data.totalBudget?.spentTodayMinor).toBe(2_000); // проведённая сегодня — до проведения уже была отложена из лимита
     expect(data.totalBudget?.spentMonthMinor).toBe(83_000);
   });
 
@@ -84,5 +84,31 @@ describe('loadForecastData: «сегодня потрачено» и «обыч�
 
     const data = await load(s);
     expect(data.usualPerDayMinor).toBe(300); // (1 400 + 1 400 + 1 400) ÷ 14
+  });
+});
+
+describe('loadForecastData: просроченные после правки правила и комиссия регулярного перевода', () => {
+  it('правка правила (имя, «Проводить само») неоплаченную прошлую дату не прячет', async () => {
+    const s = await freshStore();
+    const rule = await s.recurring.create({ kind: 'expense', walletId: await cashId(s), amountMinor: 30_000, frequency: 'monthly', startOn: '2026-10-10' });
+    const stamp = '2026-10-01T07:00:00.000Z';
+    await s.db.recurring_rules.update(rule.id, { createdAt: stamp, clientUpdatedAt: stamp });
+    await s.recurring.update(rule.id, { note: 'Аренда', autoPost: 1 }); // правка сегодня
+    const data = await load(s);
+    expect(data.rules.find((r) => r.id === rule.id)?.overdueFrom).toBe('2026-10-10');
+  });
+
+  it('комиссия регулярного перевода между своими обычными кошельками — обычная трата: входит в «сегодня» и в «обычно»', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const card = await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' });
+    await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 1_400, occurredOn: '2026-10-01' });
+    const move = await s.recurring.create({ kind: 'transfer', walletId: cash, toWalletId: card.id, amountMinor: 11_700, toAmountMinor: 10_000, frequency: 'monthly', startOn: '2026-10-05' });
+    await s.transactions.createFromRule(move.id, '2026-10-05');
+    const today = await s.recurring.create({ kind: 'transfer', walletId: cash, toWalletId: card.id, amountMinor: 10_500, toAmountMinor: 10_000, frequency: 'monthly', startOn: TODAY });
+    await s.transactions.createFromRule(today.id, TODAY);
+    const data = await load(s);
+    expect(data.spentTodayMinor).toBe(500);
+    expect(data.usualPerDayMinor).toBe(221); // (1 400 + 1 700) ÷ 14
   });
 });

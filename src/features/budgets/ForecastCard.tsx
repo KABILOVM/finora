@@ -25,16 +25,19 @@ export function skippedText(skipped: readonly ForecastSkipped[]): string {
 /** Сколько знаков в крупном числе «в день» (с «≈ »): по ним подбирается размер шрифта. */
 export const perDayChars = (f: DailyForecastOk): number => formatMinor(f.effective.perDayMinor, f.base).length + (f.approximate ? 2 : 0);
 
-/** Тратить нечего: денег не хватает или общий лимит месяца исчерпан. Тогда крупное число красное. */
-export const spendBlocked = (f: DailyForecastOk): boolean =>
-  f.notEnough || f.effective.budgetState === 'over' || f.effective.budgetState === 'exhausted';
+/** Тратить нечего: денег не хватает, общий лимит месяца исчерпан или его остаток уйдёт на регулярные платежи. Число — красное. */
+export const spendBlocked = (f: DailyForecastOk): boolean => f.notEnough || (f.effective.budgetState !== null && f.effective.budgetState !== 'ok');
 
-/** «Лимит месяца превышен на 500 с.» / «Лимит месяца исчерпан»; null — лимит не исчерпан или его нет. */
+/** Остаток лимита отложен на регулярные платежи — одна фраза на карточке и в виджете. */
+export const BUDGET_SCHEDULED_TEXT = 'Остаток лимита месяца уйдёт на регулярные платежи';
+
+/** «Лимит месяца превышен на 500 с.» / «… исчерпан» / «… уйдёт на регулярные платежи»; null — свободный остаток есть или лимита нет. */
 function budgetStateText(f: DailyForecastOk): string | null {
   const b = f.budget;
   if (b === null) return null;
   if (b.overMinor > 0) return `Лимит месяца превышен на ${endSentence(formatMinor(b.overMinor, f.base))}`;
   if (b.leftMinor === 0) return 'Лимит месяца исчерпан';
+  if (f.effective.budgetState === 'scheduled') return BUDGET_SCHEDULED_TEXT;
   return null;
 }
 
@@ -72,11 +75,11 @@ function Notice({ tone, children }: { tone: 'warning' | 'danger'; children: Reac
 
 const EXPLAIN = [
   'Деньги на руках — это остатки кошельков: наличные, карты и счета. Накопления не считаем: их тратить не нужно.',
-  'Считаем от сегодня до дня перед ближайшим регулярным доходом; если его нет — до конца месяца, но не меньше недели.',
+  'Считаем от сегодня до дня перед зарплатой — самым крупным регулярным доходом; если доходов нет — до конца месяца, но не меньше недели.',
   'К деньгам прибавляем регулярные доходы до этого дня и вычитаем обязательное: регулярные платежи и переводы в накопления, которые вы ещё не провели и не пропустили (просроченные за последний месяц — тоже), и долги, которые нужно вернуть к этому сроку.',
-  'Смотрим и дальше, до конца месяца: если после небольшого дохода денег на день выходит меньше (например, потом аренда), показываем меньшую цифру.',
+  'Небольшие доходы до зарплаты тоже учитываем: если после такого дохода денег на день выходит меньше (например, потом аренда), показываем меньшую цифру.',
   'Что осталось, делим на число дней и округляем вниз. Так мы никогда не обещаем больше, чем есть.',
-  'Если задан общий лимит на месяц и по нему в день выходит меньше — показываем цифру по лимиту.',
+  'Если задан общий лимит на месяц и по нему в день выходит меньше — показываем цифру по лимиту. Регулярные расходы этого месяца из остатка лимита откладываем заранее.',
   '«Обычно вы тратите» — средний расход в день за последние 30 дней без регулярных платежей и трат с накоплений.',
   'Деньги и платежи в валюте без курса в расчёт не входят — об этом написано под числом, а само число помечено «≈».',
 ] as const;
@@ -130,8 +133,9 @@ function Details({ f }: { f: DailyForecastOk }) {
       <div className="relative mt-3 flex flex-col gap-2 empty:hidden">
         {f.overdueCount > 0 && (
           <Notice tone="warning">
-            Из них просрочено {f.overdueCount} {pluralRu(f.overdueCount, 'платёж', 'платежа', 'платежей')} на{' '}
-            <span className="money">{formatMinor(f.overduePaymentsMinor, f.base)}</span>.{' '}
+            Из них {pluralRu(f.overdueCount, 'просрочен', 'просрочено', 'просрочено')} {f.overdueCount}{' '}
+            {pluralRu(f.overdueCount, 'платёж', 'платежа', 'платежей')} на{' '}
+            <span className="money">{endSentence(formatMinor(f.overduePaymentsMinor, f.base))}</span>{' '}
             <Link to="/recurring" className="font-semibold underline">
               Провести или пропустить
             </Link>
@@ -144,7 +148,10 @@ function Details({ f }: { f: DailyForecastOk }) {
         {budgetAlarm !== null && <Notice tone="danger">{budgetAlarm}</Notice>}
         {b && budgetAlarm === null && (
           <p className="px-1 text-sm text-muted">
-            Лимит месяца {formatMinor(b.limitMinor, f.base)} · осталось {endSentence(formatMinor(b.leftMinor, f.base))}
+            Лимит месяца {formatMinor(b.limitMinor, f.base)} · осталось{' '}
+            {b.scheduledMinor > 0
+              ? `${formatMinor(b.leftMinor, f.base)}, из них ${endSentence(`${formatMinor(b.scheduledMinor, f.base)} — на регулярные платежи`)}`
+              : endSentence(formatMinor(b.leftMinor, f.base))}
             {b.partial && ' Часть операций не учтена.'}
           </p>
         )}

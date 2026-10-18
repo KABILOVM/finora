@@ -11,14 +11,16 @@ import type { CurrencyCode, DebtDirection, IsoDate, IsoDateTime, Minor, TxKind, 
  *  1. «Деньги на руках» = остатки кошельков cash / card / bank / other (БЕЗ накопления), в основной валюте.
  *     Всё остальное считается ТОЛЬКО по этим же деньгам: правило на кошельке-накоплении (доход туда, расход оттуда)
  *     на «деньги на руках» не влияет.
- *  2. Ожидаемые доходы — регулярные доходы на обычный неархивный кошелёк, ещё не проведённые и не пропущенные, строго после
- *     сегодня и не дальше FORECAST_LOOKAHEAD_DAYS дней. Возврат долга «мне должны» по расписанию — только ожидание, его не берём.
+ *  2. Ожидаемые доходы — регулярные доходы на обычный неархивный кошелёк, ещё не проведённые и не пропущенные, с сегодня
+ *     и не дальше FORECAST_LOOKAHEAD_DAYS дней. Возврат долга «мне должны» по расписанию — только ожидание, его не берём.
+ *     Сегодняшний доход горизонт не обрывает, а пока он не проведён, на сегодня можно не больше того, что на руках.
  *  3. Обязательное к дню t: расходные правила и регулярные переводы с обычного кошелька на накопления по расписанию с сегодня
  *     по t (проведённые и пропущенные даты не считаются), их просроченные даты (не раньше overdueFrom правила; ставятся на
  *     сегодня) и остаток по долгам «я должен» со сроком не позже t (просроченные — тоже: их уже пора отдать).
  *     Платёж по долгу, который уже учтён остатком долга, второй раз не вычитается.
  *  4. Контрольные дни t: «конец без дохода» — конец месяца, но не меньше MIN_HORIZON_DAYS дней, — и день перед каждым
- *     ожидаемым доходом до него; если первый доход позже, ещё и день перед ним (до зарплаты 5-го учтём аренду 1-го).
+ *     ожидаемым доходом до последнего дня, на который смотрим (horizonLimit: не раньше дня перед «зарплатой» — самым крупным
+ *     доходом, — и перед новой зарплатой после конца месяца; до зарплаты 5-го учтём аренду 1-го).
  *     Запас к дню t = деньги + доходы до t − обязательное до t.
  *     perDay = max(0, наименьшее floor(запас(t) / дней до t включительно)). Так копеечный доход не превращает
  *     «до конца месяца» в «до завтра», аренда сразу после него не забывается, а 31-го число не становится «тратьте всё».
@@ -27,8 +29,9 @@ import type { CurrencyCode, DebtDirection, IsoDate, IsoDateTime, Minor, TxKind, 
  *     глубокого минуса.
  *  5. Все деления целочисленные, округление вниз: никогда не обещаем больше, чем есть. Деньги, доходы, платежи и долги
  *     в валюте без курса в расчёт не входят — это возвращается в skipped.
- *  6. Общий лимит месяца считается отдельно (budget); effective — меньшая из двух цифр «в день» (по деньгам и по лимиту):
- *     её показывают крупно и на «Главной», и в «Бюджетах».
+ *  6. Общий лимит месяца считается отдельно (budget): (лимит − потрачено − ещё не проведённые регулярные расходы месяца) / дней
+ *     до конца месяца. effective — меньшая из двух цифр «в день» (по деньгам и по лимиту): её показывают крупно и на «Главной»,
+ *     и в «Бюджетах».
  */
 
 /** Виды кошельков, чьи деньги можно тратить. Накопления — нет. */
@@ -96,7 +99,10 @@ export interface ForecastTotalBudget {
   limitMinor: Minor;
   currency: CurrencyCode;
   spentMonthMinor: Minor;
-  /** Сколько потрачено сегодня — по тем же правилам, что и spentMonthMinor (все кошельки, регулярные платежи тоже). */
+  /**
+   * Сколько потрачено сегодня, как в spentMonthMinor (все кошельки), но без проведённых регулярных расходов: до проведения они
+   * уже были отложены из лимита (ForecastBudgetPart.scheduledMinor).
+   */
   spentTodayMinor: Minor;
   /** Сколько операций месяца не попало в «потрачено» (другая прежняя основная валюта): цифра может быть заниженной. */
   excludedCount: number;
@@ -140,9 +146,11 @@ export interface ForecastBudgetPart {
   leftMinor: Minor;
   /** Превышение лимита (0, если не превышен). */
   overMinor: Minor;
+  /** Регулярные расходы этого месяца, ещё не проведённые: из остатка они отложены. */
+  scheduledMinor: Minor;
   /** Дней до конца МЕСЯЦА, включая сегодня (≥ 1). */
   daysLeft: number;
-  /** floor(осталось в лимите / дней до конца месяца). */
+  /** floor((осталось в лимите − регулярные расходы этого месяца) / дней до конца месяца). */
   perDayMinor: Minor;
   /** Часть операций месяца не учтена: цифра может быть выше настоящей. */
   partial: boolean;
@@ -159,8 +167,11 @@ export interface ForecastEffective {
   spentTodayMinor: Minor;
   daysLeft: number;
   horizonEnd: IsoDate;
-  /** Общий лимит месяца: 'ok' — есть остаток, 'exhausted' — потрачен ровно, 'over' — превышен; null — лимита нет или он в другой валюте. */
-  budgetState: 'ok' | 'exhausted' | 'over' | null;
+  /**
+   * Общий лимит месяца: 'ok' — есть свободный остаток, 'scheduled' — остаток уйдёт на регулярные платежи, 'exhausted' — потрачен
+   * ровно, 'over' — превышен; null — лимита нет или он в другой валюте.
+   */
+  budgetState: 'ok' | 'scheduled' | 'exhausted' | 'over' | null;
 }
 
 export interface DailyForecastOk {
@@ -293,19 +304,30 @@ function countTo(map: Map<CurrencyCode, number>, currency: CurrencyCode): void {
 
 const laterOf = (a: IsoDate, b: IsoDate): IsoDate => (a >= b ? a : b);
 
-/** Лимит месяца → «в день»: часть прогноза «по бюджету». null — общего лимита нет или он в другой валюте. */
-function budgetPart(b: ForecastTotalBudget | null, base: CurrencyCode, today: IsoDate, monthEnd: IsoDate): ForecastBudgetPart | null {
+/**
+ * Лимит месяца → «в день»: часть прогноза «по бюджету». null — общего лимита нет или он в другой валюте.
+ * Из остатка лимита сначала откладываются регулярные расходы этого месяца, ещё не проведённые (`scheduled`): они тоже лягут в лимит.
+ */
+function budgetPart(
+  b: ForecastTotalBudget | null,
+  base: CurrencyCode,
+  today: IsoDate,
+  monthEnd: IsoDate,
+  scheduled: { totalMinor: Minor; uncertain: boolean },
+): ForecastBudgetPart | null {
   if (b === null || b.currency !== base || !isMinor(b.limitMinor) || b.limitMinor <= 0) return null;
   const left = addMinor(b.limitMinor, -b.spentMonthMinor);
+  const free = addMinor(left, -scheduled.totalMinor);
   const daysLeft = daysBetween(today, monthEnd) + 1;
   return {
     limitMinor: b.limitMinor,
     spentMinor: b.spentMonthMinor,
     leftMinor: left > 0 ? left : 0,
     overMinor: left < 0 ? -left : 0,
+    scheduledMinor: scheduled.totalMinor,
     daysLeft,
-    perDayMinor: left > 0 ? floorDiv(left, daysLeft) : 0,
-    partial: b.excludedCount > 0,
+    perDayMinor: free > 0 ? floorDiv(free, daysLeft) : 0,
+    partial: b.excludedCount > 0 || scheduled.uncertain,
   };
 }
 
@@ -317,10 +339,11 @@ function effectiveOf(
   monthEnd: IsoDate,
 ): ForecastEffective {
   if (budget === null || total === null) return { by: 'money', ...money, budgetState: null };
-  const budgetState = budget.overMinor > 0 ? 'over' : budget.leftMinor === 0 ? 'exhausted' : 'ok';
+  const free = addMinor(addMinor(budget.limitMinor, -budget.spentMinor), -budget.scheduledMinor);
+  const budgetState = budget.overMinor > 0 ? 'over' : budget.leftMinor === 0 ? 'exhausted' : free <= 0 ? 'scheduled' : 'ok';
   if (budget.perDayMinor >= money.perDayMinor) return { by: 'money', ...money, budgetState };
-  // с утра в лимите было: осталось сейчас + потрачено сегодня
-  const morning = addMinor(addMinor(budget.limitMinor, -budget.spentMinor), total.spentTodayMinor);
+  // с утра в лимите было: свободный остаток сейчас + потрачено сегодня (без проведённых регулярных: они и утром были отложены)
+  const morning = addMinor(free, total.spentTodayMinor);
   return {
     by: 'budget',
     perDayMinor: budget.perDayMinor,
@@ -350,6 +373,7 @@ function leavesSpendable(r: ForecastRule, kindOfWallet: ReadonlyMap<UUID, Wallet
 
 /** Ожидаемый приход денег на руки. */
 interface IncomeFlow {
+  ruleId: UUID;
   date: IsoDate;
   currency: CurrencyCode;
   amountMinor: Minor;
@@ -365,8 +389,9 @@ interface PaymentFlow {
 }
 
 /**
- * Ожидаемые доходы с завтра по `until`: на обычный неархивный кошелёк (на накопления, в архив или неизвестно куда — деньги на
+ * Ожидаемые доходы с сегодня по `until`: на обычный неархивный кошелёк (на накопления, в архив или неизвестно куда — деньги на
  * руках не пополнят), не проведённые и не пропущенные. Возврат долга «мне должны» по расписанию — только ожидание: не берём.
+ * Сегодняшний ещё не проведённый доход тоже ожидается (зарплату обычно проводят днём), но горизонт он не обрывает.
  */
 function pendingIncomes(input: ForecastInput, until: IsoDate): IncomeFlow[] {
   const { today, rules, doneOccurrences } = input;
@@ -378,8 +403,8 @@ function pendingIncomes(input: ForecastInput, until: IsoDate): IncomeFlow[] {
     const w = walletById.get(r.walletId);
     if (!w || !isSpendableWallet(w)) continue;
     if (r.debtId !== null && debtDirection.get(r.debtId) !== 'borrowed') continue;
-    for (const date of occurrencesBetween(r, addDays(today, 1), until)) {
-      if (!doneOccurrences.has(occurrenceKey(r.id, date))) out.push({ date, currency: w.currency, amountMinor: r.amountMinor });
+    for (const date of occurrencesBetween(r, today, until)) {
+      if (!doneOccurrences.has(occurrenceKey(r.id, date))) out.push({ ruleId: r.id, date, currency: w.currency, amountMinor: r.amountMinor });
     }
   }
   return out;
@@ -410,10 +435,72 @@ function pendingPayments(input: ForecastInput, until: IsoDate): PaymentFlow[] {
   return out;
 }
 
+/**
+ * До какого дня смотрим: не раньше «конца без дохода» и не раньше дня перед
+ *  - «зарплатой» — самым крупным ожидаемым доходом (по основной валюте; из равных — ближайшим): до неё деньги должны дожить;
+ *  - первым после «конца без дохода» доходом правила, которое до этого конца ни разу не приходит (новая зарплата 5-го числа).
+ * Мелкий доход (подработка раз в неделю, кешбэк) горизонт не обрезает: аренда 1-го перед зарплатой 5-го остаётся видна.
+ * Следующую копию той же зарплаты не ждём: следующий месяц живёт на неё.
+ */
+function horizonLimit(
+  ahead: readonly IncomeFlow[],
+  all: readonly IncomeFlow[],
+  noIncomeEnd: IsoDate,
+  base: CurrencyCode,
+  getRate: ForecastInput['getRate'],
+): IsoDate {
+  const value = (i: IncomeFlow): number => {
+    if (i.currency === base) return i.amountMinor;
+    const rate = getRate(i.currency, base);
+    return rate !== null && Number.isFinite(rate) && rate > 0 ? i.amountMinor * rate : 0;
+  };
+  let salary: IncomeFlow | undefined;
+  for (const i of ahead) {
+    if (salary === undefined || value(i) > value(salary) || (value(i) === value(salary) && i.date < salary.date)) salary = i;
+  }
+  const paidBefore = new Set(all.filter((i) => i.date <= noIncomeEnd).map((i) => i.ruleId));
+  const newRule = ahead
+    .filter((i) => i.date > noIncomeEnd && !paidBefore.has(i.ruleId))
+    .map((i) => i.date)
+    .sort()[0];
+  let end = noIncomeEnd;
+  for (const d of [salary?.date, newRule]) if (d !== undefined) end = laterOf(end, addDays(d, -1));
+  return end;
+}
+
+/**
+ * Регулярные расходы, которые ещё лягут в общий лимит ЭТОГО месяца: не проведённые и не пропущенные даты с сегодня до конца
+ * месяца и просроченные даты этого же месяца (проведённая операция получает дату по расписанию — прошлый месяц сюда не попадёт).
+ * С любого кошелька, накопления тоже (лимит считает все траты); без долговых — их лимит не считает.
+ */
+function scheduledForBudget(input: ForecastInput, monthEnd: IsoDate): { totalMinor: Minor; uncertain: boolean } {
+  const { today, doneOccurrences, base, getRate } = input;
+  const currencyOfWallet = new Map(input.wallets.map((w) => [w.id, w.currency] as const));
+  const monthStart = `${today.slice(0, 8)}01`;
+  const byCurrency = new Map<CurrencyCode, Minor>();
+  let unknown = false;
+  for (const r of input.rules) {
+    if (r.kind !== 'expense' || r.debtId !== null || r.deletedAt !== null || r.archivedAt !== null) continue;
+    const from = r.overdueFrom !== undefined && r.overdueFrom !== null && isScheduleDate(r.overdueFrom) ? laterOf(r.overdueFrom, monthStart) : today;
+    const dates = occurrencesBetween(r, from < today ? from : today, monthEnd).filter((d) => !doneOccurrences.has(occurrenceKey(r.id, d)));
+    if (dates.length === 0) continue;
+    const currency = currencyOfWallet.get(r.walletId);
+    if (currency === undefined) {
+      unknown = true;
+      continue;
+    }
+    for (let k = 0; k < dates.length; k++) addTo(byCurrency, currency, r.amountMinor);
+  }
+  const sums = toBase(byCurrency, base, getRate);
+  return { totalMinor: sums.totalMinor, uncertain: unknown || sums.missing.length > 0 || sums.converted };
+}
+
 /** Запас денег к контрольному дню и из чего он сложился. */
 interface Checkpoint {
   date: IsoDate;
   days: number;
+  /** Запас на сегодня, пока сегодняшний доход ещё не проведён (горизонт — «до сегодняшнего дохода»). */
+  beforeTodayIncome: boolean;
   /** Деньги + доходы − обязательное к этому дню. */
   capMinor: Minor;
   income: Sums;
@@ -451,10 +538,11 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
     // 2. ожидаемые доходы и контрольные дни
     const monthEnd = endOfMonth(today);
     const incomes = pendingIncomes(input, forecastLookaheadEnd(today));
-    const incomeDates = new Set(incomes.map((i) => i.date));
+    const ahead = incomes.filter((i) => i.date > today);
+    const dueToday = incomes.length > ahead.length;
+    const incomeDates = new Set(ahead.map((i) => i.date));
     const noIncomeEnd = laterOf(monthEnd, addDays(today, MIN_HORIZON_DAYS - 1));
-    const firstIncome = [...incomeDates].sort()[0];
-    const lastDate = firstIncome === undefined ? noIncomeEnd : laterOf(noIncomeEnd, addDays(firstIncome, -1));
+    const lastDate = horizonLimit(ahead, incomes, noIncomeEnd, base, getRate);
     const dates = [...new Set([noIncomeEnd, lastDate, ...[...incomeDates].map((d) => addDays(d, -1)).filter((d) => d <= lastDate)])].sort();
 
     // 3. обязательное: платежи по расписанию (с просроченными) и долги «я должен» со сроком
@@ -469,9 +557,10 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
         d.remainingMinor > 0,
     );
 
-    const checkpoint = (date: IsoDate): Checkpoint => {
+    /** withTodayIncome = false — запас на сегодня, пока сегодняшний доход ещё не проведён: только то, что на руках. */
+    const checkpoint = (date: IsoDate, withTodayIncome = true): Checkpoint => {
       const incomeByCurrency = new Map<CurrencyCode, Minor>();
-      for (const i of incomes) if (i.date <= date) addTo(incomeByCurrency, i.currency, i.amountMinor);
+      for (const i of incomes) if (i.date <= date && (withTodayIncome || i.date > today)) addTo(incomeByCurrency, i.currency, i.amountMinor);
 
       // долг со сроком к этому дню учитывается остатком — его платежи по расписанию второй раз не берём
       const debtsDue = debtsOpen.filter((d) => d.dueOn !== null && d.dueOn <= date);
@@ -509,6 +598,7 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
       return {
         date,
         days: daysBetween(today, date) + 1,
+        beforeTodayIncome: !withTodayIncome,
         capMinor: addMinor(addMinor(money.totalMinor, income.totalMinor), -addMinor(paid.totalMinor, debts.totalMinor)),
         income,
         payments: paid,
@@ -525,7 +615,7 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
     };
 
     // 4. самый тесный контрольный день (из равных — самый ранний) и самый глубокий минус
-    const points = dates.map(checkpoint);
+    const points = [...(dueToday ? [checkpoint(today, false)] : []), ...dates.map((d) => checkpoint(d))];
     let tightest = points[0] as Checkpoint;
     let deepest = tightest;
     let perDay = floorDiv(tightest.capMinor, tightest.days);
@@ -550,12 +640,23 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
     };
     skip('money', money.missing, moneyByCurrency);
     skip('income', c.income.missing, c.incomeByCurrency);
-    skip('payment', c.payments.missing, c.paymentByCurrency);
-    skip('debt', c.debts.missing, c.debtByCurrency);
+    // Платёж или долг без курса, выпавший на ЛЮБОМ контрольном дне, мог сделать тот день самым тесным — говорим о каждом
+    // (сумма — наибольшая из накопленных к контрольным дням).
+    const missingEverywhere = (pick: (p: Checkpoint) => [Sums, ReadonlyMap<CurrencyCode, Minor>]): Map<CurrencyCode, Minor> => {
+      const seen = new Map<CurrencyCode, Minor>();
+      for (const p of points) {
+        const [sums, byCurrency] = pick(p);
+        for (const currency of sums.missing) seen.set(currency, Math.max(seen.get(currency) ?? 0, byCurrency.get(currency) ?? 0));
+      }
+      return seen;
+    };
+    for (const [currency, amountMinor] of missingEverywhere((p) => [p.payments, p.paymentByCurrency])) skipped.push({ source: 'payment', currency, amountMinor });
+    for (const [currency, amountMinor] of missingEverywhere((p) => [p.debts, p.debtByCurrency])) skipped.push({ source: 'debt', currency, amountMinor });
+    const unknownWalletPayments = Math.max(...points.map((p) => p.unknownWalletPayments));
 
     const perDayMinor = perDay > 0 ? perDay : 0;
     const todayLimitMinor = todayLimit > 0 ? todayLimit : 0;
-    const budget = budgetPart(input.totalBudget, base, today, monthEnd);
+    const budget = budgetPart(input.totalBudget, base, today, monthEnd, scheduledForBudget(input, monthEnd));
     const effective = effectiveOf(
       { perDayMinor, todayLimitMinor, spentTodayMinor: input.spentTodayMinor, daysLeft: c.days, horizonEnd: c.date },
       budget,
@@ -568,7 +669,7 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
       today,
       monthEnd,
       horizonEnd: c.date,
-      incomeDate: incomeDates.has(nextDay) ? nextDay : null,
+      incomeDate: c.beforeTodayIncome ? today : incomeDates.has(nextDay) ? nextDay : null,
       daysLeft: c.days,
       moneyMinor: money.totalMinor,
       incomeMinor: c.income.totalMinor,
@@ -589,15 +690,16 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
       budget,
       effective,
       skipped,
-      unknownWalletPayments: c.unknownWalletPayments,
+      unknownWalletPayments,
       approximate:
         skipped.length > 0 ||
-        c.unknownWalletPayments > 0 ||
+        unknownWalletPayments > 0 ||
         money.converted ||
         c.income.converted ||
         c.payments.converted ||
         c.debts.converted ||
-        (effective.by === 'budget' && budget !== null && budget.partial),
+        // лимит посчитан не по всем операциям: настоящая цифра по лимиту может быть ниже и стать меньшей (0 ниже не бывает)
+        (budget !== null && budget.partial && effective.perDayMinor > 0),
     };
   } catch (e) {
     if (e instanceof RangeError) return { status: 'overflow' };

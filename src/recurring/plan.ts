@@ -38,17 +38,26 @@ type RuleLike = Pick<RecurringRule, 'frequency' | 'intervalN' | 'startOn' | 'end
 const later = (a: IsoDate, b: IsoDate): IsoDate => (a >= b ? a : b);
 
 /**
- * С какой даты прошлые даты правила считаются «настоящими» (четыре границы из шапки, последняя — «сегодня − maxAgeDays»).
+ * С какой даты прошлые даты правила считаются «настоящими» (границы из шапки, последняя — «сегодня − maxAgeDays»).
+ * sinceEdit = false — без границы последней правки: прогнозу правка (новое имя, «Проводить само», возврат из архива) не отменяет
+ * неоплаченную дату, и «Просроченные» на экране платежей её тоже показывают.
  * Может быть позже сегодняшнего дня (правило начнётся позже или создано «в будущем»). null — сегодняшняя дата нечитаема.
  */
-export function historyFrom(rule: RuleLike, today: IsoDate, maxAgeDays: number, toLocal: LocalDateOf = localDateOf): IsoDate | null {
+export function historyFrom(
+  rule: RuleLike,
+  today: IsoDate,
+  maxAgeDays: number,
+  toLocal: LocalDateOf = localDateOf,
+  { sinceEdit = true }: { sinceEdit?: boolean } = {},
+): IsoDate | null {
   if (!isValidIsoDate(today)) return null;
   // Время создания не прочитать — историю не трогаем, берём только сегодняшний день.
   const created = toLocal(rule.createdAt) ?? today;
+  const from = later(later(rule.startOn, created), addDays(today, -maxAgeDays));
+  if (!sinceEdit) return from;
   // То же для последней правки. Метка из будущего (часы устройства убегали вперёд) сегодняшние платежи не откладывает.
   const changedOn = toLocal(rule.clientUpdatedAt) ?? today;
-  const changed = changedOn > today ? today : changedOn;
-  return later(later(later(rule.startOn, created), changed), addDays(today, -maxAgeDays));
+  return later(from, changedOn > today ? today : changedOn);
 }
 
 /** Отрезок дат, которые можно проводить само; null — проводить нечего (правило начнётся позже или создано «в будущем»). */

@@ -159,6 +159,12 @@ describe('historyFrom: с какого дня прошлые даты прави
     expect(historyFrom(rule({ createdAt: 'мусор', clientUpdatedAt: 'мусор' }), TODAY, 31, () => null)).toBe(TODAY);
   });
 
+  it('sinceEdit: false — без границы последней правки (прогнозу правка не отменяет неоплаченную дату)', () => {
+    const r = rule({ startOn: '2026-01-06', createdAt: CREATED, clientUpdatedAt: EDITED });
+    expect(historyFrom(r, TODAY, 31, at)).toBe('2026-10-08');
+    expect(historyFrom(r, TODAY, 31, at, { sinceEdit: false })).toBe(addDays(TODAY, -31));
+  });
+
   it('может быть позже сегодня (правило начнётся позже); сегодняшняя дата нечитаема — null', () => {
     expect(historyFrom(rule({ startOn: '2026-12-01' }), TODAY, 31, created('2026-10-01'))).toBe('2026-12-01');
     expect(historyFrom(rule(), 'вчера', 31, created('2026-10-01'))).toBeNull();

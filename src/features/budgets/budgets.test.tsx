@@ -294,13 +294,14 @@ describe('экран «Бюджеты»: прогноз', () => {
     });
     // (250 000 − 30 000) ÷ 17 = 12 941,17
     expect(perDay()).toBe(fmt(12_941));
-    expect(text(card())).toContain(`Из них просрочено 1 платёж на ${fmt(30_000)}`);
+    expect(text(card())).toContain(`Из них просрочен 1 платёж на ${fmt(30_000)} Провести или пропустить`);
+    expect(text(card())).not.toContain('..');
     expect(screen.getByRole('link', { name: 'Провести или пропустить' }).getAttribute('href')).toBe('/recurring');
 
     // пропустили — цифра вернулась
     await write(() => storeOf(td).transactions.skipOccurrence(ruleId, '2026-10-10'));
     await eventually(() => expect(perDay()).toBe(fmt(14_705)));
-    expect(text(card())).not.toContain('просрочено');
+    expect(text(card())).not.toContain('Из них просроч');
   });
 
   it('правило создано сегодня с датой начала в прошлом — прошлые даты не вычитаются', async () => {
@@ -309,7 +310,66 @@ describe('экран «Бюджеты»: прогноз', () => {
       await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-10' });
     });
     expect(perDay()).toBe(fmt(14_705));
-    expect(text(card())).not.toContain('просрочено');
+    expect(text(card())).not.toContain('Из них просроч');
+  });
+});
+
+describe('лимит теснее денег, а крупная зарплата обрывает горизонт по деньгам', () => {
+  const setup = async (s: Store) => {
+    const i = await baseSetup(s);
+    await s.budgets.create({ categoryId: null, amountMinor: 200_000 });
+    const salary = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+    await s.recurring.create({ kind: 'income', walletId: i.cash, amountMinor: 3_000_000, categoryId: salary?.id ?? null, frequency: 'monthly', startOn: '2026-10-20' });
+  };
+
+  it('карточка: дни и горизонт — по лимиту (до конца месяца), без «ждём доход»', async () => {
+    await openPage(setup);
+    expect(perDay()).toBe(fmt(8_823)); // (2 000 − 500) ÷ 17, а по деньгам 250 000 ÷ 5 = 500
+    const c = text(card());
+    expect(c).toContain('До 31 октября · 17 дней');
+    expect(c).toContain('по лимиту месяца');
+    expect(c).not.toContain('ждём доход');
+    expect(detail('По деньгам на руках')).toBe(`${fmt(50_000)} в день`);
+  });
+
+  it('виджет: та же цифра и «до 31 октября»', async () => {
+    await openWidget(setup);
+    await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(8_823)));
+    const widget = text(document.querySelector('[data-testid="budgets-widget"]'));
+    expect(widget).toContain('до 31 октября');
+    expect(widget).not.toContain('до 19 октября');
+  });
+});
+
+describe('лимит месяца и регулярные платежи', () => {
+  it('аренда сегодня по лимиту отложена заранее: после «Провести» — ни «перерасхода», ни другой цифры', async () => {
+    let ruleId = '';
+    const td = await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 200_000 });
+      ruleId = (await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-15' })).id;
+    });
+    // по лимиту: (2 000 − 500 − 300) ÷ 17 = 70,58 — меньше, чем по деньгам (2 500 − 300) ÷ 17 = 129,41
+    expect(perDay()).toBe(fmt(7_058));
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(7_058)}`);
+    expect(text(card())).toContain(`осталось ${fmt(150_000)}, из них ${fmt(30_000)} — на регулярные платежи.`);
+
+    await write(() => storeOf(td).transactions.createFromRule(ruleId, '2026-10-15'));
+    await eventually(() => expect(detail('Деньги на руках')).toBe(fmt(220_000)));
+    expect(perDay()).toBe(fmt(7_058));
+    expect(detail('Сегодня потрачено')).toBe(`${fmt(0)} из ${fmt(7_058)}`);
+    expect(text(card())).not.toContain('Сегодня потрачено больше нормы');
+  });
+
+  it('остаток лимита весь уйдёт на регулярные платежи — 0 красным и сказано почему', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: null, amountMinor: 80_000 });
+      await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 30_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-25' });
+    });
+    expect(perDay()).toBe(fmt(0));
+    expect(document.querySelector('[data-testid="forecast-per-day"] .text-expense')).not.toBeNull();
+    expect(text(card())).toContain('Остаток лимита месяца уйдёт на регулярные платежи');
   });
 });
 
@@ -541,7 +601,7 @@ describe('виджет «Можно тратить в день» на «Глав
     expect(text(document.querySelector('[data-testid="budgets-widget"]'))).toContain(`Лимит месяца превышен на ${fmt(10_000)}`);
   });
 
-  it('«Скрыть суммы»: суммы в строках «Лимит месяца превышен» и «Денег не хватает» тоже спрятаны', async () => {
+  it('«Скрыть суммы»: сумма в строке «Лимит месяца превышен» тоже спрятана', async () => {
     localStorage.setItem('finora-hide-balance', '1');
     try {
       const td = opsDeps([table()], {
@@ -565,6 +625,34 @@ describe('виджет «Можно тратить в день» на «Глав
       expect(text(widget)).toContain('Лимит месяца превышен на ••••');
       expect(text(widget)).not.toContain(fmt(10_000));
       expect(text(widget)).not.toContain(' с.'); // ни одной суммы — только даты и проценты
+    } finally {
+      localStorage.removeItem('finora-hide-balance');
+    }
+  });
+
+  it('«Скрыть суммы»: сумма в строке «Денег не хватает» тоже спрятана', async () => {
+    localStorage.setItem('finora-hide-balance', '1');
+    try {
+      const td = opsDeps([table()], {
+        setup: quiet(async (s) => {
+          await baseSetup(s);
+          await s.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 400_000, currency: 'TJS', openedOn: '2026-09-01', dueOn: '2026-10-30' });
+        }),
+      });
+      await showApp(
+        <HideAmountsProvider>
+          <BudgetsWidget />
+        </HideAmountsProvider>,
+        td,
+        '/',
+      );
+      const widget = await waitFor(() => {
+        const w = document.querySelector('[data-testid="budgets-widget"]');
+        expect(text(w)).toContain('Денег не хватает: нужно ещё ••••');
+        return w;
+      });
+      expect(text(widget)).not.toContain(fmt(150_000));
+      expect(text(widget)).not.toContain(' с.');
     } finally {
       localStorage.removeItem('finora-hide-balance');
     }

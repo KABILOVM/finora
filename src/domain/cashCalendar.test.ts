@@ -207,6 +207,53 @@ describe('просроченные платежи', () => {
   });
 });
 
+describe('доходы, которые на руки не придут, и возвраты по долгам', () => {
+  it('доход на архивный кошелёк не ставится (его деньги в «деньги на руках» не входят — как и в прогнозе «в день»)', () => {
+    const c = ok(
+      computeCashCalendar(
+        input({
+          wallets: [wallet('cash'), wallet('old', { kind: 'card', archivedAt: '2026-01-01T00:00:00.000Z' })],
+          rules: [rule('inc', { kind: 'income', walletId: 'old', amountMinor: 50_000, startOn: '2026-10-25' })],
+        }),
+      ),
+    );
+    expect(c.days.every((d) => d.events.length === 0)).toBe(true);
+    expect(c.endMinor).toBe(c.startMinor);
+  });
+
+  it('перевод на архивный кошелёк — деньги уходят с рук; с накоплений на архивный — ничего', () => {
+    const wallets = [wallet('cash'), wallet('box', { kind: 'savings' }), wallet('old', { kind: 'card', archivedAt: '2026-01-01T00:00:00.000Z' })];
+    const out = ok(computeCashCalendar(input({ wallets, rules: [rule('t', { kind: 'transfer', toWalletId: 'old', amountMinor: 5_000 })] })));
+    expect(day(out, '2026-10-20').events.map((e) => e.deltaMinor)).toEqual([-5_000]);
+    const none = ok(computeCashCalendar(input({ wallets, rules: [rule('t', { kind: 'transfer', walletId: 'box', toWalletId: 'old', amountMinor: 5_000 })] })));
+    expect(none.days.every((d) => d.events.length === 0)).toBe(true);
+  });
+
+  it('возврат «мне должны» по расписанию — только ожидание: ставится, лишь когда включено «Мне вернут долги в срок»', () => {
+    const debts = [debt('lent', { direction: 'lent', dueOn: null, remainingMinor: 30_000 })];
+    const rules = [rule('back', { kind: 'income', debtId: 'lent', amountMinor: 10_000, startOn: '2026-10-25' })];
+    expect(ok(computeCashCalendar(input({ debts, rules }))).endMinor).toBe(100_000);
+    expect(ok(computeCashCalendar(input({ debts, rules, includeReceivables: true }))).endMinor).toBe(110_000);
+  });
+
+  it('«мне должны» к сроку учтено остатком: второй раз не берутся только возвраты МНЕ, а мои выдачи в долг — берутся', () => {
+    const c = ok(
+      computeCashCalendar(
+        input({
+          includeReceivables: true,
+          debts: [debt('lent', { direction: 'lent', dueOn: '2026-11-05', remainingMinor: 30_000 })],
+          rules: [
+            rule('give', { kind: 'expense', debtId: 'lent', amountMinor: 10_000, startOn: '2026-10-01', overdueFrom: '2026-09-15' }),
+            rule('back', { kind: 'income', debtId: 'lent', amountMinor: 5_000, startOn: '2026-10-25' }),
+          ],
+        }),
+      ),
+    );
+    const kinds = c.days.flatMap((d) => d.events.map((e) => `${e.kind}:${e.id}:${e.date}`));
+    expect(kinds).toEqual(['payment:give:2026-10-15', 'payment:give:2026-11-01', 'debt-receive:lent:2026-11-05']);
+  });
+});
+
 describe('долги', () => {
   it('долг «я должен»: остаток уходит в день срока', () => {
     const c = ok(computeCashCalendar(input({ debts: [debt('d1')], labels: new Map([['d1', 'Рустам']]) })));
