@@ -1,5 +1,5 @@
 import { addMinor, isMinor } from './money';
-import type { CurrencyCode, Debt, IsoDate, Minor, Transaction, UUID, Wallet } from './types';
+import type { CurrencyCode, Debt, IsoDate, Minor, RecurringRule, Transaction, UUID, Wallet } from './types';
 
 /**
  * Остаток долга — ЧИСТАЯ функция над операциями. Нигде не хранится (как остаток кошелька), поэтому разойтись с операциями не может.
@@ -66,6 +66,33 @@ const byOrder = (a: DebtTx, b: DebtTx): number =>
       ? a.createdAt < b.createdAt ? -1 : 1
       : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 
+type Classified = { role: 'payment' | 'entry' } | { issue: DebtIssue };
+
+/** Куда операция долга попадает в расчёте: платёж, выдача/пополнение или диагностика (и почему). */
+function classify(
+  t: Pick<DebtTx, 'id' | 'kind' | 'amountMinor'>,
+  pay: 'income' | 'expense',
+  debtCurrency: CurrencyCode,
+  currency: CurrencyCode | undefined,
+): Classified {
+  if (t.kind === 'transfer') return { issue: { txId: t.id, reason: 'transfer', message: 'Перевод не может относиться к долгу' } };
+  if (!isMinor(t.amountMinor) || t.amountMinor <= 0) {
+    return { issue: { txId: t.id, reason: 'bad-amount', message: 'Некорректная сумма операции долга' } };
+  }
+  if (currency === undefined) return { issue: { txId: t.id, reason: 'unknown-wallet', message: 'Кошелёк операции долга не найден' } };
+  if (currency !== debtCurrency) {
+    return {
+      issue: {
+        txId: t.id,
+        reason: 'foreign-currency',
+        currency,
+        message: `Операция в ${currency}, а долг в ${debtCurrency}: в остаток не входит`,
+      },
+    };
+  }
+  return { role: t.kind === pay ? 'payment' : 'entry' };
+}
+
 /**
  * wallets — кошельки (в том числе архивные и удалённые): по ним определяется валюта операции.
  * Берутся только живые операции именно этого долга (по debtId); чужие и удалённые пропускаются.
@@ -91,29 +118,10 @@ export function computeDebtState(
   const issues: DebtIssue[] = [];
 
   for (const t of mine) {
-    if (t.kind === 'transfer') {
-      issues.push({ txId: t.id, reason: 'transfer', message: 'Перевод не может относиться к долгу' });
-      continue;
-    }
-    if (!isMinor(t.amountMinor) || t.amountMinor <= 0) {
-      issues.push({ txId: t.id, reason: 'bad-amount', message: 'Некорректная сумма операции долга' });
-      continue;
-    }
-    const currency = cur(t.walletId);
-    if (currency === undefined) {
-      issues.push({ txId: t.id, reason: 'unknown-wallet', message: 'Кошелёк операции долга не найден' });
-      continue;
-    }
-    if (currency !== debt.currency) {
-      issues.push({
-        txId: t.id,
-        reason: 'foreign-currency',
-        currency,
-        message: `Операция в ${currency}, а долг в ${debt.currency}: в остаток не входит`,
-      });
-      continue;
-    }
-    if (t.kind === pay) {
+    const c = classify(t, pay, debt.currency, cur(t.walletId));
+    if ('issue' in c) {
+      issues.push(c.issue);
+    } else if (c.role === 'payment') {
       paid = addMinor(paid, t.amountMinor);
       payments.push({ txId: t.id, occurredOn: t.occurredOn, amountMinor: t.amountMinor });
     } else {
@@ -138,3 +146,64 @@ export function computeDebtState(
     issues,
   };
 }
+
+/**
+ * Роль операции в долге — та же классификация, что в computeDebtState: платёж (уменьшает остаток), выдача или пополнение
+ * (сумма долга задана самим долгом, операция меняет только кошелёк и «Выдано деньгами») или «вне расчёта» (чужая валюта,
+ * неизвестный кошелёк, перевод, операция другого долга).
+ */
+export function debtTxRole(
+  debt: Pick<Debt, 'id' | 'direction' | 'currency'>,
+  tx: Pick<Transaction, 'id' | 'kind' | 'walletId' | 'amountMinor' | 'debtId'>,
+  currencyOf: (walletId: UUID) => CurrencyCode | undefined,
+): 'payment' | 'entry' | 'outside' {
+  if (tx.debtId !== debt.id) return 'outside';
+  const c = classify(tx, paymentKind(debt.direction), debt.currency, currencyOf(tx.walletId));
+  return 'issue' in c ? 'outside' : c.role;
+}
+
+/** Живой план платежей этого долга: регулярный платёж вида «возврат» с его debtId, не удалён и не в архиве. */
+export const isLivePlanOf = (
+  rule: Pick<RecurringRule, 'kind' | 'debtId' | 'deletedAt' | 'archivedAt'>,
+  debt: Pick<Debt, 'id' | 'direction'>,
+): boolean => rule.debtId === debt.id && rule.kind === paymentKind(debt.direction) && rule.deletedAt === null && rule.archivedAt === null;
+
+/**
+ * Заметка пропущенной даты плана, которую закрыл отдельный платёж по долгу («Это плановый платёж за …»). По ней «Пропущенные»
+ * не предлагают «Вернуть»: деньги уже записаны отдельным платежом, второй раз их записывать нельзя.
+ */
+export const PLAN_PAID_NOTE = 'Оплачено отдельным платежом';
+
+/** План закончился: дата окончания прошла (новых дат не будет), даже если долг не погашен. today — местная дата. */
+export const planFinished = (rule: Pick<RecurringRule, 'endOn'>, today: IsoDate): boolean => rule.endOn !== null && rule.endOn < today;
+
+/** Почему план платежей по долгу стоит: долг удалён, в архиве, закрыт или погашен. */
+export type DebtPlanStop = 'deleted' | 'archived' | 'closed' | 'settled';
+
+/**
+ * План «Платить частями» — регулярный платёж с debtId того же вида, что «возврат долга». Он останавливается сам, когда долг
+ * удалён, в архиве, закрыт или погашен: в правило ничего не пишется, поэтому «Открыть снова» и пополнение долга возвращают
+ * план без действий. Правила другого вида (выдача по расписанию) не останавливаются.
+ * debt undefined — долга на устройстве нет: план тоже стоит. state null — остаток посчитать не удалось: по остатку не останавливаем.
+ */
+export function debtPlanStop(
+  rule: Pick<RecurringRule, 'kind' | 'debtId'>,
+  debt: Pick<Debt, 'direction' | 'deletedAt' | 'archivedAt' | 'closedAt'> | undefined,
+  state: Pick<DebtState, 'remainingMinor'> | null,
+): DebtPlanStop | null {
+  if (rule.debtId === null) return null;
+  if (debt === undefined || debt.deletedAt !== null) return 'deleted';
+  if (rule.kind !== paymentKind(debt.direction)) return null;
+  if (debt.archivedAt !== null) return 'archived';
+  if (debt.closedAt !== null) return 'closed';
+  if (state !== null && state.remainingMinor <= 0) return 'settled';
+  return null;
+}
+
+/** Подпись остановленного плана: «Долг погашен — план остановлен». */
+export const DEBT_PLAN_STOP_TEXT: Record<DebtPlanStop, string> = {
+  deleted: 'Долг удалён — план остановлен',
+  archived: 'Долг в архиве — план остановлен',
+  closed: 'Долг закрыт — план остановлен',
+  settled: 'Долг погашен — план остановлен',
+};

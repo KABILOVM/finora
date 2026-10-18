@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
-import { useRecurringRules, useStore, useUpcoming, ValidationError } from '@/db';
+import { useRecurringRules, useStoppedDebtPlans, useStore, useUpcoming, ValidationError } from '@/db';
 import type { IsoDate, LocalRow, RecurringRule } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
@@ -75,6 +75,7 @@ export default function RecurringPage() {
   const upcoming = useUpcoming(SOON_DAYS, { today });
   const lookups = useRecurringLookups();
   const failures = useAutoPostFailures(store.userId);
+  const stoppedPlans = useStoppedDebtPlans();
   const skipped = useSkipped(rules ?? [], today);
   const subs = useSubscriptions(lookups, today);
 
@@ -297,6 +298,7 @@ export default function RecurringPage() {
                   lookups={lookups}
                   today={today}
                   failure={failures.get(r.id)}
+                  stop={stoppedPlans?.get(r.id)}
                   done={doneDates.get(r.id)}
                   onOpen={() => setSheet({ kind: 'edit', id: r.id })}
                 />

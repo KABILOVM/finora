@@ -32,14 +32,16 @@ export interface RuleOpts {
   autoPost?: 0 | 1;
   archived?: boolean;
   deleted?: boolean;
+  /** Долг правила: план платежей (вид «возврат») или выдача по расписанию. */
+  debtId?: string | null;
 }
 export async function rule(user: string, o: RuleOpts): Promise<string> {
   const rid = id('b');
   await sql(
     user,
-    `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, deleted_at, archived_at, kind, wallet_id, amount_minor, note, frequency, interval_n, start_on, end_on, auto_post)
-     values ($1, $2, $2, 'dev', $3, $4, $5, $6, 777777, $7, $8, $9, $10, $11, $12)`,
-    [rid, TS, o.deleted ? TS : null, o.archived ? TS : null, o.kind ?? 'expense', o.walletId, o.note ?? 'Аренда', o.frequency ?? 'monthly', o.intervalN ?? 1, o.startOn ?? '2026-01-10', o.endOn ?? null, o.autoPost ?? 0],
+    `insert into public.recurring_rules (id, created_at, client_updated_at, device_id, deleted_at, archived_at, kind, wallet_id, amount_minor, note, frequency, interval_n, start_on, end_on, auto_post, debt_id)
+     values ($1, $2, $2, 'dev', $3, $4, $5, $6, 777777, $7, $8, $9, $10, $11, $12, $13)`,
+    [rid, TS, o.deleted ? TS : null, o.archived ? TS : null, o.kind ?? 'expense', o.walletId, o.note ?? 'Аренда', o.frequency ?? 'monthly', o.intervalN ?? 1, o.startOn ?? '2026-01-10', o.endOn ?? null, o.autoPost ?? 0, o.debtId ?? null],
   );
   return rid;
 }

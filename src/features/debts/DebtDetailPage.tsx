@@ -6,13 +6,17 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
-import { useDebtView, useStore, type DebtDeleteMode, type DebtDeletion } from '@/db';
-import type { DebtPayment } from '@/domain/debts';
+import { useDebtView, useRecurringRules, useStore, type DebtDeleteMode, type DebtDeletion } from '@/db';
+import { debtPlanStop, isLivePlanOf, planFinished, type DebtPayment } from '@/domain/debts';
+import type { LocalRow, RecurringRule } from '@/domain/types';
 import { formatMinor } from '@/domain/money';
+import { RuleSheet } from '@/features/recurring/RuleSheet';
+import { useRecurringLookups } from '@/features/recurring/useRecurringData';
 import { humanError, toastWithUndo, UNDO_MS } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { useToday } from '@/recurring/useToday';
 import { mergeCandidates } from './debtMatch';
+import { DebtPlanCard } from './DebtPlanCard';
 import { DebtSheet } from './DebtSheet';
 import { DeleteDebtDialog } from './DeleteDebtDialog';
 import { DebtSummaryCard } from './DebtSummaryCard';
@@ -72,8 +76,11 @@ export default function DebtDetailPage() {
   const all = useDebtsData(); // для «Объединить»: какие ещё долги подходят
   const [dialog, setDialog] = useState<Dialog>(null);
   const [deleting, setDeleting] = useState<DebtPayment | null>(null);
+  const [editingPlan, setEditingPlan] = useState<LocalRow<RecurringRule> | null>(null);
   const [busy, setBusy] = useState(false);
   const today = useToday();
+  const rules = useRecurringRules();
+  const lookups = useRecurringLookups();
 
   if (view === undefined || lines === undefined) {
     return (
@@ -105,6 +112,15 @@ export default function DebtDetailPage() {
   const key = personKey(debt.counterparty);
   const person = all ? groupByPerson(all.items).find((p) => p.key === key) : undefined;
   const hasOthers = person !== undefined && person.open.some((it) => it.debt.id !== debt.id);
+  const plans = (rules ?? []).filter((r) => isLivePlanOf(r, debt));
+  // при закрытии остановятся планы, которые сейчас идут
+  const running = plans.filter((r) => debtPlanStop(r, debt, state) === null && !planFinished(r, today)).length;
+  const planNote =
+    running === 0
+      ? ''
+      : running === 1
+        ? ' План платежей по долгу остановится; если открыть долг снова, он продолжится.'
+        : ` Планы платежей по долгу (${running}) остановятся; если открыть долг снова, они продолжатся.`;
 
   const run = async (action: () => Promise<unknown>, fallback: string, done?: () => void) => {
     if (busy) return false;
@@ -186,6 +202,13 @@ export default function DebtDetailPage() {
     if (ok) setDeleting(null);
   };
 
+  const stopPlan = (rule: LocalRow<RecurringRule>) =>
+    run(
+      () => store.recurring.archive(rule.id),
+      'Не удалось остановить план',
+      () => toastWithUndo(toast, 'План платежей остановлен', () => store.recurring.restore(rule.id), 'План возвращён'),
+    );
+
   const openTx = (txId: string) => navigate(`/edit/${txId}`, { state: { background: location } });
 
   return (
@@ -200,6 +223,7 @@ export default function DebtDetailPage() {
       )}
 
       <DebtSummaryCard debt={debt} state={state} today={today} />
+      <DebtPlanCard debt={debt} state={state} plans={plans} today={today} busy={busy} onEdit={setEditingPlan} onStop={(r) => void stopPlan(r)} />
 
       <div className="mt-4 flex flex-col gap-2">
         {!archived && (
@@ -219,7 +243,7 @@ export default function DebtDetailPage() {
             )}
           </div>
         )}
-        {!archived && !closed && state.remainingMinor > 0 && (
+        {!archived && !closed && state.remainingMinor > 0 && rules !== undefined && plans.length === 0 && (
           <Button variant="secondary" onClick={() => setDialog('parts')}>
             {PARTS_ACTION[debt.direction]}
           </Button>
@@ -295,8 +319,8 @@ export default function DebtDetailPage() {
         title="Закрыть долг?"
         message={
           state.remainingMinor > 0
-            ? `Остаток ${endSentence(formatMinor(state.remainingMinor, debt.currency))} Он останется в истории, но долг уйдёт из открытых и из итогов. Деньги в кошельках не меняются. Закрытый долг можно открыть снова.`
-            : 'Долг погашен полностью. Он перейдёт в «Закрытые»; открыть его снова можно в любой момент.'
+            ? `Остаток ${endSentence(formatMinor(state.remainingMinor, debt.currency))} Он останется в истории, но долг уйдёт из открытых и из итогов. Деньги в кошельках не меняются. Закрытый долг можно открыть снова.${planNote}`
+            : `Долг погашен полностью. Он перейдёт в «Закрытые»; открыть его снова можно в любой момент.${planNote}`
         }
         confirmLabel="Закрыть долг"
         loading={busy}
@@ -323,6 +347,7 @@ export default function DebtDetailPage() {
       {dialog === 'parts' && <PayInPartsSheet debt={debt} state={state} onClose={() => setDialog(null)} />}
       {dialog === 'remind' && remind !== null && <ReminderSheet name={debt.counterparty} text={remind} onClose={() => setDialog(null)} />}
       {dialog === 'merge' && mergeTarget && <MergeDebtsSheet target={mergeTarget} items={all?.items ?? []} onClose={() => setDialog(null)} />}
+      {editingPlan && lookups && <RuleSheet rule={editingPlan} lookups={lookups} today={today} onClose={() => setEditingPlan(null)} />}
       {dialog === 'edit' && <DebtSheet debt={debt} paidMinor={state.paidMinor} base={base} onClose={() => setDialog(null)} />}
     </>
   );

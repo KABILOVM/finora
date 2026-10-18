@@ -6,7 +6,8 @@ import { Icon } from '@/components/Icon';
 import { useToast } from '@/components/Toast';
 import { useStore, useUpcoming, ValidationError, type UpcomingItem } from '@/db';
 import type { IsoDate } from '@/domain/types';
-import { HomeMoney } from '@/features/home/hideAmounts';
+import { formatMinor } from '@/domain/money';
+import { HomeMoney, useHideAmounts } from '@/features/home/hideAmounts';
 import { useRates } from '@/rates/hooks';
 import { needsFx, pickAutoRate } from '@/recurring/fx';
 import { viewRule } from '@/recurring/ruleView';
@@ -78,6 +79,7 @@ function WidgetRow({
 export default function UpcomingWidget() {
   const store = useStore();
   const toast = useToast();
+  const { hidden } = useHideAmounts();
   const { getRate } = useRates();
   const today = useToday();
   const items = useUpcoming(WIDGET_DAYS, { today });
@@ -108,11 +110,17 @@ export default function UpcomingWidget() {
     busyRef.current.add(key);
     setBusyKeys(new Set(busyRef.current));
     try {
-      const tx = await store.transactions.createFromRule(item.rule.id, item.date, fx ? { fx } : {});
+      const tx = await store.transactions.createFromRule(item.rule.id, item.date, { fitToDebt: true, ...(fx ? { fx } : {}) });
+      const v = viewRule(item.rule, lookups.wallets, lookups.categories, lookups.base);
       if (tx.deletedAt !== null) {
         toast.error('Этот платёж уже пропущен или удалён. Верните его в разделе «Регулярные платежи».');
+      } else if (item.rule.debtId !== null && tx.amountMinor < item.rule.amountMinor) {
+        // последний платёж по плану записан на остаток долга, а не на всю сумму плана — сумма должна быть видна
+        toast.success(
+          hidden ? `Платёж проведён на остаток долга: ${v.title}` : `Проведено ${formatMinor(tx.amountMinor, v.currency)} — остаток долга: ${v.title}`,
+        );
       } else {
-        toast.success(`Платёж проведён: ${viewRule(item.rule, lookups.wallets, lookups.categories, lookups.base).title}`);
+        toast.success(`Платёж проведён: ${v.title}`);
       }
     } catch (e) {
       if (e instanceof ValidationError) toast.error(e.message);

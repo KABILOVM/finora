@@ -1,6 +1,7 @@
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { MoneyText } from '@/components/MoneyText';
+import { DEBT_PLAN_STOP_TEXT, type DebtPlanStop } from '@/domain/debts';
 import type { IsoDate, LocalRow, RecurringRule } from '@/domain/types';
 import { ruDate } from '@/features/transactions/txForm';
 import { addDays } from '@/lib/dates';
@@ -35,13 +36,15 @@ export interface RuleRowProps {
   lookups: RecurringLookups;
   today: IsoDate;
   failure?: AutoPostFailure;
+  /** План по долгу стоит (долг погашен, закрыт, в архиве или удалён): платежей по нему нет, пока долг снова не откроют. */
+  stop?: DebtPlanStop;
   /** Даты этого правила, по которым платёж уже проведён или пропущен (в окне «Предстоящих»). */
   done?: ReadonlySet<IsoDate>;
   onOpen: () => void;
 }
 
 /** Правило в списке «Все правила»: название, расписание словами, сумма, кошелёк, категория и как проводится. Касание — правка. */
-export function RuleRow({ rule, lookups, today, failure, done, onOpen }: RuleRowProps) {
+export function RuleRow({ rule, lookups, today, failure, stop, done, onOpen }: RuleRowProps) {
   const v = viewRule(rule, lookups.wallets, lookups.categories, lookups.base);
   const debt = rule.debtId === null ? undefined : lookups.debts.get(rule.debtId);
   const schedule = `${describeSchedule(rule)}${rule.endOn ? `, до ${ruDate(rule.endOn)}` : ''}`;
@@ -58,9 +61,13 @@ export function RuleRow({ rule, lookups, today, failure, done, onOpen }: RuleRow
           <span className="block text-sm text-muted">{schedule}</span>
           {v.subtitle && <span className="block truncate text-sm text-muted">{v.subtitle}</span>}
           {debt && <span className="block truncate text-sm text-muted">Платёж по долгу: {debt.counterparty}</span>}
-          <span className="block text-sm text-muted">{nextText(rule, today, done)}</span>
+          <span className="block text-sm text-muted">{stop ? DEBT_PLAN_STOP_TEXT[stop] : nextText(rule, today, done)}</span>
           <span className="mt-1 block">
-            <Badge tone={rule.autoPost === 1 ? 'brand' : 'neutral'}>{rule.autoPost === 1 ? 'Проводится само' : 'Ждёт подтверждения'}</Badge>
+            {stop ? (
+              <Badge tone="neutral">Остановлен</Badge>
+            ) : (
+              <Badge tone={rule.autoPost === 1 ? 'brand' : 'neutral'}>{rule.autoPost === 1 ? 'Проводится само' : 'Ждёт подтверждения'}</Badge>
+            )}
           </span>
         </span>
         <span className="shrink-0 text-right">

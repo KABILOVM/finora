@@ -3,7 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useStore, type DebtDeleteMode } from '@/db';
 import type { CurrencyCode, LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
-import { deleteHint, keepHint, previewDebtDelete } from './debtDeleteText';
+import { endSentence } from '@/features/transactions/txDisplay';
+import { pluralRu } from '@/lib/plural';
+import { deleteHint, keepHint, keepText, opsCount, previewDebtDelete, type DeletePreview } from './debtDeleteText';
 
 interface Props {
   open: boolean;
@@ -22,21 +24,35 @@ const OPTIONS: readonly { mode: DebtDeleteMode; label: string }[] = [
   { mode: 'with-operations', label: 'Удалить долг и его операции' },
 ];
 
+/** Предпросмотр без падения: суммы, которые не помещаются в расчёт, просто не называем. */
+function safePreview(...args: Parameters<typeof previewDebtDelete>): DeletePreview | null {
+  try {
+    return previewDebtDelete(...args);
+  } catch (e) {
+    if (e instanceof RangeError) return null;
+    throw e;
+  }
+}
+
 /**
- * Подтверждение удаления долга с двумя вариантами. По умолчанию выбран безопасный («только долг»: деньги не двигаются).
- * Кнопка «Отмена» остаётся в фокусе (как у всех подтверждений), ничего не меняется, пока не нажато «Удалить».
+ * Подтверждение удаления долга. Есть операции — вариант («только долг» или «долг и его операции») выбирают сами: заранее
+ * не выбран ни один, и «Удалить» недоступно, пока выбора нет (оба варианта меняют итоги, просто по-разному). Операций нет —
+ * выбирать нечего. Кнопка «Отмена» остаётся в фокусе (как у всех подтверждений), ничего не меняется, пока не нажато «Удалить».
  */
 export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, base, loading, onConfirm, onCancel }: Props) {
   const store = useStore();
-  const [mode, setMode] = useState<DebtDeleteMode>('keep-operations');
+  const [mode, setMode] = useState<DebtDeleteMode | null>(null);
   useEffect(() => {
-    if (open) setMode('keep-operations');
+    if (open) setMode(null);
   }, [open]);
   const rules = useLiveQuery(
     async () => (await store.db.recurring_rules.toArray()).filter((r) => r.debtId === debtId && r.deletedAt === null && r.archivedAt === null).length,
     [store, debtId],
   );
-  const preview = previewDebtDelete(txs, wallets, base);
+  const preview = safePreview(txs, wallets, base);
+  const count = preview?.count ?? [...txs.values()].filter((t) => t.deletedAt === null).length;
+  const choose = count > 0;
+  const keep = preview ? keepText(preview) : '';
 
   return (
     <ConfirmDialog
@@ -45,26 +61,47 @@ export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, bas
       title={`Удалить долг «${counterparty}»?`}
       confirmLabel="Удалить"
       loading={loading}
-      onConfirm={() => onConfirm(mode)}
+      confirmDisabled={choose && mode === null}
+      onConfirm={() => {
+        if (!choose) onConfirm('keep-operations');
+        else if (mode !== null) onConfirm(mode);
+      }}
       onCancel={onCancel}
       message={
         <div className="flex flex-col gap-3">
-          <div role="radiogroup" aria-label="Что удалить" className="flex flex-col gap-2">
-            {OPTIONS.map((o) => (
-              <label
-                key={o.mode}
-                className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2 text-base font-semibold text-text has-[:checked]:border-brand"
-              >
-                <input type="radio" name="debt-delete-mode" className="h-5 w-5 accent-brand" checked={mode === o.mode} onChange={() => setMode(o.mode)} />
-                {o.label}
-              </label>
-            ))}
-          </div>
-          <p data-testid="debt-delete-hint">{mode === 'keep-operations' ? keepHint(preview.count) : deleteHint(preview)}</p>
+          {choose && (
+            <div role="radiogroup" aria-label="Что удалить" className="flex flex-col gap-2">
+              {OPTIONS.map((o) => (
+                <label
+                  key={o.mode}
+                  className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2 text-base font-semibold text-text has-[:checked]:border-brand"
+                >
+                  <input type="radio" name="debt-delete-mode" className="h-5 w-5 accent-brand" checked={mode === o.mode} onChange={() => setMode(o.mode)} />
+                  {o.label}
+                </label>
+              ))}
+            </div>
+          )}
+          {!choose ? (
+            <p data-testid="debt-delete-hint">{keepHint(0)}</p>
+          ) : mode === null ? (
+            <p data-testid="debt-delete-hint">
+              Выберите, что сделать с {count} {pluralRu(count, 'операцией', 'операциями', 'операциями')} этого долга.
+            </p>
+          ) : mode === 'keep-operations' ? (
+            <p data-testid="debt-delete-hint">
+              {keepHint(count)}
+              {keep ? ` ${keep[0]?.toUpperCase()}${endSentence(keep).slice(1)}` : ''} Операциям без заметки допишем «Долг «{counterparty}» (удалён)».
+            </p>
+          ) : (
+            <p data-testid="debt-delete-hint">
+              {preview ? deleteHint(preview) : `Будет удалено: ${opsCount(count)}. Остатки кошельков вернутся такими, как были до этого долга.`}
+            </p>
+          )}
           {rules !== undefined && rules > 0 && (
             <p>Регулярные платежи по этому долгу ({rules}) уйдут в архив, чтобы не проводиться как обычные расходы.</p>
           )}
-          <p>Сразу после удаления всё можно вернуть кнопкой «Отменить».</p>
+          <p>Сразу после удаления всё можно вернуть кнопкой «Отменить». Чтобы просто убрать долг из списка, отправьте его в архив.</p>
         </div>
       }
     />

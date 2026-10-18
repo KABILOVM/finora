@@ -74,12 +74,16 @@ test.describe('33. Долги: взаимозачёт и «платить час
     await expect(parts).toBeVisible();
     await tapAmount(page, '150');
     await expect(page.getByTestId('payoff-preview')).toContainText('Долг закроется 15 января: 4 платежа');
-    await expect(page.getByTestId('payoff-preview')).toContainText('Последний платёж меньше');
+    await expect(page.getByTestId('payoff-preview')).toContainText('запишется на остаток долга');
     await shot(page, '33-pay-in-parts', testInfo);
     await noHorizontalScroll(page, 'Платить частями');
     await parts.getByRole('button', { name: 'Создать платежи' }).click();
     await expect(parts).toBeHidden();
     await dismissToasts(page);
+    // план виден на странице долга; второй план тому же долгу не создать — кнопка спрятана
+    await expect(page.getByTestId('debt-plan')).toContainText('каждый месяц');
+    await expect(page.getByRole('button', { name: 'Получать частями' })).toHaveCount(0);
+    await shot(page, '33-debt-plan-card', testInfo);
 
     // правило видно среди регулярных платежей
     await goSection(page, 'Платежи');

@@ -12,7 +12,6 @@ import type { Debt, IsoDate, LocalRow, Minor } from '@/domain/types';
 import { longDate } from '@/features/budgets/budgetText';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { rankWallets, usePopularity } from '@/features/transactions/popularity';
-import { endSentence } from '@/features/transactions/txDisplay';
 import { todayLocal } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { savePayInParts } from './debtActions';
@@ -34,7 +33,7 @@ const ceilDiv = (a: Minor, b: number): Minor => Math.floor((a - 1) / b) + 1;
 /**
  * «Платить частями»: регулярный платёж «раз в месяц» по долгу с датой окончания. Окно считает, сколько платежей понадобится и когда долг
  * закроется. Сами платежи появляются в «Платежах» и проводятся по одному (или сами — по желанию). Последний платёж может оказаться
- * меньше обычного: сумму тогда исправляют при проведении.
+ * меньше обычного: он записывается на остаток долга (createFromRule с fitToDebt). Второй план тому же долгу не создаётся.
  */
 export function PayInPartsSheet({ debt, state, onClose }: PayInPartsSheetProps) {
   const store = useStore();
@@ -68,7 +67,7 @@ export function PayInPartsSheet({ debt, state, onClose }: PayInPartsSheetProps) 
 
   const save = async () => {
     if (busy.current) return;
-    const v = validatePayInParts({ amountMinor: amount, walletId, startOn, today, openedOn: debt.openedOn });
+    const v = validatePayInParts({ amountMinor: amount, walletId, startOn, today, openedOn: debt.openedOn, remainingMinor: remaining });
     if (!v.ok || amount === null || walletId === null) return setErrors(v.errors);
     if (payoff === null) return setErrors({ amount: result && !result.ok && result.reason === 'too-long' ? 'Слишком мелкие платежи: больше 50 лет. Увеличьте сумму.' : 'Проверьте сумму и дату первого платежа' });
     setErrors({});
@@ -112,7 +111,7 @@ export function PayInPartsSheet({ debt, state, onClose }: PayInPartsSheetProps) 
                   </p>
                   {payoff.lastAmountMinor < amount && (
                     <p className="text-muted">
-                      Последний платёж меньше — {endSentence(formatMinor(payoff.lastAmountMinor, debt.currency))} Исправьте сумму при проведении.
+                      Последний платёж — {formatMinor(payoff.lastAmountMinor, debt.currency)}: запишется на остаток долга.
                     </p>
                   )}
                 </>

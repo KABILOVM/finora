@@ -9,6 +9,7 @@ import {
   type LevelBudget,
   type LevelTx,
   type LogEntry,
+  type PlanDebtLite,
   type PushSub,
   type ReminderSettingsRow,
   type ReminderStore,
@@ -100,6 +101,8 @@ export class FakeStore implements ReminderStore {
   rules = new Map<string, RuleLite[]>();
   transactionIds = new Set<string>();
   debts = new Map<string, DebtLite[]>();
+  /** Все долги пользователя (любые: удалённые, в архиве, закрытые) — для планов платежей по долгам. */
+  planDebts = new Map<string, PlanDebtLite[]>();
   debtTxs: DebtTxLite[] = [];
   wallets = new Map<string, string>();
   liveTxDates = new Map<string, Set<string>>();
@@ -148,6 +151,10 @@ export class FakeStore implements ReminderStore {
   async listRules(userId: string): Promise<RuleLite[]> {
     this.enter('listRules', userId);
     return this.rules.get(userId) ?? [];
+  }
+  async listDebtsByIds(userId: string, debtIds: readonly string[]): Promise<PlanDebtLite[]> {
+    this.enter('listDebtsByIds', userId);
+    return (this.planDebts.get(userId) ?? []).filter((d) => debtIds.includes(d.id));
   }
   async existingTransactionIds(userId: string, ids: readonly string[]): Promise<Set<string>> {
     this.enter('existingTransactionIds', userId);

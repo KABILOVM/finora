@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { computeDebtState, debtPlanStop, type DebtTx } from '../domain/debts';
 import {
   DEBT_OVERDUE_DAYS,
   MAX_PAYMENT_CANDIDATES,
@@ -11,8 +12,10 @@ import {
   paymentCandidates,
   paymentRef,
   shiftIso,
+  stoppedPlanIds,
   type DebtLite,
   type DebtTxLite,
+  type PlanDebtLite,
   type RuleLite,
 } from '../../supabase/functions/send-reminders/index';
 
@@ -262,5 +265,106 @@ describe('долги: срок и остаток', () => {
 
   it('сломанная исходная сумма — остаток 0 (напоминать нечего)', () => {
     for (const p of [0, -1, 1.5, NaN, Number.MAX_SAFE_INTEGER + 2]) expect(debtRemainingMinor(debt({ principalMinor: p }), [], wallets), String(p)).toBe(0n);
+  });
+});
+
+describe('план платежей по долгу: когда стоит (stoppedPlanIds — как debtPlanStop в приложении)', () => {
+  const D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const TS = '2026-10-01T10:00:00+00:00';
+  const plan = (o: Partial<RuleLite> = {}): RuleLite => rule({ kind: 'income', debtId: D, ...o });
+  const pdebt = (o: Partial<PlanDebtLite> = {}): PlanDebtLite => ({ id: D, direction: 'lent', principalMinor: 100_000, currency: 'TJS', deletedAt: null, archivedAt: null, closedAt: null, ...o });
+  const pay = (o: Partial<DebtTxLite> = {}): DebtTxLite => ({ debtId: D, kind: 'income', walletId: 'w-tjs', amountMinor: 30_000, ...o });
+  const wallets = new Map([
+    ['w-tjs', 'TJS'],
+    ['w-usd', 'USD'],
+  ]);
+  const stopped = (r: RuleLite, d: PlanDebtLite | null, txs: DebtTxLite[] = []): boolean => stoppedPlanIds([r], d === null ? [] : [d], txs, wallets).has(r.id);
+
+  it('открытый долг с остатком — план идёт; погашен ровно или с переплатой — стоит', () => {
+    expect(stopped(plan(), pdebt())).toBe(false);
+    expect(stopped(plan(), pdebt(), [pay(), pay({ amountMinor: 69_999 })])).toBe(false); // остаток 1
+    expect(stopped(plan(), pdebt(), [pay(), pay({ amountMinor: 70_000 })])).toBe(true);
+    expect(stopped(plan(), pdebt(), [pay({ amountMinor: 150_000 })])).toBe(true);
+  });
+
+  it('долг в архиве или закрыт — план стоит, даже если остаток есть', () => {
+    expect(stopped(plan(), pdebt({ archivedAt: TS }))).toBe(true);
+    expect(stopped(plan(), pdebt({ closedAt: TS }))).toBe(true);
+  });
+
+  it('долг удалён или его нет — стоит любое правило с его id, и выдача по расписанию тоже', () => {
+    expect(stopped(plan(), pdebt({ deletedAt: TS }))).toBe(true);
+    expect(stopped(plan(), null)).toBe(true);
+    expect(stopped(plan({ kind: 'expense' }), pdebt({ deletedAt: TS }))).toBe(true);
+    expect(stopped(plan({ kind: 'expense' }), null)).toBe(true);
+  });
+
+  it('выдача по расписанию (вид не «возврат») не останавливается архивом, закрытием и погашением', () => {
+    const issue = plan({ kind: 'expense' }); // мне должны: выдача — расход
+    expect(stopped(issue, pdebt({ closedAt: TS }))).toBe(false);
+    expect(stopped(issue, pdebt({ archivedAt: TS }))).toBe(false);
+    expect(stopped(issue, pdebt(), [pay({ amountMinor: 100_000 })])).toBe(false);
+  });
+
+  it('я должен: план — расход, гасят его расходы; доход по такому долгу — получение, а не платёж', () => {
+    const d = pdebt({ direction: 'borrowed' });
+    const mine = plan({ kind: 'expense' });
+    expect(stopped(mine, d, [pay({ kind: 'income', amountMinor: 100_000 })])).toBe(false);
+    expect(stopped(mine, d, [pay({ kind: 'expense', amountMinor: 100_000 })])).toBe(true);
+    expect(stopped(mine, pdebt({ direction: 'borrowed', closedAt: TS }))).toBe(true);
+    expect(stopped(plan({ kind: 'income' }), pdebt({ direction: 'borrowed', closedAt: TS }))).toBe(false); // получение по расписанию
+  });
+
+  it('платёж в другой валюте, в неизвестном кошельке или другого долга долг не гасит', () => {
+    expect(stopped(plan(), pdebt(), [pay({ walletId: 'w-usd', amountMinor: 100_000 })])).toBe(false);
+    expect(stopped(plan(), pdebt(), [pay({ walletId: 'нет такого', amountMinor: 100_000 })])).toBe(false);
+    expect(stopped(plan(), pdebt(), [pay({ debtId: 'другой', amountMinor: 100_000 })])).toBe(false);
+    expect(stopped(plan(), pdebt({ currency: 'USD' }), [pay({ walletId: 'w-usd', amountMinor: 100_000 })])).toBe(true);
+  });
+
+  it('правило без долга или неизвестного вида не трогается; у каждого правила — свой долг', () => {
+    expect(stopped(rule(), null)).toBe(false);
+    expect(stopped(plan({ debtId: null }), null)).toBe(false);
+    expect(stopped(plan({ kind: null }), null)).toBe(false);
+    expect(stopped(plan({ kind: undefined, debtId: undefined }), null)).toBe(false);
+    const D2 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const a = plan({ id: '00000000-0000-4000-8000-00000000000a' });
+    const b = plan({ id: '00000000-0000-4000-8000-00000000000b', debtId: D2 });
+    const c = rule({ id: '00000000-0000-4000-8000-00000000000c' });
+    expect([...stoppedPlanIds([a, b, c], [pdebt(), pdebt({ id: D2, closedAt: TS })], [], wallets)]).toEqual([b.id]);
+  });
+
+  it('совпадает с debtPlanStop + computeDebtState приложения на сетке случаев', () => {
+    const payments: Array<Array<Pick<DebtTxLite, 'kind' | 'walletId' | 'amountMinor'>>> = [
+      [],
+      [{ kind: 'income', walletId: 'w-tjs', amountMinor: 40_000 }],
+      [{ kind: 'income', walletId: 'w-tjs', amountMinor: 100_000 }],
+      [{ kind: 'expense', walletId: 'w-tjs', amountMinor: 100_000 }],
+      [{ kind: 'income', walletId: 'w-tjs', amountMinor: 60_000 }, { kind: 'income', walletId: 'w-tjs', amountMinor: 50_000 }],
+      [{ kind: 'income', walletId: 'w-usd', amountMinor: 100_000 }],
+      [{ kind: 'expense', walletId: 'w-usd', amountMinor: 100_000 }],
+    ];
+    const marks: Array<Partial<PlanDebtLite> | null> = [null, {}, { deletedAt: TS }, { archivedAt: TS }, { closedAt: TS }, { archivedAt: TS, closedAt: TS }];
+    let stops = 0;
+    let runs = 0;
+    for (const direction of ['lent', 'borrowed'] as const) {
+      for (const kind of ['income', 'expense'] as const) {
+        for (const mark of marks) {
+          for (const list of payments) {
+            const d = mark === null ? null : pdebt({ direction, ...mark });
+            const txs = list.map((t) => pay(t));
+            const appTxs: DebtTx[] = txs.map((t, i) => ({ id: `t${i}`, kind: t.kind as DebtTx['kind'], walletId: t.walletId, amountMinor: t.amountMinor, occurredOn: '2026-10-01', createdAt: TS, deletedAt: null, debtId: t.debtId }));
+            const app =
+              debtPlanStop({ kind, debtId: D }, d === null ? undefined : d, d === null ? null : computeDebtState(d, appTxs, [{ id: 'w-tjs', currency: 'TJS' }, { id: 'w-usd', currency: 'USD' }])) !== null;
+            const edge = stopped(plan({ kind }), d, txs);
+            expect(edge, JSON.stringify({ direction, kind, mark, list })).toBe(app);
+            if (edge) stops++;
+            else runs++;
+          }
+        }
+      }
+    }
+    expect(stops).toBeGreaterThan(20);
+    expect(runs).toBeGreaterThan(20);
   });
 });

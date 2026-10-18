@@ -11,6 +11,7 @@ import { formatMinor } from '@/domain/money';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
 import { overpayAfterEdit, type EditOverpay } from '@/features/debts/editOverpay';
 import { TxLinkNotice } from '@/features/debts/TxLinkNotice';
+import { useDebtTxRole } from '@/features/debts/useDebtTxRole';
 import { Receipt } from '@/features/shopping/Receipt';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
 import { humanError, toastWithUndo } from './txActions';
@@ -138,6 +139,14 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const debtRole = useDebtTxRole(orig);
+  // что станет с долгом после удаления: платёж — остаток пересчитается; выдача — сумма долга задана в самом долге
+  const debtEffect =
+    debtRole?.role === 'payment' || (debtRole === undefined && orig.debtId) // роль ещё читается — как раньше, про остаток
+      ? ', в том числе остаток долга'
+      : debtRole?.role === 'entry'
+        ? '; сумма и остаток долга не изменятся — меняется только кошелёк и «Выдано деньгами»'
+        : '';
   // Правка платежа по долгу делает переплату больше: ждём подтверждения (как «Это переплата» в шите платежа)
   const [overpay, setOverpay] = useState<EditOverpay | null>(null);
 
@@ -259,7 +268,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
         open={confirmOpen}
         danger
         title="Удалить операцию?"
-        message={`${endSentence(summary)} Она пропадёт из списка, остатки пересчитаются${tx.debtId ? ', в том числе остаток долга' : ''}. Сразу после удаления её можно вернуть кнопкой «Отменить».`}
+        message={`${endSentence(summary)} Она пропадёт из списка, остатки пересчитаются${debtEffect}. Сразу после удаления её можно вернуть кнопкой «Отменить».`}
         confirmLabel="Удалить"
         loading={deleting}
         onConfirm={() => void remove()}

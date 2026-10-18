@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { useStore } from '@/db';
@@ -7,7 +8,7 @@ import { formatMinor } from '@/domain/money';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
-import { mergeCandidates, mergePreview } from './debtMatch';
+import { mergeCandidates, mergePreview, normName } from './debtMatch';
 import type { DebtItem } from './debtSummary';
 import { ruDateShort } from './debtText';
 
@@ -22,17 +23,27 @@ export interface MergeDebtsSheetProps {
 /**
  * Объединение долгов: текущий долг + выбранные того же направления и валюты. Платежи, выдачи и регулярные платежи переходят
  * к текущему долгу, остальные уходят из списка. Деньги в кошельках не двигаются. После объединения — «Отменить».
+ * Заранее отмечены только открытые долги того же человека. Долг с другим именем объединяется лишь после подтверждения:
+ * имя пропадёт из списка (в заметке остаётся «Объединён с: …»).
  */
 export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps) {
   const store = useStore();
   const toast = useToast();
   const candidates = useMemo(() => mergeCandidates(items, target.debt), [items, target.debt]);
-  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(candidates.filter((c) => c.sameName).map((c) => c.item.debt.id)));
+  const [picked, setPicked] = useState<ReadonlySet<string>>(
+    () => new Set(candidates.filter((c) => c.sameName && c.item.debt.closedAt === null).map((c) => c.item.debt.id)),
+  );
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
 
   const chosen = candidates.filter((c) => picked.has(c.item.debt.id)).map((c) => c.item);
+  // долги с другим именем и имена, которые после объединения пропадут (одно имя — один раз, как его видно в первом долге)
+  const lostDebts = candidates.filter((c) => !c.sameName && picked.has(c.item.debt.id)).map((c) => c.item.debt);
+  const lostNames = [...new Map(lostDebts.map((d) => [normName(d.counterparty), d.counterparty.trim()] as const)).values()];
+  const namesText = lostNames.map((n) => `«${n}»`).join(', ');
+  const many = lostDebts.length > 1;
   const preview = chosen.length > 0 ? mergePreview([target, ...chosen]) : null;
   const cur = target.debt.currency;
 
@@ -48,6 +59,7 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
 
   const save = async () => {
     if (busy.current || chosen.length === 0) return;
+    setConfirming(false);
     busy.current = true;
     setSaving(true);
     try {
@@ -79,7 +91,13 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
               {error}
             </p>
           )}
-          <Button size="lg" fullWidth loading={saving} disabled={chosen.length === 0} onClick={() => void save()}>
+          <Button
+            size="lg"
+            fullWidth
+            loading={saving}
+            disabled={chosen.length === 0}
+            onClick={() => (lostNames.length > 0 ? setConfirming(true) : void save())}
+          >
             {chosen.length === 0 ? 'Выберите долги' : `Объединить: ${chosen.length + 1} ${pluralRu(chosen.length + 1, 'долг', 'долга', 'долгов')}`}
           </Button>
         </div>
@@ -116,6 +134,11 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
                         {d.counterparty}
                         {sameName && <span className="ml-2 text-xs font-medium text-muted">тот же человек</span>}
                       </span>
+                      {!sameName && (
+                        <span className="block text-sm font-medium text-warning">
+                          Другое имя: после объединения останется «{target.debt.counterparty}»
+                        </span>
+                      )}
                       <span className="block text-sm text-muted">
                         Остаток {item.state ? formatMinor(item.state.remainingMinor, cur) : '—'} · от {ruDateShort(d.openedOn)}
                         {d.dueOn !== null && ` · срок ${ruDateShort(d.dueOn)}`}
@@ -146,12 +169,27 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
             У одного из долгов есть переплата: она засчитается в остаток других, поэтому общий остаток меньше суммы остатков.
           </p>
         )}
+        {lostNames.length > 0 && (
+          <p role="status" className="text-sm font-medium text-warning" data-testid="merge-names">
+            {lostNames.length === 1 ? 'Имя' : 'Имена'} {namesText} {lostNames.length === 1 ? 'пропадёт' : 'пропадут'} из списка: долг останется
+            на имя «{target.debt.counterparty}». В заметке долга сохранится, с кем он объединён.
+          </p>
+        )}
         {chosen.length > 0 && preview === null && (
           <p role="alert" className="text-sm font-medium text-danger">
             Суммы слишком большие, чтобы их сложить.
           </p>
         )}
       </div>
+      <ConfirmDialog
+        open={confirming}
+        title="Объединить разных людей?"
+        message={`${many ? 'Долги' : 'Долг'} ${namesText} ${many ? 'перейдут' : 'перейдёт'} к «${target.debt.counterparty}»: в списке останется только это имя. Сразу после объединения его можно отменить.`}
+        confirmLabel="Объединить"
+        loading={saving}
+        onConfirm={() => void save()}
+        onCancel={() => setConfirming(false)}
+      />
     </Sheet>
   );
 }

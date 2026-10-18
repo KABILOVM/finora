@@ -1,3 +1,4 @@
+import { isLivePlanOf } from '@/domain/debts';
 import type { Frequency, IsoDate, LocalRow, Minor, RecurringRule, TxKind, UUID, Wallet } from '@/domain/types';
 import { ValidationError } from './errors';
 import { newId } from './ids';
@@ -108,6 +109,21 @@ export function createRecurringRepo(ctx: RepoContext): RecurringRepo {
     return parseRuleData(full as unknown as Record<string, unknown>, { requireToAmount: true });
   }
 
+  /**
+   * У долга один живой план платежей (isLivePlanOf). Правило, которое СТАНОВИТСЯ планом долга (новое, возвращённое из архива,
+   * привязанное к долгу или сменившее вид), не может стать вторым: платежи по двум планам сложились бы. Уже существующие дубли
+   * (после объединения долгов или правок с двух устройств) правке не мешают — их видно на странице долга с предупреждением.
+   */
+  async function checkOnePlan(id: UUID, next: Pick<RuleData, 'kind' | 'debtId' | 'archivedAt'>, cur?: RecurringRule): Promise<void> {
+    if (next.debtId === null || next.archivedAt !== null) return;
+    const debt = await db.debts.get(next.debtId);
+    if (!debt || !isLivePlanOf({ ...next, deletedAt: null }, debt)) return;
+    if (cur && isLivePlanOf(cur, debt)) return; // уже был планом этого долга
+    if ((await db.recurring_rules.toArray()).some((r) => r.id !== id && isLivePlanOf(r, debt))) {
+      throw new ValidationError(`У долга «${debt.counterparty}» уже есть план платежей: измените или остановите его на странице долга`);
+    }
+  }
+
   async function getLiveRule(id: UUID): Promise<LocalRow<RecurringRule>> {
     const r = await db.recurring_rules.get(id);
     if (!r) throw new ValidationError('Регулярный платёж не найден');
@@ -123,6 +139,7 @@ export function createRecurringRepo(ctx: RepoContext): RecurringRepo {
       // ссылки проверяем при правке содержимого; архивация и возврат из архива не должны упираться в удалённый позже кошелёк
       const next = checkRefs ? await verify(raw, cur) : raw;
       if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
+      await checkOnePlan(id, next, cur);
       const row = withDirtyGroups<LocalRow<RecurringRule>>('recurring_rules', cur, { ...cur, ...next, ...touch(ctx).fields });
       await db.recurring_rules.put(row);
       return row;
@@ -141,6 +158,7 @@ export function createRecurringRepo(ctx: RepoContext): RecurringRepo {
           throw new ValidationError('Регулярный платёж с таким id уже существует');
         }
         const data = await verify(parsed);
+        await checkOnePlan(newRowId, data);
         const { stamp, fields } = touch(ctx);
         const row: LocalRow<RecurringRule> = {
           id: newRowId,

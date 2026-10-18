@@ -47,9 +47,16 @@ test.describe('24. Удаление долга', () => {
   test('«Удалить только долг»: операции остаются обычными, деньги не меняются; «Отменить» всё возвращает', async ({ page }, testInfo) => {
     await setup(page);
     const dlg = await openDelete(page);
-    await expect(dlg.getByRole('radio', { name: 'Удалить только долг' })).toBeChecked();
+    // вариант заранее не выбран: «Удалить» недоступно, пока не решили, что делать с операциями
+    await expect(dlg.getByRole('radio', { name: 'Удалить только долг' })).not.toBeChecked();
+    await expect(dlg.getByRole('radio', { name: 'Удалить долг и его операции' })).not.toBeChecked();
+    await expect(dlg.getByRole('button', { name: 'Удалить', exact: true })).toBeDisabled();
+    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('Выберите, что сделать с 2 операциями');
+    await dlg.getByRole('radio', { name: 'Удалить только долг' }).check();
     await expect(dlg.getByTestId('debt-delete-hint')).toContainText('2 операции останутся');
-    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('обычными доходами и расходами месяца');
+    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('попадут в итоги и бюджеты.');
+    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('расходы добавится');
+    await expect(dlg).toContainText('отправьте его в архив');
     await shot(page, '24-delete-dialog', testInfo);
 
     // «Отмена» ничего не меняет
@@ -57,7 +64,10 @@ test.describe('24. Удаление долга', () => {
     await expect(dlg).toBeHidden();
     await expect(page.getByRole('heading', { level: 1, name: 'Алишер' })).toBeVisible();
 
-    await (await openDelete(page)).getByRole('button', { name: 'Удалить', exact: true }).click();
+    const again = await openDelete(page);
+    await expect(again.getByRole('radio', { name: 'Удалить только долг' })).not.toBeChecked(); // выбор не запоминается
+    await again.getByRole('radio', { name: 'Удалить только долг' }).check();
+    await again.getByRole('button', { name: 'Удалить', exact: true }).click();
     const toast = page.getByRole('status').filter({ hasText: 'Долг удалён' });
     await expect(toast).toBeVisible();
     await expect(page).toHaveURL(/#\/debts/);

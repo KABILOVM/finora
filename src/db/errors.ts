@@ -20,6 +20,17 @@ export class FxRequiredError extends ValidationError {
   }
 }
 
+/**
+ * Платёж по плану долга не проведён, потому что долг уже закрыт или погашен (createFromRule с fitToDebt). План при этом стоит
+ * сам (debtPlanStop): автоплатёж такое правило молча пропускает, а не помечает ошибкой.
+ */
+export class DebtPlanStoppedError extends ValidationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DebtPlanStoppedError';
+  }
+}
+
 export function fail(message: string): never {
   throw new ValidationError(message);
 }

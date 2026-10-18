@@ -59,7 +59,8 @@
  *    Повтор в тот же день исключает push_log (user_id, kind, ref, sent_on = локальная дата).
  *  - payments: живые не архивные правила с auto_post = 0 (при 1 платёж проводит само приложение): даты СЕГОДНЯ и просроченные за
  *    7 дней по расписанию (та же логика, что в приложении), для которых нет операции с id v5(правило, дата). Удалённая операция
- *    = «пропущено» = обработано.
+ *    = «пропущено» = обработано. План платежей по долгу (правило с debt_id того же вида, что «возврат»: мне должны → доход,
+ *    я должен → расход) молчит, когда долг удалён, в архиве, закрыт или погашен — как в приложении (stoppedPlanIds ниже).
  *  - debts: живые не архивные не закрытые долги со сроком сегодня, завтра или просроченным (до 30 дней), у которых остаток > 0.
  *  - daily: за локальное «сегодня» нет ни одной живой операции (любого вида).
  *  - budgets (remind_budgets = true): живые не архивные лимиты на месяц в основной валюте пользователя (settings.base_currency); расходы
@@ -549,6 +550,10 @@ export interface CategoryLite {
 export interface RuleLite extends ScheduleRule {
   id: string;
   note: string;
+  /** Вид операции правила: доход или расход. Перевод, неизвестное значение или нет поля — правило не про долг. */
+  kind?: 'income' | 'expense' | null;
+  /** Долг правила (план платежей или выдача по расписанию); null или нет поля — правило не про долг. */
+  debtId?: string | null;
 }
 
 export interface DebtLite {
@@ -558,6 +563,13 @@ export interface DebtLite {
   principalMinor: number;
   currency: string;
   dueOn: IsoDate;
+}
+
+/** Долг плана платежей — любой (удалённый, в архиве, закрытый, без срока): всё, от чего зависит, стоит ли план. */
+export interface PlanDebtLite extends Pick<DebtLite, 'id' | 'direction' | 'principalMinor' | 'currency'> {
+  deletedAt: string | null;
+  archivedAt: string | null;
+  closedAt: string | null;
 }
 
 export interface DebtTxLite {
@@ -698,7 +710,11 @@ export function debtDueKind(dueOn: unknown, today: IsoDate): DebtDueKind | null 
  * «возврат» для направления (мне должны → доход, я должен → расход) в кошельке ТОЙ ЖЕ валюты, что долг. Остальные
  * (другая валюта, неизвестный кошелёк, выдача долга, перевод) в остаток не входят. Не меньше 0. Считает точно (BigInt).
  */
-export function debtRemainingMinor(debt: DebtLite, txs: readonly DebtTxLite[], currencyByWallet: ReadonlyMap<string, string>): bigint {
+export function debtRemainingMinor(
+  debt: Pick<DebtLite, 'id' | 'direction' | 'principalMinor' | 'currency'>,
+  txs: readonly DebtTxLite[],
+  currencyByWallet: ReadonlyMap<string, string>,
+): bigint {
   if (!Number.isSafeInteger(debt.principalMinor) || debt.principalMinor <= 0) return 0n;
   const payKind = debt.direction === 'lent' ? 'income' : 'expense';
   let paid = 0n;
@@ -710,6 +726,34 @@ export function debtRemainingMinor(debt: DebtLite, txs: readonly DebtTxLite[], c
   }
   const left = BigInt(debt.principalMinor) - paid;
   return left > 0n ? left : 0n;
+}
+
+/**
+ * Какие правила — остановленные планы платежей по долгам (как debtPlanStop в src/domain/debts.ts): о них не напоминаем.
+ * Долга нет среди debts или он удалён — стоит любое правило с его debtId. Правило вида «возврат» (мне должны → доход,
+ * я должен → расход) стоит ещё, когда долг в архиве, закрыт или погашен (остаток debtRemainingMinor = 0). Правило другого вида
+ * (выдача по расписанию) и правило без долга или неизвестного вида не останавливаются никогда.
+ * debts — долги правил (любые, в том числе удалённые); txs и currencyByWallet — как для debtRemainingMinor.
+ */
+export function stoppedPlanIds(
+  rules: readonly RuleLite[],
+  debts: readonly PlanDebtLite[],
+  txs: readonly DebtTxLite[],
+  currencyByWallet: ReadonlyMap<string, string>,
+): Set<string> {
+  const byId = new Map(debts.map((d) => [d.id, d]));
+  const out = new Set<string>();
+  for (const r of rules) {
+    if (r.debtId === null || r.debtId === undefined || (r.kind !== 'income' && r.kind !== 'expense')) continue;
+    const d = byId.get(r.debtId);
+    if (d === undefined || d.deletedAt !== null) {
+      out.add(r.id); // долг удалён (или его нет): стоит и план, и выдача по расписанию
+      continue;
+    }
+    if (r.kind !== (d.direction === 'lent' ? 'income' : 'expense')) continue; // выдача по расписанию
+    if (d.archivedAt !== null || d.closedAt !== null || debtRemainingMinor(d, txs, currencyByWallet) <= 0n) out.add(r.id);
+  }
+  return out;
 }
 
 /** Адрес push принимаем только от известных push-сервисов (иначе чужой адрес в базе превратил бы функцию в «отправителя» запросов). */
@@ -898,8 +942,10 @@ export interface ReminderStore {
    * место, где читаются чужие строки: нужно, чтобы не слать напоминания человека на устройство, которым уже пользуется другой.
    */
   listLiveEndpointClaims(endpoints: readonly string[]): Promise<EndpointClaim[]>;
-  /** Живые не архивные правила с auto_post = 0, начавшиеся не позже today. Все страницы. */
+  /** Живые не архивные правила с auto_post = 0, начавшиеся не позже today (с видом и долгом). Все страницы. */
   listRules(userId: string, today: IsoDate): Promise<RuleLite[]>;
+  /** Долги пользователя с этими id — любые (удалённые, в архиве, закрытые, с любым сроком): чтобы знать, стоит ли план платежей. */
+  listDebtsByIds(userId: string, debtIds: readonly string[]): Promise<PlanDebtLite[]>;
   /** Какие из id есть среди операций пользователя (живые и удалённые). */
   existingTransactionIds(userId: string, ids: readonly string[]): Promise<Set<string>>;
   /** Живые не архивные не закрытые долги со сроком в [dueFrom, dueTo]. */
@@ -990,13 +1036,19 @@ export function parseSettingsRow(row: unknown): ReminderSettingsRow | null {
   };
 }
 
+/**
+ * Вид и долг правила разбираются мягко: правило с непонятным видом или неверным debt_id всё равно напоминается, просто считается
+ * правилом не про долг (kind/debtId = null). Долг бывает только у дохода и расхода (у перевода его нет по схеме).
+ */
 export function parseRuleRow(row: unknown): RuleLite | null {
   if (!isRec(row) || typeof row.id !== 'string' || !isUuid(row.id)) return null;
-  const { frequency, interval_n: intervalN, start_on: startOn, end_on: endOn, note } = row;
+  const { frequency, interval_n: intervalN, start_on: startOn, end_on: endOn, note, kind: rawKind, debt_id: rawDebtId } = row;
   if (frequency !== 'daily' && frequency !== 'weekly' && frequency !== 'monthly' && frequency !== 'yearly') return null;
   if (typeof intervalN !== 'number' || typeof startOn !== 'string') return null;
   if (endOn !== null && typeof endOn !== 'string') return null;
-  return { id: row.id.toLowerCase(), note: typeof note === 'string' ? note : '', frequency, intervalN, startOn, endOn };
+  const kind = rawKind === 'income' || rawKind === 'expense' ? rawKind : null;
+  const debtId = kind !== null && typeof rawDebtId === 'string' && isUuid(rawDebtId) ? rawDebtId.toLowerCase() : null;
+  return { id: row.id.toLowerCase(), note: typeof note === 'string' ? note : '', kind, debtId, frequency, intervalN, startOn, endOn };
 }
 
 export function parseDebtRow(row: unknown): DebtLite | null {
@@ -1005,6 +1057,16 @@ export function parseDebtRow(row: unknown): DebtLite | null {
   if (direction !== 'lent' && direction !== 'borrowed') return null;
   if (typeof principal !== 'number' || typeof currency !== 'string' || typeof dueOn !== 'string') return null;
   return { id: row.id.toLowerCase(), direction, counterparty: typeof counterparty === 'string' ? counterparty : '', principalMinor: principal, currency, dueOn };
+}
+
+/** Долг плана платежей. Отметка (удалён, в архиве, закрыт) — любая строка; не строка — отметки нет. */
+export function parsePlanDebtRow(row: unknown): PlanDebtLite | null {
+  if (!isRec(row) || typeof row.id !== 'string' || !isUuid(row.id)) return null;
+  const { direction, principal_minor: principal, currency } = row;
+  if (direction !== 'lent' && direction !== 'borrowed') return null;
+  if (typeof principal !== 'number' || typeof currency !== 'string') return null;
+  const stamp = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  return { id: row.id.toLowerCase(), direction, principalMinor: principal, currency, deletedAt: stamp(row.deleted_at), archivedAt: stamp(row.archived_at), closedAt: stamp(row.closed_at) };
 }
 
 export function parseDebtTxRow(row: unknown): DebtTxLite | null {
@@ -1210,7 +1272,7 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
       const rows = await allRows(
         'recurring_rules',
         [
-          ['select', 'id,note,frequency,interval_n,start_on,end_on'],
+          ['select', 'id,note,kind,debt_id,frequency,interval_n,start_on,end_on'],
           ['user_id', `eq.${userId}`],
           ['deleted_at', 'is.null'],
           ['archived_at', 'is.null'],
@@ -1223,6 +1285,23 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
       for (const r of rows) {
         const p = parseRuleRow(r);
         if (p) out.push(p);
+      }
+      return out;
+    },
+
+    async listDebtsByIds(userId, debtIds) {
+      const out: PlanDebtLite[] = [];
+      for (const part of chunks(uuids(debtIds), IN_CHUNK)) {
+        const raw = await call('GET', 'debts', [
+          ['select', 'id,direction,principal_minor,currency,deleted_at,archived_at,closed_at'],
+          ['user_id', `eq.${userId}`],
+          ['id', `in.(${part.join(',')})`],
+          ['limit', String(part.length)],
+        ]);
+        for (const r of Array.isArray(raw) ? raw : []) {
+          const p = parsePlanDebtRow(r);
+          if (p) out.push(p);
+        }
       }
       return out;
     },
@@ -1670,11 +1749,27 @@ export async function findBudgetAlerts(store: ReminderStore, userId: string, tod
   return out.sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || b.percent - a.percent || (a.ref < b.ref ? -1 : 1));
 }
 
+/**
+ * Правила, которые сейчас — остановленные планы платежей по долгам (stoppedPlanIds). Нет правил про долг — больше ничего не читаем;
+ * операции и кошельки — только у долгов, которые не удалены, не в архиве и не закрыты (остальным остаток не нужен: план стоит и так).
+ */
+async function stoppedPlans(store: ReminderStore, userId: string, rules: readonly RuleLite[]): Promise<Set<string>> {
+  const debtIds = [...new Set(rules.flatMap((r) => (r.debtId ? [r.debtId] : [])))];
+  if (debtIds.length === 0) return new Set();
+  const debts = await store.listDebtsByIds(userId, debtIds);
+  const open = debts.filter((d) => d.deletedAt === null && d.archivedAt === null && d.closedAt === null).map((d) => d.id);
+  const txs = open.length === 0 ? [] : await store.listDebtTransactions(userId, open);
+  const wallets = txs.length === 0 ? new Map<string, string>() : await store.walletCurrencies(userId, txs.map((t) => t.walletId));
+  return stoppedPlanIds(rules, debts, txs, wallets);
+}
+
 /** Что сегодня напомнить пользователю (до проверки по push_log). */
 async function findDue(store: ReminderStore, s: ReminderSettingsRow, today: IsoDate): Promise<Found> {
   const found: Found = { payments: [], debts: [], daily: false, budgets: [] };
   if (s.remindPayments) {
-    const cands = paymentCandidates(await store.listRules(s.userId, today), today);
+    const rules = await store.listRules(s.userId, today);
+    const stopped = await stoppedPlans(store, s.userId, rules);
+    const cands = paymentCandidates(rules.filter((r) => !stopped.has(r.id)), today);
     if (cands.length > 0) {
       const ids = await Promise.all(cands.map((p) => uuidV5(p.ruleId, p.date)));
       const have = await store.existingTransactionIds(s.userId, ids);

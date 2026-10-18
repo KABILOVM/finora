@@ -39,7 +39,7 @@ describe('DebtsRepo.softDelete: только долг', () => {
     const { store, debt } = await setup();
     await store.debts.softDelete(debt.id, 'keep-operations');
     const snap = JSON.stringify([await store.db.debts.toArray(), await store.db.transactions.toArray(), await store.db.recurring_rules.toArray()]);
-    expect(await store.debts.softDelete(debt.id, 'with-operations')).toEqual({ debtId: debt.id, mode: 'with-operations', txIds: [], ruleIds: [] });
+    expect(await store.debts.softDelete(debt.id, 'with-operations')).toEqual({ debtId: debt.id, mode: 'with-operations', txIds: [], ruleIds: [], notedTxIds: [] });
     expect(JSON.stringify([await store.db.debts.toArray(), await store.db.transactions.toArray(), await store.db.recurring_rules.toArray()])).toBe(snap);
   });
 
@@ -122,5 +122,94 @@ describe('удалённый долг в остальных местах', () =>
     await expect(store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 1, occurredOn: '2026-10-09', debtId: debt.id })).rejects.toThrow(/удалён/);
     await expect(store.debts.update(debt.id, { note: 'x' })).rejects.toThrow(/удалён/);
     await expect(store.debts.close(debt.id)).rejects.toThrow(/удалён/);
+  });
+});
+
+describe('DebtsRepo.softDelete «только долг»: заметка «Долг «X» (удалён)» у операций без своей заметки', () => {
+  /** К долгу Али из setup добавлен платёж 50 с. со своей заметкой. */
+  async function withNoted() {
+    const ctx = await setup();
+    const own = await ctx.store.transactions.create({
+      kind: 'income',
+      walletId: ctx.cash.id,
+      amountMinor: 5_000,
+      occurredOn: '2026-10-07',
+      debtId: ctx.debt.id,
+      note: 'вернул наличными',
+    });
+    return { ...ctx, own };
+  }
+
+  it('операциям без заметки дописано «Долг «Али» (удалён)», своя заметка не тронута; notedTxIds — только дописанные', async () => {
+    const { store, debt, issue, pay, other, own } = await withNoted();
+    const res = await store.debts.softDelete(debt.id, 'keep-operations');
+    expect(res.txIds.sort()).toEqual([issue.id, pay.id, own.id].sort());
+    expect(res.notedTxIds.sort()).toEqual([issue.id, pay.id].sort());
+    for (const t of [issue, pay]) expect(await store.db.transactions.get(t.id)).toMatchObject({ debtId: null, deletedAt: null, note: 'Долг «Али» (удалён)', dirty: 1 });
+    expect(await store.db.transactions.get(own.id)).toMatchObject({ debtId: null, deletedAt: null, note: 'вернул наличными' });
+    expect(await store.db.transactions.get(other.id)).toEqual(other); // чужая операция без заметки не трогается
+  });
+
+  it('заметка из одних пробелов считается пустой', async () => {
+    const { store, cash, debt } = await setup();
+    const blank = await store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 700, occurredOn: '2026-10-08', debtId: debt.id });
+    await store.db.transactions.update(blank.id, { note: '   ' }); // как могло прийти из старой версии или с сервера
+    const res = await store.debts.softDelete(debt.id, 'keep-operations');
+    expect(res.notedTxIds).toContain(blank.id);
+    expect((await store.db.transactions.get(blank.id))!.note).toBe('Долг «Али» (удалён)');
+  });
+
+  it('отмена стирает дописанную заметку и возвращает связь с долгом; своя заметка остаётся', async () => {
+    const { store, debt, issue, pay, own } = await withNoted();
+    const res = await store.debts.softDelete(debt.id, 'keep-operations');
+    await store.debts.undoDelete(res);
+    for (const t of [issue, pay]) expect(await store.db.transactions.get(t.id)).toMatchObject({ debtId: debt.id, note: '' });
+    expect(await store.db.transactions.get(own.id)).toMatchObject({ debtId: debt.id, note: 'вернул наличными' });
+    const st = computeDebtState(debt, await store.db.transactions.toArray(), await store.db.wallets.toArray());
+    expect(st).toMatchObject({ paidMinor: 15_000, remainingMinor: 25_000 });
+  });
+
+  it('заметку, которую после удаления изменили, отмена не стирает (но связь с долгом возвращает)', async () => {
+    const { store, debt, issue, pay } = await setup();
+    const res = await store.debts.softDelete(debt.id, 'keep-operations');
+    await store.transactions.update(pay.id, { note: 'Али вернул часть' });
+    await store.debts.undoDelete(res);
+    expect(await store.db.transactions.get(pay.id)).toMatchObject({ debtId: debt.id, note: 'Али вернул часть' });
+    expect(await store.db.transactions.get(issue.id)).toMatchObject({ debtId: debt.id, note: '' });
+  });
+
+  it('своя заметка, совпадающая с автоматической, при отмене не стирается: стирается только то, что дописало удаление', async () => {
+    const { store, cash, debt } = await setup();
+    const same = await store.transactions.create({
+      kind: 'income',
+      walletId: cash.id,
+      amountMinor: 300,
+      occurredOn: '2026-10-08',
+      debtId: debt.id,
+      note: 'Долг «Али» (удалён)',
+    });
+    const res = await store.debts.softDelete(debt.id, 'keep-operations');
+    expect(res.notedTxIds).not.toContain(same.id);
+    await store.debts.undoDelete(res);
+    expect(await store.db.transactions.get(same.id)).toMatchObject({ debtId: debt.id, note: 'Долг «Али» (удалён)' });
+  });
+
+  it('повторная отмена ничего не меняет', async () => {
+    const { store, debt } = await withNoted();
+    const res = await store.debts.softDelete(debt.id, 'keep-operations');
+    await store.debts.undoDelete(res);
+    const snap = JSON.stringify(await store.db.transactions.toArray());
+    await store.debts.undoDelete(res);
+    expect(JSON.stringify(await store.db.transactions.toArray())).toBe(snap);
+  });
+
+  it('«долг и операции»: заметки не дописываются, notedTxIds пуст, отмена возвращает операции с прежними заметками', async () => {
+    const { store, debt, issue, pay, own } = await withNoted();
+    const res = await store.debts.softDelete(debt.id, 'with-operations');
+    expect(res.notedTxIds).toEqual([]);
+    for (const t of [issue, pay]) expect(await store.db.transactions.get(t.id)).toMatchObject({ deletedAt: expect.any(String), debtId: debt.id, note: '' });
+    expect((await store.db.transactions.get(own.id))!.note).toBe('вернул наличными');
+    await store.debts.undoDelete(res);
+    for (const t of [issue, pay]) expect(await store.db.transactions.get(t.id)).toMatchObject({ deletedAt: null, debtId: debt.id, note: '' });
   });
 });

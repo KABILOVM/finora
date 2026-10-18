@@ -4,7 +4,7 @@ export { openStore, type Store, type OpenStoreOptions } from './store';
 export { StoreProvider, useOptionalStore, useStore } from './storeContext';
 
 export { FinoraDB, META_LAST_SYNCED_AT, type MetaRow, type MetaValue } from './database';
-export { FxRequiredError, ValidationError } from './errors';
+export { DebtPlanStoppedError, FxRequiredError, ValidationError } from './errors';
 
 export { createClock, type Clock, type ClockOptions } from './clock';
 export { getDeviceId } from './deviceId';
@@ -47,6 +47,7 @@ export {
   useDebtState,
   useDebtView,
   useUpcoming,
+  useStoppedDebtPlans,
   BALANCES_OVERFLOW_MESSAGE,
   DEBT_OVERFLOW_MESSAGE,
   type BalancesState,
@@ -54,6 +55,7 @@ export {
   type UpcomingItem,
 } from './hooks';
 
+export { stoppedDebtPlans } from './debtPlans';
 export { ensureSeeded } from './seed';
 export { countUserData } from './localData';
 export { exportBackup, exportTransactionsCsv, importBackup, type BackupFile, type ImportOptions, type ImportResult } from './backup';

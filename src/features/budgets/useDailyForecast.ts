@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { summarizeDay, summarizeMonth, uuidV5, useStore, type Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
-import { computeDebtState } from '@/domain/debts';
+import { computeDebtState, debtPlanStop } from '@/domain/debts';
 import {
   computeDailyForecast,
   daysBetween,
@@ -52,7 +52,7 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
   // Прошлые даты правила, не проведённые и не пропущенные, прогноз вычитает как просроченные — но не старше месяца и не раньше
   // создания правила (recurring/plan.ts). Правка правила их не отменяет — так же, как «Просроченные» на экране платежей
   // (там, в отличие от прогноза, видны и даты до создания правила).
-  const rules: ForecastRule[] = ruleRows
+  let rules: ForecastRule[] = ruleRows
     .filter((r) => r.deletedAt === null && r.archivedAt === null)
     .map((r) => ({ ...r, overdueFrom: historyFrom(r, today, FORECAST_OVERDUE_MAX_AGE_DAYS, localDateOf, { sinceEdit: false }) }));
 
@@ -86,6 +86,15 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
         closedAt: d.closedAt,
         archivedAt: d.archivedAt,
       }));
+
+    // План по долгу, который стоит (долг погашен, закрыт, в архиве или удалён), денег больше не тратит — как в «Предстоящих»
+    const debtRowById = new Map(debtRows.map((d) => [d.id, d] as const));
+    const remainingById = new Map(debts.map((d) => [d.id, d.remainingMinor] as const));
+    rules = rules.filter((r) => {
+      if (r.debtId === null) return true;
+      const left = remainingById.get(r.debtId);
+      return debtPlanStop(r, debtRowById.get(r.debtId), left === undefined ? null : { remainingMinor: left }) === null;
+    });
 
     const month = summarizeMonth(txs, today.slice(0, 7), base);
     const isScheduled = (t: LocalRow<Transaction>): boolean => t.recurringRuleId !== null && t.recurringRuleId !== undefined;
