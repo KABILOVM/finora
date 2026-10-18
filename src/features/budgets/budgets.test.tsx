@@ -17,6 +17,7 @@ import {
 } from '@/features/transactions/__fixtures__/opsKit';
 import BudgetsPage from './BudgetsPage';
 import BudgetsWidget from './BudgetsWidget';
+import { HideAmountsProvider } from '@/features/home/hideAmounts';
 
 /** «Сегодня» = четверг 15 октября 2026 (pinToday): до конца месяца 17 дней (15…31), основная валюта TJS. */
 beforeEach(pinToday);
@@ -538,6 +539,35 @@ describe('виджет «Можно тратить в день» на «Глав
     await waitFor(() => expect(text(document.querySelector('[data-testid="widget-per-day"]'))).toBe(fmt(0)));
     expect(document.querySelector('[data-testid="widget-per-day"] .text-expense')).not.toBeNull();
     expect(text(document.querySelector('[data-testid="budgets-widget"]'))).toContain(`Лимит месяца превышен на ${fmt(10_000)}`);
+  });
+
+  it('«Скрыть суммы»: суммы в строках «Лимит месяца превышен» и «Денег не хватает» тоже спрятаны', async () => {
+    localStorage.setItem('finora-hide-balance', '1');
+    try {
+      const td = opsDeps([table()], {
+        setup: quiet(async (s) => {
+          await baseSetup(s);
+          await s.budgets.create({ categoryId: null, amountMinor: 40_000 });
+        }),
+      });
+      await showApp(
+        <HideAmountsProvider>
+          <BudgetsWidget />
+        </HideAmountsProvider>,
+        td,
+        '/',
+      );
+      const widget = await waitFor(() => {
+        const w = document.querySelector('[data-testid="budgets-widget"]');
+        expect(text(w)).toContain('Лимит месяца превышен на');
+        return w;
+      });
+      expect(text(widget)).toContain('Лимит месяца превышен на ••••');
+      expect(text(widget)).not.toContain(fmt(10_000));
+      expect(text(widget)).not.toContain(' с.'); // ни одной суммы — только даты и проценты
+    } finally {
+      localStorage.removeItem('finora-hide-balance');
+    }
   });
 
   it('нет общего лимита: самые «горячие» по категориям, не больше двух', async () => {

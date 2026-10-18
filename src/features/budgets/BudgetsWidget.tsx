@@ -4,16 +4,14 @@ import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
 import { pickWidgetBudgets, type BudgetProgress } from '@/domain/budgetProgress';
 import type { DailyForecast } from '@/domain/forecast';
-import { formatMinor } from '@/domain/money';
 import type { CurrencyCode } from '@/domain/types';
 import { HomeMoney } from '@/features/home/hideAmounts';
-import { endSentence } from '@/features/transactions/txDisplay';
 import { cn } from '@/lib/cn';
 import { monthKey } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
 import { BudgetBar, LEVEL_TEXT } from './BudgetBar';
 import { budgetLabel, fitFontSize, longDate, spentWord } from './budgetText';
-import { budgetStateText, perDayChars, spendBlocked } from './ForecastCard';
+import { perDayChars, spendBlocked } from './ForecastCard';
 import { useBudgetsData, type BudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
 
@@ -26,7 +24,16 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
     return <p className="mt-2 text-muted">Все кошельки — накопления, а их мы не считаем: на траты денег нет.</p>;
   }
   if (forecast.status !== 'ok') return null;
-  const budgetAlarm = budgetStateText(forecast);
+  const b = forecast.budget;
+  // суммы в тревожных строках — тоже через HomeMoney: «Скрыть суммы» прячет их, как и крупное число
+  const budgetAlarm =
+    b === null ? null : b.overMinor > 0 ? (
+      <>
+        Лимит месяца превышен на <HomeMoney minor={b.overMinor} currency={forecast.base} tone="none" />
+      </>
+    ) : b.leftMinor === 0 ? (
+      'Лимит месяца исчерпан'
+    ) : null;
   return (
     <>
       <p
@@ -40,7 +47,9 @@ function ForecastPart({ forecast }: { forecast: DailyForecast }) {
       {forecast.notEnough && (
         <p className="mt-1.5 flex items-start gap-2 text-sm font-semibold text-danger">
           <Icon name="alert" size={18} className="mt-0.5 shrink-0" />
-          <span>Денег не хватает: нужно ещё {endSentence(formatMinor(forecast.shortfallMinor, forecast.base))}</span>
+          <span>
+            Денег не хватает: нужно ещё <HomeMoney minor={forecast.shortfallMinor} currency={forecast.base} tone="none" />
+          </span>
         </p>
       )}
       {!forecast.notEnough && budgetAlarm !== null && (

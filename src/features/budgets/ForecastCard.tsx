@@ -30,7 +30,7 @@ export const spendBlocked = (f: DailyForecastOk): boolean =>
   f.notEnough || f.effective.budgetState === 'over' || f.effective.budgetState === 'exhausted';
 
 /** «Лимит месяца превышен на 500 с.» / «Лимит месяца исчерпан»; null — лимит не исчерпан или его нет. */
-export function budgetStateText(f: DailyForecastOk): string | null {
+function budgetStateText(f: DailyForecastOk): string | null {
   const b = f.budget;
   if (b === null) return null;
   if (b.overMinor > 0) return `Лимит месяца превышен на ${endSentence(formatMinor(b.overMinor, f.base))}`;
