@@ -128,7 +128,19 @@ describe('регулярные платежи и доходы', () => {
     const fromBox = rule('t2', { kind: 'transfer', walletId: 'box', toWalletId: 'cash', amountMinor: 2_000 });
     const between = rule('t3', { kind: 'transfer', walletId: 'cash', toWalletId: 'card', amountMinor: 9_000 });
     const noTarget = rule('t4', { kind: 'transfer', walletId: 'cash', toWalletId: null, amountMinor: 9_000 });
-    expect(ok(computeCashCalendar(input({ wallets, rules: [toBox, fromBox, between, noTarget] }))).endMinor).toBe(100_000 - 5_000 + 2_000);
+    const balances = new Map([['cash', 100_000], ['box', 50_000]]);
+    expect(ok(computeCashCalendar(input({ wallets, balances, rules: [toBox, fromBox, between, noTarget] }))).endMinor).toBe(100_000 - 5_000 + 2_000);
+  });
+
+  it('с накоплений приходит не больше, чем там лежит: с пустой копилки — ничего, с неполной — остаток', () => {
+    const wallets = [wallet('cash'), wallet('box', { kind: 'savings' })];
+    const fromBox = rule('t2', { kind: 'transfer', walletId: 'box', toWalletId: 'cash', amountMinor: 20_000, frequency: 'weekly', startOn: '2026-10-16' });
+    expect(ok(computeCashCalendar(input({ wallets, rules: [fromBox] }))).endMinor).toBe(100_000);
+    const partial = ok(computeCashCalendar(input({ wallets, balances: new Map([['cash', 100_000], ['box', 30_000]]), rules: [fromBox] })));
+    expect(partial.days.flatMap((d) => d.events.map((e) => [e.date, e.deltaMinor]))).toEqual([
+      ['2026-10-16', 20_000],
+      ['2026-10-23', 10_000],
+    ]);
   });
 
   it('кошелёк правила не найден — платёж не считается, а об этом сказано', () => {
@@ -329,7 +341,11 @@ describe('регулярные переводы с комиссией', () => {
     const wallets = [wallet('cash'), wallet('card', { kind: 'card' }), wallet('box', { kind: 'savings' })];
     const fee = ok(computeCashCalendar(input({ wallets, rules: [rule('move', { kind: 'transfer', toWalletId: 'card', amountMinor: 30_000, toAmountMinor: 20_000 })] })));
     expect(day(fee, '2026-10-20').events.map((e) => e.deltaMinor)).toEqual([-10_000]);
-    const take = ok(computeCashCalendar(input({ wallets, rules: [rule('take', { kind: 'transfer', walletId: 'box', toWalletId: 'cash', amountMinor: 30_000, toAmountMinor: 20_000 })] })));
+    const take = ok(
+      computeCashCalendar(
+        input({ wallets, balances: new Map([['cash', 100_000], ['box', 30_000]]), rules: [rule('take', { kind: 'transfer', walletId: 'box', toWalletId: 'cash', amountMinor: 30_000, toAmountMinor: 20_000 })] }),
+      ),
+    );
     expect(day(take, '2026-10-20').events.map((e) => e.deltaMinor)).toEqual([20_000]);
   });
 });

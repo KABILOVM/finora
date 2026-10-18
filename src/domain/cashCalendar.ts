@@ -2,6 +2,7 @@ import { addDays } from '@/lib/dates';
 import {
   isSpendableWallet,
   occurrenceKey,
+  savingsInflows,
   SPENDABLE_KINDS,
   transferFeeMinor,
   type ForecastDebt,
@@ -21,7 +22,7 @@ import type { CurrencyCode, IsoDate, Minor, UUID, WalletKind } from './types';
  * На каждый день ставятся:
  *  - регулярные платежи и доходы по расписанию, ещё не проведённые и не пропущенные (расход с обычного кошелька и перевод с него
  *    на накопления — минус; комиссия перевода между обычными — минус; доход на обычный неархивный кошелёк и перевод с накоплений
- *    на него — плюс (зачисленная сумма); остальное на деньги на руках не влияет);
+ *    на него — плюс (зачисленная сумма, не больше, чем лежит на накоплениях); остальное на деньги на руках не влияет);
  *  - просроченные платежи (прошлые даты не раньше overdueFrom правила, не проведённые и не пропущенные) — одним событием на сегодня;
  *    просроченный доход не ставится: обещать деньги, которые могут и не прийти, нельзя;
  *  - срок долга «я должен» (минус остаток за вычетом плановых платежей до срока; просроченный — сегодня); плановые платежи по нему
@@ -141,11 +142,8 @@ function moveOf(r: ForecastRule, walletOf: ReadonlyMap<UUID, ForecastWallet>): M
   if (from === undefined || to === undefined) return 'unknown';
   if (from.archivedAt !== null || to.archivedAt !== null) return 'none'; // с архивным кошельком операцию не провести
   if (isSpendableKind(from.kind) && !isSpendableKind(to.kind)) return { flow: 'out', amountMinor: r.amountMinor, currency: from.currency };
-  if (!isSpendableKind(from.kind) && isSpendableKind(to.kind)) {
-    const received = r.toAmountMinor;
-    if (received !== null && received !== undefined && isMinor(received)) return { flow: 'in', amountMinor: received, currency: to.currency };
-    return from.currency === to.currency ? { flow: 'in', amountMinor: r.amountMinor, currency: to.currency } : 'none';
-  }
+  // с накоплений на руки — отдельно (savingsInflows): не больше, чем лежит на накоплениях
+  if (!isSpendableKind(from.kind) && isSpendableKind(to.kind)) return 'none';
   if (isSpendableKind(from.kind) && isSpendableKind(to.kind)) {
     const fee = transferFeeMinor(r, from, to);
     return fee > 0 ? { flow: 'out', amountMinor: fee, currency: from.currency } : 'none';
@@ -311,6 +309,10 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
       return sum;
     };
     for (const p of planned) putPlanned(p, total(p));
+    for (const i of savingsInflows(input, today, endDate)) {
+      const amount = inBase(i.amountMinor, i.currency, 'payment');
+      if (amount !== null) put({ kind: 'income', id: i.ruleId, label: label(i.ruleId, 'Доход'), date: i.date, deltaMinor: amount });
+    }
     for (const [debtId, list] of byDebt) {
       const debt = debtOf.get(debtId) as ForecastDebt;
       list.sort((a, b) => (a.overdue !== b.overdue ? (a.overdue ? -1 : 1) : a.date < b.date ? -1 : a.date > b.date ? 1 : 0));

@@ -697,6 +697,25 @@ describe('computeDailyForecast: «зарплатой» не считаются �
   });
 });
 
+describe('computeDailyForecast: последняя выплата зарплаты и переводы с накоплений', () => {
+  it('зарплата по контракту до конца года: до её последней выплаты смотрим, аренда перед ней вычтена', () => {
+    const r = calc({
+      today: '2026-11-18',
+      balances: new Map([['cash', 300_000]]),
+      rules: [rule('salary', { kind: 'income', startOn: '2026-01-05', endOn: '2026-12-31', amountMinor: 1_000_000 }), rule('rent', { amountMinor: 250_000, startOn: '2026-01-01' })],
+    });
+    expect(r).toMatchObject({ horizonEnd: '2026-12-04', paymentsMinor: 250_000, perDayMinor: 2_941 }); // (3 000 − 2 500) ÷ 17
+  });
+
+  it('с накоплений приходит не больше, чем там лежит', () => {
+    const wallets = [wallet('cash'), wallet('box', { kind: 'savings' })];
+    const take = rule('take', { kind: 'transfer', walletId: 'box', toWalletId: 'cash', amountMinor: 50_000, startOn: '2026-10-25' });
+    expect(calc({ wallets, balances: new Map([['cash', 100_000], ['box', 0]]), rules: [take] }).incomeMinor).toBe(0);
+    expect(calc({ wallets, balances: new Map([['cash', 100_000], ['box', 20_000]]), rules: [take] }).incomeMinor).toBe(20_000);
+    expect(calc({ wallets, balances: new Map([['cash', 100_000], ['box', 90_000]]), rules: [take] }).incomeMinor).toBe(50_000);
+  });
+});
+
 describe('computeDailyForecast: плановые платежи по долгу «я должен»', () => {
   const debt = (over: Partial<ForecastInput['debts'][number]> = {}) => ({
     id: 'loan',

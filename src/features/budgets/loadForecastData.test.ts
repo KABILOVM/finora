@@ -189,3 +189,50 @@ describe('loadForecastData: доход, внесённый через «+», з�
     expect(data.doneOccurrences.has(occurrenceKey(back.id, TODAY))).toBe(false);
   });
 });
+
+describe('loadForecastData: «+»-операция закрывает ту плановую дату, к которой ближе', () => {
+  it('аванс сегодня внесли «+»: закрыт аванс, а не зарплата через два дня', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const advance = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 600_000, frequency: 'monthly', startOn: TODAY });
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: '2026-10-17' });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 600_000, occurredOn: TODAY });
+    const data = await load(s);
+    expect(data.doneOccurrences.has(occurrenceKey(advance.id, TODAY))).toBe(true);
+    expect(data.doneOccurrences.has(occurrenceKey(salary.id, '2026-10-17'))).toBe(false);
+  });
+
+  it('подарок накануне зарплаты (меньше 90 % плана) зарплату не закрывает', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: '2026-10-18' });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 500_000, occurredOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, '2026-10-18'))).toBe(false);
+  });
+
+  it('операция, пришедшая под вчерашнюю дату одного правила, не закрывает завтрашнюю дату другого', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 500_000, frequency: 'monthly', startOn: '2026-10-14' });
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 520_000, frequency: 'monthly', startOn: '2026-10-16' });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 500_000, occurredOn: '2026-10-14' });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, '2026-10-16'))).toBe(false);
+  });
+
+  it('зарплату внесли «+» сразу датой выплаты через два дня — её дату второй раз не ждём', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: '2026-10-17' });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, occurredOn: '2026-10-17' });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, '2026-10-17'))).toBe(true);
+  });
+
+  it('перевод с накоплений по плану сделали вручную — его дату второй раз не ждём', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const box = await s.wallets.create({ name: 'Копилка', currency: 'TJS', kind: 'savings', openingBalanceMinor: 1_000_000, color: '#2563eb', icon: '🪙' });
+    const take = await s.recurring.create({ kind: 'transfer', walletId: box.id, toWalletId: cash, amountMinor: 400_000, frequency: 'monthly', startOn: TODAY });
+    await s.transactions.create({ kind: 'transfer', walletId: box.id, toWalletId: cash, amountMinor: 400_000, occurredOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(take.id, TODAY))).toBe(true);
+  });
+});
