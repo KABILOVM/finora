@@ -54,6 +54,11 @@ const checkUpdate = (page: Page) =>
     await reg?.update();
   });
 const prompt = (page: Page) => page.getByText('Доступна новая версия');
+/** «Кошельки» лежат за «Ещё»: сначала меню, потом строка списка (вторая ленивая страница — «Кошельки A/B»). */
+const openWallets = async (page: Page) => {
+  await page.getByRole('navigation').first().getByRole('link', { name: /^Ещё/ }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Кошельки', exact: true }).click();
+};
 const navLabel = (page: Page) => page.getByRole('navigation').first().getByRole('link', { name: /^Ещё/ });
 
 async function openA(ctx: BrowserContext): Promise<Page> {
@@ -104,7 +109,7 @@ test('A открыта, выложена B: подсказка «Доступн�
   await dialog.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Еда' }).first().click();
   await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(page);
   await expect(page.getByRole('heading', { name: 'Кошельки A' })).toBeVisible();
   await expect(prompt(page)).toBeVisible();
 
@@ -112,7 +117,7 @@ test('A открыта, выложена B: подсказка «Доступн�
   await page.getByRole('button', { name: 'Обновить' }).click();
   await expect(navLabel(page)).toHaveText('Ещё B', { timeout: 20_000 });
   await expect(prompt(page)).toHaveCount(0);
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(page);
   await expect(page.getByRole('heading', { name: 'Кошельки B' })).toBeVisible();
   await page.goto(`${srv.url}#/transactions`);
   await expect(page.getByText('−321 с.').first()).toBeVisible();
@@ -131,7 +136,7 @@ test('A открыта, выложена B: подсказка «Доступн�
   await ctx.setOffline(true);
   await page.reload();
   await expect(navLabel(page)).toHaveText('Ещё B');
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(page);
   await expect(page.getByRole('heading', { name: 'Кошельки B' })).toBeVisible();
   expect(errors).toEqual([]);
   // ни одного 404 за весь сценарий (= ни один кусок A или B не потерялся)
@@ -147,13 +152,13 @@ test('«Позже» не ломает приложение; после пере
   await expect(prompt(page)).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Позже' }).click();
   await expect(prompt(page)).toHaveCount(0);
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(page);
   await expect(page.getByRole('heading', { name: 'Кошельки A' })).toBeVisible();
   // обычная перезагрузка вкладки: воркер B ещё ждёт, страница всё ещё A целиком, подсказка снова на месте
   await page.reload();
   await expect(navLabel(page)).toHaveText('Ещё A');
   await expect(prompt(page)).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(page);
   await expect(page.getByRole('heading', { name: 'Кошельки A' })).toBeVisible();
   await ctx.close();
 });
@@ -174,7 +179,7 @@ test('Закрыли ВСЕ вкладки и открыли заново: ср�
   await navLabel(p2).waitFor();
   // воркер B может сменить A не сразу (ждёт, пока закроются клиенты): допускается ровно одна из двух согласованных версий
   const label = await navLabel(p2).textContent();
-  await p2.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(p2);
   const heading = label === 'Ещё B' ? 'Кошельки B' : 'Кошельки A';
   await expect(p2.getByRole('heading', { name: heading })).toBeVisible();
   await p2.goto(`${srv.url}#/transactions`);
@@ -195,7 +200,7 @@ test('Вторая вкладка: после «Обновить» в перво
   await expect(navLabel(tab1)).toHaveText('Ещё B', { timeout: 20_000 });
   // вкладка 2 ещё не открывала «Кошельки»: если бы она осталась на A, чанк A уже пропал бы
   await expect(navLabel(tab2)).toHaveText('Ещё B', { timeout: 20_000 });
-  await tab2.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(tab2);
   await expect(tab2.getByRole('heading', { name: 'Кошельки B' })).toBeVisible();
   await ctx.close();
 });
@@ -331,7 +336,7 @@ test('«Позже» нажали до поломки: исправление в
   await expect(prompt(page)).toHaveCount(0);
   // …и после этого сломанная версия падает на его данных прямо во время работы (без перезагрузки; воркер B всё ещё ждёт).
   await page.evaluate(() => localStorage.setItem('finora-test-crash', '1'));
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await openWallets(page);
   await expect(navLabel(page)).toHaveText('Ещё B', { timeout: 20_000 });
   await expect(page.getByText('Что-то пошло не так')).toHaveCount(0);
   await ctx.close();
