@@ -20,6 +20,8 @@ import { addDays, isValidIsoDate, todayLocal } from '@/lib/dates';
  */
 
 export const AUTO_POST_MAX_AGE_DAYS = 60;
+/** Прогноз «в день» вычитает не проведённые и не пропущенные платежи не старше стольких дней. */
+export const FORECAST_OVERDUE_MAX_AGE_DAYS = 31;
 /** Не больше стольких новых операций за один проход (дальше — на следующем проходе). */
 export const AUTO_POST_MAX_PER_PASS = 200;
 
@@ -35,16 +37,24 @@ type RuleLike = Pick<RecurringRule, 'frequency' | 'intervalN' | 'startOn' | 'end
 
 const later = (a: IsoDate, b: IsoDate): IsoDate => (a >= b ? a : b);
 
-/** Отрезок дат, которые можно проводить само; null — проводить нечего (правило начнётся позже или создано «в будущем»). */
-export function autoPostWindow(rule: RuleLike, today: IsoDate, toLocal: LocalDateOf = localDateOf): { from: IsoDate; to: IsoDate } | null {
+/**
+ * С какой даты прошлые даты правила считаются «настоящими» (четыре границы из шапки, последняя — «сегодня − maxAgeDays»).
+ * Может быть позже сегодняшнего дня (правило начнётся позже или создано «в будущем»). null — сегодняшняя дата нечитаема.
+ */
+export function historyFrom(rule: RuleLike, today: IsoDate, maxAgeDays: number, toLocal: LocalDateOf = localDateOf): IsoDate | null {
   if (!isValidIsoDate(today)) return null;
   // Время создания не прочитать — историю не трогаем, берём только сегодняшний день.
   const created = toLocal(rule.createdAt) ?? today;
   // То же для последней правки. Метка из будущего (часы устройства убегали вперёд) сегодняшние платежи не откладывает.
   const changedOn = toLocal(rule.clientUpdatedAt) ?? today;
   const changed = changedOn > today ? today : changedOn;
-  const from = later(later(later(rule.startOn, created), changed), addDays(today, -AUTO_POST_MAX_AGE_DAYS));
-  return from > today ? null : { from, to: today };
+  return later(later(later(rule.startOn, created), changed), addDays(today, -maxAgeDays));
+}
+
+/** Отрезок дат, которые можно проводить само; null — проводить нечего (правило начнётся позже или создано «в будущем»). */
+export function autoPostWindow(rule: RuleLike, today: IsoDate, toLocal: LocalDateOf = localDateOf): { from: IsoDate; to: IsoDate } | null {
+  const from = historyFrom(rule, today, AUTO_POST_MAX_AGE_DAYS, toLocal);
+  return from === null || from > today ? null : { from, to: today };
 }
 
 /** Даты расписания правила, которые автопроведение может провести (по возрастанию). */

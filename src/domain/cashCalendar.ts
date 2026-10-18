@@ -12,6 +12,8 @@ import type { CurrencyCode, IsoDate, Minor, UUID, WalletKind } from './types';
  * На каждый день ставятся:
  *  - регулярные платежи и доходы по расписанию, ещё не проведённые и не пропущенные (расход с обычного кошелька и перевод с него
  *    на накопления — минус; доход на обычный кошелёк и перевод с накоплений на обычный — плюс; остальное на деньги на руках не влияет);
+ *  - просроченные платежи (прошлые даты не раньше overdueFrom правила, не проведённые и не пропущенные) — одним событием на сегодня;
+ *    просроченный доход не ставится: обещать деньги, которые могут и не прийти, нельзя;
  *  - срок долга «я должен» (минус остаток; просроченный — сегодня); платёж по долгу, уже учтённый остатком, второй раз не берётся;
  *  - по желанию: «мне должны» к сроку (плюс остаток; просроченный — сегодня) — это только ожидание, поэтому включается отдельно;
  *  - по желанию: обычные траты — каждый день минус usualPerDay (за сегодня — то, что ещё не потрачено).
@@ -56,8 +58,10 @@ export interface CalendarEvent {
   date: IsoDate;
   /** Изменение денег на руках в основной валюте (минус — уходят). */
   deltaMinor: Minor;
-  /** Срок уже прошёл (долг просрочен): событие поставлено на сегодня. */
+  /** Срок уже прошёл (долг или платёж просрочен): событие поставлено на сегодня. */
   overdue?: boolean;
+  /** Сколько просроченных дат платежа собрано в это событие. */
+  overdueCount?: number;
 }
 
 export interface CalendarDay {
@@ -193,15 +197,17 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
       }
     }
 
+    const yesterday = addDays(today, -1);
     for (const r of input.rules) {
       if (r.deletedAt !== null || r.archivedAt !== null) continue;
       const flow = flowOf(r, kindOf);
       if (flow === 'none') continue;
       if (r.debtId !== null && coveredDebts.has(r.debtId)) continue; // уже учтено остатком долга
+      const currency = currencyOf.get(r.walletId);
+      const known = flow !== 'unknown' && currency !== undefined;
       for (const date of occurrencesBetween(r, today, endDate)) {
         if (input.doneOccurrences.has(occurrenceKey(r.id, date))) continue;
-        const currency = currencyOf.get(r.walletId);
-        if (flow === 'unknown' || currency === undefined) {
+        if (!known) {
           if (r.kind !== 'income') unknownWalletPayments++;
           continue;
         }
@@ -215,6 +221,23 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
           deltaMinor: flow === 'out' ? -amount : amount,
         });
       }
+
+      // просроченные расходы — одним событием на сегодня
+      if (flow === 'in' || r.kind === 'income') continue;
+      const from = r.overdueFrom;
+      if (from === undefined || from === null || !isScheduleDate(from) || from > yesterday) continue;
+      let overdueCount = 0;
+      for (const date of occurrencesBetween(r, from, yesterday)) if (!input.doneOccurrences.has(occurrenceKey(r.id, date))) overdueCount++;
+      if (overdueCount === 0) continue;
+      if (!known) {
+        unknownWalletPayments += overdueCount;
+        continue;
+      }
+      let sum: Minor = 0;
+      for (let i = 0; i < overdueCount; i++) sum = addMinor(sum, r.amountMinor);
+      const amount = inBase(sum, currency, 'payment');
+      if (amount === null) continue;
+      put({ kind: 'payment', id: r.id, label: label(r.id, 'Платёж'), date: today, deltaMinor: -amount, overdue: true, overdueCount });
     }
 
     // 3. дни: остаток на конец каждого

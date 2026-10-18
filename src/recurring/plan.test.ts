@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { addDays } from '@/lib/dates';
-import { AUTO_POST_MAX_AGE_DAYS, autoPostDates, autoPostWindow, collectCandidates, isAutoPostRule, localDateOf } from './plan';
+import {
+  AUTO_POST_MAX_AGE_DAYS,
+  autoPostDates,
+  autoPostWindow,
+  collectCandidates,
+  FORECAST_OVERDUE_MAX_AGE_DAYS,
+  historyFrom,
+  isAutoPostRule,
+  localDateOf,
+} from './plan';
 
 /** Для проверок задаём «местную дату создания» напрямую: результат не должен зависеть от часового пояса машины. */
 const created = (day: string) => () => day;
@@ -129,6 +138,37 @@ describe('autoPostWindow: историю не проводим', () => {
     const dates = autoPostDates(rule({ startOn: '2026-10-01', endOn: '2026-10-03' }), TODAY, created('2026-10-01'));
     expect(dates).toEqual(['2026-10-01', '2026-10-02', '2026-10-03']);
     expect(autoPostDates(rule({ startOn: '2026-01-01', endOn: '2026-06-30' }), TODAY, created('2026-01-01'))).toEqual([]);
+  });
+});
+
+describe('historyFrom: с какого дня прошлые даты правила «настоящие» (общая граница автоплатежа и прогноза)', () => {
+  const CREATED = '2026-01-05T08:00:00.000Z';
+  const EDITED = '2026-10-08T08:00:00.000Z';
+  const at = byStamp({ [CREATED]: '2026-01-05', [EDITED]: '2026-10-08' });
+
+  it('самая поздняя из границ: начало расписания, создание, правка, сегодня − maxAge', () => {
+    expect(historyFrom(rule({ startOn: '2026-10-05' }), TODAY, 31, created('2026-10-01'))).toBe('2026-10-05');
+    expect(historyFrom(rule({ startOn: '2026-01-01' }), TODAY, 31, created('2026-10-09'))).toBe('2026-10-09');
+    expect(historyFrom(rule({ startOn: '2025-01-01' }), TODAY, 31, created('2025-01-02'))).toBe(addDays(TODAY, -31));
+    expect(historyFrom(rule({ startOn: '2026-01-06', createdAt: CREATED, clientUpdatedAt: EDITED }), TODAY, 31, at)).toBe('2026-10-08');
+  });
+
+  it('метка правки из будущего не сдвигает границу дальше сегодняшнего дня; нечитаемые метки — сегодня', () => {
+    const future = byStamp({ [CREATED]: '2026-01-05', '2030-01-01T00:00:00.000Z': '2030-01-01' });
+    expect(historyFrom(rule({ startOn: '2026-01-06', createdAt: CREATED, clientUpdatedAt: '2030-01-01T00:00:00.000Z' }), TODAY, 31, future)).toBe(TODAY);
+    expect(historyFrom(rule({ createdAt: 'мусор', clientUpdatedAt: 'мусор' }), TODAY, 31, () => null)).toBe(TODAY);
+  });
+
+  it('может быть позже сегодня (правило начнётся позже); сегодняшняя дата нечитаема — null', () => {
+    expect(historyFrom(rule({ startOn: '2026-12-01' }), TODAY, 31, created('2026-10-01'))).toBe('2026-12-01');
+    expect(historyFrom(rule(), 'вчера', 31, created('2026-10-01'))).toBeNull();
+  });
+
+  it('прогноз смотрит на месяц назад, автоплатёж — на 60 дней: окно автоплатежа не изменилось', () => {
+    expect(FORECAST_OVERDUE_MAX_AGE_DAYS).toBe(31);
+    const old = rule({ startOn: '2025-01-01' });
+    expect(historyFrom(old, TODAY, FORECAST_OVERDUE_MAX_AGE_DAYS, created('2025-01-02'))).toBe(addDays(TODAY, -31));
+    expect(autoPostWindow(old, TODAY, created('2025-01-02'))).toEqual({ from: historyFrom(old, TODAY, AUTO_POST_MAX_AGE_DAYS, created('2025-01-02')), to: TODAY });
   });
 });
 

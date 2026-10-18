@@ -5,18 +5,21 @@ import { computeBalances } from '@/domain/balances';
 import { computeDebtState } from '@/domain/debts';
 import {
   computeDailyForecast,
-  endOfMonth,
   floorDiv,
+  forecastLookaheadEnd,
   isSpendableWallet,
   occurrenceKey,
+  SPENDABLE_KINDS,
   usualSpendWindow,
   type DailyForecast,
   type ForecastDebt,
   type ForecastInput,
+  type ForecastRule,
 } from '@/domain/forecast';
 import { occurrencesBetween } from '@/domain/schedule';
 import type { IsoDate, LocalRow, Transaction, UUID } from '@/domain/types';
 import { useRates } from '@/rates/hooks';
+import { FORECAST_OVERDUE_MAX_AGE_DAYS, historyFrom } from '@/recurring/plan';
 import { useToday } from '@/recurring/useToday';
 
 export type ForecastData = Omit<ForecastInput, 'getRate'>;
@@ -26,8 +29,10 @@ export type LoadedForecast = { overflow: true } | { overflow: false; data: Forec
  * Читает из локальной базы всё, что нужно прогнозу, ОДНИМ чтением (иначе экран на миг показал бы цифры из разных моментов).
  * null — настройки ещё не созданы. После последнего обращения к базе идёт только ожидание crypto (v5-идентификаторы) —
  * вне транзакции Dexie это безопасно (так же сделано в useUpcoming).
+ * Проведённые и пропущенные даты правил собираются от их просроченных дат до `horizonEnd` — он должен покрывать всё, на что
+ * смотрит расчёт (по умолчанию — окно прогноза «в день»).
  */
-export async function loadForecastData(store: Store, today: IsoDate, horizonEnd: IsoDate = endOfMonth(today)): Promise<LoadedForecast | null> {
+export async function loadForecastData(store: Store, today: IsoDate, horizonEnd: IsoDate = forecastLookaheadEnd(today)): Promise<LoadedForecast | null> {
   const settings = await store.settings.get();
   if (!settings) return null;
   const { db } = store;
@@ -41,7 +46,11 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
   ]);
   const base = settings.baseCurrency;
   const wallets = walletRows.filter((w) => w.deletedAt === null);
-  const rules = ruleRows.filter((r) => r.deletedAt === null && r.archivedAt === null);
+  // Прошлые даты правила, не проведённые и не пропущенные, прогноз вычитает как просроченные — но не старше месяца и не раньше
+  // создания или последней правки правила (те же границы, что у автоплатежа: recurring/plan.ts).
+  const rules: ForecastRule[] = ruleRows
+    .filter((r) => r.deletedAt === null && r.archivedAt === null)
+    .map((r) => ({ ...r, overdueFrom: historyFrom(r, today, FORECAST_OVERDUE_MAX_AGE_DAYS) }));
 
   const byDebt = new Map<string, LocalRow<Transaction>[]>();
   const existingIds = new Set<string>();
@@ -75,18 +84,24 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
       }));
 
     const month = summarizeMonth(txs, today.slice(0, 7), base);
+    const notScheduled = (t: LocalRow<Transaction>): boolean => t.recurringRuleId === null || t.recurringRuleId === undefined;
     // «Сегодня потрачено» — только из тех кошельков, чьи деньги входят в «деньги на руках»: трата с накопления их не уменьшила
-    // и в «можно было потратить сегодня» (деньги на руках + потрачено сегодня) попасть не должна.
+    // и в «можно было потратить сегодня» (деньги на руках + потрачено сегодня) попасть не должна. Без операций по регулярным
+    // платежам: до проведения они уже вычитались как обязательные, и проведённая аренда не делает день «перерасходом».
     const moneyWalletIds = new Set(wallets.filter(isSpendableWallet).map((w) => w.id));
     const spentToday = summarizeDay(
-      txs.filter((t) => t.occurredOn === today && moneyWalletIds.has(t.walletId)),
+      txs.filter((t) => t.occurredOn === today && moneyWalletIds.has(t.walletId) && notScheduled(t)),
       base,
     ).expenseMinor;
+    // «Обычно тратите» — повседневные траты: без регулярных платежей (их прогноз и календарь вычитают отдельно) и без трат
+    // с накоплений. По виду кошелька, а не по архиву: траты с карты, которую потом убрали в архив, остаются показательными.
+    const isFreeSpend = (t: LocalRow<Transaction>): boolean =>
+      notScheduled(t) && SPENDABLE_KINDS.includes(walletById.get(t.walletId)?.kind ?? 'savings');
     const window = usualSpendWindow(firstOp, today);
     const usualPerDayMinor = window
       ? floorDiv(
           summarizeDay(
-            txs.filter((t) => t.occurredOn >= window.from && t.occurredOn <= window.to),
+            txs.filter((t) => t.occurredOn >= window.from && t.occurredOn <= window.to && isFreeSpend(t)),
             base,
           ).expenseMinor,
           window.days,
@@ -104,7 +119,17 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
       spentTodayMinor: spentToday,
       usualPerDayMinor,
       totalBudget: total
-        ? { limitMinor: total.amountMinor, currency: total.currency, spentMonthMinor: month.expenseMinor, excludedCount: month.excludedCount }
+        ? {
+            limitMinor: total.amountMinor,
+            currency: total.currency,
+            spentMonthMinor: month.expenseMinor,
+            // как и «потрачено за месяц»: все кошельки, регулярные платежи тоже
+            spentTodayMinor: summarizeDay(
+              txs.filter((t) => t.occurredOn === today),
+              base,
+            ).expenseMinor,
+            excludedCount: month.excludedCount,
+          }
         : null,
     };
   } catch (e) {
@@ -115,7 +140,8 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
   // Какие даты правил уже проведены или пропущены: id операции = v5(правило, дата).
   const doneOccurrences = new Set<string>();
   for (const r of rules) {
-    for (const date of occurrencesBetween(r, today, horizonEnd)) {
+    const from = r.overdueFrom !== null && r.overdueFrom !== undefined && r.overdueFrom < today ? r.overdueFrom : today;
+    for (const date of occurrencesBetween(r, from, horizonEnd)) {
       if (existingIds.has(await uuidV5(r.id, date))) doneOccurrences.add(occurrenceKey(r.id, date));
     }
   }

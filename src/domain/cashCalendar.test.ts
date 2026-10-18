@@ -148,6 +148,65 @@ describe('регулярные платежи и доходы', () => {
   });
 });
 
+describe('просроченные платежи', () => {
+  it('без overdueFrom прошлые даты не ставятся (как раньше)', () => {
+    const c = ok(computeCashCalendar(input({ rules: [rule('rent', { startOn: '2026-10-10' })] })));
+    expect(day(c, TODAY).events).toEqual([]);
+  });
+
+  it('просроченный расход — одним событием на сегодня, помечен; несколько дат складываются', () => {
+    const c = ok(
+      computeCashCalendar(
+        input({
+          rules: [
+            rule('rent', { startOn: '2026-10-10', amountMinor: 30_000, overdueFrom: '2026-09-15' }),
+            rule('daily', { frequency: 'daily', startOn: '2026-10-12', endOn: '2026-10-14', amountMinor: 1_000, overdueFrom: '2026-10-01' }),
+          ],
+          labels: new Map([['rent', 'Аренда']]),
+        }),
+      ),
+    );
+    const events = day(c, TODAY).events;
+    expect(events).toEqual([
+      { kind: 'payment', id: 'rent', label: 'Аренда', date: TODAY, deltaMinor: -30_000, overdue: true, overdueCount: 1 },
+      { kind: 'payment', id: 'daily', label: 'Платёж', date: TODAY, deltaMinor: -3_000, overdue: true, overdueCount: 3 },
+    ]);
+    expect(day(c, TODAY).balanceMinor).toBe(67_000);
+  });
+
+  it('проведённая или пропущенная прошлая дата и дата раньше overdueFrom не ставятся', () => {
+    const c = ok(
+      computeCashCalendar(
+        input({
+          rules: [rule('a', { startOn: '2026-10-10', overdueFrom: '2026-09-15' }), rule('b', { startOn: '2026-10-10', overdueFrom: '2026-10-11' })],
+          doneOccurrences: new Set([occurrenceKey('a', '2026-10-10')]),
+        }),
+      ),
+    );
+    expect(day(c, TODAY).events).toEqual([]);
+  });
+
+  it('просроченный доход не ставится: обещать деньги, которые могут не прийти, нельзя', () => {
+    const c = ok(computeCashCalendar(input({ rules: [rule('inc', { kind: 'income', startOn: '2026-10-10', endOn: '2026-10-10', overdueFrom: '2026-09-15' })] })));
+    expect(c.days.every((d) => d.events.length === 0)).toBe(true);
+    expect(c.endMinor).toBe(100_000);
+  });
+
+  it('у правила и просроченная дата, и дата сегодня: два события на сегодня', () => {
+    const c = ok(computeCashCalendar(input({ rules: [rule('w', { frequency: 'weekly', startOn: '2026-10-08', amountMinor: 5_000, overdueFrom: '2026-10-01' })] })));
+    const events = day(c, TODAY).events;
+    expect(events.map((e) => [e.deltaMinor, e.overdue ?? false])).toEqual([
+      [-5_000, false],
+      [-5_000, true],
+    ]);
+  });
+
+  it('просроченный платёж по долгу, уже учтённому остатком, второй раз не берётся', () => {
+    const c = ok(computeCashCalendar(input({ debts: [debt('d')], rules: [rule('pay', { debtId: 'd', startOn: '2026-10-10', overdueFrom: '2026-09-15' })] })));
+    expect(day(c, TODAY).events).toEqual([]);
+  });
+});
+
 describe('долги', () => {
   it('долг «я должен»: остаток уходит в день срока', () => {
     const c = ok(computeCashCalendar(input({ debts: [debt('d1')], labels: new Map([['d1', 'Рустам']]) })));

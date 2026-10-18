@@ -10,7 +10,12 @@ import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
 import { daysText, fitFontSize, longDate } from './budgetText';
 
-const SKIPPED_WHERE: Record<ForecastSkipped['source'], string> = { money: 'в кошельках', payment: 'в платежах', debt: 'в долгах' };
+const SKIPPED_WHERE: Record<ForecastSkipped['source'], string> = {
+  money: 'в кошельках',
+  income: 'в доходах',
+  payment: 'в платежах',
+  debt: 'в долгах',
+};
 
 /** «100 $ (в кошельках), 20 $ (в платежах)» — что не вошло в расчёт из-за отсутствия курса. */
 export function skippedText(skipped: readonly ForecastSkipped[]): string {
@@ -18,14 +23,27 @@ export function skippedText(skipped: readonly ForecastSkipped[]): string {
 }
 
 /** Сколько знаков в крупном числе «в день» (с «≈ »): по ним подбирается размер шрифта. */
-export const perDayChars = (f: DailyForecastOk): number => formatMinor(f.perDayMinor, f.base).length + (f.approximate ? 2 : 0);
+export const perDayChars = (f: DailyForecastOk): number => formatMinor(f.effective.perDayMinor, f.base).length + (f.approximate ? 2 : 0);
 
-/** Крупное число «в день»; «≈», если оно приблизительное. */
+/** Тратить нечего: денег не хватает или общий лимит месяца исчерпан. Тогда крупное число красное. */
+export const spendBlocked = (f: DailyForecastOk): boolean =>
+  f.notEnough || f.effective.budgetState === 'over' || f.effective.budgetState === 'exhausted';
+
+/** «Лимит месяца превышен на 500 с.» / «Лимит месяца исчерпан»; null — лимит не исчерпан или его нет. */
+export function budgetStateText(f: DailyForecastOk): string | null {
+  const b = f.budget;
+  if (b === null) return null;
+  if (b.overMinor > 0) return `Лимит месяца превышен на ${endSentence(formatMinor(b.overMinor, f.base))}`;
+  if (b.leftMinor === 0) return 'Лимит месяца исчерпан';
+  return null;
+}
+
+/** Крупное число «в день» (меньшее из «по деньгам» и «по лимиту»); «≈», если оно приблизительное. */
 export function PerDay({ f, className }: { f: DailyForecastOk; className?: string }) {
   return (
     <span className={className}>
       {f.approximate && <span title="Приблизительно: часть денег пересчитана по курсу или не вошла в расчёт">≈ </span>}
-      <MoneyText minor={f.perDayMinor} currency={f.base} tone={f.notEnough ? 'expense' : 'none'} />
+      <MoneyText minor={f.effective.perDayMinor} currency={f.base} tone={spendBlocked(f) ? 'expense' : 'none'} />
     </span>
   );
 }
@@ -54,9 +72,12 @@ function Notice({ tone, children }: { tone: 'warning' | 'danger'; children: Reac
 
 const EXPLAIN = [
   'Деньги на руках — это остатки кошельков: наличные, карты и счета. Накопления не считаем: их тратить не нужно.',
-  'Считаем от сегодня до конца месяца. Если раньше придёт доход по регулярному платежу — только до дня перед ним.',
-  'Из денег вычитаем обязательное: регулярные платежи и переводы в накопления по расписанию, которые вы ещё не провели, и долги, которые нужно вернуть к этому сроку.',
+  'Считаем от сегодня до дня перед ближайшим регулярным доходом; если его нет — до конца месяца, но не меньше недели.',
+  'К деньгам прибавляем регулярные доходы до этого дня и вычитаем обязательное: регулярные платежи и переводы в накопления, которые вы ещё не провели и не пропустили (просроченные за последний месяц — тоже), и долги, которые нужно вернуть к этому сроку.',
+  'Смотрим и дальше, до конца месяца: если после небольшого дохода денег на день выходит меньше (например, потом аренда), показываем меньшую цифру.',
   'Что осталось, делим на число дней и округляем вниз. Так мы никогда не обещаем больше, чем есть.',
+  'Если задан общий лимит на месяц и по нему в день выходит меньше — показываем цифру по лимиту.',
+  '«Обычно вы тратите» — средний расход в день за последние 30 дней без регулярных платежей и трат с накоплений.',
   'Деньги и платежи в валюте без курса в расчёт не входят — об этом написано под числом, а само число помечено «≈».',
 ] as const;
 
@@ -71,14 +92,21 @@ function ExplainPanel() {
 }
 
 function Details({ f }: { f: DailyForecastOk }) {
-  const over = f.spentTodayMinor > f.todayLimitMinor;
+  const e = f.effective;
+  const over = e.spentTodayMinor > e.todayLimitMinor;
   const b = f.budget;
+  const budgetAlarm = budgetStateText(f);
   return (
     <>
       <dl className="relative mt-4 grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-2">
         <Tile label="Деньги на руках">
           <MoneyText minor={f.moneyMinor} currency={f.base} tone={f.moneyMinor < 0 ? 'expense' : 'none'} />
         </Tile>
+        {f.incomeMinor > 0 && (
+          <Tile label={`Доходы до ${longDate(f.horizonEnd)}`}>
+            <MoneyText minor={f.incomeMinor} currency={f.base} tone="none" sign="always" />
+          </Tile>
+        )}
         <Tile label={`Платежи и долги до ${longDate(f.horizonEnd)}`}>
           <MoneyText minor={-f.obligationsMinor} currency={f.base} tone="none" />
         </Tile>
@@ -87,26 +115,40 @@ function Details({ f }: { f: DailyForecastOk }) {
             <span className="money">{formatMinor(f.usualPerDayMinor, f.base)} в день</span>
           </Tile>
         )}
-        {b && (
+        {b && e.by === 'money' && (
           <Tile label="По бюджету на месяц">
             <span className="money">{formatMinor(b.perDayMinor, f.base)} в день</span>
+          </Tile>
+        )}
+        {e.by === 'budget' && (
+          <Tile label="По деньгам на руках">
+            <span className="money">{formatMinor(f.perDayMinor, f.base)} в день</span>
           </Tile>
         )}
       </dl>
 
       <div className="relative mt-3 flex flex-col gap-2 empty:hidden">
+        {f.overdueCount > 0 && (
+          <Notice tone="warning">
+            Из них просрочено {f.overdueCount} {pluralRu(f.overdueCount, 'платёж', 'платежа', 'платежей')} на{' '}
+            <span className="money">{formatMinor(f.overduePaymentsMinor, f.base)}</span>.{' '}
+            <Link to="/recurring" className="font-semibold underline">
+              Провести или пропустить
+            </Link>
+          </Notice>
+        )}
         {over && <Notice tone="warning">Сегодня потрачено больше нормы</Notice>}
-        {f.usualPerDayMinor !== null && f.usualPerDayMinor > f.perDayMinor && !f.notEnough && (
+        {f.usualPerDayMinor !== null && f.usualPerDayMinor > e.perDayMinor && !spendBlocked(f) && (
           <Notice tone="warning">Обычно тратите больше, чем можно в день</Notice>
         )}
-        {b && (
+        {budgetAlarm !== null && <Notice tone="danger">{budgetAlarm}</Notice>}
+        {b && budgetAlarm === null && (
           <p className="px-1 text-sm text-muted">
-            {b.overMinor > 0
-              ? `Лимит месяца превышен на ${endSentence(formatMinor(b.overMinor, f.base))}`
-              : `Лимит месяца ${formatMinor(b.limitMinor, f.base)} · осталось ${endSentence(formatMinor(b.leftMinor, f.base))}`}
+            Лимит месяца {formatMinor(b.limitMinor, f.base)} · осталось {endSentence(formatMinor(b.leftMinor, f.base))}
             {b.partial && ' Часть операций не учтена.'}
           </p>
         )}
+        {b && budgetAlarm !== null && b.partial && <p className="px-1 text-sm text-muted">Часть операций не учтена.</p>}
         {f.skipped.length > 0 && <Notice tone="warning">Не вошло в расчёт — нет курса: {endSentence(skippedText(f.skipped))}</Notice>}
         {f.unknownWalletPayments > 0 && (
           <Notice tone="warning">
@@ -142,8 +184,9 @@ function Unavailable({ forecast }: { forecast: Exclude<DailyForecast, DailyForec
 
 /** Полоса «сегодня потрачено от дневной нормы»: красная, если норма превышена. Только картинка: те же цифры написаны словами ниже. */
 function TodayBar({ f }: { f: DailyForecastOk }) {
-  if (f.todayLimitMinor <= 0) return null;
-  const ratio = f.spentTodayMinor / f.todayLimitMinor;
+  const { todayLimitMinor, spentTodayMinor } = f.effective;
+  if (todayLimitMinor <= 0) return null;
+  const ratio = spentTodayMinor / todayLimitMinor;
   const shown = Math.min(100, Math.max(0, ratio * 100));
   return (
     <div
@@ -164,9 +207,9 @@ function TodayRow({ f }: { f: DailyForecastOk }) {
     <dl className="relative mt-2 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
       <dt className="text-muted">Сегодня потрачено</dt>
       <dd className="flex flex-wrap items-baseline gap-x-1.5 font-semibold">
-        <span className="money">{formatMinor(f.spentTodayMinor, f.base)}</span>{' '}
+        <span className="money">{formatMinor(f.effective.spentTodayMinor, f.base)}</span>{' '}
         <span className="font-normal text-muted">
-          из <span className="money">{formatMinor(f.todayLimitMinor, f.base)}</span>
+          из <span className="money">{formatMinor(f.effective.todayLimitMinor, f.base)}</span>
         </span>
       </dd>
     </dl>
@@ -233,9 +276,15 @@ function ForecastOk({ forecast }: { forecast: DailyForecastOk }) {
       <p className="relative mt-3 flex flex-wrap gap-1.5 text-sm">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/80 px-3 py-1 font-medium text-text ring-1 ring-border/60">
           <Icon name="calendar" size={14} className="text-brand" />
-          До {longDate(forecast.horizonEnd)} · {daysText(forecast.daysLeft)}
+          До {longDate(forecast.effective.horizonEnd)} · {daysText(forecast.effective.daysLeft)}
         </span>
-        {forecast.incomeDate !== null && (
+        {forecast.effective.by === 'budget' && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/80 px-3 py-1 font-medium text-muted ring-1 ring-border/60">
+            <Icon name="pie" size={14} className="text-brand" />
+            по лимиту месяца
+          </span>
+        )}
+        {forecast.effective.by === 'money' && forecast.incomeDate !== null && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-income/10 px-3 py-1 font-medium text-income">
             <Icon name="income" size={14} />
             {longDate(forecast.incomeDate)} ждём доход

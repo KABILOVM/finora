@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventually } from '@/app/testkit';
+import { eventually, write } from '@/app/testkit';
 import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { formatMinor } from '@/domain/money';
-import { opsDeps, pinToday, showApp, table, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
+import { opsDeps, pinToday, showApp, storeOf, table, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
 import BudgetsPage from './BudgetsPage';
 import BudgetsWidget from './BudgetsWidget';
 
@@ -85,11 +85,39 @@ describe('атака: приложение простояло через пол�
     await showApp(<BudgetsPage />, td, '/budgets');
     await findByRole('heading', { name: 'Бюджеты', level: 1 });
     await waitFor(() => expect(card()).not.toBeNull());
-    expect(text(card())).toContain('До 31 октября · 1 день');
+    // 31-е: не «тратьте всё сегодня», а не меньше недели
+    expect(text(card())).toContain('До 6 ноября · 7 дней');
 
     await wakeUpAt(new Date(2026, 10, 1, 7, 30, 0)); // 1 ноября, 07:30
 
     await eventually(() => expect(text(card())).toContain('До 30 ноября · 30 дней'), 3000);
+  });
+
+  it('31 октября видна аренда 1 ноября; проведённая заранее, она не вычитается второй раз — ни вечером, ни утром 1-го', async () => {
+    vi.setSystemTime(new Date(2026, 9, 31, 23, 50, 0));
+    let ruleId = '';
+    const td = opsDeps([table()], {
+      setup: async (s) => {
+        const i = await baseSetup(s);
+        ruleId = (await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 70_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-11-01' })).id;
+      },
+    });
+    await showApp(<BudgetsPage />, td, '/budgets');
+    await findByRole('heading', { name: 'Бюджеты', level: 1 });
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(detail('Платежи и долги до 6 ноября')).toBe(fmt(-70_000));
+    expect(perDay()).toBe(fmt(25_714)); // (250 000 − 70 000) ÷ 7
+
+    // аренду за 1 ноября провели заранее, вечером 31-го
+    await write(() => storeOf(td).transactions.createFromRule(ruleId, '2026-11-01'));
+    await eventually(() => expect(detail('Деньги на руках')).toBe(fmt(180_000)), 3000);
+    expect(detail('Платежи и долги до 6 ноября')).toBe(fmt(0));
+    expect(perDay()).toBe(fmt(25_714));
+
+    await wakeUpAt(new Date(2026, 10, 1, 7, 30, 0));
+    await eventually(() => expect(text(card())).toContain('До 30 ноября · 30 дней'), 3000);
+    expect(detail('Платежи и долги до 30 ноября')).toBe(fmt(0));
+    expect(perDay()).toBe(fmt(6_000)); // 180 000 ÷ 30
   });
 
   it('экран «Бюджеты»: «текущий» месяц переезжает на новый сам, а вручную выбранный прошлый остаётся на месте', async () => {
