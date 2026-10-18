@@ -54,8 +54,8 @@ test.describe('24. Удаление долга', () => {
     await expect(dlg.getByTestId('debt-delete-hint')).toContainText('Выберите, что сделать с 2 операциями');
     await dlg.getByRole('radio', { name: 'Удалить только долг' }).check();
     await expect(dlg.getByTestId('debt-delete-hint')).toContainText('2 операции останутся');
-    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('попадут в итоги и бюджеты');
-    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('в расходы добавится');
+    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('попадут в итоги и бюджеты.');
+    await expect(dlg.getByTestId('debt-delete-hint')).toContainText('расходы добавится');
     await expect(dlg).toContainText('отправьте его в архив');
     await shot(page, '24-delete-dialog', testInfo);
 
