@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   computeDailyForecast,
+  occurrenceKey,
   usualSpendWindow,
   type DailyForecast,
   type DailyForecastOk,
@@ -101,9 +102,9 @@ describe('computeDailyForecast: долги', () => {
     expect(r.debtsCount).toBe(0);
   });
 
-  it('срок долга после дохода (горизонт короче) — не вычитается', () => {
+  it('срок долга после крупного дохода (горизонт короче) — не вычитается', () => {
     const r = calc({
-      rules: [rule('salary', { kind: 'income', startOn: '2026-10-25' })],
+      rules: [rule('salary', { kind: 'income', amountMinor: 1_000_000, startOn: '2026-10-25' })],
       debts: [debt('d', { dueOn: '2026-10-28' })],
     });
     expect(r.debtsMinor).toBe(0);
@@ -235,6 +236,7 @@ describe('computeDailyForecast: «по бюджету»', () => {
     limitMinor: 200_000,
     currency: 'TJS',
     spentMonthMinor: 50_000,
+    spentTodayMinor: 0,
     excludedCount: 0,
     ...over,
   });
@@ -246,6 +248,7 @@ describe('computeDailyForecast: «по бюджету»', () => {
       spentMinor: 50_000,
       leftMinor: 150_000,
       overMinor: 0,
+      scheduledMinor: 0,
       daysLeft: 10,
       perDayMinor: 15_000,
       partial: false,
@@ -253,7 +256,7 @@ describe('computeDailyForecast: «по бюджету»', () => {
   });
 
   it('горизонт по доходу бюджет не сокращает: он всегда до конца месяца', () => {
-    const r = calc({ totalBudget: budget(), rules: [rule('salary', { kind: 'income', startOn: '2026-10-23' })] });
+    const r = calc({ totalBudget: budget(), rules: [rule('salary', { kind: 'income', amountMinor: 1_000_000, startOn: '2026-10-23' })] });
     expect(r.daysLeft).toBe(1);
     expect(r.budget?.daysLeft).toBe(10);
   });
@@ -280,6 +283,164 @@ describe('computeDailyForecast: «по бюджету»', () => {
   it('лимит в прежней валюте или без лимита — части «по бюджету» нет', () => {
     expect(calc({ totalBudget: budget({ currency: 'USD' }) }).budget).toBeNull();
     expect(calc({ totalBudget: null }).budget).toBeNull();
+  });
+});
+
+describe('computeDailyForecast: effective — крупная цифра (меньшая из «по деньгам» и «по лимиту»)', () => {
+  const budget = (over: Partial<NonNullable<ForecastInput['totalBudget']>> = {}) => ({
+    limitMinor: 200_000,
+    currency: 'TJS',
+    spentMonthMinor: 50_000,
+    spentTodayMinor: 0,
+    excludedCount: 0,
+    ...over,
+  });
+
+  it('лимита нет или он в другой валюте — цифра по деньгам, состояния лимита нет', () => {
+    for (const totalBudget of [null, budget({ currency: 'USD' })]) {
+      const r = calc({ totalBudget });
+      expect(r.effective).toEqual({
+        by: 'money',
+        perDayMinor: 10_000,
+        todayLimitMinor: 10_000,
+        spentTodayMinor: 0,
+        daysLeft: 10,
+        horizonEnd: '2026-10-31',
+        budgetState: null,
+      });
+    }
+  });
+
+  it('по деньгам меньше, чем по лимиту — цифра по деньгам', () => {
+    const r = calc({ totalBudget: budget() }); // 1000/10 = 100 против 1500/10 = 150
+    expect(r.effective).toMatchObject({ by: 'money', perDayMinor: 10_000, budgetState: 'ok' });
+  });
+
+  it('по лимиту меньше — цифра по лимиту: дни и горизонт — до конца месяца, даже если по деньгам горизонт короче', () => {
+    const r = calc({
+      totalBudget: budget({ spentMonthMinor: 150_000 }), // осталось 500 на 10 дней = 50
+      rules: [rule('salary', { kind: 'income', amountMinor: 1_000_000, startOn: '2026-10-25' })], // по деньгам: 1000/3 = 333,33
+    });
+    expect(r.perDayMinor).toBe(33_333);
+    expect(r.daysLeft).toBe(3);
+    expect(r.effective).toMatchObject({ by: 'budget', perDayMinor: 5_000, daysLeft: 10, horizonEnd: '2026-10-31', budgetState: 'ok' });
+  });
+
+  it('равенство — в пользу денег', () => {
+    const r = calc({ totalBudget: budget({ spentMonthMinor: 100_000 }) }); // 1000/10 по лимиту = 100 = по деньгам
+    expect(r.effective.by).toBe('money');
+  });
+
+  it('лимит превышен: 0 в день по лимиту, состояние over; ровно потрачен — exhausted', () => {
+    expect(calc({ totalBudget: budget({ spentMonthMinor: 250_000 }) }).effective).toMatchObject({ by: 'budget', perDayMinor: 0, budgetState: 'over' });
+    expect(calc({ totalBudget: budget({ spentMonthMinor: 200_000 }) }).effective).toMatchObject({ by: 'budget', perDayMinor: 0, budgetState: 'exhausted' });
+  });
+
+  it('денег не хватает и лимит превышен: показываем нехватку денег (0 по деньгам, равенство — деньги)', () => {
+    const r = calc({ balances: new Map([['cash', -5_000]]), totalBudget: budget({ spentMonthMinor: 250_000 }) });
+    expect(r.notEnough).toBe(true);
+    expect(r.effective).toMatchObject({ by: 'money', perDayMinor: 0, budgetState: 'over' });
+  });
+
+  it('«сегодня можно» по лимиту — с утра: остаток лимита + потрачено сегодня (все кошельки), на дни до конца месяца', () => {
+    const r = calc({
+      spentTodayMinor: 1_000, // с обычных кошельков, без регулярных
+      totalBudget: budget({ spentMonthMinor: 150_000, spentTodayMinor: 3_000 }), // по лимиту — всё, что потрачено сегодня
+    });
+    expect(r.effective).toMatchObject({ by: 'budget', spentTodayMinor: 3_000, todayLimitMinor: 5_300 }); // (500 + 30) / 10
+    expect(r.todayLimitMinor).toBe(10_100); // по деньгам: (1000 + 10) / 10
+  });
+
+  it('часть операций месяца не учтена — число приблизительное, какая бы цифра ни победила (настоящая по лимиту может быть ниже)', () => {
+    expect(calc({ totalBudget: budget({ spentMonthMinor: 150_000, excludedCount: 1 }) }).approximate).toBe(true);
+    expect(calc({ totalBudget: budget({ excludedCount: 1 }) }).approximate).toBe(true);
+    // но 0 ниже не бывает: «≈ 0» не пишем
+    expect(calc({ balances: new Map([['cash', -5_000]]), totalBudget: budget({ excludedCount: 1 }) }).approximate).toBe(false);
+  });
+});
+
+describe('computeDailyForecast: лимит месяца заранее откладывает регулярные расходы', () => {
+  const budget = (over: Partial<NonNullable<ForecastInput['totalBudget']>> = {}) => ({
+    limitMinor: 200_000,
+    currency: 'TJS',
+    spentMonthMinor: 50_000,
+    spentTodayMinor: 0,
+    excludedCount: 0,
+    ...over,
+  });
+
+  it('аренда 25-го ещё не проведена — её сумма отложена из остатка лимита', () => {
+    const r = calc({ totalBudget: budget(), rules: [rule('rent', { amountMinor: 30_000, startOn: '2026-10-25' })] });
+    expect(r.budget).toMatchObject({ leftMinor: 150_000, scheduledMinor: 30_000, perDayMinor: 12_000 }); // (1500 − 300) ÷ 10
+  });
+
+  it('с накоплений — тоже (лимит считает все траты); долговые, проведённые, пропущенные и следующего месяца — нет', () => {
+    const r = calc({
+      wallets: [wallet('cash'), wallet('box', { kind: 'savings' })],
+      totalBudget: budget(),
+      debts: [debt('d', { dueOn: null })],
+      rules: [
+        rule('box', { walletId: 'box', amountMinor: 5_000, startOn: '2026-10-25' }),
+        rule('debt', { debtId: 'd', amountMinor: 7_000, startOn: '2026-10-25' }),
+        rule('done', { amountMinor: 9_000, startOn: '2026-10-25' }),
+        rule('next', { amountMinor: 11_000, startOn: '2026-11-01' }),
+      ],
+      doneOccurrences: new Set([occurrenceKey('done', '2026-10-25')]),
+    });
+    expect(r.budget?.scheduledMinor).toBe(5_000);
+  });
+
+  it('просроченная дата этого месяца — отложена; прошлого месяца — нет (она ляжет в прошлый месяц)', () => {
+    const r = calc({
+      totalBudget: budget(),
+      rules: [rule('rent', { amountMinor: 30_000, startOn: '2026-09-20', overdueFrom: '2026-09-01' })], // 20.09 и 20.10 просрочены
+    });
+    expect(r.budget?.scheduledMinor).toBe(30_000);
+    expect(r.overdueCount).toBe(2); // а деньги на руках отдадут за оба
+  });
+
+  it('остаток лимита весь уйдёт на регулярные платежи: 0 в день по лимиту, состояние «scheduled»', () => {
+    const r = calc({ totalBudget: budget({ spentMonthMinor: 150_000 }), rules: [rule('rent', { amountMinor: 60_000, startOn: '2026-10-25' })] });
+    expect(r.budget).toMatchObject({ leftMinor: 50_000, overMinor: 0, perDayMinor: 0 });
+    expect(r.effective).toMatchObject({ by: 'budget', perDayMinor: 0, budgetState: 'scheduled' });
+  });
+
+  it('провели регулярный платёж сегодня — цифра по лимиту и «сегодня можно» не меняются', () => {
+    const total = budget({ spentMonthMinor: 140_000 });
+    const before = calc({ totalBudget: total, rules: [rule('rent', { amountMinor: 30_000, startOn: '2026-10-22' })] });
+    const after = calc({
+      balances: new Map([['cash', 70_000]]),
+      totalBudget: { ...total, spentMonthMinor: 170_000 }, // в «сегодня» лимита проведённый регулярный не входит
+      rules: [rule('rent', { amountMinor: 30_000, startOn: '2026-10-22' })],
+      doneOccurrences: new Set([occurrenceKey('rent', '2026-10-22')]),
+    });
+    expect(before.effective).toMatchObject({ by: 'budget', perDayMinor: 3_000, todayLimitMinor: 3_000 });
+    expect(after.effective).toMatchObject({ by: 'budget', perDayMinor: 3_000, todayLimitMinor: 3_000 });
+  });
+
+  it('регулярный расход в долларах при известном курсе — отложен по курсу, но «часть не учтена» не пишем; без курса — пишем', () => {
+    const usd = { wallets: [wallet('cash'), wallet('usd', { currency: 'USD' })], balances: new Map([['cash', 100_000], ['usd', 0]]) };
+    const rules = [rule('sub', { walletId: 'usd', amountMinor: 1_000, startOn: '2026-10-25' })];
+    const withRate = calc({ ...usd, rules, totalBudget: budget(), getRate: rates({ 'USD>TJS': 10.9 }) });
+    expect(withRate.budget).toMatchObject({ scheduledMinor: 10_900, partial: false });
+    const noRate = calc({ ...usd, rules, totalBudget: budget() });
+    expect(noRate.budget).toMatchObject({ scheduledMinor: 0, partial: true });
+  });
+
+  it('у регулярного перевода в лимит ляжет комиссия — она отложена заранее', () => {
+    const r = calc({
+      wallets: [wallet('cash'), wallet('box', { kind: 'savings' })],
+      balances: new Map([['cash', 100_000], ['box', 0]]),
+      totalBudget: budget(),
+      rules: [rule('save', { kind: 'transfer', toWalletId: 'box', amountMinor: 30_000, toAmountMinor: 28_500, startOn: '2026-10-25' })],
+    });
+    expect(r.budget?.scheduledMinor).toBe(1_500);
+    expect(r.paymentsMinor).toBe(30_000); // а с рук уходит весь перевод
+  });
+
+  it('регулярный расход с неизвестного кошелька — лимит помечен «часть не учтена»', () => {
+    const r = calc({ totalBudget: budget(), rules: [rule('ghost', { walletId: 'нет-такого', startOn: '2026-10-25' })] });
+    expect(r.budget?.partial).toBe(true);
   });
 });
 
@@ -328,8 +489,8 @@ describe('computeDailyForecast: переполнение и устойчивос
 
   it('большие, но допустимые суммы считаются точно', () => {
     const big = 9_000_000_000_000_000; // < MAX_SAFE_INTEGER
-    const r = calc({ today: '2026-10-29', balances: new Map([['cash', big]]) }); // 3 дня
-    expect(BigInt(r.perDayMinor)).toBe(BigInt(big) / 3n);
+    const r = calc({ today: '2026-10-29', balances: new Map([['cash', big]]) }); // 7 дней (неделя — минимум)
+    expect(BigInt(r.perDayMinor)).toBe(BigInt(big) / 7n);
   });
 
   it('входные данные не меняются', () => {
