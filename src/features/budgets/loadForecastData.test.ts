@@ -133,3 +133,59 @@ describe('loadForecastData: просроченные после правки п�
     expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, TODAY))).toBe(false);
   });
 });
+
+describe('loadForecastData: доход, внесённый через «+», закрывает своё правило', () => {
+  const setup = async (order: 'side-first' | 'salary-first') => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const ids = order === 'side-first' ? ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'] : ['00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001'];
+    const side = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 50_000, frequency: 'monthly', startOn: TODAY }, { id: ids[0] });
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: TODAY }, { id: ids[1] });
+    return { s, cash, side, salary };
+  };
+
+  it('самое крупное правило — первым, и ему самая близкая по сумме операция: порядок правил в базе не важен', async () => {
+    for (const order of ['side-first', 'salary-first'] as const) {
+      const { s, cash, side, salary } = await setup(order);
+      await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, occurredOn: TODAY });
+      const data = await load(s);
+      expect(data.doneOccurrences.has(occurrenceKey(salary.id, TODAY)), order).toBe(true);
+      expect(data.doneOccurrences.has(occurrenceKey(side.id, TODAY)), order).toBe(false);
+    }
+  });
+
+  it('чуть меньше плана — тоже зарплата; копейки — нет', async () => {
+    const { s, cash, salary } = await setup('side-first');
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 990_000, occurredOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, TODAY))).toBe(true);
+  });
+
+  it('зарплату внесли на день раньше — завтрашнюю дату второй раз не ждём', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: '2026-10-16' });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, occurredOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(salary.id, '2026-10-16'))).toBe(true);
+  });
+
+  it('возврат по долгу по расписанию обычной операцией не закрывается — даже когда других правил нет', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const debt = await s.debts.create({ direction: 'lent', counterparty: 'Али', principalMinor: 300_000, currency: 'TJS', openedOn: '2026-09-01', dueOn: null });
+    const back = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 100_000, frequency: 'monthly', startOn: TODAY, debtId: debt.id });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 100_000, occurredOn: TODAY });
+    expect((await load(s)).doneOccurrences.has(occurrenceKey(back.id, TODAY))).toBe(false);
+  });
+
+  it('возврат по долгу по расписанию обычной операцией не закрывается (и зарплату не «съедает»)', async () => {
+    const s = await freshStore();
+    const cash = await cashId(s);
+    const debt = await s.debts.create({ direction: 'lent', counterparty: 'Али', principalMinor: 300_000, currency: 'TJS', openedOn: '2026-09-01', dueOn: null });
+    const back = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 100_000, frequency: 'monthly', startOn: TODAY, debtId: debt.id }, { id: '00000000-0000-4000-8000-000000000001' });
+    const salary = await s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, frequency: 'monthly', startOn: TODAY }, { id: '00000000-0000-4000-8000-000000000002' });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 1_000_000, occurredOn: TODAY });
+    const data = await load(s);
+    expect(data.doneOccurrences.has(occurrenceKey(salary.id, TODAY))).toBe(true);
+    expect(data.doneOccurrences.has(occurrenceKey(back.id, TODAY))).toBe(false);
+  });
+});

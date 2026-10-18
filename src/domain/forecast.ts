@@ -187,6 +187,11 @@ export interface DailyForecastOk {
   incomeDate: IsoDate | null;
   /** Дней от сегодня до конца горизонта включительно (≥ 1). */
   daysLeft: number;
+  /**
+   * Цифру ограничивают деньги на руках до сегодняшнего дохода (он ещё не проведён): горизонт — сегодня, а «платежи и долги» —
+   * только просроченные (сегодняшние отдадут из дохода).
+   */
+  untilTodayIncome: boolean;
   moneyMinor: Minor;
   /** Ожидаемые доходы с завтра до конца горизонта. */
   incomeMinor: Minor;
@@ -366,20 +371,32 @@ export function transferFeeMinor(r: Pick<ForecastRule, 'kind' | 'amountMinor' | 
 
 /**
  * Сколько денег правила уходит из «денег на руках» за одну дату (в валюте кошелька правила): расход с обычного кошелька —
- * вся сумма; перевод с обычного на накопления или на архивный — вся сумма; между обычными кошельками — только комиссия.
- * 0 — не уходит (расход с накопления, доход, перевод без комиссии); 'unknown' — кошелёк не найден, понять нельзя.
+ * вся сумма; перевод с обычного на накопления — вся сумма; между обычными кошельками — только комиссия.
+ * 0 — не уходит (расход с накопления, доход, перевод без комиссии) или не случится: с архивным кошельком операцию не провести.
+ * 'unknown' — кошелёк не найден, понять нельзя.
  */
 function outflowOf(r: ForecastRule, walletOf: ReadonlyMap<UUID, ForecastWallet>): Minor | 'unknown' {
   const from = walletOf.get(r.walletId);
-  if (r.kind === 'expense') return from === undefined ? 'unknown' : isSpendableKind(from.kind) ? r.amountMinor : 0;
+  if (r.kind === 'expense') return from === undefined ? 'unknown' : isSpendableWallet(from) ? r.amountMinor : 0;
   if (r.kind === 'transfer') {
     if (!r.toWalletId) return 0; // перевод без получателя: вычитать нечего
     const to = walletOf.get(r.toWalletId);
     if (from === undefined || to === undefined) return 'unknown';
-    if (!isSpendableKind(from.kind)) return 0;
-    return isSpendableWallet(to) ? transferFeeMinor(r, from, to) : r.amountMinor;
+    if (from.archivedAt !== null || to.archivedAt !== null || !isSpendableKind(from.kind)) return 0;
+    return isSpendableKind(to.kind) ? transferFeeMinor(r, from, to) : r.amountMinor;
   }
   return 0;
+}
+
+/** Сколько придёт на руки по переводу с накоплений на обычный кошелёк (зачисленная сумма в валюте получателя); null — не перевод с накоплений. */
+function inflowOfTransfer(r: ForecastRule, walletOf: ReadonlyMap<UUID, ForecastWallet>): { amountMinor: Minor; currency: CurrencyCode } | null {
+  if (r.kind !== 'transfer' || !r.toWalletId) return null;
+  const from = walletOf.get(r.walletId);
+  const to = walletOf.get(r.toWalletId);
+  if (from === undefined || to === undefined || from.archivedAt !== null || isSpendableKind(from.kind) || !isSpendableWallet(to)) return null;
+  const received = r.toAmountMinor;
+  if (received !== null && received !== undefined && isMinor(received)) return { amountMinor: received, currency: to.currency };
+  return from.currency === to.currency ? { amountMinor: r.amountMinor, currency: to.currency } : null;
 }
 
 /** Ожидаемый приход денег на руки. */
@@ -401,7 +418,8 @@ interface PaymentFlow {
 
 /**
  * Ожидаемые доходы с сегодня по `until`: на обычный неархивный кошелёк (на накопления, в архив или неизвестно куда — деньги на
- * руках не пополнят), не проведённые и не пропущенные. Возврат долга «мне должны» по расписанию — только ожидание: не берём.
+ * руках не пополнят), не проведённые и не пропущенные, и регулярные переводы с накоплений на руки (зачисленная сумма).
+ * Возврат долга «мне должны» по расписанию — только ожидание: не берём.
  * Сегодняшний ещё не проведённый доход тоже ожидается (зарплату обычно проводят днём), но горизонт он не обрывает.
  */
 function pendingIncomes(input: ForecastInput, until: IsoDate): IncomeFlow[] {
@@ -410,12 +428,19 @@ function pendingIncomes(input: ForecastInput, until: IsoDate): IncomeFlow[] {
   const debtDirection = new Map(input.debts.map((d) => [d.id, d.direction] as const));
   const out: IncomeFlow[] = [];
   for (const r of rules) {
-    if (r.kind !== 'income' || r.deletedAt !== null || r.archivedAt !== null) continue;
-    const w = walletById.get(r.walletId);
-    if (!w || !isSpendableWallet(w)) continue;
-    if (r.debtId !== null && debtDirection.get(r.debtId) !== 'borrowed') continue;
+    if (r.deletedAt !== null || r.archivedAt !== null) continue;
+    let flow: { amountMinor: Minor; currency: CurrencyCode } | null = null;
+    if (r.kind === 'income') {
+      const w = walletById.get(r.walletId);
+      if (!w || !isSpendableWallet(w)) continue;
+      if (r.debtId !== null && debtDirection.get(r.debtId) !== 'borrowed') continue;
+      flow = { amountMinor: r.amountMinor, currency: w.currency };
+    } else {
+      flow = inflowOfTransfer(r, walletById); // своё же с накоплений — придёт наверняка (зарплатой не считается)
+    }
+    if (flow === null) continue;
     for (const date of occurrencesBetween(r, today, until)) {
-      if (!doneOccurrences.has(occurrenceKey(r.id, date))) out.push({ ruleId: r.id, date, currency: w.currency, amountMinor: r.amountMinor });
+      if (!doneOccurrences.has(occurrenceKey(r.id, date))) out.push({ ruleId: r.id, date, ...flow });
     }
   }
   return out;
@@ -425,10 +450,13 @@ function pendingIncomes(input: ForecastInput, until: IsoDate): IncomeFlow[] {
 function pendingPayments(input: ForecastInput, until: IsoDate): PaymentFlow[] {
   const { today, doneOccurrences } = input;
   const walletOf = new Map(input.wallets.map((w) => [w.id, w] as const));
+  const debtOf = new Map(input.debts.map((d) => [d.id, d] as const));
   const yesterday = addDays(today, -1);
   const out: PaymentFlow[] = [];
   for (const r of input.rules) {
     if (r.deletedAt !== null || r.archivedAt !== null) continue;
+    const debt = r.debtId === null ? undefined : debtOf.get(r.debtId);
+    if (debt?.direction === 'borrowed' && !isOpenDebt(debt)) continue; // долг закрыт или отдан — платить по нему нечего
     const amount = outflowOf(r, walletOf);
     if (amount === 0) continue;
     const currency = amount === 'unknown' ? null : (walletOf.get(r.walletId)?.currency ?? null);
@@ -442,35 +470,73 @@ function pendingPayments(input: ForecastInput, until: IsoDate): PaymentFlow[] {
       if (!doneOccurrences.has(occurrenceKey(r.id, date))) out.push(flow(today, true));
     }
   }
-  return out;
+  return capToDebts(out, debtOf);
+}
+
+/** Долг ещё открыт: не закрыт, не в архиве и остаток больше нуля. */
+const isOpenDebt = (d: ForecastDebt): boolean => d.closedAt === null && d.archivedAt === null && isMinor(d.remainingMinor) && d.remainingMinor > 0;
+
+/**
+ * Плановые платежи по долгу «я должен» не больше его остатка: по порядку (просроченные, затем по датам) — что сверх остатка,
+ * платить не придётся. Суммы в другой валюте, чем долг, сравнить нельзя — их оставляем как есть.
+ */
+function capToDebts(flows: PaymentFlow[], debtOf: ReadonlyMap<UUID, ForecastDebt>): PaymentFlow[] {
+  const order = [...flows.keys()].sort((a, b) => {
+    const x = flows[a] as PaymentFlow;
+    const y = flows[b] as PaymentFlow;
+    if (x.overdue !== y.overdue) return x.overdue ? -1 : 1;
+    return x.date < y.date ? -1 : x.date > y.date ? 1 : a - b;
+  });
+  const used = new Map<UUID, Minor>();
+  const capped = flows.map((f) => ({ ...f }));
+  for (const k of order) {
+    const f = capped[k] as PaymentFlow;
+    const debt = f.debtId === null ? undefined : debtOf.get(f.debtId);
+    if (debt === undefined || debt.direction !== 'borrowed' || f.currency !== debt.currency) continue;
+    const left = addMinor(debt.remainingMinor, -(used.get(debt.id) ?? 0));
+    f.amountMinor = left <= 0 ? 0 : f.amountMinor > left ? left : f.amountMinor;
+    used.set(debt.id, addMinor(used.get(debt.id) ?? 0, f.amountMinor));
+  }
+  return capped.filter((f) => f.amountMinor > 0);
 }
 
 /**
  * До какого дня смотрим: до дня перед ближайшей ещё не проведённой датой «зарплаты», но не раньше «конца без дохода».
- * «Зарплата» — регулярное (не разовое) правило дохода с самой крупной суммой за раз в основной валюте (из равных — то, что
- * придёт раньше). Мелкие доходы, разовые премии и редкие поступления горизонт не двигают: аренда 1-го перед зарплатой 5-го видна,
- * а дальше следующей копии зарплаты не смотрим — следующий месяц живёт на неё. Сегодняшний доход сюда не входит (ahead — строго
- * после сегодня), поэтому «Провести» утром горизонт не меняет; проведённая заранее дата уже лежит в остатке — ждём следующую.
+ * «Зарплата» — регулярный доход, приходящий не реже раза в месяц (не разовый, не последний платёж, не раз в квартал или в год),
+ * с самой крупной суммой за раз в основной валюте; из равных — тот, что придёт раньше. Мелкие, редкие и разовые доходы горизонт
+ * не двигают: аренда 1-го перед зарплатой 5-го видна, а дальше следующей копии зарплаты не смотрим — следующий месяц живёт на неё.
+ * Доход в валюте без курса сравнить нельзя — до дня перед ним смотрим тоже (так только осторожнее). Сегодняшний доход сюда не
+ * входит (ahead — строго после сегодня), поэтому «Провести» утром горизонт не меняет; проведённая заранее дата уже лежит
+ * в остатке — ждём следующую.
  */
 function horizonLimit(input: ForecastInput, ahead: readonly IncomeFlow[], noIncomeEnd: IsoDate): IsoDate {
   const { base, getRate } = input;
-  const value = (i: IncomeFlow): Minor => {
+  const ruleOf = new Map(input.rules.map((r) => [r.id, r] as const));
+  const value = (i: IncomeFlow): Minor | null => {
     if (i.currency === base) return i.amountMinor;
     const rate = getRate(i.currency, base);
-    return rate !== null && Number.isFinite(rate) && rate > 0 ? convertMinor(i.amountMinor, i.currency, base, rate) : 0;
+    return rate !== null && Number.isFinite(rate) && rate > 0 ? convertMinor(i.amountMinor, i.currency, base, rate) : null;
   };
-  const recurring = new Set(input.rules.filter((r) => r.endOn === null || r.endOn > r.startOn).map((r) => r.id));
+  /** Приходит не реже раза в месяц: после ближайшей даты будет ещё одна не позже чем через 31 день (раз в квартал, в год,
+   *  последний платёж и разовый доход — нет). */
+  const regular = (r: ForecastRule, next: IsoDate): boolean => occurrencesBetween(r, addDays(next, 1), addDays(next, 31)).length > 0;
   const nextOf = new Map<UUID, IncomeFlow>();
   for (const i of ahead) {
     const first = nextOf.get(i.ruleId);
-    if (recurring.has(i.ruleId) && (first === undefined || i.date < first.date)) nextOf.set(i.ruleId, i);
+    if (first === undefined || i.date < first.date) nextOf.set(i.ruleId, i);
   }
-  let salary: { value: Minor; next: IsoDate } | undefined;
-  for (const i of nextOf.values()) {
-    const v = value(i);
-    if (salary === undefined || v > salary.value || (v === salary.value && i.date < salary.next)) salary = { value: v, next: i.date };
+  const candidates: { value: Minor | null; next: IsoDate }[] = [];
+  for (const [ruleId, i] of nextOf) {
+    const r = ruleOf.get(ruleId);
+    if (r !== undefined && r.kind === 'income' && regular(r, i.date)) candidates.push({ value: value(i), next: i.date });
   }
-  return salary === undefined ? noIncomeEnd : laterOf(noIncomeEnd, addDays(salary.next, -1));
+  let max: Minor | null = null;
+  for (const c of candidates) if (c.value !== null && (max === null || c.value > max)) max = c.value;
+  let salaryNext: IsoDate | null = null;
+  for (const c of candidates) if (c.value === max && (salaryNext === null || c.next < salaryNext)) salaryNext = c.next;
+  let end = salaryNext === null ? noIncomeEnd : laterOf(noIncomeEnd, addDays(salaryNext, -1));
+  for (const c of candidates) if (c.value === null) end = laterOf(end, addDays(c.next, -1));
+  return end;
 }
 
 /**
@@ -489,6 +555,8 @@ function scheduledForBudget(input: ForecastInput, monthEnd: IsoDate): { totalMin
     if (r.debtId !== null || r.deletedAt !== null || r.archivedAt !== null) continue;
     const fee = r.kind === 'transfer' ? transferFeeMinor(r, walletOf.get(r.walletId), r.toWalletId ? walletOf.get(r.toWalletId) : undefined) : 0;
     if (r.kind !== 'expense' && fee === 0) continue;
+    // с архивным кошельком операцию не провести — в лимит она не ляжет
+    if (walletOf.get(r.walletId)?.archivedAt != null || (r.toWalletId ? walletOf.get(r.toWalletId)?.archivedAt != null : false)) continue;
     const from = r.overdueFrom !== undefined && r.overdueFrom !== null && isScheduleDate(r.overdueFrom) ? laterOf(r.overdueFrom, monthStart) : today;
     const dates = occurrencesBetween(r, from < today ? from : today, monthEnd).filter((d) => !doneOccurrences.has(occurrenceKey(r.id, d)));
     if (dates.length === 0) continue;
@@ -627,7 +695,9 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
     // 4. самый тесный контрольный день (из равных — самый ранний) и самый глубокий минус
     const points = [...(dueToday ? [checkpoint(today, false)] : []), ...dates.map((d) => checkpoint(d))];
     let tightest = points[0] as Checkpoint;
-    let deepest = tightest;
+    // «Денег не хватает» — только по обычным контрольным дням: утром дня дохода тот ещё не проведён, но придёт сегодня
+    // (утренняя точка лишь не даёт обещать на сегодня больше, чем на руках)
+    let deepest = points.find((p) => !p.beforeTodayIncome) as Checkpoint;
     let perDay = floorDiv(tightest.capMinor, tightest.days);
     let todayLimit = floorDiv(addMinor(tightest.capMinor, input.spentTodayMinor), tightest.days);
     for (const p of points) {
@@ -636,7 +706,7 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
         perDay = v;
         tightest = p;
       }
-      if (p.capMinor < deepest.capMinor) deepest = p;
+      if (!p.beforeTodayIncome && p.capMinor < deepest.capMinor) deepest = p;
       const withToday = floorDiv(addMinor(p.capMinor, input.spentTodayMinor), p.days);
       if (withToday < todayLimit) todayLimit = withToday;
     }
@@ -684,6 +754,7 @@ export function computeDailyForecast(input: ForecastInput): DailyForecast {
       monthEnd,
       horizonEnd: c.date,
       incomeDate: c.beforeTodayIncome ? today : incomeDates.has(nextDay) ? nextDay : null,
+      untilTodayIncome: c.beforeTodayIncome,
       daysLeft: c.days,
       moneyMinor: money.totalMinor,
       incomeMinor: c.income.totalMinor,

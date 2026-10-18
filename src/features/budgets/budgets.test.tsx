@@ -341,6 +341,24 @@ describe('лимит теснее денег, а крупная зарплата
   });
 });
 
+describe('утро дня зарплаты', () => {
+  it('аренду уже провели, а зарплату ещё нет: 0 на сегодня без «Денег не хватает», и сказано почему', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      const salary = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+      await s.recurring.create({ kind: 'income', walletId: i.cash, amountMinor: 3_000_000, categoryId: salary?.id ?? null, frequency: 'monthly', startOn: '2026-10-15' });
+      const rent = await s.recurring.create({ kind: 'expense', walletId: i.cash, amountMinor: 300_000, categoryId: i.cats['Жильё'] ?? null, frequency: 'monthly', startOn: '2026-10-15' });
+      await s.transactions.createFromRule(rent.id, '2026-10-15'); // на руках −500
+    });
+    expect(perDay()).toBe(fmt(0));
+    const c = text(card());
+    expect(c).not.toContain('Денег не хватает');
+    expect(c).toContain('15 октября ждём доход');
+    expect(c).toContain('Сегодня ждём доход — пока он не проведён, считаем только то, что на руках.');
+    expect(detail('Просроченные платежи и долги')).toBe(fmt(0));
+  });
+});
+
 describe('лимит месяца и регулярные платежи', () => {
   it('аренда сегодня по лимиту отложена заранее: после «Провести» — ни «перерасхода», ни другой цифры', async () => {
     let ruleId = '';

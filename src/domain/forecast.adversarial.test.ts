@@ -111,11 +111,13 @@ describe('атака: регулярный перевод из тратимых 
     expect(f.perDayMinor).toBe(10_000);
   });
 
-  it('перевод ИЗ копилки на руки в расчёт не входит (ни как платёж, ни как доход)', () => {
+  it('перевод ИЗ копилки на руки — ожидаемый приход (как и в календаре), но не «зарплата»: горизонт не обрывает', () => {
     const f = calc({ wallets, balances, rules: [transfer('take', { walletId: 'box', toWalletId: 'cash' })] });
     expect(f.paymentsMinor).toBe(0);
+    expect(f.incomeMinor).toBe(40_000);
     expect(f.incomeDate).toBeNull();
-    expect(f.perDayMinor).toBe(10_000);
+    expect(f.horizonEnd).toBe('2026-10-31');
+    expect(f.perDayMinor).toBe(14_000); // (1 000 + 400) ÷ 10
   });
 
   it('перевод с долларового кошелька в копилку: сумма в долларах, пересчёт по курсу, число приблизительное', () => {

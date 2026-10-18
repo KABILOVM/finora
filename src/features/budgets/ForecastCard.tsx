@@ -110,7 +110,7 @@ function Details({ f }: { f: DailyForecastOk }) {
             <MoneyText minor={f.incomeMinor} currency={f.base} tone="none" sign="always" />
           </Tile>
         )}
-        <Tile label={`Платежи и долги до ${longDate(f.horizonEnd)}`}>
+        <Tile label={f.untilTodayIncome ? 'Просроченные платежи и долги' : `Платежи и долги до ${longDate(f.horizonEnd)}`}>
           <MoneyText minor={-f.obligationsMinor} currency={f.base} tone="none" />
         </Tile>
         {f.usualPerDayMinor !== null && (
@@ -131,6 +131,9 @@ function Details({ f }: { f: DailyForecastOk }) {
       </dl>
 
       <div className="relative mt-3 flex flex-col gap-2 empty:hidden">
+        {f.untilTodayIncome && (
+          <p className="px-1 text-sm text-muted">Сегодня ждём доход — пока он не проведён, считаем только то, что на руках.</p>
+        )}
         {f.overdueCount > 0 && (
           <Notice tone="warning">
             Из них {pluralRu(f.overdueCount, 'просрочен', 'просрочено', 'просрочено')} {f.overdueCount}{' '}

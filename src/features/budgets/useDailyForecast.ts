@@ -18,6 +18,7 @@ import {
 } from '@/domain/forecast';
 import { occurrencesBetween } from '@/domain/schedule';
 import type { IsoDate, LocalRow, Transaction, UUID } from '@/domain/types';
+import { addDays } from '@/lib/dates';
 import { useRates } from '@/rates/hooks';
 import { FORECAST_OVERDUE_MAX_AGE_DAYS, historyFrom, localDateOf } from '@/recurring/plan';
 import { useToday } from '@/recurring/useToday';
@@ -151,17 +152,34 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
       if (existingIds.has(await uuidV5(r.id, date))) doneOccurrences.add(occurrenceKey(r.id, date));
     }
   }
-  // Сегодняшний доход по правилу внесли обычной операцией («+», а не «Провести»): деньги уже в остатке — второй раз его не ждём.
-  // Опознаём по кошельку и сумме не меньше плановой; одна операция закрывает одно правило.
-  const plainIncomesToday = txs.filter(
-    (t) => t.deletedAt === null && t.kind === 'income' && t.occurredOn === today && t.debtId == null && t.recurringRuleId == null,
+  // Доход по правилу внесли обычной операцией («+», а не «Провести»), в день по плану или на 1–3 дня раньше: деньги уже в остатке —
+  // второй раз его не ждём. Опознаём по кошельку и сумме не меньше половины плановой; крупные правила — первыми, каждому — самая
+  // близкая по сумме операция, одна операция закрывает одну дату. Возвраты по долгам так не закрываются.
+  const EARLY_DAYS = 3;
+  const plainIncomes = txs.filter(
+    (t) =>
+      t.deletedAt === null &&
+      t.kind === 'income' &&
+      t.debtId == null &&
+      t.recurringRuleId == null &&
+      t.occurredOn <= today &&
+      t.occurredOn >= addDays(today, -EARLY_DAYS),
   );
-  for (const r of rules) {
-    if (r.kind !== 'income' || doneOccurrences.has(occurrenceKey(r.id, today)) || occurrencesBetween(r, today, today).length === 0) continue;
-    const i = plainIncomesToday.findIndex((t) => t.walletId === r.walletId && t.amountMinor >= r.amountMinor);
-    if (i < 0) continue;
-    plainIncomesToday.splice(i, 1);
-    doneOccurrences.add(occurrenceKey(r.id, today));
+  const expected = rules
+    .filter((r) => r.kind === 'income' && r.debtId === null)
+    .flatMap((r) => occurrencesBetween(r, today, addDays(today, EARLY_DAYS)).filter((d) => !doneOccurrences.has(occurrenceKey(r.id, d))).map((d) => ({ r, d })))
+    .sort((a, b) => b.r.amountMinor - a.r.amountMinor || (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  for (const { r, d } of expected) {
+    let best = -1;
+    plainIncomes.forEach((t, i) => {
+      if (t.walletId !== r.walletId || t.occurredOn < addDays(d, -EARLY_DAYS) || t.occurredOn > d || t.amountMinor * 2 < r.amountMinor) return;
+      const fit = Math.abs(t.amountMinor - r.amountMinor);
+      const bestT = best < 0 ? undefined : plainIncomes[best];
+      if (bestT === undefined || fit < Math.abs(bestT.amountMinor - r.amountMinor)) best = i;
+    });
+    if (best < 0) continue;
+    plainIncomes.splice(best, 1);
+    doneOccurrences.add(occurrenceKey(r.id, d));
   }
   // Подписи для списков (календарь): у правила — заметка или название категории, у долга — с кем.
   const categoryName = new Map(categoryRows.map((c) => [c.id, c.name] as const));

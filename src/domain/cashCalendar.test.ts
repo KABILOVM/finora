@@ -223,12 +223,21 @@ describe('доходы, которые на руки не придут, и во�
     expect(c.endMinor).toBe(c.startMinor);
   });
 
-  it('перевод на архивный кошелёк — деньги уходят с рук; с накоплений на архивный — ничего', () => {
-    const wallets = [wallet('cash'), wallet('box', { kind: 'savings' }), wallet('old', { kind: 'card', archivedAt: '2026-01-01T00:00:00.000Z' })];
-    const out = ok(computeCashCalendar(input({ wallets, rules: [rule('t', { kind: 'transfer', toWalletId: 'old', amountMinor: 5_000 })] })));
-    expect(day(out, '2026-10-20').events.map((e) => e.deltaMinor)).toEqual([-5_000]);
-    const none = ok(computeCashCalendar(input({ wallets, rules: [rule('t', { kind: 'transfer', walletId: 'box', toWalletId: 'old', amountMinor: 5_000 })] })));
-    expect(none.days.every((d) => d.events.length === 0)).toBe(true);
+  it('перевод на архивный кошелёк или с него не случится — с архивным кошельком операцию не провести', () => {
+    const wallets = [
+      wallet('cash'),
+      wallet('box', { kind: 'savings' }),
+      wallet('old', { kind: 'card', archivedAt: '2026-01-01T00:00:00.000Z' }),
+      wallet('oldBox', { kind: 'savings', archivedAt: '2026-01-01T00:00:00.000Z' }),
+    ];
+    for (const r of [
+      rule('t', { kind: 'transfer', toWalletId: 'old', amountMinor: 5_000 }),
+      rule('t', { kind: 'transfer', walletId: 'box', toWalletId: 'old', amountMinor: 5_000 }),
+      rule('t', { kind: 'transfer', walletId: 'oldBox', toWalletId: 'cash', amountMinor: 5_000 }),
+      rule('t', { kind: 'expense', walletId: 'old', amountMinor: 5_000 }),
+    ]) {
+      expect(ok(computeCashCalendar(input({ wallets, rules: [r] }))).days.every((d) => d.events.length === 0)).toBe(true);
+    }
   });
 
   it('возврат «мне должны» по расписанию — только ожидание: ставится, лишь когда включено «Мне вернут долги в срок»', () => {
@@ -253,6 +262,65 @@ describe('доходы, которые на руки не придут, и во�
     );
     const kinds = c.days.flatMap((d) => d.events.map((e) => `${e.kind}:${e.id}:${e.date}`));
     expect(kinds).toEqual(['payment:give:2026-10-15', 'payment:give:2026-11-01', 'debt-receive:lent:2026-11-05']);
+  });
+});
+
+describe('плановые платежи по долгам — не больше остатка', () => {
+  it('«я должен» закрыт (остаток простили) или в архиве, а правило живо — платить нечего', () => {
+    for (const d of [debt('d', { dueOn: null, closedAt: '2026-10-01T00:00:00.000Z' }), debt('d', { dueOn: null, archivedAt: '2026-10-01T00:00:00.000Z' })]) {
+      const c = ok(computeCashCalendar(input({ debts: [d], rules: [rule('pay', { debtId: 'd', frequency: 'weekly', amountMinor: 5_000, startOn: '2026-10-16' })] })));
+      expect(c.endMinor).toBe(100_000);
+    }
+  });
+
+  it('«я должен»: еженедельные 100 при остатке 200 — два платежа, в срок ничего не осталось', () => {
+    const c = ok(
+      computeCashCalendar(
+        input({
+          balances: new Map([['cash', 25_000]]),
+          debts: [debt('d', { dueOn: '2026-11-10', remainingMinor: 20_000 })],
+          rules: [rule('pay', { debtId: 'd', frequency: 'weekly', amountMinor: 10_000, startOn: '2026-10-20' })],
+        }),
+      ),
+    );
+    const events = c.days.flatMap((d) => d.events.map((e) => [e.kind, e.date, e.deltaMinor]));
+    expect(events).toEqual([
+      ['payment', '2026-10-20', -10_000],
+      ['payment', '2026-10-27', -10_000],
+    ]);
+    expect(c.firstNegativeDate).toBeNull();
+  });
+
+  it('долг и его плановый платёж в валюте без курса не называются дважды: 100 $ в платежах + 900 $ в долгах', () => {
+    const c = ok(
+      computeCashCalendar(
+        input({
+          getRate: (from, to) => (from === to ? 1 : null),
+          wallets: [wallet('cash'), wallet('usd', { currency: 'USD' })],
+          balances: new Map([['cash', 100_000], ['usd', 0]]),
+          debts: [debt('loan', { currency: 'USD', dueOn: '2026-11-03', remainingMinor: 100_000 })],
+          rules: [rule('pay', { walletId: 'usd', debtId: 'loan', amountMinor: 10_000, startOn: '2026-10-25' })],
+        }),
+      ),
+    );
+    expect(c.skipped).toEqual([
+      { source: 'payment', currency: 'USD', amountMinor: 10_000 },
+      { source: 'debt', currency: 'USD', amountMinor: 90_000 },
+    ]);
+  });
+
+  it('«мне должны»: остаток уходит на возвраты по датам, а не по порядку правил', () => {
+    const debts = [debt('lent', { direction: 'lent', dueOn: null, remainingMinor: 30_000 })];
+    const late = rule('late', { kind: 'income', debtId: 'lent', amountMinor: 30_000, startOn: '2026-11-10' });
+    const early = rule('early', { kind: 'income', debtId: 'lent', amountMinor: 10_000, frequency: 'weekly', startOn: '2026-10-16' });
+    for (const rules of [[late, early], [early, late]]) {
+      const c = ok(computeCashCalendar(input({ includeReceivables: true, debts, rules })));
+      expect(c.days.flatMap((d) => d.events.map((e) => [e.id, e.date]))).toEqual([
+        ['early', '2026-10-16'],
+        ['early', '2026-10-23'],
+        ['early', '2026-10-30'],
+      ]);
+    }
   });
 });
 

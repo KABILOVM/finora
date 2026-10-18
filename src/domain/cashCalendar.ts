@@ -133,20 +133,20 @@ function moveOf(r: ForecastRule, walletOf: ReadonlyMap<UUID, ForecastWallet>): M
   const from = walletOf.get(r.walletId);
   if (r.kind === 'expense') {
     if (from === undefined) return 'unknown';
-    return isSpendableKind(from.kind) ? { flow: 'out', amountMinor: r.amountMinor, currency: from.currency } : 'none';
+    return isSpendableWallet(from) ? { flow: 'out', amountMinor: r.amountMinor, currency: from.currency } : 'none';
   }
   if (r.kind === 'income') return from !== undefined && isSpendableWallet(from) ? { flow: 'in', amountMinor: r.amountMinor, currency: from.currency } : 'none';
   if (!r.toWalletId) return 'none';
   const to = walletOf.get(r.toWalletId);
   if (from === undefined || to === undefined) return 'unknown';
-  if (isSpendableKind(from.kind) && !isSpendableWallet(to)) return { flow: 'out', amountMinor: r.amountMinor, currency: from.currency };
-  if (!isSpendableKind(from.kind) && isSpendableWallet(to)) {
+  if (from.archivedAt !== null || to.archivedAt !== null) return 'none'; // с архивным кошельком операцию не провести
+  if (isSpendableKind(from.kind) && !isSpendableKind(to.kind)) return { flow: 'out', amountMinor: r.amountMinor, currency: from.currency };
+  if (!isSpendableKind(from.kind) && isSpendableKind(to.kind)) {
     const received = r.toAmountMinor;
-    return received !== null && received !== undefined && isMinor(received)
-      ? { flow: 'in', amountMinor: received, currency: to.currency }
-      : { flow: 'in', amountMinor: r.amountMinor, currency: from.currency };
+    if (received !== null && received !== undefined && isMinor(received)) return { flow: 'in', amountMinor: received, currency: to.currency };
+    return from.currency === to.currency ? { flow: 'in', amountMinor: r.amountMinor, currency: to.currency } : 'none';
   }
-  if (isSpendableKind(from.kind) && isSpendableWallet(to)) {
+  if (isSpendableKind(from.kind) && isSpendableKind(to.kind)) {
     const fee = transferFeeMinor(r, from, to);
     return fee > 0 ? { flow: 'out', amountMinor: fee, currency: from.currency } : 'none';
   }
@@ -221,10 +221,30 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
       if (openDue(d, 'borrowed') || (input.includeReceivables && openDue(d, 'lent'))) coveredDebts.set(d.id, d);
     }
     const debtOf = new Map(input.debts.map((d) => [d.id, d] as const));
-    /** Плановые платежи по долгу «я должен» до его срока (в основной валюте): на столько меньше отдать в день срока. */
-    const paidBeforeDue = new Map<UUID, Minor>();
-    /** Сколько плановых возвратов «мне должны» уже поставлено (в валюте кошелька правила): больше остатка не ждём. */
-    const expectedBack = new Map<UUID, Minor>();
+    const isOpen = (d: ForecastDebt): boolean => d.closedAt === null && d.archivedAt === null && isMinor(d.remainingMinor) && d.remainingMinor > 0;
+
+    /** Плановое движение по правилу: одна дата или все просроченные даты сразу (на сегодня). */
+    interface Planned {
+      rule: ForecastRule;
+      move: Move;
+      date: IsoDate;
+      count: number;
+      overdue: boolean;
+    }
+    /** Движения по долгам: по долгу — в порядке дат и не больше остатка (что сверх остатка, платить или ждать не придётся). */
+    const byDebt = new Map<UUID, Planned[]>();
+    const planned: Planned[] = [];
+    const plan = (p: Planned) => {
+      const debt = p.rule.debtId === null ? undefined : debtOf.get(p.rule.debtId);
+      const capped = debt !== undefined && ((debt.direction === 'borrowed' && p.move.flow === 'out') || (debt.direction === 'lent' && p.move.flow === 'in'));
+      if (!capped || debt === undefined) {
+        planned.push(p);
+        return;
+      }
+      const list = byDebt.get(debt.id);
+      if (list) list.push(p);
+      else byDebt.set(debt.id, [p]);
+    };
 
     const yesterday = addDays(today, -1);
     for (const r of input.rules) {
@@ -235,10 +255,12 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
       const debt = r.debtId === null ? undefined : debtOf.get(r.debtId);
       const covered = r.debtId === null ? undefined : coveredDebts.get(r.debtId);
       if (covered?.direction === 'lent' && flow === 'in') continue; // уже учтено остатком долга
+      // «я должен» закрыт или отдан — платить по нему нечего
+      if (debt?.direction === 'borrowed' && flow !== 'in' && !isOpen(debt)) continue;
       // возврат «мне должны» по расписанию — только ожидание: как и остаток такого долга, ставится, лишь если включено,
-      // и только пока долг открыт и не больше остатка
+      // и только пока долг открыт
       const receivable = r.kind === 'income' && r.debtId !== null && debt?.direction !== 'borrowed';
-      if (receivable && (!input.includeReceivables || debt === undefined || debt.closedAt !== null || debt.archivedAt !== null || !(debt.remainingMinor > 0))) continue;
+      if (receivable && (!input.includeReceivables || debt === undefined || !isOpen(debt))) continue;
       /** Дата позже срока долга «я должен», учтённого остатком: этот платёж уже внутри остатка. */
       const insideDebt = (date: IsoDate): boolean => covered?.direction === 'borrowed' && flow !== 'in' && covered.dueOn !== null && date >= covered.dueOn;
 
@@ -248,23 +270,7 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
           if (r.kind !== 'income') unknownWalletPayments++;
           continue;
         }
-        let amountMinor = move.amountMinor;
-        if (receivable && debt !== undefined && move.currency === debt.currency) {
-          const left = addMinor(debt.remainingMinor, -(expectedBack.get(debt.id) ?? 0));
-          if (left <= 0) break;
-          if (amountMinor > left) amountMinor = left;
-          expectedBack.set(debt.id, addMinor(expectedBack.get(debt.id) ?? 0, amountMinor));
-        }
-        const amount = inBase(amountMinor, move.currency, 'payment');
-        if (amount === null) continue;
-        if (covered?.direction === 'borrowed' && move.flow === 'out') paidBeforeDue.set(covered.id, addMinor(paidBeforeDue.get(covered.id) ?? 0, amount));
-        put({
-          kind: move.flow === 'out' ? 'payment' : 'income',
-          id: r.id,
-          label: label(r.id, move.flow === 'out' ? 'Платёж' : 'Доход'),
-          date,
-          deltaMinor: move.flow === 'out' ? -amount : amount,
-        });
+        plan({ rule: r, move, date, count: 1, overdue: false });
       }
 
       // просроченные расходы — одним событием на сегодня
@@ -280,25 +286,64 @@ export function computeCashCalendar(input: CalendarInput): CashCalendar {
         unknownWalletPayments += overdueCount;
         continue;
       }
+      plan({ rule: r, move, date: today, count: overdueCount, overdue: true });
+    }
+
+    /** Плановые платежи по долгу «я должен» до его срока: в валюте долга (если та же) и остальное — в основной валюте. */
+    const paidSame = new Map<UUID, Minor>();
+    const paidBase = new Map<UUID, Minor>();
+    const putPlanned = (p: Planned, amountMinor: Minor) => {
+      const amount = inBase(amountMinor, p.move.currency, 'payment');
+      if (amount === null) return;
+      const title = label(p.rule.id, p.move.flow === 'out' ? 'Платёж' : 'Доход');
+      put({
+        kind: p.move.flow === 'out' ? 'payment' : 'income',
+        id: p.rule.id,
+        label: title,
+        date: p.date,
+        deltaMinor: p.move.flow === 'out' ? -amount : amount,
+        ...(p.overdue ? { overdue: true, overdueCount: p.count } : {}),
+      });
+    };
+    const total = (p: Planned): Minor => {
       let sum: Minor = 0;
-      for (let i = 0; i < overdueCount; i++) sum = addMinor(sum, move.amountMinor);
-      const amount = inBase(sum, move.currency, 'payment');
-      if (amount === null) continue;
-      if (covered?.direction === 'borrowed') paidBeforeDue.set(covered.id, addMinor(paidBeforeDue.get(covered.id) ?? 0, amount));
-      put({ kind: 'payment', id: r.id, label: label(r.id, 'Платёж'), date: today, deltaMinor: -amount, overdue: true, overdueCount });
+      for (let i = 0; i < p.count; i++) sum = addMinor(sum, p.move.amountMinor);
+      return sum;
+    };
+    for (const p of planned) putPlanned(p, total(p));
+    for (const [debtId, list] of byDebt) {
+      const debt = debtOf.get(debtId) as ForecastDebt;
+      list.sort((a, b) => (a.overdue !== b.overdue ? (a.overdue ? -1 : 1) : a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      let left = debt.remainingMinor;
+      for (const p of list) {
+        let amount = total(p);
+        if (p.move.currency === debt.currency) {
+          if (left <= 0) break;
+          if (amount > left) amount = left;
+          left = addMinor(left, -amount);
+          if (debt.direction === 'borrowed') paidSame.set(debtId, addMinor(paidSame.get(debtId) ?? 0, amount));
+        } else if (debt.direction === 'borrowed') {
+          const inB = inBase(amount, p.move.currency, 'payment');
+          if (inB !== null) paidBase.set(debtId, addMinor(paidBase.get(debtId) ?? 0, inB));
+        }
+        putPlanned(p, amount);
+      }
     }
 
     for (const d of coveredDebts.values()) {
       if (d.dueOn === null) continue;
-      const remaining = inBase(d.remainingMinor, d.currency, 'debt');
-      if (remaining === null) continue;
       const overdue = d.dueOn < today ? { overdue: true } : {};
       if (d.direction === 'borrowed') {
         // к сроку отдать остаток за вычетом плановых платежей до срока (не меньше нуля)
-        const delta = addMinor(remaining, -(paidBeforeDue.get(d.id) ?? 0));
+        const rest = addMinor(d.remainingMinor, -(paidSame.get(d.id) ?? 0));
+        if (rest <= 0) continue;
+        const restBase = inBase(rest, d.currency, 'debt');
+        if (restBase === null) continue;
+        const delta = addMinor(restBase, -(paidBase.get(d.id) ?? 0));
         if (delta > 0) put({ kind: 'debt-pay', id: d.id, label: label(d.id, 'Возврат долга'), date: dueDate(d.dueOn), deltaMinor: -delta, ...overdue });
       } else {
-        put({ kind: 'debt-receive', id: d.id, label: label(d.id, 'Вернут долг'), date: dueDate(d.dueOn), deltaMinor: remaining, ...overdue });
+        const remaining = inBase(d.remainingMinor, d.currency, 'debt');
+        if (remaining !== null) put({ kind: 'debt-receive', id: d.id, label: label(d.id, 'Вернут долг'), date: dueDate(d.dueOn), deltaMinor: remaining, ...overdue });
       }
     }
 
