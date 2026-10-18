@@ -135,12 +135,13 @@ describe('запросы', () => {
       expect(((queries[2] as Query).rows as Array<Record<string, unknown>>).every((r) => !('goal_minor' in r) && !('goal_on' in r))).toBe(true);
     });
 
-    it('у какой-то строки цель задана — ошибку не прячем (цель нельзя потерять молча): ошибка сервера, повторов нет', async () => {
+    it('у какой-то строки цель задана — ошибку не прячем (цель нельзя потерять молча): «устарела схема» с колонками, повторов нет', async () => {
       const { client, queries } = old();
       const withGoal = makeWallet({ kind: 'savings', goalMinor: 100_000, goalOn: '2027-01-01' });
       const err = await createSupabaseTransport(client).push('wallets', [toWire('wallets', makeWallet(), 1), toWire('wallets', withGoal, 2)]).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(TransportError);
-      expect((err as TransportError).kind).toBe('server');
+      // не «сервер недоступен»: движок отложит только строку с целью, остальное отправит
+      expect(err).toMatchObject({ kind: 'schema', code: 'PGRST204', columns: ['goal_minor', 'goal_on'], retryable: false });
       expect(queries).toHaveLength(1);
     });
 
@@ -152,7 +153,7 @@ describe('запросы', () => {
       const goalRow = toWire('wallets', makeWallet({ kind: 'savings', goalMinor: 100_000, goalOn: '2027-01-01' }), 2);
       const err = await t.push('wallets', [goalRow]).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(TransportError);
-      expect((err as TransportError).kind).toBe('server');
+      expect((err as TransportError).kind).toBe('schema');
       const sent = (queries[queries.length - 1] as Query).rows as Array<Record<string, unknown>>;
       expect(sent[0]).toMatchObject({ goal_minor: 100_000, goal_on: '2027-01-01' }); // цель в запросе была
       serverHasGoal = true; // схему обновили
@@ -166,6 +167,21 @@ describe('запросы', () => {
       const { client, queries } = fakeClient(() => ({ data: null, error: null, status: 201 }));
       await createSupabaseTransport(client).push('categories', [toWire('categories', makeCategory(), 1)]);
       expect(queries).toHaveLength(1);
+    });
+
+    it('нет и base_seq, и колонок цели, а цель задана: base_seq отключается и запрос повторяется, затем «устарела схема»', async () => {
+      const missingBase = { code: 'PGRST204', message: "Could not find the 'base_seq' column of 'wallets' in the schema cache" };
+      const { client, queries } = fakeClient((q) => {
+        const rows = q.rows as Array<Record<string, unknown>>;
+        if (rows.some((r) => 'base_seq' in r)) return { data: null, error: missingBase, status: 400 };
+        if (rows.some((r) => 'goal_minor' in r)) return { data: null, error: missingGoal, status: 400 };
+        return { data: null, error: null, status: 201 };
+      });
+      const withGoal = toWire('wallets', makeWallet({ kind: 'savings', goalMinor: 100_000, goalOn: null }), 5);
+      const err = await createSupabaseTransport(client).push('wallets', [withGoal]).catch((e: unknown) => e);
+      expect(err).toMatchObject({ kind: 'schema', columns: ['goal_minor', 'goal_on'] });
+      expect(queries).toHaveLength(2);
+      expect(((queries[1] as Query).rows as Array<Record<string, unknown>>)[0]).not.toHaveProperty('base_seq');
     });
 
     it('нет и base_seq, и колонок цели (самая старая схема): оба отключаются, отправка проходит', async () => {
@@ -190,6 +206,31 @@ describe('запросы', () => {
       const b = fakeClient(() => ({ data: null, error: other, status: 400 }));
       await expect(createSupabaseTransport(b.client).push('wallets', [toWire('wallets', makeWallet(), 5)])).rejects.toBeInstanceOf(TransportError);
       expect(b.queries).toHaveLength(1);
+    });
+  });
+
+  describe('push: сервер без колонки городов для погоды (раздел 13 схемы не выполнен)', () => {
+    const missingWeather = { code: 'PGRST204', message: "Could not find the 'weather' column of 'settings' in the schema cache" };
+    const old = () =>
+      fakeClient((q) =>
+        (q.rows as Array<Record<string, unknown>>).some((r) => 'weather' in r) ? { data: null, error: missingWeather, status: 400 } : { data: null, error: null, status: 201 },
+      );
+    const settings = (weather: string | null) =>
+      toWire('settings', { id: makeUserId(), createdAt: '2026-10-01T00:00:00.000Z', clientUpdatedAt: '2026-10-01T00:00:00.000Z', deviceId: 'd', deletedAt: null, baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, weather } as never, 3);
+
+    it('города не выбраны — повтор без пустой колонки, ошибки нет', async () => {
+      const { client, queries } = old();
+      await createSupabaseTransport(client).push('settings', [settings(null)]);
+      expect(queries).toHaveLength(2);
+      expect(((queries[1] as Query).rows as Array<Record<string, unknown>>)[0]).not.toHaveProperty('weather');
+    });
+
+    it('город выбран — «устарела схема» с колонкой weather (не «сервер недоступен»), повторов нет', async () => {
+      const { client, queries } = old();
+      const err = await createSupabaseTransport(client).push('settings', [settings('{"v":1,"selected":null,"cities":[]}')]).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TransportError);
+      expect(err).toMatchObject({ kind: 'schema', code: 'PGRST204', columns: ['weather'] });
+      expect(queries).toHaveLength(1);
     });
   });
 

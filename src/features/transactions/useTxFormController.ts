@@ -85,6 +85,8 @@ export interface TxFormController {
   fee: { minor: Minor | null; total: Minor | null };
   /** Правка существующей операции (комиссию к уже внесённому расходу не добавляем). */
   editing: boolean;
+  /** Правка операции по долгу: вид не меняется (платёж и выдача считаются по-разному, репозиторий такую правку не примет). */
+  kindLocked: boolean;
   set(patch: Partial<TxFormState>): void;
   setKind(kind: TxKind): void;
   setWallet(id: string): void;
@@ -232,7 +234,10 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     clearErrors((Object.keys(patch) as (keyof TxFormState)[]).flatMap((k) => CLEARS[k] ?? []));
   };
 
+  const kindLocked = mode === 'edit' && !!orig?.debtId;
+
   const setKind = (kind: TxKind) => {
+    if (kindLocked) return;
     setForm((f) => {
       if (f.kind === kind) return f;
       const toWalletId =
@@ -424,6 +429,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     received,
     fee: { minor: feeMinor, total },
     editing: mode === 'edit',
+    kindLocked,
     set,
     setKind,
     setWallet,

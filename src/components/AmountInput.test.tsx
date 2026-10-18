@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { act, createRef, useState, type MutableRefObject } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Minor } from '@/domain/types';
 import { AmountInput } from './AmountInput';
-import { Keypad } from './Keypad';
+import { Keypad, type KeypadKey } from './Keypad';
 import { render, screen, user } from './testUtils';
 
 const NB = ' ';
@@ -421,6 +421,153 @@ describe('AmountInput: калькулятор', () => {
     expect(onValue).toHaveBeenLastCalledWith(250);
     await user.keyboard('{Enter}');
     expect(input().value).toBe('2,5');
+  });
+
+  it('клавиатура ПК: «x» между числами — умножение', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '12x3');
+    expect(onValue).toHaveBeenLastCalledWith(3600);
+  });
+
+  it('вставка из СМС банка («-150,00 TJS», «Расход 150 TJS», «-150,00») читается как сумма, а не как выражение', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    for (const [text, minor, shown] of [
+      ['-150,00 TJS', 15_000, '150,00'],
+      ['Расход 150 TJS', 15_000, '150'],
+      ['−150,00', 15_000, '150,00'],
+      ['Оплата: 1 234,56 TJS', 123_456, nb('1 234,56')],
+    ] as const) {
+      await user.clear(input());
+      onValue.mockClear();
+      await user.paste(text);
+      expect(onValue, text).toHaveBeenLastCalledWith(minor);
+      expect(input().value, text).toBe(shown);
+    }
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('буква в слове не становится умножением: «150 TJS Taxi 2» не превращается в 300', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '5');
+    onValue.mockClear();
+    await user.paste('150 TJS Taxi 2');
+    expect(onValue).not.toHaveBeenCalled();
+    expect(input().value).toBe('5');
+    expect(screen.getByRole('alert')).toHaveTextContent('Не удалось прочитать сумму');
+  });
+
+  it('текст со словами, вставленный вместо выражения, заменяет его суммой; лишний знак в выражении просто не принимается', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '5+');
+    expect(onValue).toHaveBeenLastCalledWith(null);
+    await user.type(input(), '+');
+    expect(input().value.replace(/\s/g, '')).toBe('5+');
+    await user.clear(input());
+    await user.type(input(), '5+');
+    input().setSelectionRange(0, input().value.length); // выделили всё выражение
+    await user.paste('Расход 150 TJS');
+    expect(onValue).toHaveBeenLastCalledWith(15_000);
+    expect(input().value).toBe('150');
+    expect(screen.queryByRole('button', { name: /^=/ })).toBeNull();
+  });
+
+  it('набранная буква внутри выражения — опечатка: «12+» остаётся, следующая цифра продолжает выражение (12+3 = 15, а не 123)', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '12+');
+    await user.type(input(), 'б');
+    expect(input().value.replace(/\s/g, '')).toBe('12+');
+    expect(onValue).toHaveBeenLastCalledWith(null);
+    await user.type(input(), '3');
+    expect(onValue).toHaveBeenLastCalledWith(1500);
+  });
+
+  it('число со знаком из банка («-150,00»), вставленное поверх выражения, заменяет его суммой', async () => {
+    const onValue = vi.fn();
+    render(<Calc onValue={onValue} />);
+    await user.type(input(), '5+2');
+    input().setSelectionRange(0, input().value.length);
+    await user.paste('-150,00');
+    expect(onValue).toHaveBeenLastCalledWith(15_000);
+    expect(input().value).toBe('150,00');
+  });
+});
+
+describe('AmountInput: клавиши из чужой клавиатуры (keyRef)', () => {
+  const Fee = ({ keyRef, onValue }: { keyRef: MutableRefObject<((k: KeypadKey) => void) | null>; onValue: (m: Minor | null) => void }) => {
+    const [v, setV] = useState<Minor | null>(null);
+    return (
+      <AmountInput
+        currency="TJS"
+        label="Комиссия"
+        value={v}
+        showKeypad={false}
+        keyRef={keyRef}
+        onChange={(m) => {
+          setV(m);
+          onValue(m);
+        }}
+      />
+    );
+  };
+  const press = (ref: MutableRefObject<((k: KeypadKey) => void) | null>, keys: KeypadKey[]) => {
+    for (const k of keys) act(() => ref.current!(k));
+  };
+  const feeInput = () => screen.getByRole('textbox', { name: /Комиссия/ }) as HTMLInputElement;
+
+  it('«2», «,», «5» → в поле 2,5 и 250; запятая видна сразу; «⌫» стирает по знаку', () => {
+    const ref = createRef<((k: KeypadKey) => void) | null>() as MutableRefObject<((k: KeypadKey) => void) | null>;
+    const onValue = vi.fn();
+    render(<Fee keyRef={ref} onValue={onValue} />);
+    press(ref, ['2', ',']);
+    expect(feeInput().value).toBe('2,');
+    press(ref, ['5']);
+    expect(feeInput().value).toBe('2,5');
+    expect(onValue).toHaveBeenLastCalledWith(250);
+    press(ref, ['backspace']);
+    expect(feeInput().value).toBe('2,');
+    expect(onValue).toHaveBeenLastCalledWith(200);
+    press(ref, ['0', '5']);
+    expect(feeInput().value).toBe('2,05');
+    expect(onValue).toHaveBeenLastCalledWith(205);
+  });
+
+  it('без калькулятора знаки и «=» ничего не делают; поле ушло с экрана — обработчика нет', () => {
+    const ref = createRef<((k: KeypadKey) => void) | null>() as MutableRefObject<((k: KeypadKey) => void) | null>;
+    const onValue = vi.fn();
+    const { unmount } = render(<Fee keyRef={ref} onValue={onValue} />);
+    press(ref, ['0', ',', '5', '+', '×', '=']);
+    expect(feeInput().value).toBe('0,5');
+    expect(onValue).toHaveBeenLastCalledWith(50);
+    unmount();
+    expect(ref.current).toBeNull();
+  });
+});
+
+describe('AmountInput: невысокий экран (compact)', () => {
+  const MEDIA = '[@media(max-height:700px)]:text-4xl';
+
+  it('короткая сумма: на невысоком экране шрифт на ступень мельче (text-4xl), символ валюты тоже', () => {
+    render(<AmountInput currency="TJS" value={1250} onChange={() => {}} compact />);
+    expect(input().className).toContain('text-5xl');
+    expect(input().className).toContain(MEDIA);
+    expect(screen.getByText('с.').className).toContain('[@media(max-height:700px)]:text-xl');
+  });
+
+  it('длинная сумма мельчает по длине, как и без compact: принудительного text-4xl нет', () => {
+    render(<AmountInput currency="TJS" value={12_345_678_901} onChange={() => {}} compact />); // «123 456 789,01»
+    expect(input().className).toContain('text-3xl');
+    expect(input().className).not.toContain('text-4xl');
+  });
+
+  it('без compact (поле комиссии и другие) шрифт не зависит от высоты экрана', () => {
+    render(<AmountInput currency="TJS" value={1250} onChange={() => {}} />);
+    expect(input().className).toContain('text-5xl');
+    expect(input().className).not.toContain('max-height');
   });
 });
 

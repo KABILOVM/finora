@@ -2,7 +2,7 @@ import Dexie from 'dexie';
 import type { Entity, IsoDateTime, LocalRow, UUID } from '@/domain/types';
 import { SYNC_TABLES, type EntityOf, type SyncTableName } from '@/sync/tables';
 import type { Clock } from './clock';
-import { cursorKey, META_LAST_STAMP, type FinoraDB, type MetaValue } from './database';
+import { cursorKey, META_LAST_STAMP, resyncKey, type FinoraDB, type MetaValue } from './database';
 import { ValidationError } from './errors';
 import { hasUnsentMemory, markSent, needsRemoteMerge, readTracking, withTracking } from './mergeGroups';
 import { mergeRemoteRow, pickColumns, type MergeStamper } from './syncMerge';
@@ -48,8 +48,12 @@ export interface SyncCounts {
 export interface SyncOps {
   /** Курс (server_seq последней применённой строки) таблицы; 0 по умолчанию. */
   getCursor(table: SyncTableName): Promise<number>;
+  /** Таблицу надо забрать с сервера целиком (метка версии базы 6): получение идёт с нуля, пока полный проход не дойдёт до конца. */
+  needsResync(table: SyncTableName): Promise<boolean>;
+  /** Полный проход до конца таблицы завершён: метку снять. */
+  finishResync(table: SyncTableName): Promise<void>;
   getMeta(key: string): Promise<MetaValue | undefined>;
-  /** Служебные ключи ('lastStamp', 'cursor:*') менять нельзя — для них есть свои методы. */
+  /** Служебные ключи ('lastStamp', 'cursor:*', 'resync:*') менять нельзя — для них есть свои методы. */
   setMeta(key: string, value: MetaValue): Promise<void>;
   /** Строки dirty=1 БЕЗ карантина, старые первыми. */
   listDirty<T extends SyncTableName>(table: T, limit: number): Promise<LocalRow<EntityOf<T>>[]>;
@@ -150,13 +154,23 @@ export function createSyncOps(db: FinoraDB, clock: Clock): SyncOps {
       return readCursor(table);
     },
 
+    async needsResync(table) {
+      assertTable(table);
+      return (await db.meta.get(resyncKey(table)))?.value === true;
+    },
+
+    async finishResync(table) {
+      assertTable(table);
+      await db.meta.delete(resyncKey(table));
+    },
+
     async getMeta(key) {
       return (await db.meta.get(key))?.value;
     },
 
     async setMeta(key, value) {
       if (typeof key !== 'string' || key === '' || key.length > 100) throw new ValidationError('Ключ служебных данных некорректен');
-      if (key === META_LAST_STAMP || key.startsWith('cursor:')) {
+      if (key === META_LAST_STAMP || key.startsWith('cursor:') || key.startsWith('resync:')) {
         throw new ValidationError(`Ключ «${key}» служебный: менять его напрямую нельзя`);
       }
       await db.meta.put({ key, value });

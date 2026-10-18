@@ -37,7 +37,9 @@ test.describe('Статика: vercel.json и index.html', () => {
     expect(h['strict-transport-security']).toMatch(/max-age=\d{7,}/);
     expect(h['cross-origin-opener-policy']).toBe('same-origin');
     const pp = h['permissions-policy'] ?? '';
-    for (const f of ['camera', 'microphone']) expect(pp, f).toContain(`${f}=()`);
+    expect(pp, 'camera').toContain('camera=()');
+    // микрофон — только само приложение («Продиктовать» в покупках и «Продиктовать расходы»); чужим источникам и «*» нельзя
+    expect(pp, 'microphone').toMatch(/(^|,\s*)microphone=\(self\)\s*(,|$)/);
     // местоположение — только само приложение и только по нажатию «Определить место» (погода); чужим фреймам нельзя
     expect(pp, 'geolocation').toContain('geolocation=(self)');
     expect(parseCsp(h['content-security-policy'] ?? '')['frame-ancestors']).toEqual(["'none'"]);
@@ -366,6 +368,23 @@ test.describe('CSP в настоящем браузере', () => {
     const r = await page.request.get(`${srv.origin}/sw.js`);
     expect(r.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
     expect(r.headers()['cache-control']).toBe('no-cache');
+  });
+
+  // `vite preview` (e2e/flows/27-shopping) заголовков vercel.json не шлёт: запрет микрофона виден только здесь
+  test('«Продиктовать» под настоящими заголовками: Permissions-Policy не запрещает микрофон, запись включается', async ({ page, context }) => {
+    await context.grantPermissions(['microphone'], { origin: srv.origin });
+    const violations = await recordViolations(page);
+    await page.goto(`${srv.origin}/#/shopping`);
+    await waitReady(page);
+    await dismissInstallPrompt(page);
+    await page.getByRole('button', { name: 'Добавить списком' }).first().click();
+    const dlg = sheet(page, 'Добавить списком');
+    await dlg.getByRole('button', { name: 'Продиктовать' }).click();
+    await expect(dlg.getByTestId('record-panel')).toBeVisible();
+    await expect(dlg.getByRole('alert')).toHaveCount(0);
+    await dlg.getByRole('button', { name: 'Отмена' }).click();
+    await expect(dlg.getByTestId('record-panel')).toBeHidden();
+    expect(await violations(), 'нарушения CSP при записи голоса').toEqual([]);
   });
 
   test('заголовки на ответах: html, sw.js, ассеты', async ({ request }) => {

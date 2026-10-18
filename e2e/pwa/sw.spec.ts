@@ -168,7 +168,7 @@ test('Сеть пропала ПОСЛЕ загрузки страницы: вс
   await ctx.close();
 });
 
-test('Первый заход: чанк страницы не загрузился — не белый экран, а понятное сообщение, и «Перезагрузить» лечит', async ({ browser }) => {
+test('Первый заход: чанк страницы не загрузился — не белый экран, а «Раздел не загрузился» при живом меню, и «Повторить» лечит', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 }, serviceWorkers: 'block' });
   const page = await ctx.newPage();
   await skipOnboardingInAdvance(page);
@@ -177,12 +177,17 @@ test('Первый заход: чанк страницы не загрузилс
   await page.goto(srv.url);
   await ready(page);
   await page.getByRole('navigation').first().getByRole('link', { name: 'Операции' }).click();
-  await page.waitForTimeout(1500);
-  const text = (await page.locator('body').innerText()).trim();
-  expect(text.length, 'экран пустой (белый экран)').toBeGreaterThan(10);
-  await expect(page.getByRole('alert')).toBeVisible();
+  // карточка — на месте страницы, а меню остаётся: можно уйти в другой раздел
+  const card = page.getByRole('main').getByRole('alert');
+  await expect(card).toContainText('Раздел не загрузился', { timeout: 5000 });
+  await expect(page.getByRole('navigation').first()).toBeVisible();
+  await expect(page.getByText('Что-то пошло не так')).toHaveCount(0);
+  await card.getByRole('button', { name: 'На главную' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
+  await page.getByRole('navigation').first().getByRole('link', { name: 'Операции' }).click();
+  await expect(card).toBeVisible();
   blocked = false; // сеть вернулась
-  await page.getByRole('button', { name: 'Перезагрузить' }).click();
+  await card.getByRole('button', { name: 'Повторить' }).click();
   await ready(page);
   await page.getByRole('navigation').first().getByRole('link', { name: 'Операции' }).click();
   await expect(page.getByRole('heading', { name: 'Операции' }).first()).toBeVisible();

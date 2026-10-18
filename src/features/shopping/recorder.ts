@@ -25,10 +25,43 @@ export function recordingSupported(): boolean {
   return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
 }
 
+/**
+ * Запрещает ли настройка сайта (заголовок Permissions-Policy, `microphone=()`) микрофон самой странице. Тогда браузер откажет
+ * без вопроса, и разрешение в настройках телефона не поможет. Где браузер не отвечает — не знаем, false.
+ */
+export function policyBlocksMicrophone(): boolean {
+  try {
+    const doc = document as Document & {
+      permissionsPolicy?: { allowsFeature(name: string): boolean };
+      featurePolicy?: { allowsFeature(name: string): boolean };
+    };
+    const policy = doc.permissionsPolicy ?? doc.featurePolicy;
+    if (!policy || typeof policy.allowsFeature !== 'function') return false;
+    return policy.allowsFeature('microphone') === false;
+  } catch {
+    return false;
+  }
+}
+
+/** iPhone/iPad (iPadOS называет себя Mac, но у него сенсорный экран). */
+function onIos(): boolean {
+  const ua = navigator.userAgent ?? '';
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1);
+}
+
+/** Другой браузер или встроенное окно приложения на iPhone: у них свой переключатель «Микрофон» в настройках iOS, не у Safari. */
+const OTHER_IOS_BROWSER = /CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|GSA\/|FBAN|FBAV|Instagram|Line\/|YaBrowser|Telegram/;
+
 function describe(e: unknown): RecorderError {
   const name = (e as { name?: unknown } | null)?.name;
   if (name === 'NotAllowedError' || name === 'SecurityError')
-    return new RecorderError('Нет доступа к микрофону. Разрешите его в настройках телефона (Safari → Микрофон) и повторите.');
+    return new RecorderError(
+      !onIos()
+        ? 'Нет доступа к микрофону. Разрешите его в настройках браузера для этого сайта и повторите.'
+        : OTHER_IOS_BROWSER.test(navigator.userAgent ?? '')
+          ? 'Нет доступа к микрофону. Разрешите его в настройках телефона (Настройки → ваш браузер → Микрофон) и повторите.'
+          : 'Нет доступа к микрофону. Разрешите его в настройках телефона (Safari → Микрофон) и повторите.',
+    );
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return new RecorderError('Микрофон не найден.');
   if (name === 'NotReadableError') return new RecorderError('Микрофон занят другим приложением.');
   return new RecorderError('Не удалось включить микрофон.');
@@ -37,6 +70,8 @@ function describe(e: unknown): RecorderError {
 export const startRecorder: StartRecorder = async (onLevel) => {
   if (!recordingSupported())
     throw new RecorderError('Этот браузер не умеет записывать голос. Наберите список текстом или нажмите значок микрофона на клавиатуре.');
+  // Запрет заголовком сайта: getUserMedia не зовём, иначе человек получит совет про настройки телефона, который не поможет.
+  if (policyBlocksMicrophone()) throw new RecorderError('Микрофон отключён настройками сайта.');
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });

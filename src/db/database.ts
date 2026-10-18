@@ -12,6 +12,11 @@ export interface MetaRow {
 export const META_LAST_STAMP = 'lastStamp';
 export const META_LAST_SYNCED_AT = 'lastSyncedAt';
 export const cursorKey = (table: SyncTableName): string => `cursor:${table}`;
+/**
+ * Метка «таблицу надо забрать с сервера целиком». Пока она стоит, получение идёт с нуля, а не с курса: курс может переписать вкладка
+ * со старой версией приложения, которая про метку не знает. Снимает метку только полный проход до конца таблицы (syncOps.finishResync).
+ */
+export const resyncKey = (table: SyncTableName): string => `resync:${table}`;
 
 export function dbNameFor(userId: string): string {
   return `finora-v1-${userId}`;
@@ -36,7 +41,11 @@ export function dbNameFor(userId: string): string {
  *    проставляется debtId = null и recurringRuleId = null (новые поля договора обязательны, а не «может не быть»);
  *  - 3: + shopping_items (список покупок);
  *  - 4: у кошельков цель накопления (goalMinor, goalOn — без индексов). Старым кошелькам в upgrade() проставляется null;
- *  - 5: у настроек города для погоды (weather — без индексов). Старым настройкам в upgrade() проставляется null.
+ *  - 5: у настроек города для погоды (weather — без индексов). Старым настройкам в upgrade() проставляется null;
+ *  - 6: кошельки и настройки забираются с сервера заново: в upgrade() удаляются курсоры cursor:wallets и cursor:settings, а строкам
+ *    этих таблиц, уже видевшим сервер, serverSeq = 0 (dirty, dirtyGroups и dirtyBase не трогаются). Прежняя версия получала их,
+ *    отбрасывая незнакомые колонки (цель, города), и без этого первая же правка стёрла бы цель или города на сервере.
+ *    Новая колонка в TABLE_SPECS требует такой же версии для своей таблицы (страж — tests/db/dexieUpgrade.test.ts).
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -100,6 +109,26 @@ export class FinoraDB extends Dexie {
             if (s['weather'] === undefined) s['weather'] = null;
           }),
       );
+    // Прежняя версия отбросила при получении незнакомые колонки, но запомнила курсор и серверную версию строки: без сброса повтор
+    // отсёкся бы как уже виденный. serverSeq = 0, а не null: «строка на сервере есть» — правка сначала сверится с сервером
+    // (base_seq 0 → конфликт → слияние по группам полей, см. syncMerge.ts), а с null ушла бы целиком, как созданная здесь.
+    // Кошельки (цель накопления), настройки (города погоды) и операции (debtId и recurringRuleId — их не знала самая первая версия
+    // с облаком). Метка resync держит повтор, даже если вкладка со старым кодом успеет записать курсор поверх сброса.
+    this.version(6)
+      .stores({})
+      .upgrade(async (tx) => {
+        const tables = ['wallets', 'settings', 'transactions'] as const;
+        await tx.table('meta').bulkDelete(tables.map((t) => cursorKey(t)));
+        await tx.table('meta').bulkPut(tables.map((t) => ({ key: resyncKey(t), value: true })));
+        for (const name of tables) {
+          await tx
+            .table(name)
+            .toCollection()
+            .modify((r: Record<string, unknown>) => {
+              if (typeof r['serverSeq'] === 'number') r['serverSeq'] = 0;
+            });
+        }
+      });
   }
 
   /** Таблица синхронизируемой сущности по имени. */

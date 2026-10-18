@@ -7,7 +7,8 @@ test.describe('12. Ввод с клавиатуры и две вкладки', (
     const dlg = page.getByRole('dialog', { name: 'Новая операция' });
     const amount = dlg.getByRole('textbox', { name: /^Сумма/ });
     await amount.focus();
-    await page.keyboard.type('abc12.5x');
+    // «x» здесь не годится: в поле суммы это знак умножения калькулятора (см. amountExpr.ts)
+    await page.keyboard.type('abc12.5q');
     await expect(amount).toHaveValue('12,5');
     await page.keyboard.type('678'); // третий знак после запятой не принимается
     await expect(amount).toHaveValue('12,56');

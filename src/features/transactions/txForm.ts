@@ -1,5 +1,6 @@
 import type { TransactionInput, TransactionPatch } from '@/db';
 import type { CurrencyCode, IsoDate, Minor, Transaction, TxKind } from '@/domain/types';
+import { percentOfMinor } from '@/domain/money';
 import { isValidIsoDate, todayLocal } from '@/lib/dates';
 import { MAX_PER_UNIT, MIN_PER_UNIT } from '@/rates/parseUtil';
 import type { RateLookup } from '@/rates/types';
@@ -133,9 +134,9 @@ export function parsePercent(input: string): number | null {
 export function computeFee(form: Pick<TxFormState, 'feeMode' | 'feeAmount' | 'feePct'>, base: Minor | null): Minor | null {
   if (form.feeMode === 'amount') return form.feeAmount ?? 0;
   if (form.feePct.trim() === '') return 0;
-  const pct = parsePercent(form.feePct);
-  if (pct === null) return null;
-  return base === null ? 0 : Math.round((base * pct) / 100);
+  if (parsePercent(form.feePct) === null) return null;
+  // точно, целыми числами: Math.round(base × pct / 100) на половинках ошибался (1,15% от 30 с. давало 0,34 вместо 0,35)
+  return base === null ? 0 : percentOfMinor(base, form.feePct);
 }
 
 // ───────────────────────── даты ─────────────────────────

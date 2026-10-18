@@ -3,7 +3,7 @@ import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
 import { useSettings, useWallets } from '@/db';
 import { currencyInfo } from '@/domain/currency';
-import { formatDayLabel } from '@/lib/dates';
+import { formatDayInline } from '@/lib/dates';
 import { EnteredRatesList } from '@/rates/EnteredRatesList';
 import { enteredLabel } from '@/rates/enteredText';
 import { useRates } from '@/rates/hooks';
@@ -70,7 +70,7 @@ export function RatesSection() {
                   {lookup
                     ? lookup.entered
                       ? `${enteredLabel(lookup.asOf)} · в операции`
-                      : `${rateSourceLabel(lookup.source)} · на ${formatDayLabel(lookup.asOf)}${lookup.stale ? ' · устарел' : ''}`
+                      : `${rateSourceLabel(lookup.source)} · на ${formatDayInline(lookup.asOf)}${lookup.stale ? ' · устарел' : ''}`
                     : 'Обновите или задайте свой — иначе кошелёк не войдёт в «Всего»'}
                 </div>
               </div>

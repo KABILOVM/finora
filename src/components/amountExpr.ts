@@ -31,6 +31,14 @@ export function isOpKey(key: string): key is OpKey {
   return key === '+' || key === '−' || key === '×' || key === '÷';
 }
 
+/**
+ * В тексте есть слова: буквы, кроме одиночной «x»/«х» между числами (знак умножения с клавиатуры ПК).
+ * Такой текст — не выражение («Расход 150 TJS»: «х» в слове не умножение), сумму из него читают как обычное число.
+ */
+export function hasWords(raw: string): boolean {
+  return (raw.match(/\p{L}+/gu) ?? []).some((w) => !/^[xXхХ]$/.test(w));
+}
+
 /** Приводит набранное на клавиатуре ПК к виду выражения: «*», «x» → ×; «/» → ÷; «-» → −; «.» → «,»; лишнее выкидывает. */
 export function normalizeExprText(raw: string): string {
   return raw

@@ -405,6 +405,13 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         if (fields.recurringRuleId !== (cur.recurringRuleId ?? null)) {
           throw new ValidationError('Связь операции с регулярным платежом менять нельзя');
         }
+        // Операция по долгу с другим видом молча стала бы другим движением долга (выдача → платёж и наоборот).
+        // Явно снятая связь (debtId: null) или перевод, сбрасывающий долг сам, — не смена вида операции по долгу.
+        if (fields.debtId !== null && (cur.debtId ?? null) !== null && fields.kind !== cur.kind) {
+          throw new ValidationError(
+            'Вид операции по долгу менять нельзя: платёж и выдача считаются по-разному. Удалите операцию и запишите заново со страницы долга',
+          );
+        }
 
         const { wallet, toWallet } = await loadWallets(ctx, fields, cur);
         await checkCategoryOf(ctx, fields);

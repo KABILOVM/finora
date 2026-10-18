@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import { AmountInput, isCoarsePointer } from '@/components/AmountInput';
 import type { KeypadKey } from '@/components/Keypad';
 import { Icon } from '@/components/Icon';
@@ -35,6 +35,7 @@ export function FeeField({
   active = false,
   onActivate,
   onRemove,
+  keyRef,
 }: {
   c: TxFormController;
   /** Экранная клавиатура сейчас печатает в комиссию (рамка выделена). */
@@ -42,6 +43,8 @@ export function FeeField({
   onActivate?: () => void;
   /** «Убрать комиссию»: снять комиссию и закрыть панель. */
   onRemove?: () => void;
+  /** Сюда поле суммы комиссии отдаёт обработчик клавиш: экранная клавиатура суммы печатает прямо в него (телефон). */
+  keyRef?: MutableRefObject<((key: KeypadKey) => void) | null>;
 }) {
   const { form, errors, fee } = c;
   const isTransfer = form.kind === 'transfer';
@@ -106,6 +109,7 @@ export function FeeField({
               showKeypad={false}
               noSystemKeyboard
               onActivate={onActivate}
+              keyRef={keyRef}
               bare
               className={`w-full ${AMOUNT_BOX}`}
             />

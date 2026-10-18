@@ -3,6 +3,7 @@ import { useReceipt } from '@/db';
 import { formatMinor } from '@/domain/money';
 import { itemTitle, unitPrice } from '@/domain/shopping';
 import type { CurrencyCode } from '@/domain/types';
+import { pluralRu } from '@/lib/plural';
 import { perUnitText, priceText } from './shoppingText';
 
 /**
@@ -18,7 +19,7 @@ export function Receipt({ txId, currency }: { txId: string; currency: CurrencyCo
     <section aria-label="Чек" data-testid="receipt" className="mb-3 rounded-2xl bg-surface-2 p-3">
       <h3 className="mb-1 flex items-center gap-2 text-sm font-bold">
         <Icon name="cart" size={16} className="text-brand" />
-        Чек · {items.length} {items.length === 1 ? 'позиция' : items.length < 5 ? 'позиции' : 'позиций'}
+        Чек · {items.length} {pluralRu(items.length, 'позиция', 'позиции', 'позиций')}
       </h3>
       <ul className="divide-y divide-border/60">
         {items.map((i) => {
