@@ -72,7 +72,7 @@ describe('новый долг: сбой базы посреди записи', (
   it('операция не записалась: не остаётся ни долга, ни операции; повтор после сбоя записывает ровно один долг и одну операцию', async () => {
     const td = opsDeps([table()]);
     await showApp(<DebtsPage />, td, '/debts');
-    await findByRole('heading', { name: 'Долги и кредиты', level: 1 });
+    await findByRole('heading', { name: 'Долги', level: 1 });
     await waitFor(() => expect(screen.queryByText('Загрузка…')).toBeNull());
     const s = storeOf(td);
     vi.spyOn(s.db.transactions, 'add').mockRejectedValueOnce(new Error('disk full'));

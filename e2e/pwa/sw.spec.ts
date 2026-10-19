@@ -151,13 +151,16 @@ test('Сеть пропала ПОСЛЕ загрузки страницы: вс
   const nav = page.getByRole('navigation').first();
   for (const [name, heading] of [
     ['Операции', 'Операции'],
-    ['Кошельки', 'Кошельки'],
+    ['Аналитика', 'Аналитика'],
     ['Ещё', 'Ещё'],
   ] as const) {
     await nav.getByRole('link', { name }).click();
     await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible();
   }
-  // «Ещё» — это меню; «Настройки» открываются вторым шагом, тоже без сети (ленивая страница из precache)
+  // «Ещё» — это меню; «Кошельки» и «Настройки» открываются вторым шагом, тоже без сети (ленивые страницы из precache)
+  await page.getByRole('main').getByRole('link', { name: 'Кошельки', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Кошельки' }).first()).toBeVisible();
+  await nav.getByRole('link', { name: 'Ещё' }).click();
   await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Настройки' }).first()).toBeVisible();
   await page.goto(`${srv.url}#/settings/categories`);
@@ -204,7 +207,8 @@ test('Первый заход: ленивый чанк «завис» (медл�
   });
   await page.goto(srv.url);
   await ready(page);
-  await page.getByRole('navigation').first().getByRole('link', { name: 'Кошельки' }).click();
+  await page.getByRole('navigation').first().getByRole('link', { name: 'Ещё' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Кошельки', exact: true }).click();
   await page.waitForTimeout(800);
   // Пока страница грузится, каркас (меню, шапка) на экране, а не пустота.
   await expect(page.getByRole('navigation').first()).toBeVisible();

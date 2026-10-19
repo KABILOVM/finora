@@ -19,7 +19,7 @@ function rowText(row: Row, base: CurrencyCode): string | null {
 
 /**
  * Левая ячейка полосы «Курсы и погода» на «Главной»: доллар и рубль к основной валюте, две строки по 20 px. Нажатие открывает
- * «Курсы и конвертер». Курсы лежат на устройстве, поэтому работает без интернета; нет курса — так и пишем, без выдуманных цифр.
+ * «Курсы валют». Курсы лежат на устройстве, поэтому работает без интернета; нет курса — так и пишем, без выдуманных цифр.
  * Дата курса и «устарел» — в имени ссылки и жёлтой точкой, чтобы не занимать место.
  */
 export default function RatesWidget({ base }: { base: CurrencyCode }) {
@@ -31,8 +31,8 @@ export default function RatesWidget({ base }: { base: CurrencyCode }) {
   const manual = known.some((r) => r.lookup.manual);
 
   const label = known.length
-    ? `Курсы к ${currencyInfo(base).name}: ${known.map((r) => rowText(r, base)).join('; ')}${asOf ? `, на ${shortAsOf(asOf)}` : ''}${stale ? '. Курсы устарели' : ''}${manual && !stale ? '. Свой курс' : ''}. Открыть курсы и конвертер`
-    : 'Курсы валют: пока нет данных. Открыть курсы и конвертер';
+    ? `Курсы к ${currencyInfo(base).name}: ${known.map((r) => rowText(r, base)).join('; ')}${asOf ? `, на ${shortAsOf(asOf)}` : ''}${stale ? '. Курсы устарели' : ''}${manual && !stale ? '. Свой курс' : ''}. Открыть курсы валют`
+    : 'Курсы валют: пока нет данных. Открыть курсы валют';
 
   return (
     <Link

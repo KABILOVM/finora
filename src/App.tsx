@@ -85,7 +85,7 @@ function historyIndex(): number {
 }
 
 /**
- * Маршруты: / /transactions /wallets /more /budgets /recurring /shopping /debts /import /settings /settings/categories внутри каркаса (вход показывает сборка src/app),
+ * Маршруты (разделы — в реестре src/app/sections.ts, плюс /more): внутри каркаса (вход показывает сборка src/app),
  * /add и /edit/:id — шиты поверх страницы, с которой их открыли (при прямом заходе — поверх «Главной»).
  */
 export function AppRoutes() {

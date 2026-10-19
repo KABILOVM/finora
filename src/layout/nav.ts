@@ -1,56 +1,48 @@
 import { useLocation, type Location } from 'react-router-dom';
+import { MORE_PATH, MORE_TITLE, SECTIONS, type Section, type SectionGroup } from '@/app/sections';
 import type { IconName } from '@/components/Icon';
 import type { TxKind } from '@/domain/types';
 
 export interface NavItem {
   to: string;
-  /** Подпись в нижней панели телефона. */
+  /** Единственное название раздела (src/app/sections.ts) — и в нижней панели, и в боковой. */
   label: string;
-  /** Подпись в боковой панели ПК. */
-  sideLabel: string;
   icon: IconName;
+  group: SectionGroup | 'more';
   /** Активен только при точном совпадении пути (для «/»). */
   end?: boolean;
-  /** Есть ли пункт в нижней панели телефона (там место только для четырёх). */
-  phone?: boolean;
-  /** Где пункт в боковой панели ПК: основная группа сверху, нижняя группа или его там нет. */
-  side?: 'main' | 'bottom';
   /** Пункт подсвечен и на этих разделах (и их вложенных адресах) в нижней панели; по умолчанию только на своём. */
   phoneActiveOn?: readonly string[];
   /** То же для боковой панели. */
   sideActiveOn?: readonly string[];
 }
 
-/** Разделы, которые на телефоне лежат за пунктом «Ещё»: там он остаётся подсвеченным. */
-export const MORE_SECTIONS = ['/more', '/budgets', '/analytics', '/recurring', '/shopping', '/debts', '/rates', '/weather', '/settings', '/import'] as const;
+const toItem = (s: Section): NavItem => ({
+  to: s.path,
+  label: s.title,
+  icon: s.icon,
+  group: s.group,
+  ...(s.path === '/' ? { end: true } : {}),
+});
+
+/** Разделы, которые на телефоне лежат за пунктом «Ещё»: там он остаётся подсвеченным (в том числе внутри «Настроек»). */
+export const MORE_SECTIONS: readonly string[] = [MORE_PATH, ...SECTIONS.filter((s) => !s.bottomBar).map((s) => s.path)];
+
+const MORE_ITEM: NavItem = { to: MORE_PATH, label: MORE_TITLE, icon: 'more', group: 'more', phoneActiveOn: MORE_SECTIONS };
 
 /**
- * Пункты меню. На телефоне «+» (добавить операцию) вставляется между вторым и третьим пунктом.
- * На ПК места больше: в основной группе Бюджеты, Аналитика, Платежи, Покупки и Долги, внизу «Настройки». Пункта «Ещё» на ПК нет:
- * это меню только для телефона, где в нижней панели не хватает места. Категории и импорт лежат внутри «Настроек».
+ * Нижняя панель телефона: разделы с bottomBar из реестра и «Ещё». «+» (добавить операцию) вставляется между вторым и третьим
+ * пунктом, поэтому пунктов ровно четыре.
  */
-export const NAV_ITEMS: readonly NavItem[] = [
-  { to: '/', label: 'Главная', sideLabel: 'Главная', icon: 'home', end: true, phone: true, side: 'main' },
-  { to: '/transactions', label: 'Операции', sideLabel: 'Операции', icon: 'list', phone: true, side: 'main' },
-  { to: '/wallets', label: 'Кошельки', sideLabel: 'Кошельки', icon: 'wallet', phone: true, side: 'main' },
-  { to: '/budgets', label: 'Бюджеты', sideLabel: 'Бюджеты', icon: 'pie', side: 'main' },
-  { to: '/analytics', label: 'Аналитика', sideLabel: 'Аналитика', icon: 'chart', side: 'main' },
-  { to: '/recurring', label: 'Регулярные платежи', sideLabel: 'Платежи', icon: 'repeat', side: 'main' },
-  { to: '/shopping', label: 'Покупки', sideLabel: 'Покупки', icon: 'cart', side: 'main' },
-  { to: '/debts', label: 'Долги и кредиты', sideLabel: 'Долги', icon: 'banknote', side: 'main' },
-  { to: '/rates', label: 'Курсы и конвертер', sideLabel: 'Курсы', icon: 'transfer', side: 'main' },
-  { to: '/weather', label: 'Погода', sideLabel: 'Погода', icon: 'cloud', side: 'main' },
-  {
-    to: '/more',
-    label: 'Ещё',
-    sideLabel: 'Ещё',
-    icon: 'more',
-    phone: true,
-    phoneActiveOn: MORE_SECTIONS,
-  },
-  // На ПК подсвечен и внутри «Настроек»: категории и импорт — их части
-  { to: '/settings', label: 'Настройки', sideLabel: 'Настройки', icon: 'sliders', side: 'bottom', sideActiveOn: ['/settings', '/import'] },
-];
+export const PHONE_ITEMS: readonly NavItem[] = [...SECTIONS.filter((s) => s.bottomBar).map(toItem), MORE_ITEM];
+
+/**
+ * Боковая панель ПК: группы из реестра. Основная (без заголовка) сверху, потом «Деньги», «Планирование», «Инструменты»; «Настройки»
+ * внизу под чертой. Пункта «Ещё» на ПК нет. Категории и импорт лежат внутри «Настроек» (там же подсвечиваются).
+ */
+export const SIDE_ITEMS: readonly NavItem[] = SECTIONS.filter((s) => s.side !== false).map((s) =>
+  s.id === 'settings' ? { ...toItem(s), sideActiveOn: ['/settings', '/import'] } : toItem(s),
+);
 
 /** Путь без хвостовых «/» и в нижнем регистре (маршруты регистр не различают, подсветка тоже). */
 const normalize = (path: string): string => path.toLowerCase().replace(/\/+$/, '') || '/';

@@ -302,7 +302,7 @@ describe('новый долг тому же человеку: предложен
       td,
       '/debts',
     );
-    await findByRole('heading', { name: 'Долги и кредиты', level: 1 });
+    await findByRole('heading', { name: 'Долги', level: 1 });
     await waitFor(() => expect(screen.queryByText('Загрузка…')).toBeNull());
     return { td, cash: () => cash };
   }

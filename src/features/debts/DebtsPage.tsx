@@ -70,7 +70,7 @@ function Totals({ items, direction, base, today }: { items: readonly DebtItem[];
 }
 
 /**
- * Долги и кредиты: переключатель «Мне должны» / «Я должен», итог по каждой валюте отдельно, строки с остатком, полосой и сроком
+ * Долги: переключатель «Мне должны» / «Я должен», итог по каждой валюте отдельно, строки с остатком, полосой и сроком
  * словами, свёрнутые «Закрытые» и «Архив». Остаток каждого долга считается из операций (нигде не хранится).
  */
 export default function DebtsPage() {
@@ -107,9 +107,9 @@ export default function DebtsPage() {
   const base = data?.base ?? null;
   const header = (
     <PageHeader
-      title="Долги и кредиты"
+      title="Долги"
       actions={
-        // на телефоне — только «+»: длинный заголовок «Долги и кредиты» иначе обрезается; имя кнопки для скринридера остаётся
+        // на телефоне — только «+»: заголовок рядом с кнопкой тесен; имя кнопки для скринридера остаётся
         <Button icon="plus" aria-label="Новый долг" disabled={base === null} onClick={() => setSheet(true)}>
           <span className="hidden sm:inline">Новый долг</span>
         </Button>

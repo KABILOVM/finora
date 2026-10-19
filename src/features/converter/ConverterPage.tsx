@@ -62,7 +62,7 @@ function CurrencyButton({ code, label, onClick }: { code: CurrencyCode; label: s
   );
 }
 
-/** «Курсы и конвертер»: сумма → результат, флаги стран, курс к выбранной валюте для всех валют списком. */
+/** «Курсы валют»: сумма → результат, флаги стран, курс к выбранной валюте для всех валют списком. */
 export default function ConverterPage() {
   const rates = useRates();
   const service = useRateService();

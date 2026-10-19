@@ -1,6 +1,7 @@
 import { test as base, expect, type Browser, type BrowserContext, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { MORE_TITLE, SECTIONS } from '../src/app/sections';
 
 /* ---------------------------------------------------------------------------------------------
  * Общие помощники для сквозных сценариев. Кнопки ищем по доступным именам (роль + текст/aria-label),
@@ -208,54 +209,55 @@ export async function activateServiceWorker(page: Page): Promise<void> {
 
 /* ------------------------------ навигация ------------------------------ */
 
-export type Section = 'Главная' | 'Операции' | 'Кошельки' | 'Бюджеты' | 'Аналитика' | 'Платежи' | 'Покупки' | 'Долги' | 'Ещё' | 'Настройки';
+export type Section =
+  | 'Главная'
+  | 'Операции'
+  | 'Аналитика'
+  | 'Кошельки'
+  | 'Долги'
+  | 'Бюджеты'
+  | 'Платежи'
+  | 'Покупки'
+  | 'Курсы'
+  | 'Погода'
+  | 'Ещё'
+  | 'Настройки';
 
-/** Заголовок страницы (h1) для пункта меню. */
-const SECTION_TITLE: Record<Section, string> = {
-  Главная: 'Главная',
-  Операции: 'Операции',
-  Кошельки: 'Кошельки',
-  Бюджеты: 'Бюджеты',
-  Аналитика: 'Аналитика',
-  Платежи: 'Регулярные платежи',
-  Покупки: 'Покупки',
-  Долги: 'Долги и кредиты',
-  Ещё: 'Ещё',
-  Настройки: 'Настройки',
+/** Короткие имена в тестах → разделы реестра (src/app/sections.ts): название в меню и заголовок страницы там одно. */
+const REGISTRY_ID: Partial<Record<Section, string>> = { Платежи: 'recurring', Курсы: 'rates' };
+
+/** Название раздела (оно же заголовок h1 и название пункта меню). */
+const SECTION_TITLE = (section: Section): string => {
+  if (section === 'Ещё') return MORE_TITLE;
+  const id = REGISTRY_ID[section];
+  const found = SECTIONS.find((s) => (id ? s.id === id : s.title === section));
+  if (!found) throw new Error(`Нет раздела «${section}» в реестре`);
+  return found.title;
 };
 
-/** Пункты, которые есть в нижней панели телефона; остальное на телефоне открывается через «Ещё». */
-const PHONE_NAV: readonly Section[] = ['Главная', 'Операции', 'Кошельки', 'Ещё'];
-
-/** Название пункта на странице «Ещё» (там названия полные). */
-const MORE_TITLE: Partial<Record<Section, string>> = {
-  Бюджеты: 'Бюджеты',
-  Аналитика: 'Аналитика',
-  Платежи: 'Регулярные платежи',
-  Покупки: 'Покупки',
-  Долги: 'Долги и кредиты',
-  Настройки: 'Настройки',
-};
+/** Пункты, которые есть в нижней панели телефона (из реестра); остальное на телефоне открывается через «Ещё». */
+const PHONE_NAV: readonly string[] = [...SECTIONS.filter((s) => s.bottomBar).map((s) => s.title), MORE_TITLE];
 
 /** Основная навигация (на ПК — боковая панель, на телефоне — нижняя). */
 export const mainNav = (page: Page): Locator => page.getByRole('navigation', { name: 'Основная навигация' });
 
 /**
- * Перейти в раздел через меню. ПК: пункт боковой панели. Телефон: пункт нижней панели, а Бюджеты, Платежи, Покупки, Долги и
- * Настройки открываются в два шага: «Ещё», затем строка списка.
+ * Перейти в раздел через меню. ПК: пункт боковой панели. Телефон: пункт нижней панели (Главная, Операции, Аналитика, Ещё), а
+ * остальное (Кошельки, Долги, Бюджеты, Платежи, Покупки, Курсы, Погода, Настройки) открывается в два шага: «Ещё», затем строка списка.
  */
 export async function goSection(page: Page, section: Section): Promise<void> {
-  if (isPhone(page) && !PHONE_NAV.includes(section)) {
+  const title = SECTION_TITLE(section);
+  if (isPhone(page) && !PHONE_NAV.includes(title)) {
     await goSection(page, 'Ещё');
-    await page.getByRole('main').getByRole('link', { name: MORE_TITLE[section], exact: true }).click();
+    await page.getByRole('main').getByRole('link', { name: title, exact: true }).click();
   } else {
-    await mainNav(page).getByRole('link', { name: section, exact: true }).click();
+    await mainNav(page).getByRole('link', { name: title, exact: true }).click();
   }
-  await expect(page.getByRole('heading', { level: 1, name: SECTION_TITLE[section] })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
   await expect(page.getByText('Загрузка…')).toHaveCount(0);
 }
 
-/** Страница «Ещё» (только телефон) и её пункт по названию: Бюджеты, Регулярные платежи, Долги и кредиты, Настройки. */
+/** Страница «Ещё» (только телефон) и её пункт по названию: Бюджеты, Регулярные платежи, Долги, Настройки. */
 export async function openFromMore(page: Page, title: string): Promise<void> {
   await goSection(page, 'Ещё');
   await page.getByRole('main').getByRole('link', { name: title, exact: true }).click();
