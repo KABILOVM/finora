@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
-import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
 import { useDebtView, useRecurringRules, useStore, type DebtDeleteMode, type DebtDeletion } from '@/db';
@@ -33,20 +32,12 @@ import { useDebtsData } from './useDebtsData';
 
 type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | 'remind' | 'parts' | null;
 
-function BackLink({ dir }: { dir?: string }) {
-  return (
-    <Link to={dir ? `/debts?dir=${dir}` : '/debts'} className="-ml-1 inline-flex min-h-[44px] items-center gap-1 pr-3 text-base font-semibold text-brand">
-      <Icon name="chevron" size={18} className="rotate-180" />
-      Все долги
-    </Link>
-  );
-}
+const backTo = (dir?: string) => ({ to: dir ? `/debts?dir=${dir}` : '/debts', label: 'Долги' });
 
 function Notice({ title, text }: { title: string; text: string }) {
   return (
     <>
-      <BackLink />
-      <PageHeader title="Долг" />
+      <PageHeader title="Долг" back={backTo()} />
       <EmptyState
         icon="alert"
         title={title}
@@ -85,8 +76,7 @@ export default function DebtDetailPage() {
   if (view === undefined || lines === undefined) {
     return (
       <>
-        <BackLink />
-        <PageHeader title="Долг" />
+        <PageHeader title="Долг" back={backTo()} />
         <p role="status" className="py-10 text-center text-muted">
           Загрузка…
         </p>
@@ -213,8 +203,11 @@ export default function DebtDetailPage() {
 
   return (
     <>
-      <BackLink dir={debt.direction === 'borrowed' ? 'borrowed' : undefined} />
-      <PageHeader title={debt.counterparty} subtitle={`${DIRECTION_LABEL[debt.direction]} · ${debt.currency}`} />
+      <PageHeader
+        title={debt.counterparty}
+        subtitle={`${DIRECTION_LABEL[debt.direction]} · ${debt.currency}`}
+        back={backTo(debt.direction === 'borrowed' ? 'borrowed' : undefined)}
+      />
 
       {archived && (
         <p role="status" className="mb-3 rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">

@@ -144,7 +144,11 @@ test.describe('39. Главная: компактная, с «Требует в�
     await shot(page, '39-home-top', testInfo);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await shot(page, '39-home-bottom', testInfo);
-    await page.getByRole('button', { name: 'Включить тёмную тему' }).click();
+    // переключателя темы в шапке телефона больше нет: тема — в «Настройки → Оформление»
+    await goSection(page, 'Настройки');
+    await page.getByRole('radio', { name: 'Тёмная', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await goSection(page, 'Главная');
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(800);
     await shot(page, '39-home-top-dark', testInfo);
