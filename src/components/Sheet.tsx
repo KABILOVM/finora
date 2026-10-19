@@ -26,9 +26,12 @@ export interface SheetProps {
   dismissible?: boolean;
   /**
    * В окне есть несохранённый ввод: закрытие (×, Esc, фон, «Назад») сначала спрашивает «Закрыть без сохранения?».
+   * «Назад» спрашивает только у окон с history (по умолчанию); у окон в адресе (history: false) «Назад» уводит роутер.
    * Сохранение и «Отмена» внутри окна зовут onClose сами и вопроса не вызывают.
    */
   isDirty?: boolean;
+  /** Подпись кнопки «×» для скринридера (по умолчанию «Закрыть»). */
+  closeLabel?: string;
   /** «Назад» (жест, кнопка браузера) закрывает окно. Выключают у окон, которые живут в адресе (/add, /edit/:id). */
   history?: boolean;
   className?: string;
@@ -50,6 +53,7 @@ export function Sheet({
   role = 'dialog',
   dismissible = true,
   isDirty = false,
+  closeLabel = 'Закрыть',
   history = true,
   className,
 }: SheetProps) {
@@ -163,7 +167,7 @@ export function Sheet({
           </h2>
           <div className="flex shrink-0 items-center gap-1">
             {headerAction}
-            {dismissible && <IconButton icon="close" label="Закрыть" onClick={requestClose} className="-mr-2" />}
+            {dismissible && <IconButton icon="close" label={closeLabel} onClick={requestClose} className="-mr-2" />}
           </div>
         </div>
         <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3">
@@ -184,6 +188,7 @@ export function Sheet({
         open
         onClose={() => setAsking(false)}
         title="Закрыть без сохранения?"
+        closeLabel="Не закрывать"
         placement="center"
         role="alertdialog"
         footer={

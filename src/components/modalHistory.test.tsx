@@ -1,11 +1,11 @@
 import { StrictMode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { dropModalAnchor, resetModalHistoryForTests } from './modalHistory';
+import { dropModalAnchor, resetModalHistoryForTests, runWithoutModalAnchor } from './modalHistory';
 import { Sheet } from './Sheet';
 import { act, render, screen, user } from './testUtils';
 
 const wait = (ms = 30) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
-const flagged = () => (window.history.state as { __sumoimaModal?: boolean } | null)?.__sumoimaModal === true;
+const flagged = () => typeof (window.history.state as { __sumoimaModal?: unknown } | null)?.__sumoimaModal === 'string';
 const back = async () => {
   act(() => window.history.back());
   await wait();
@@ -138,18 +138,62 @@ describe('переход по истории из кода при открыто
     await user.click(screen.getByRole('button', { name: 'Открыть первое' }));
     expect(flagged()).toBe(true);
     // как закрытие /add: переход закрывает и само окно
+    let flaggedAtLeave: boolean | null = null;
     const leave = () => {
       called++;
+      flaggedAtLeave = flagged(); // переход из кода видит страницу уже без якоря
       act(() => screen.getAllByRole('button', { name: 'Закрыть' })[0]!.click());
     };
     expect(dropModalAnchor(leave)).toBe(true);
     expect(called).toBe(0); // переход ждёт, пока якорь уйдёт
     await wait(80);
     expect(called).toBe(1);
+    expect(flaggedAtLeave).toBe(false);
     expect(dlg('Первое')).toBeNull();
     await wait(80); // act вложен в ожидание теста и закрыл окно в самом конце: запись снимается следом
     expect(flagged()).toBe(false);
     expect(window.history.state).toMatchObject({ idx: 3, key: 'k' });
+  });
+});
+
+describe('чужие и оставшиеся записи', () => {
+  it('запись с пометкой от прошлой загрузки страницы или снятого якоря не мешает: первый «Назад» закрывает окно', async () => {
+    window.history.replaceState({ idx: 3, key: 'k', usr: null, __sumoimaModal: 'old-1' }, '');
+    render(<Two />);
+    await user.click(screen.getByRole('button', { name: 'Открыть первое' }));
+    expect(dlg('Первое')).not.toBeNull();
+    await back();
+    await wait();
+    expect(dlg('Первое')).toBeNull();
+  });
+
+  it('пока код уходит по истории сам, новый якорь не ставится; потом окна, оставшиеся открытыми, получают запись', async () => {
+    render(<Two />);
+    await user.click(screen.getByRole('button', { name: 'Открыть первое' }));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(dropModalAnchor(() => undefined)).toBe(true); // окно при этом остаётся открытым
+    await wait(80);
+    expect(flagged()).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Открыть второе' })); // другое окно открылось посреди перехода
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(flagged()).toBe(false);
+    await wait(700);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(flagged()).toBe(true);
+  });
+
+  it('runWithoutModalAnchor без окон зовёт переход сразу, с окном — после снятия якоря', async () => {
+    let at: boolean[] = [];
+    runWithoutModalAnchor(() => at.push(flagged()));
+    expect(at).toEqual([false]);
+
+    at = [];
+    render(<Two />);
+    await user.click(screen.getByRole('button', { name: 'Открыть первое' }));
+    runWithoutModalAnchor(() => at.push(flagged()));
+    expect(at).toEqual([]);
+    await wait(80);
+    expect(at).toEqual([false]);
   });
 });
 

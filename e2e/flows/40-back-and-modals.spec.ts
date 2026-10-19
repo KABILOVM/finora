@@ -46,6 +46,15 @@ test.describe('40. «Назад» на вложенных экранах и в �
     await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeVisible();
   });
 
+  test('после создания долга в истории нет лишней записи: «назад» уходит с экрана «Долги» сразу', async ({ page }) => {
+    await openApp(page);
+    await addDebt(page, 'Рустам', '300');
+    await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeVisible();
+    await page.waitForTimeout(300);
+    await page.goBack();
+    await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeHidden();
+  });
+
   test('«назад» в браузере закрывает открытое окно, а страница остаётся прежней', async ({ page }) => {
     await openApp(page);
     await goSection(page, 'Кошельки');

@@ -13,6 +13,9 @@
 export const MODAL_HISTORY = true;
 
 const FLAG = '__sumoimaModal';
+/** Номер нашего текущего якоря: запись с пометкой другого номера (осталась от перезагрузки, снятого якоря) — не наша. */
+let anchorId = '';
+let seq = 0;
 
 interface User {
   /** Закрыть окно по «Назад» (то же, что ×: окно с несохранённым вводом спросит подтверждение). */
@@ -29,16 +32,24 @@ let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let unwindTimer: ReturnType<typeof setTimeout> | null = null;
 /** Что сделать, когда наш back() дойдёт (dropModalAnchor). */
 let afterUnwind: (() => void) | null = null;
+/**
+ * Пока код уходит по истории сам (navigate после dropModalAnchor), новый якорь не ставим: окно, которое роутер ещё не убрал,
+ * поставило бы запись поперёк этого перехода. Снимается popstate перехода или через HOLD_MS.
+ */
+let holding = false;
+let holdTimer: ReturnType<typeof setTimeout> | null = null;
+const HOLD_MS = 600;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
-const onAnchor = (): boolean => isObject(window.history.state) && window.history.state[FLAG] === true;
+const onAnchor = (): boolean => anchorId !== '' && isObject(window.history.state) && window.history.state[FLAG] === anchorId;
 
 /** Привести историю в соответствие с окнами: есть окна — есть якорь, нет окон — якоря нет. */
 function sync(): void {
-  if (unwinding > 0) return; // дождёмся popstate от своего back(): до него положение в истории не определено
+  if (unwinding > 0 || holding) return; // дождёмся popstate от своего back() и от перехода кода: до них положение в истории не определено
   if (users.length > 0 && !anchored) {
     const state = window.history.state;
-    window.history.pushState({ ...(isObject(state) ? state : {}), [FLAG]: true }, '');
+    anchorId = `${Date.now()}-${++seq}`;
+    window.history.pushState({ ...(isObject(state) ? state : {}), [FLAG]: anchorId }, '');
     anchored = true;
   } else if (users.length === 0 && anchored) {
     anchored = false;
@@ -67,8 +78,25 @@ function unwind(): void {
 function finishUnwind(): void {
   const then = afterUnwind;
   afterUnwind = null;
-  syncSoon(); // окна, открытые за это время, ждали своей записи; React к этому моменту уже убрал закрытые
-  then?.();
+  if (!then) {
+    syncSoon(); // окна, открытые за это время, ждали своей записи; React к этому моменту уже убрал закрытые
+    return;
+  }
+  hold();
+  then();
+}
+
+function hold(): void {
+  holding = true;
+  if (holdTimer !== null) clearTimeout(holdTimer);
+  holdTimer = setTimeout(release, HOLD_MS);
+}
+
+function release(): void {
+  holding = false;
+  if (holdTimer !== null) clearTimeout(holdTimer);
+  holdTimer = null;
+  syncSoon();
 }
 
 /** Не сразу: закрытие окна и открытие другого в одном обновлении (StrictMode, смена шага) не должны ходить по истории туда-сюда. */
@@ -90,6 +118,7 @@ function onPopState(): void {
     }
     return;
   }
+  if (holding) release(); // дошёл переход, ради которого держали паузу
   // «Назад» от человека: наша запись ушла. Если мы оказались ЕЁ копией (вперёд/назад по чужим записям), окно не трогаем.
   if (!anchored || onAnchor()) return;
   anchored = false;
@@ -131,12 +160,21 @@ export function dropModalAnchor(then: () => void): boolean {
   return true;
 }
 
+/** dropModalAnchor, а если якоря нет — сразу `then`. Для переходов из кода, которые могут случиться при открытом окне. */
+export function runWithoutModalAnchor(then: () => void): void {
+  if (!dropModalAnchor(then)) then();
+}
+
 /** Для тестов: забыть всё, что накопили предыдущие тесты. */
 export function resetModalHistoryForTests(): void {
   users.length = 0;
   anchored = false;
+  anchorId = '';
   unwinding = 0;
   afterUnwind = null;
+  holding = false;
+  if (holdTimer !== null) clearTimeout(holdTimer);
+  holdTimer = null;
   if (syncTimer !== null) clearTimeout(syncTimer);
   if (unwindTimer !== null) clearTimeout(unwindTimer);
   syncTimer = null;

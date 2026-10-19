@@ -16,7 +16,7 @@ import { PageNotices } from '@/app/PageNotices';
 import { canRescueExport, exportLocalBackup } from '@/app/rescueExport';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { dropModalAnchor } from '@/components/modalHistory';
+import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { ToastProvider } from '@/components/Toast';
 import BudgetAlerts from '@/features/budgets/BudgetAlerts';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
@@ -107,11 +107,10 @@ export function AppRoutes() {
   // съел бы её, а не запись шита (modalHistory.ts).
   const closeAdd = () => {
     const canGoBack = navigationType === 'PUSH' || historyIndex() > 0;
-    const leave = () => {
+    runWithoutModalAnchor(() => {
       if (background && canGoBack) navigate(-1);
       else navigate('/', { replace: true });
-    };
-    if (!dropModalAnchor(leave)) leave();
+    });
   };
 
   // Непонятный адрес с переводом строки: сразу на «Главную» (иначе router показал бы пустой экран)
