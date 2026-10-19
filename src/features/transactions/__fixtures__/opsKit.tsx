@@ -131,13 +131,15 @@ export function LocationProbe() {
   const location = useLocation();
   const background = (location.state as { background?: { pathname?: string } } | null)?.background?.pathname ?? '';
   return (
-    <p data-testid="location" data-background={background}>
+    <p data-testid="location" data-background={background} data-search={location.search}>
       {location.pathname}
     </p>
   );
 }
 
 export const backgroundPath = (): string => document.querySelector('[data-testid="location"]')?.getAttribute('data-background') ?? '';
+
+export const currentSearch = (): string => document.querySelector('[data-testid="location"]')?.getAttribute('data-search') ?? '';
 
 export const currentPath = (): string => document.querySelector('[data-testid="location"]')?.textContent ?? '';
 

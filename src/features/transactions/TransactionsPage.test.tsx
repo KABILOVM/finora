@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { write } from '@/app/testkit';
 import { findByRole, screen, user, waitFor } from '@/components/testUtils';
@@ -8,6 +10,7 @@ import {
   backgroundPath,
   choose,
   currentPath,
+  currentSearch,
   LocationProbe,
   opsDeps,
   pinToday,
@@ -19,7 +22,7 @@ import {
   type History,
   unpinToday,
 } from './__fixtures__/opsKit';
-import { dayTotal, periodRange, shiftMonth, toTxFilter, type ListFilters } from './txFilters';
+import { dayTotal, periodRange, shiftMonth, toTxFilter, walletOpsQuery, type ListFilters } from './txFilters';
 import TransactionsPage, { PAGE_SIZE } from './TransactionsPage';
 
 beforeEach(pinToday);
@@ -30,7 +33,18 @@ afterEach(() => {
 
 let hist: History = { cash: '', card: '', usd: '', txs: {} };
 
-async function openList(options: { empty?: boolean; sync?: SyncEngineApi | null; path?: string } = {}) {
+/** Переход по адресу, как по ссылке из другого места приложения (чип кошелька, вкладка «Операции»). */
+let jumpTo = '';
+function Jump() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(jumpTo)}>
+      jump
+    </button>
+  );
+}
+
+async function openList(options: { empty?: boolean; sync?: SyncEngineApi | null; path?: string; extra?: ReactNode } = {}) {
   const td = opsDeps([table()], {
     setup: async (s) => {
       if (!options.empty) hist = await seedHistory(s);
@@ -40,6 +54,7 @@ async function openList(options: { empty?: boolean; sync?: SyncEngineApi | null;
     <>
       <TransactionsPage />
       <LocationProbe />
+      {options.extra}
     </>
   );
   await showApp(options.sync ? <SyncProvider engine={options.sync}>{page}</SyncProvider> : page, td, options.path ?? '/transactions');
@@ -236,7 +251,7 @@ describe('шит «Фильтры» и счётчик', () => {
     const periodGroup = screen.getByRole('group', { name: 'Период' });
     // чипы периода и кнопка лежат в одной строке (общий родитель)
     expect(periodGroup.parentElement?.contains(filtersButton())).toBe(true);
-    expect(screen.getByRole('textbox', { name: 'Поиск по заметке' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Поиск по операциям' })).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Кошелёк' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Категория' })).toBeNull();
     expect(filtersButton().getAttribute('aria-label')).toBe('Фильтры');
@@ -304,7 +319,7 @@ describe('поиск по заметке', () => {
     await openList();
     await period('Всё время');
     await waitFor(() => expect(has('Работа')).toBe(true));
-    const search = screen.getByRole('textbox', { name: 'Поиск по заметке' });
+    const search = screen.getByRole('textbox', { name: 'Поиск по операциям' });
     await user.type(search, 'ТАКСИ');
     // сразу после набора запрос ещё не ушёл
     expect(has('обед')).toBe(true);
@@ -315,12 +330,129 @@ describe('поиск по заметке', () => {
 
   it('ничего не найдено → понятное сообщение; «Показать всё» сбрасывает поиск', async () => {
     await openList();
-    const search = screen.getByRole('textbox', { name: 'Поиск по заметке' });
+    const search = screen.getByRole('textbox', { name: 'Поиск по операциям' });
     await user.type(search, 'qqqq');
     expect(await waitFor(() => screen.getByText('Ничего не найдено'))).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Показать всё' }));
     await waitFor(() => expect(has('Работа')).toBe(true));
-    expect((screen.getByRole('textbox', { name: 'Поиск по заметке' }) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('textbox', { name: 'Поиск по операциям' }) as HTMLInputElement).value).toBe('');
+  });
+});
+
+describe('поиск по категории, кошельку и сумме', () => {
+  const searchFor = async (text: string) => {
+    await user.clear(screen.getByRole('textbox', { name: 'Поиск по операциям' }));
+    await user.type(screen.getByRole('textbox', { name: 'Поиск по операциям' }), text);
+  };
+
+  it('по названию категории и кошелька', async () => {
+    await openList();
+    await period('Всё время');
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    await searchFor('еда');
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    expect(has('обед')).toBe(true);
+    expect(has('coffee')).toBe(true);
+    await searchFor('доллары');
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(has('coffee')).toBe(true);
+  });
+
+  it('по сумме: «12,5» находит обед за 12,50; «5000» — аванс', async () => {
+    await openList();
+    await period('Всё время');
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    await searchFor('12,5');
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(has('обед')).toBe(true);
+    await searchFor('5 000');
+    await waitFor(() => expect(has('аванс')).toBe(true));
+    expect(rowTexts()).toHaveLength(1);
+  });
+
+  it('итог периода и итог дня считают найденное, а не всё', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await searchFor('такси');
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    const totals = document.querySelector('[data-testid="period-totals"]')?.textContent ?? '';
+    expect(totals).toContain(money(-300));
+    expect(totals).not.toContain(money(500_000, 'TJS', 'always'));
+  });
+});
+
+describe('фильтры живут в адресе', () => {
+  it('«Всё время» и фильтр из шита пишутся в адрес; «Сбросить» их убирает; поиск в адрес не попадает', async () => {
+    await openList();
+    expect(currentSearch()).toBe('');
+    await period('Всё время');
+    await waitFor(() => expect(currentSearch()).toBe('?period=all'));
+    await applySheet(() => choose('Кошелёк', 'Карта'));
+    await waitFor(() => expect(currentSearch()).toBe(`?period=all&wallet=${hist.card}`));
+    await user.type(screen.getByRole('textbox', { name: 'Поиск по операциям' }), 'такси');
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(currentSearch()).toBe(`?period=all&wallet=${hist.card}`);
+    await user.click(screen.getByRole('button', { name: 'Сбросить' }));
+    await waitFor(() => expect(currentSearch()).toBe('?period=all'));
+  });
+
+  it('«Другой месяц» держится, даже когда выбран текущий месяц', async () => {
+    await openList();
+    await period('Другой месяц');
+    await waitFor(() => expect(currentSearch()).toBe('?period=month&month=2026-10'));
+    expect(screen.getByRole('button', { name: 'Другой месяц' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('ссылка с чипа кошелька (?wallet=<id>&period=all) — операции только этого кошелька за всё время; вкладка «Операции» сбрасывает', async () => {
+    await openList({ extra: <Jump /> });
+    await waitFor(() => expect(has('обед')).toBe(true));
+    jumpTo = `/transactions?${walletOpsQuery(hist.card)}`;
+    await user.click(screen.getByRole('button', { name: 'jump' }));
+    await waitFor(() => expect(has('обед')).toBe(false));
+    expect(has('такси')).toBe(true);
+    expect(has('Наличные → Карта')).toBe(true); // перевод НА карту
+    expect(has('Работа')).toBe(true); // июльский доход на карту: «за всё время»
+    expect(screen.getByRole('button', { name: 'Всё время' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('[data-testid="active-filters"]')).toHaveTextContent('Карта');
+    jumpTo = '/transactions';
+    await user.click(screen.getByRole('button', { name: 'jump' }));
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера']));
+    expect(document.querySelector('[data-testid="active-filters"]')).toBeNull();
+  });
+
+  it('«Показать всё» в пустом списке: весь срок, остальное выключено', async () => {
+    await openList({ path: '/transactions?kind=income&month=2026-09' });
+    expect(await waitFor(() => screen.getByText('Ничего не найдено'))).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Показать всё' }));
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    expect(currentSearch()).toBe('?period=all');
+  });
+});
+
+describe('комиссия перевода', () => {
+  it('входит в итог периода отдельной строкой и видна в строке перевода', async () => {
+    const td = await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    // списали 100, зачислили 97,50: комиссия 2,50
+    await write(() =>
+      storeOf(td).transactions.create({
+        kind: 'transfer',
+        walletId: hist.cash,
+        toWalletId: hist.card,
+        amountMinor: 10_000,
+        toAmountMinor: 9750,
+        occurredOn: '2026-10-14',
+        note: 'с комиссией',
+      }),
+    );
+    await waitFor(() => expect(has('с комиссией')).toBe(true));
+    expect(rowTexts().find((t) => t.includes('с комиссией'))).toContain(`комиссия ${money(250).replace('−', '')}`);
+    const totals = document.querySelector('[data-testid="period-totals"]')?.textContent ?? '';
+    // сомони: обед 12,50 + такси 3 + комиссия 2,50 = 18
+    expect(totals).toContain(money(-1800));
+    expect(totals).toContain(`в расходах комиссии переводов: ${money(250)}`);
+    // итог дня 14 октября: −3 (такси) −109 (10 $) −2,50 (комиссия); сам перевод не считается
+    expect(section('Вчера')?.querySelector('header')?.textContent).toContain(money(-(300 + 10_900 + 250), 'TJS', 'always'));
   });
 });
 
@@ -348,7 +480,7 @@ describe('пустое состояние', () => {
     await openList({ empty: true });
     expect(await waitFor(() => screen.getByText('Операций пока нет'))).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Добавить операцию' })).toHaveAttribute('href', '/add');
-    expect(screen.queryByRole('textbox', { name: 'Поиск по заметке' })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Поиск по операциям' })).toBeNull();
   });
 });
 

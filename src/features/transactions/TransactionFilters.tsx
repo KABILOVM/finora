@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { inputClasses } from '@/components/Field';
+import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { Icon } from '@/components/Icon';
 import type { Category, LocalRow, Wallet } from '@/domain/types';
 import { cn } from '@/lib/cn';
@@ -105,7 +106,7 @@ export interface TransactionFiltersProps {
 
 /**
  * Панель над списком, максимально плотная: в первой строке чипы периода и кнопка «Фильтры» (с числом включённых),
- * ниже — поиск по заметке. Кошелёк, вид и категория спрятаны в шит «Фильтры»; что из них включено, видно в строке под поиском.
+ * ниже — поиск (заметка, категория, кошелёк, сумма). Кошелёк, вид и категория спрятаны в шит «Фильтры»; что из них включено, видно в строке под поиском.
  */
 export function TransactionFilters({ filters, onChange, wallets, categories, currentMonth }: TransactionFiltersProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -147,8 +148,8 @@ export function TransactionFilters({ filters, onChange, wallets, categories, cur
         <Icon name="search" size={20} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
         <input
           type="search"
-          aria-label="Поиск по заметке"
-          placeholder="Поиск по заметке"
+          aria-label="Поиск по операциям"
+          placeholder="Заметка, категория, кошелёк, сумма"
           value={filters.search}
           autoComplete="off"
           onChange={(e) => onChange({ search: e.target.value })}
@@ -178,8 +179,9 @@ export function TransactionFilters({ filters, onChange, wallets, categories, cur
           wallets={wallets}
           categories={categories}
           onApply={(next) => {
-            onChange(next);
             setSheetOpen(false);
+            // фильтры лежат в адресе: правим его, когда запись окна в истории уже снята (иначе replace затёр бы её)
+            runWithoutModalAnchor(() => onChange(next));
           }}
           onClose={() => setSheetOpen(false)}
         />

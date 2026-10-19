@@ -248,7 +248,7 @@ test.describe('CSP в настоящем браузере', () => {
     await page.getByRole('button', { name: /^Фильтры/ }).click();
     await expect(sheet(page, /Фильтры/)).toBeVisible();
     await page.keyboard.press('Escape');
-    await page.getByRole('searchbox', { name: 'Поиск по заметке' }).fill('хл');
+    await page.getByRole('searchbox', { name: 'Поиск по операциям' }).fill('хл');
 
     // «Кошельки»: сверка
     await goSection(page, 'Кошельки');
