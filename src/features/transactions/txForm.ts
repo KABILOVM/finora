@@ -139,6 +139,32 @@ export function computeFee(form: Pick<TxFormState, 'feeMode' | 'feeAmount' | 'fe
   return base === null ? 0 : percentOfMinor(base, form.feePct);
 }
 
+/**
+ * Есть ли в форме несохранённый ввод (закрытие окна тогда спросит подтверждение). «Добавить»: считаем набранное — сумму, категорию,
+ * заметку, комиссию, курс; вид, кошельки и дата — выбор, а не ввод, их одних терять не жалко. «Правка»: любое отличие от операции.
+ */
+export function isFormDirty(form: TxFormState, initial: TxFormState, editing: boolean): boolean {
+  const typed =
+    form.amountMinor !== initial.amountMinor ||
+    form.categoryId !== initial.categoryId ||
+    form.note !== initial.note ||
+    form.toAmountOverride !== initial.toAmountOverride ||
+    form.feeAmount !== initial.feeAmount ||
+    form.feePct !== initial.feePct ||
+    form.rateText !== initial.rateText;
+  if (!editing) return typed;
+  const sameDate = form.date.mode === initial.date.mode && (form.date.mode === 'today' || form.date.value === (initial.date as { value: string }).value);
+  return (
+    typed ||
+    form.kind !== initial.kind ||
+    form.walletId !== initial.walletId ||
+    form.toWalletId !== initial.toWalletId ||
+    form.feeOpen !== initial.feeOpen ||
+    form.feeMode !== initial.feeMode ||
+    !sameDate
+  );
+}
+
 // ───────────────────────── даты ─────────────────────────
 
 export function resolveDate(choice: DateChoice, now: Date = new Date()): string {

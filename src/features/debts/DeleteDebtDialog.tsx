@@ -62,6 +62,7 @@ export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, bas
       confirmLabel="Удалить"
       loading={loading}
       confirmDisabled={choose && mode === null}
+      history={false} // после удаления страница сразу уходит на список (navigate с заменой): запись окна в истории ему мешала бы
       onConfirm={() => {
         if (!choose) onConfirm('keep-operations');
         else if (mode !== null) onConfirm(mode);

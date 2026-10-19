@@ -58,6 +58,12 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
   const [error, setError] = useState<FieldError | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Несохранённый ввод: у нового кошелька — имя, остаток, цель; у правки — любое отличие от того, что открыли.
+  const typed = [name.trim(), opening?.toString() ?? '', goal?.toString() ?? ''];
+  const snapshot = JSON.stringify(editing ? [...typed, currency, kind, icon, color, bankId, hasDue ? dueOn : null] : typed);
+  const [baseline] = useState(snapshot);
+  const dirty = snapshot !== baseline;
+
   // По кошельку есть операции (даже удалённые): валюту менять нельзя, иначе суммы поменяют смысл.
   const hasOperations = useLiveQuery(async () => {
     if (!wallet) return false;
@@ -163,6 +169,7 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
     <Sheet
       open
       onClose={onClose}
+      isDirty={dirty}
       dismissible={!saving}
       title={editing ? 'Правка кошелька' : 'Новый кошелёк'}
       footer={

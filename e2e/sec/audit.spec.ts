@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { addLink, addTx, createWallet, dismissInstallPrompt, dismissToasts, expect, goSection, sheet, test, waitReady } from '../helpers';
+import { addLink, addTx, confirmDiscard, createWallet, dismissInstallPrompt, dismissToasts, expect, goSection, sheet, test, waitReady } from '../helpers';
 import { DIST, ROOT, SEC_TMP, listFiles, startHeaderServer, type HeaderServer } from './helpers';
 
 /* ---------------------------------------------------------------------------------------------
@@ -309,6 +309,7 @@ test.describe('Хранилище, длинные строки, адрес', () 
     await expect(dlg).toBeVisible();
     expect(Date.now() - t1, 'вставка 2 МБ в заметку заняла слишком много времени').toBeLessThan(15_000);
     await page.keyboard.press('Escape');
+    await confirmDiscard(page); // сумма и заметка набраны — окно спрашивает «Закрыть без сохранения?»
 
     await goSection(page, 'Операции');
     await page.getByRole('button', { name: 'Всё время' }).click();

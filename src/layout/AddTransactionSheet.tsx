@@ -16,7 +16,7 @@ import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
-import { emptyForm, GENERIC_SAVE_ERROR, pickDefaultWallet } from '@/features/transactions/txForm';
+import { emptyForm, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet } from '@/features/transactions/txForm';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
 import { useCloseDuplicateEntry } from '@/features/transactions/useCloseDuplicateEntry';
@@ -49,7 +49,7 @@ export default function AddTransactionSheet({ onClose }: AddTransactionSheetProp
 
   if (settings === null) {
     return (
-      <Sheet open onClose={onClose} title={TITLE}>
+      <Sheet open onClose={onClose} history={false} title={TITLE}>
         <EmptyState
           icon="cloud"
           title="Данные ещё загружаются"
@@ -76,7 +76,7 @@ export default function AddTransactionSheet({ onClose }: AddTransactionSheetProp
 function NoWalletSheet({ onClose, hasArchived }: { onClose: () => void; hasArchived: boolean }) {
   const navigate = useNavigate();
   return (
-    <Sheet open onClose={onClose} title={TITLE}>
+    <Sheet open onClose={onClose} history={false} title={TITLE}>
       <EmptyState
         icon="wallet"
         title={hasArchived ? 'Все кошельки в архиве' : 'Сначала создайте кошелёк'}
@@ -215,6 +215,8 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     <Sheet
       open={!finished}
       onClose={onClose}
+      history={false}
+      isDirty={isFormDirty(c.form, initial, false)}
       dismissible={saving === null}
       title={TITLE}
       headerAction={<DateChip c={c} />}

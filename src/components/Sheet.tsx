@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
+import { Button } from './Button';
 import { IconButton } from './IconButton';
 import { useModal } from './useModal';
 
@@ -23,6 +24,13 @@ export interface SheetProps {
   role?: 'dialog' | 'alertdialog';
   /** Не закрывать по тапу на фон и Esc (например, пока идёт сохранение). */
   dismissible?: boolean;
+  /**
+   * В окне есть несохранённый ввод: закрытие (×, Esc, фон, «Назад») сначала спрашивает «Закрыть без сохранения?».
+   * Сохранение и «Отмена» внутри окна зовут onClose сами и вопроса не вызывают.
+   */
+  isDirty?: boolean;
+  /** «Назад» (жест, кнопка браузера) закрывает окно. Выключают у окон, которые живут в адресе (/add, /edit/:id). */
+  history?: boolean;
   className?: string;
 }
 
@@ -41,6 +49,8 @@ export function Sheet({
   placement = 'auto',
   role = 'dialog',
   dismissible = true,
+  isDirty = false,
+  history = true,
   className,
 }: SheetProps) {
   const titleId = useId();
@@ -48,6 +58,19 @@ export function Sheet({
   const bodyRef = useRef<HTMLDivElement>(null);
   const downOnBackdrop = useRef(false);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const [asking, setAsking] = useState(false);
+
+  // Закрыли иначе (после сохранения родитель убрал окно) — вопрос не должен пережить окно и всплыть при следующем открытии.
+  useEffect(() => {
+    if (!open) setAsking(false);
+  }, [open]);
+
+  // Все способы закрыть окно «от человека» идут сюда: с несохранённым вводом сначала вопрос.
+  const requestClose = () => {
+    if (!dismissible) return;
+    if (isDirty) setAsking(true);
+    else onClose();
+  };
 
   // Экранная клавиатура на iPhone НЕ уменьшает страницу, а ложится поверх неё и закрывает низ окна (поля и кнопки).
   // Подгоняем подложку под видимую часть экрана (visualViewport): окно «поднимается» над клавиатурой и остаётся целиком на виду.
@@ -99,20 +122,13 @@ export function Sheet({
     };
   }, [open]);
 
-  useModal({
-    open,
-    onClose: () => {
-      if (dismissible) onClose();
-    },
-    panelRef,
-    initialFocusRoot: bodyRef,
-  });
+  useModal({ open, onClose: requestClose, panelRef, initialFocusRoot: bodyRef, history });
 
   if (!open) return null;
 
   const centered = placement === 'center';
 
-  return createPortal(
+  const sheet = createPortal(
     <div
       ref={overlayRef}
       className={cn(
@@ -124,7 +140,7 @@ export function Sheet({
       }}
       onClick={(e) => {
         // Закрываем только если и нажатие, и отпускание были на фоне (выделение текста в шите не закрывает его).
-        if (dismissible && downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        if (downOnBackdrop.current && e.target === e.currentTarget) requestClose();
         downOnBackdrop.current = false;
       }}
     >
@@ -147,7 +163,7 @@ export function Sheet({
           </h2>
           <div className="flex shrink-0 items-center gap-1">
             {headerAction}
-            {dismissible && <IconButton icon="close" label="Закрыть" onClick={onClose} className="-mr-2" />}
+            {dismissible && <IconButton icon="close" label="Закрыть" onClick={requestClose} className="-mr-2" />}
           </div>
         </div>
         <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3">
@@ -158,5 +174,37 @@ export function Sheet({
       </div>
     </div>,
     document.body,
+  );
+
+  if (!asking) return sheet;
+  return (
+    <>
+      {sheet}
+      <Sheet
+        open
+        onClose={() => setAsking(false)}
+        title="Закрыть без сохранения?"
+        placement="center"
+        role="alertdialog"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setAsking(false)} data-autofocus>
+              Остаться
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setAsking(false);
+                onClose();
+              }}
+            >
+              Закрыть
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-muted">Введённое пропадёт.</p>
+      </Sheet>
+    </>
   );
 }

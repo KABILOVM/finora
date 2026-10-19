@@ -1,8 +1,10 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { enterModalHistory } from './modalHistory';
 
 /**
  * Общее поведение модальных окон: Esc, фокус-ловушка, возврат фокуса, блокировка прокрутки фона.
  * Окна могут накладываться (диалог подтверждения поверх шита): Esc и Tab обрабатывает только верхнее.
+ * Жест/кнопка «Назад» закрывает верхнее окно, а не страницу (modalHistory.ts), если окно не выключило это (history: false).
  */
 
 // Только то, до чего доходит Tab: элементы с tabindex="-1" (невыбранные сегменты в Segmented) не считаются,
@@ -53,9 +55,14 @@ export interface UseModalOptions {
   panelRef: RefObject<HTMLElement | null>;
   /** Откуда искать первый элемент для фокуса (по умолчанию — вся панель). */
   initialFocusRoot?: RefObject<HTMLElement | null>;
+  /**
+   * «Назад» закрывает это окно (по умолчанию да). Нет у окон, которые живут в адресе (/add, /edit/:id): их закрывает роутер,
+   * и вторая запись в истории сломала бы их закрытие.
+   */
+  history?: boolean;
 }
 
-export function useModal({ open, onClose, panelRef, initialFocusRoot }: UseModalOptions): void {
+export function useModal({ open, onClose, panelRef, initialFocusRoot, history = true }: UseModalOptions): void {
   // onClose храним в ref: смена колбэка между рендерами не должна перезапускать эффект
   // (иначе при каждом рендере фокус «возвращался» бы на кнопку-открывашку).
   const onCloseRef = useRef(onClose);
@@ -67,6 +74,7 @@ export function useModal({ open, onClose, panelRef, initialFocusRoot }: UseModal
     stack.push(token);
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockScroll();
+    const leaveHistory = history ? enterModalHistory(() => onCloseRef.current()) : null;
 
     const panel = panelRef.current;
     if (panel) {
@@ -115,6 +123,7 @@ export function useModal({ open, onClose, panelRef, initialFocusRoot }: UseModal
       const i = stack.indexOf(token);
       if (i >= 0) stack.splice(i, 1);
       unlockScroll();
+      leaveHistory?.();
       // Возвращаем фокус туда, откуда окно открыли (если элемент ещё на странице).
       if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus({ preventScroll: true });
     };

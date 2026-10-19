@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, emptyDebtForm, overpayOf, validateDebtForm, validatePayment, validateTopUp, type DebtFormState, type TopUpFormInput } from './debtForm';
+import { cleanName, emptyDebtForm, isDebtFormDirty, overpayOf, validateDebtForm, validatePayment, validateTopUp, type DebtFormState, type TopUpFormInput } from './debtForm';
 
 const form = (over: Partial<DebtFormState> = {}): DebtFormState => ({
   ...emptyDebtForm('lent', 'TJS', '2026-10-15'),
@@ -120,3 +120,21 @@ describe('validateTopUp: «добавить ещё в долг»', () => {
   });
 });
 
+
+describe('isDebtFormDirty: есть ли что терять при закрытии окна', () => {
+  const start = emptyDebtForm('lent', 'TJS', '2026-10-15');
+  it('новый долг: имя, сумма и заметка — ввод; направление и дата — нет', () => {
+    expect(isDebtFormDirty(start, start, false)).toBe(false);
+    expect(isDebtFormDirty({ ...start, direction: 'borrowed', openedOn: '2026-10-01', hasDue: true }, start, false)).toBe(false);
+    expect(isDebtFormDirty({ ...start, counterparty: ' ' }, start, false)).toBe(false);
+    expect(isDebtFormDirty({ ...start, counterparty: 'Али' }, start, false)).toBe(true);
+    expect(isDebtFormDirty({ ...start, amountMinor: 100 }, start, false)).toBe(true);
+    expect(isDebtFormDirty({ ...start, note: 'на ремонт' }, start, false)).toBe(true);
+  });
+  it('правка: любое отличие; срок сравнивается, только если он включён', () => {
+    expect(isDebtFormDirty({ ...start, openedOn: '2026-10-01' }, start, true)).toBe(true);
+    expect(isDebtFormDirty({ ...start, direction: 'borrowed' }, start, true)).toBe(true);
+    expect(isDebtFormDirty({ ...start, dueOn: '2027-01-01' }, start, true)).toBe(false); // срока нет — дата в поле не в счёт
+    expect(isDebtFormDirty({ ...start, hasDue: true, dueOn: '2027-01-01' }, start, true)).toBe(true);
+  });
+});

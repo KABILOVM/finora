@@ -16,6 +16,7 @@ import { PageNotices } from '@/app/PageNotices';
 import { canRescueExport, exportLocalBackup } from '@/app/rescueExport';
 import { getDefaultClient } from '@/auth/supabaseClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { dropModalAnchor } from '@/components/modalHistory';
 import { ToastProvider } from '@/components/Toast';
 import BudgetAlerts from '@/features/budgets/BudgetAlerts';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
@@ -102,10 +103,15 @@ export function AppRoutes() {
   // Назад (navigate(-1)) — только если есть куда вернуться: шит открыли переходом внутри приложения (PUSH) или перед этой
   // записью в истории есть другая (history.state.idx > 0). Иначе (дубль вкладки, восстановление сессии, прямой заход,
   // state.background без предыдущей записи) «назад» ничего не закрыл бы или увёл бы из приложения — заменяем запись на «/».
+  // Поверх шита может лежать запись окна (вопрос «Закрыть без сохранения?», подтверждение): сначала снимаем её, иначе шаг назад
+  // съел бы её, а не запись шита (modalHistory.ts).
   const closeAdd = () => {
     const canGoBack = navigationType === 'PUSH' || historyIndex() > 0;
-    if (background && canGoBack) navigate(-1);
-    else navigate('/', { replace: true });
+    const leave = () => {
+      if (background && canGoBack) navigate(-1);
+      else navigate('/', { replace: true });
+    };
+    if (!dropModalAnchor(leave)) leave();
   };
 
   // Непонятный адрес с переводом строки: сразу на «Главную» (иначе router показал бы пустой экран)

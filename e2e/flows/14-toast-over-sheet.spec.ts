@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addLink, createWallet, dismissToasts, expect, openApp, shot, sheet, test } from '../helpers';
+import { addLink, confirmDiscard, createWallet, dismissToasts, expect, openApp, shot, sheet, test } from '../helpers';
 
 /**
  * E-3. Тост «Кошелёк добавлен» оставался внизу поверх открытого шита «Новая операция» и закрывал цифры «0», «,» и кнопки
@@ -107,7 +107,9 @@ test('тост поверх открытого шита «Новая опера�
     await expect(dlg.getByRole('textbox', { name: /^Сумма/ })).toHaveValue('0');
 
     // закрыли окно — тост (если ещё жив) возвращается на своё обычное место внизу, а не остаётся наверху
+    // (в окне уже набрана сумма — Esc сначала спрашивает «Закрыть без сохранения?»)
     await page.keyboard.press('Escape');
+    await confirmDiscard(page);
     await expect(dlg).toBeHidden();
     const left = page.getByRole('status').filter({ hasText: 'Кошелёк добавлен' });
     if ((await left.count()) > 0) {
