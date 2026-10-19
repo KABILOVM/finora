@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
+import { Notice } from '@/components/Notice';
 import { coverFocusables, installCoverGuards } from './coverGuards';
 import { inertOutside } from './inertOutside';
 import type { LockState } from './lockStore';
@@ -164,9 +165,9 @@ export function LockCover({ state, cloud, onUnlock, onLeave }: LockCoverProps) {
               </Button>
             )}
             {message && (
-              <p role="alert" className="w-full rounded-xl bg-danger/10 p-3 font-medium text-danger">
+              <Notice tone="danger" className="w-full">
                 {message}
-              </p>
+              </Notice>
             )}
 
             <Button
@@ -199,9 +200,9 @@ export function LockCover({ state, cloud, onUnlock, onLeave }: LockCoverProps) {
               )}
             </div>
             {message && (
-              <p role="alert" className="w-full rounded-xl bg-danger/10 p-3 font-medium text-danger">
+              <Notice tone="danger" className="w-full">
                 {message}
-              </p>
+              </Notice>
             )}
             <div className="flex w-full flex-col gap-2">
               <Button variant="danger" fullWidth loading={leaving} onClick={() => void leave()}>

@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { Skeleton } from '@/components/Skeleton';
 import { useTransactions } from '@/db';
 import type { Category, Wallet } from '@/domain/types';
 import { TransactionRow } from '@/features/transactions/TransactionRow';
@@ -40,12 +41,12 @@ export function RecentOps({ wallets, categories }: RecentOpsProps) {
           <span className="sr-only">Загрузка…</span>
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex items-center gap-3" aria-hidden="true">
-              <div className="skeleton h-10 w-10 rounded-2xl" />
+              <Skeleton className="h-10 w-10 !rounded-2xl" />
               <div className="flex-1 space-y-2">
-                <div className="skeleton h-3.5 w-2/5 rounded" />
-                <div className="skeleton h-3 w-3/5 rounded" />
+                <Skeleton className="h-3.5 w-2/5" />
+                <Skeleton className="h-3 w-3/5" />
               </div>
-              <div className="skeleton h-4 w-16 rounded" />
+              <Skeleton className="h-4 w-16" />
             </div>
           ))}
         </Card>

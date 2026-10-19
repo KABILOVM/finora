@@ -2,6 +2,7 @@ import { useId, useRef, useEffect, useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
+import { Switch } from '@/components/Switch';
 import { cn } from '@/lib/cn';
 import { clearLock, DEFAULT_GRACE, updateGrace, writeLock, type GraceSeconds } from '@/lock/lockStore';
 import { useLockState, useLockSupport } from '@/lock/useLockState';
@@ -15,30 +16,6 @@ const GRACE_OPTIONS: readonly SegmentOption<`${GraceSeconds}`>[] = [
 ];
 
 type Note = { tone: 'ok' | 'error'; text: string } | null;
-
-/** Переключатель. Свой, а не флажок: на телефоне нужна крупная область касания и понятная подпись состояния. */
-function Switch({ checked, disabled, busy, labelledBy, onToggle }: { checked: boolean; disabled: boolean; busy: boolean; labelledBy: string; onToggle(): void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-labelledby={labelledBy}
-      aria-busy={busy || undefined}
-      disabled={disabled}
-      onClick={onToggle}
-      className={cn(
-        'relative inline-flex h-11 w-[60px] shrink-0 items-center rounded-full px-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-        checked ? 'bg-brand' : 'bg-border-strong/60',
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn('h-8 w-8 rounded-full bg-white shadow transition-transform dark:bg-bg', checked ? 'translate-x-[22px]' : 'translate-x-0')}
-      />
-    </button>
-  );
-}
 
 /**
  * Блокировка приложения по Face ID / отпечатку («замок на экран»).
@@ -147,7 +124,7 @@ function AppLockBody({ userId, cloud }: { userId: string; cloud: boolean }) {
           disabled={checking || busy !== null || broken || (!supported && !on)}
           busy={busy !== null}
           labelledBy={labelId}
-          onToggle={toggle}
+          onChange={toggle}
         />
       </div>
 

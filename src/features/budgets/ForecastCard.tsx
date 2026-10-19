@@ -4,6 +4,7 @@ import { buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { MoneyText } from '@/components/MoneyText';
+import { Skeleton } from '@/components/Skeleton';
 import type { DailyForecast, DailyForecastOk, ForecastSkipped } from '@/domain/forecast';
 import { formatMinor } from '@/domain/money';
 import { endSentence } from '@/features/transactions/txDisplay';
@@ -231,8 +232,8 @@ export function ForecastCard({ forecast }: { forecast: DailyForecast | null | un
   if (forecast === undefined) {
     return (
       <Card aria-label="Сколько можно тратить в день" aria-busy="true" className="min-h-[11rem]">
-        <div className="h-4 w-32 animate-pulse rounded bg-surface-2" aria-hidden="true" />
-        <div className="mt-3 h-10 w-48 animate-pulse rounded bg-surface-2" aria-hidden="true" />
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="mt-3 h-10 w-48" />
       </Card>
     );
   }

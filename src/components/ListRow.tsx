@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 import { Icon } from './Icon';
 
@@ -11,6 +12,8 @@ export interface ListRowProps {
   trailing?: ReactNode;
   /** Если задан — строка становится кнопкой на всю ширину. */
   onClick?: () => void;
+  /** Если задан — строка становится ссылкой на всю ширину (открывается в новой вкладке, читается как ссылка). Главнее onClick. */
+  to?: string;
   /** Стрелка «›» справа (для строк-переходов). */
   chevron?: boolean;
   className?: string;
@@ -21,7 +24,7 @@ export interface ListRowProps {
  * Значок и название идут одной группой с читаемой минимальной шириной (min-w-[9.5rem]): если рядом с ней не помещается
  * длинная сумма (узкий телефон, «1 234 567,89 $»), сумма переносится на вторую строку справа, а не съедает название.
  */
-export function ListRow({ leading, title, subtitle, trailing, onClick, chevron = false, className }: ListRowProps) {
+export function ListRow({ leading, title, subtitle, trailing, onClick, to, chevron = false, className }: ListRowProps) {
   const content = (
     <>
       <div className="flex min-w-[9.5rem] flex-1 items-center gap-3">
@@ -36,6 +39,13 @@ export function ListRow({ leading, title, subtitle, trailing, onClick, chevron =
     </>
   );
   const base = 'flex min-h-[56px] w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2';
+  if (to !== undefined) {
+    return (
+      <Link to={to} className={cn(base, 'transition-colors hover:bg-surface-2 active:bg-border/60', className)}>
+        {content}
+      </Link>
+    );
+  }
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={cn(base, 'transition-colors hover:bg-surface-2 active:bg-border/60', className)}>

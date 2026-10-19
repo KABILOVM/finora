@@ -6,7 +6,9 @@ const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: 'media',
+  // Тема выбирается человеком (data-theme на <html>, см. src/theme.ts), а не только системой, поэтому класс dark: НЕ используется:
+  // всё берётся из токенов выше (тест-страж src/accents.test.ts). Селектор оставлен на случай, если dark: когда-нибудь понадобится.
+  darkMode: ['selector', ':root[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -24,6 +26,9 @@ export default {
         expense: v('expense'),
         warning: v('warning'),
       },
+      // Шкала скруглений: поле/кнопка — control, карточка — card, «таблетка» и кружки — pill. Остальные значения — для особых случаев.
+      borderRadius: { control: '0.75rem', card: '1.5rem', pill: '9999px' },
+      fontSize: { caption: ['0.75rem', { lineHeight: '1rem' }] },
       fontFamily: {
         // Manrope вшит в приложение (src/assets/fonts), системные шрифты — запасные.
         sans: [

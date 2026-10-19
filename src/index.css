@@ -517,6 +517,23 @@
     text-overflow: ellipsis;
   }
 
+  /*
+   * Невидимая область касания 44×44 вокруг маленького значка: внешний вид не меняется, а попасть пальцем легче.
+   * Нужна элементу с position (relative/absolute/fixed): класс сам ставит relative, если его не задали.
+   */
+  .tap-44 {
+    position: relative;
+  }
+  .tap-44::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+
   /* Строка с горизонтальной прокруткой без полосы (чипы периода): прокручивается пальцем, полоса не занимает место. */
   .scroll-x-quiet {
     overflow-x: auto;

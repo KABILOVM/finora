@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Spinner } from '@/components/Button';
 import { Icon } from '@/components/Icon';
+import { Skeleton } from '@/components/Skeleton';
 import { conditionOf, formatTemp } from '@/features/weather/conditions';
 import { locate } from '@/features/weather/geolocation';
 import { withCity } from '@/features/weather/places';
@@ -41,7 +42,7 @@ export default function WeatherWidget() {
     }
   };
 
-  if (!ready) return <div data-testid="weather-widget" aria-busy="true" className="min-h-[64px] px-3 py-3"><div className="skeleton h-9 w-24 rounded-xl" aria-hidden="true" /></div>;
+  if (!ready) return <div data-testid="weather-widget" aria-busy="true" className="min-h-[64px] px-3 py-3"><Skeleton className="h-9 w-24 !rounded-xl" /></div>;
 
   if (!city) {
     return (
@@ -89,7 +90,7 @@ export default function WeatherWidget() {
             <span className="block text-xs text-muted">Погода недоступна</span>
           ) : (
             <span role="status" className="mt-1 flex items-center gap-2 text-xs text-muted">
-              <span className="skeleton h-3 w-16 rounded" aria-hidden="true" />
+              <Skeleton className="h-3 w-16" />
               <span className="sr-only">Загружаем…</span>
             </span>
           )}

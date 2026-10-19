@@ -215,3 +215,48 @@ describe('index.html и таблица ACCENTS', () => {
     expect(Object.fromEntries(metas.map((m) => [m[2], m[1]]))).toEqual({ light: ACCENTS[0]?.bar.light, dark: ACCENTS[0]?.bar.dark });
   });
 });
+
+describe('цвета денег и состояний (доход, расход, ошибка, предупреждение)', () => {
+  const MONEY = ['income', 'expense', 'danger', 'warning'] as const;
+
+  it('заданы темой (светлая, тёмная, «как в системе»), а не акцентом: выбор акцента их не перекрашивает', () => {
+    for (const theme of [LIGHT, DARK, SYSTEM_DARK]) for (const k of MONEY) expect(theme[k], k).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/);
+    for (const [id, block] of BLOCKS) for (const k of MONEY) expect(block[k], `${id}: ${k}`).toBeUndefined();
+  });
+
+  /** Угол между тонами двух цветов (0–180°). */
+  const hueDistance = (a: Rgb, b: Rgb): number => {
+    const hue = ([r, g, bl]: Rgb): number => {
+      const [x, y, z] = [r / 255, g / 255, bl / 255];
+      const max = Math.max(x, y, z);
+      const d = max - Math.min(x, y, z);
+      if (d === 0) return 0;
+      const h = max === x ? ((y - z) / d) % 6 : max === y ? (z - x) / d + 2 : (x - y) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    const diff = Math.abs(hue(a) - hue(b));
+    return Math.min(diff, 360 - diff);
+  };
+
+  /**
+   * Главный цвет акцента не должен совпадать по тону с цветом денег или состояния: иначе кнопка выглядит как «ошибка», а ссылка —
+   * как «расход». Известные совпадения закреплены здесь явно (их выбрал человек, акцент остаётся): у красного главный цвет ≈ цвет
+   * ошибки, у оранжевого ≈ цвет предупреждения. Суммы всегда подписаны знаком («+», «−») и значком, цвет не единственный признак.
+   * Новый акцент с таким же совпадением не пройдёт, пока его не добавят сюда; убранное совпадение тоже придётся убрать из списка.
+   */
+  const KNOWN_NEAR: Record<string, readonly string[]> = { red: ['danger'], orange: ['warning'] };
+  const NEAR_DEGREES = 12;
+
+  it(`главный цвет акцента отличается по тону от цветов денег и состояний не меньше чем на ${NEAR_DEGREES}°, кроме известных совпадений`, () => {
+    const found: Record<string, string[]> = {};
+    for (const [id, block] of BLOCKS) {
+      const near = new Set<string>();
+      for (const [suffix, theme] of [['l', LIGHT], ['d', DARK]] as const) {
+        const brand = rgb(block[`ac-brand-${suffix}`], `${id}: brand-${suffix}`);
+        for (const k of MONEY) if (hueDistance(brand, rgb(theme[k], k)) < NEAR_DEGREES) near.add(k);
+      }
+      if (near.size > 0) found[id] = [...near].sort();
+    }
+    expect(found).toEqual(Object.fromEntries(Object.entries(KNOWN_NEAR).map(([id, ks]) => [id, [...ks].sort()])));
+  });
+});

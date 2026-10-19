@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { SwitchTrack } from '@/components/Switch';
 import { cn } from '@/lib/cn';
 
 export interface ToggleRowProps {
@@ -38,20 +39,7 @@ export function ToggleRow({ label, hint, checked, onChange, disabled = false, co
           </span>
         )}
       </span>
-      <span
-        aria-hidden="true"
-        className={cn(
-          'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors',
-          checked ? 'border-brand bg-brand' : 'border-border-strong bg-surface-2',
-        )}
-      >
-        <span
-          className={cn(
-            'absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
-            checked ? 'translate-x-[1.375rem]' : 'translate-x-0',
-          )}
-        />
-      </span>
+      <SwitchTrack checked={checked} />
     </button>
   );
 }
