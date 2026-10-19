@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { Glyph } from '@/components/Glyph';
+import { Switch } from '@/components/Switch';
 import { getDeferredPrompt, runNativePrompt, subscribeInstall } from '@/install/installEvent';
-import { cn } from '@/lib/cn';
 import type { Wants } from './onboardingLogic';
 import { WizardFrame } from './WizardFrame';
 
@@ -15,26 +15,9 @@ export function isInstalledApp(): boolean {
   }
 }
 
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className="flex h-11 w-14 shrink-0 items-center justify-center"
-    >
-      <span className={cn('relative h-7 w-12 rounded-full transition-colors', checked ? 'bg-brand' : 'bg-border-strong')}>
-        <span className={cn('absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all', checked ? 'left-[22px]' : 'left-0.5')} />
-      </span>
-    </button>
-  );
-}
-
 function Row({ icon, color, title, text, control, extra }: { icon: string; color: string; title: string; text: string; control: React.ReactNode; extra?: React.ReactNode }) {
   return (
-    <li className="rounded-3xl border border-border/70 bg-surface/75 px-3 py-1.5 shadow-card backdrop-blur-xl">
+    <li className="rounded-3xl border border-border/70 bg-surface/85 px-3 py-1.5 shadow-card">
       <div className="flex items-center gap-3">
         <Glyph value={icon} color={color} size={36} />
         <div className="min-w-0 flex-1">

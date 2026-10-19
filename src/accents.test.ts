@@ -176,6 +176,14 @@ describe('цвета акцентов (src/index.css)', () => {
         expect(ratio('on-danger', 'danger'), 'on-danger на danger').toBeGreaterThanOrEqual(4.5);
       });
 
+      it('переключатель: выключенная дорожка видна на поверхностях, ручка видна на дорожке в обоих состояниях (≥ 3:1, WCAG 1.4.11)', () => {
+        for (const surface of ['bg', 'surface', 'surface-2']) {
+          expect(ratio('border-strong', surface), `дорожка (border-strong) на ${surface}`).toBeGreaterThanOrEqual(3);
+        }
+        expect(ratio('surface', 'border-strong'), 'выключено: ручка (surface) на дорожке (border-strong)').toBeGreaterThanOrEqual(3);
+        expect(ratio('on-brand', 'brand'), 'включено: ручка (on-brand) на дорожке (brand)').toBeGreaterThanOrEqual(3);
+      });
+
       it('brand читается на подсвеченной плашке (выбранный чип: bg-brand/10 и /15 на surface)', () => {
         for (const alpha of [0.1, 0.15]) {
           expect(ratio('brand', over(color('brand'), alpha, color('surface'))), `bg-brand/${alpha * 100}`).toBeGreaterThanOrEqual(4.5);
@@ -213,5 +221,59 @@ describe('index.html и таблица ACCENTS', () => {
   it('начальный цвет строки состояния (до запуска скриптов) — фон фиолетового акцента', () => {
     const metas = [...read('../index.html').matchAll(/<meta name="theme-color" content="(#[0-9a-f]{6})" media="\(prefers-color-scheme: (light|dark)\)"/g)];
     expect(Object.fromEntries(metas.map((m) => [m[2], m[1]]))).toEqual({ light: ACCENTS[0]?.bar.light, dark: ACCENTS[0]?.bar.dark });
+  });
+});
+
+describe('цвета денег и состояний (доход, расход, ошибка, предупреждение)', () => {
+  const MONEY = ['income', 'expense', 'danger', 'warning'] as const;
+
+  it('заданы темой (светлая, тёмная, «как в системе»), а не акцентом: выбор акцента их не перекрашивает', () => {
+    for (const theme of [LIGHT, DARK, SYSTEM_DARK]) for (const k of MONEY) expect(theme[k], k).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/);
+    for (const [id, block] of BLOCKS) for (const k of MONEY) expect(block[k], `${id}: ${k}`).toBeUndefined();
+  });
+
+  /** Расстояние между двумя цветами в OKLab (равномерное по восприятию; учитывает светлоту, насыщенность и тон). */
+  const oklab = ([r, g, b]: Rgb): [number, number, number] => {
+    const [lr, lg, lb] = [toLinear(r), toLinear(g), toLinear(b)];
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+    const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+    const sCone = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    return [
+      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * sCone,
+      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * sCone,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * sCone,
+    ];
+  };
+  const distance = (a: Rgb, b: Rgb): number => {
+    const [x, y] = [oklab(a), oklab(b)];
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+  };
+
+  /**
+   * Главный цвет акцента не должен сливаться с цветом денег или состояния: иначе кнопка выглядит как «ошибка», а ссылка — как
+   * «расход». Совпадения, которые есть сейчас, закреплены здесь явно (акцент выбрал человек, он остаётся): красный ≈ ошибка и расход,
+   * оранжевый ≈ предупреждение и ошибка, зелёный и бирюзовый ≈ доход (в светлой теме). Суммы всегда подписаны знаком («+», «−»)
+   * и значком, цвет — не единственный признак. Новый акцент или правка палитры с таким же сближением не пройдут, пока его не
+   * внесут сюда; убранное сближение тоже придётся убрать из списка.
+   */
+  const KNOWN_NEAR: Record<string, readonly string[]> = {
+    red: ['danger', 'expense'],
+    orange: ['danger', 'warning'],
+    green: ['income'],
+    teal: ['income'],
+  };
+  const NEAR_DISTANCE = 0.07;
+
+  it(`главный цвет акцента отличается от цветов денег и состояний не меньше чем на ${NEAR_DISTANCE} (OKLab), кроме известных сближений`, () => {
+    const found: Record<string, string[]> = {};
+    for (const [id, block] of BLOCKS) {
+      const near = new Set<string>();
+      for (const [suffix, theme] of [['l', LIGHT], ['d', DARK]] as const) {
+        const brand = rgb(block[`ac-brand-${suffix}`], `${id}: brand-${suffix}`);
+        for (const k of MONEY) if (distance(brand, rgb(theme[k], k)) < NEAR_DISTANCE) near.add(k);
+      }
+      if (near.size > 0) found[id] = [...near].sort();
+    }
+    expect(found).toEqual(Object.fromEntries(Object.entries(KNOWN_NEAR).map(([id, ks]) => [id, [...ks].sort()])));
   });
 });

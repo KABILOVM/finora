@@ -19,7 +19,7 @@ function Choice({ icon, color, title, text, onClick }: { icon: string; color: st
       type="button"
       onClick={onClick}
       className={cn(
-        'flex min-h-[88px] w-full items-center gap-3 rounded-3xl border border-border/70 bg-surface/75 p-4 text-left shadow-card backdrop-blur-xl',
+        'flex min-h-[88px] w-full items-center gap-3 rounded-3xl border border-border/70 bg-surface/85 p-4 text-left shadow-card',
         'transition duration-200 ease-spring hover:bg-surface-2 active:scale-[0.98]',
       )}
     >

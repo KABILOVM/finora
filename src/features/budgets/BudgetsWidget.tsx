@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
+import { Skeleton } from '@/components/Skeleton';
 import { pickWidgetBudgets, type BudgetProgress } from '@/domain/budgetProgress';
 import type { DailyForecast } from '@/domain/forecast';
 import type { CurrencyCode } from '@/domain/types';
@@ -114,9 +115,9 @@ export default function BudgetsWidget() {
   if (forecast === undefined || data === undefined) {
     return (
       <Card aria-busy="true" className="min-h-[7.5rem] !py-3 md:!p-5">
-        <div className="skeleton h-4 w-40 rounded" aria-hidden="true" />
-        <div className="skeleton mt-3 h-9 w-44 rounded" aria-hidden="true" />
-        <div className="skeleton mt-4 h-2 w-full rounded-full" aria-hidden="true" />
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="mt-3 h-9 w-44" />
+        <Skeleton className="mt-4 h-2 w-full !rounded-pill" />
       </Card>
     );
   }

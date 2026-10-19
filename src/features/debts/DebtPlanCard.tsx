@@ -2,6 +2,7 @@ import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { MoneyText } from '@/components/MoneyText';
+import { Notice } from '@/components/Notice';
 import { DEBT_PLAN_STOP_TEXT, debtPlanStop, planFinished, type DebtState } from '@/domain/debts';
 import type { Debt, IsoDate, LocalRow, RecurringRule } from '@/domain/types';
 import { describeSchedule } from '@/recurring/describe';
@@ -28,9 +29,9 @@ export function DebtPlanCard({ debt, state, plans, today, busy, onEdit, onStop }
         {many ? `Планы платежей (${plans.length})` : 'План платежей'}
       </h2>
       {many && (
-        <p role="status" className="mb-2 rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
+        <Notice tone="warning" className="mb-2 text-sm">
           У долга несколько планов: платежи по ним складываются. Оставьте один, остальные остановите.
-        </p>
+        </Notice>
       )}
       <div className="flex flex-col gap-2">
         {plans.map((rule) => {

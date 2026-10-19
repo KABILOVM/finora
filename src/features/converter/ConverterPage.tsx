@@ -170,7 +170,7 @@ export default function ConverterPage() {
               type="button"
               onClick={() => setAmountText(q)}
               className={cn(
-                'min-h-[36px] flex-1 rounded-full px-3 text-sm font-bold transition active:scale-95',
+                'min-h-[44px] flex-1 rounded-full px-3 text-sm font-bold transition active:scale-95',
                 amountText === q ? 'bg-white text-hero' : 'bg-white/15 text-white hover:bg-white/25',
               )}
             >

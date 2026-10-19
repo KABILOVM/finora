@@ -9,7 +9,7 @@ export type ButtonSize = 'md' | 'lg';
 export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
     'bg-gradient-to-br from-brand to-accent text-brand-fg shadow-[0_10px_24px_-10px_rgb(var(--brand)/0.7)] hover:brightness-110 active:brightness-95',
-  secondary: 'bg-surface/70 text-text border border-border backdrop-blur hover:bg-surface-2 active:bg-border/60',
+  secondary: 'bg-surface/80 text-text border border-border hover:bg-surface-2 active:bg-border/60',
   ghost: 'bg-transparent text-brand hover:bg-brand/10 active:bg-brand/15',
   danger: 'bg-danger text-on-danger hover:opacity-90 active:opacity-80',
 };

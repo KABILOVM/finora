@@ -96,14 +96,14 @@ export function HomeHero({ total, base }: HomeHeroProps) {
 
       <div className="relative">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <p className="text-sm font-medium opacity-90">Всего</p>
             <button
               type="button"
               onClick={toggle}
               aria-pressed={hidden}
               aria-label={hidden ? 'Показать суммы' : 'Скрыть суммы'}
-              className="press flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+              className="press tap-44 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
             >
               <Icon name={hidden ? 'eye-off' : 'eye'} size={17} />
             </button>
@@ -112,7 +112,7 @@ export function HomeHero({ total, base }: HomeHeroProps) {
                 type="button"
                 onClick={() => setNotesOpen(true)}
                 aria-label="Как посчитан итог"
-                className="press relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+                className="press tap-44 relative flex h-9 w-9 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
               >
                 <Icon name="info" size={17} />
                 {stale && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-amber-300 ring-2 ring-hero" />}
@@ -148,7 +148,7 @@ export function HomeHero({ total, base }: HomeHeroProps) {
               <button
                 type="button"
                 onClick={() => setNotesOpen(true)}
-                className="press relative mt-3 flex min-h-[40px] w-full items-center gap-2 rounded-xl bg-surface px-3 py-1.5 text-left text-sm font-medium text-warning"
+                className="press relative mt-3 flex min-h-[44px] w-full items-center gap-2 rounded-xl bg-surface px-3 py-1.5 text-left text-sm font-medium text-warning"
               >
                 <Icon name="alert" size={16} className="shrink-0" />
                 <span className="min-w-0 truncate">Не вошло в итог: нет курса ({total.missing.map((m) => m.currency).join(', ')})</span>

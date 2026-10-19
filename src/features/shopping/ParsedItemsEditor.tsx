@@ -175,7 +175,7 @@ function RowEditor({
               key={c.name}
               type="button"
               onClick={() => pick(c)}
-              className="min-h-[36px] rounded-full border border-border bg-surface px-3 text-sm font-medium active:bg-border/50"
+              className="min-h-[44px] rounded-full border border-border bg-surface px-3 text-sm font-medium active:bg-border/50"
             >
               {c.name} · {UNIT_LABEL[c.unit]}
             </button>

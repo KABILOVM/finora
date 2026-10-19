@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { MoneyText } from '@/components/MoneyText';
+import { Notice } from '@/components/Notice';
 import { Sheet } from '@/components/Sheet';
 import { useBalances, useTransactions } from '@/db';
 import type { LocalRow, Wallet } from '@/domain/types';
@@ -82,20 +83,17 @@ export function ReconcileSheet({ wallet, onClose }: { wallet: LocalRow<Wallet>; 
             </Line>
           </div>
           {shown !== undefined && (
-            <p
-              role="status"
-              className={`mt-3 rounded-xl p-3 font-medium ${shown === result.totalMinor ? 'bg-income/10 text-income' : 'bg-danger/10 text-danger'}`}
-            >
+            <Notice tone={shown === result.totalMinor ? 'success' : 'danger'} role="status" className="mt-3 font-medium">
               {shown === result.totalMinor
                 ? 'Совпадает с остатком на экране «Кошельки».'
                 : 'Не совпадает с остатком на экране «Кошельки», так быть не должно. Записи на месте: сохраните резервную копию (Настройки → «Резервная копия») и перезапустите приложение — остатки пересчитаются заново.'}
-            </p>
+            </Notice>
           )}
           {result.skipped > 0 && (
-            <p role="alert" className="mt-3 rounded-xl bg-warning/10 p-3 text-warning">
+            <Notice tone="warning" role="alert" className="mt-3">
               Пропущено операций с некорректной суммой: {result.skipped}. В остаток они не входят. Найти их можно в «Операциях»: период
               «Всё время», в «Фильтрах» — этот кошелёк. Откройте такую операцию и введите верную сумму или удалите её.
-            </p>
+            </Notice>
           )}
         </div>
       )}

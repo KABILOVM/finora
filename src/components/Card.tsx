@@ -11,7 +11,9 @@ const PADDING = { none: '', md: 'p-4', lg: 'p-5' } as const;
 export function Card({ padding = 'md', className, ...rest }: CardProps) {
   return (
     <div
-      className={cn('rounded-3xl border border-border/70 bg-surface/75 shadow-card backdrop-blur-xl', PADDING[padding], className)}
+      // Без backdrop-blur: размытие каждой карточки поверх анимированного фона дорого на слабых телефонах. Размытие оставлено там,
+      // где под панелью прокручивается содержимое (нижняя панель, липкая шапка).
+      className={cn('rounded-card border border-border/70 bg-surface/85 shadow-card', PADDING[padding], className)}
       {...rest}
     />
   );

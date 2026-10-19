@@ -3,6 +3,7 @@ import { moreGroups, type Section } from '@/app/sections';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
+import { SectionHeader } from '@/components/SectionHeader';
 import { cn } from '@/lib/cn';
 import { useAttention } from '@/features/home/useAttention';
 import type { AttentionItem } from '@/features/home/attention';
@@ -44,9 +45,7 @@ export default function MorePage() {
       <PageHeader title="Ещё" />
       {moreGroups().map((g) => (
         <section key={g.group} aria-labelledby={`more-${g.group}`} className="mb-5">
-          <h2 id={`more-${g.group}`} className="mb-2 px-1 text-sm font-bold uppercase tracking-wide text-muted">
-            {g.title}
-          </h2>
+          <SectionHeader id={`more-${g.group}`}>{g.title}</SectionHeader>
           <Card padding="none">
             <ul className="divide-y divide-border">
               {g.items.map((section) => (

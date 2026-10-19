@@ -227,7 +227,7 @@ export default function WeatherPage() {
               aria-selected={c.id === city.id}
               onClick={() => select(c.id)}
               className={cn(
-                'min-h-[40px] rounded-full px-4 text-sm font-semibold transition active:scale-95',
+                'min-h-[44px] rounded-full px-4 text-sm font-semibold transition active:scale-95',
                 c.id === city.id ? 'bg-brand text-brand-fg shadow-float' : 'border border-border bg-surface/70 text-text hover:bg-surface-2',
               )}
             >

@@ -6,7 +6,10 @@ const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: 'media',
+  // Тема выбирается человеком (data-theme на <html>, см. src/theme.ts), а «как в системе» атрибута не ставит, поэтому класс dark: НЕ
+  // используется (в режиме «как в системе» он бы не сработал): весь цвет берётся из токенов выше, тест-страж — src/darkVariant.test.ts.
+  // Селектор оставлен только затем, чтобы dark: не показывал тему системы, если его когда-нибудь добавят по ошибке.
+  darkMode: ['selector', ':root[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -24,6 +27,9 @@ export default {
         expense: v('expense'),
         warning: v('warning'),
       },
+      // Шкала скруглений: поле/кнопка — control, карточка — card, «таблетка» и кружки — pill. Остальные значения — для особых случаев.
+      borderRadius: { control: '0.75rem', card: '1.5rem', pill: '9999px' },
+      fontSize: { caption: ['0.75rem', { lineHeight: '1rem' }] },
       fontFamily: {
         // Manrope вшит в приложение (src/assets/fonts), системные шрифты — запасные.
         sans: [
