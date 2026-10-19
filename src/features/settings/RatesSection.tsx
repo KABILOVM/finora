@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
+import { Notice } from '@/components/Notice';
 import { useSettings, useWallets } from '@/db';
 import { currencyInfo } from '@/domain/currency';
 import { formatDayInline } from '@/lib/dates';
@@ -53,9 +54,9 @@ export function RatesSection() {
         </p>
       )}
       {anyStale && (
-        <p className="rounded-xl bg-warning/10 p-3 text-warning">
+        <Notice tone="warning" role="note">
           Курс устарел. Обновите курсы или задайте свой.
-        </p>
+        </Notice>
       )}
 
       {rows.length > 0 && (

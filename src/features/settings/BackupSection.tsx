@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
+import { Notice } from '@/components/Notice';
 import { exportBackup, exportTransactionsCsv, importBackup, useStore, ValidationError, type ImportResult } from '@/db';
 import { todayLocal } from '@/lib/dates';
 import { isForeignBackup, withoutSettings } from './backupAccount';
@@ -131,17 +132,15 @@ export function BackupSection() {
       </div>
 
       {error && (
-        <p role="alert" className="rounded-xl bg-danger/10 p-3 font-medium text-danger">
-          {error}
-        </p>
+        <Notice tone="danger">{error}</Notice>
       )}
       {result && (
-        <div role="status" className="rounded-xl bg-income/10 p-3">
-          <p className="font-semibold text-income">Копия загружена</p>
-          <p className="mt-1 text-sm">
+        <Notice tone="success">
+          <p className="font-semibold">Копия загружена</p>
+          <p className="mt-1 text-sm text-text">
             Добавлено: {result.added} · обновлено: {result.replaced}
           </p>
-        </div>
+        </Notice>
       )}
 
       <ConfirmDialog

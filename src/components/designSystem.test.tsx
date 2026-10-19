@@ -76,6 +76,17 @@ describe('Notice', () => {
     expect(screen.getByRole('note')).toHaveTextContent('Готово');
   });
 
+  it('live: плашка с ролью note зачитывается по aria-live, не становясь «status»', () => {
+    render(
+      <Notice role="note" live="polite">
+        Готово
+      </Notice>,
+    );
+    const el = screen.getByRole('note');
+    expect(el).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('действие показывается под текстом', () => {
     render(<Notice tone="warning" action={<button>Повторить</button>}>Не получилось</Notice>);
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();

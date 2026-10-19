@@ -3,7 +3,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/Button';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import { Switch } from '@/components/Switch';
-import { cn } from '@/lib/cn';
+import { Notice } from '@/components/Notice';
 import { clearLock, DEFAULT_GRACE, updateGrace, writeLock, type GraceSeconds } from '@/lock/lockStore';
 import { useLockState, useLockSupport } from '@/lock/useLockState';
 import { createLockCredential, LOCK_FAILURE_TEXT, onIosBrowserTab, SUPPORT_TEXT, verifyLock } from '@/lock/webauthn';
@@ -140,9 +140,10 @@ function AppLockBody({ userId, cloud }: { userId: string; cloud: boolean }) {
       )}
 
       {note && (
-        <p role={note.tone === 'error' ? 'alert' : undefined} aria-live={note.tone === 'error' ? undefined : 'polite'} className={cn('rounded-xl p-3 font-medium', note.tone === 'error' ? 'bg-danger/10 text-danger' : 'bg-brand/10 text-brand')}>
+        // «alert» только у ошибки; результат читается вежливо (aria-live), но не как «status»: лишних статусов на странице настроек быть не должно
+        <Notice tone={note.tone === 'error' ? 'danger' : 'info'} role={note.tone === 'error' ? 'alert' : 'note'} live={note.tone === 'error' ? undefined : 'polite'} className={note.tone === 'error' ? undefined : 'font-medium !text-brand'}>
           {note.text}
-        </p>
+        </Notice>
       )}
 
       {on && (

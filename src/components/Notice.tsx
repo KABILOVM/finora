@@ -20,13 +20,15 @@ export interface NoticeProps {
   action?: ReactNode;
   /** По умолчанию: ошибка — «alert» (читается сразу), остальное — «status» (вежливо, не перебивая). */
   role?: 'status' | 'alert' | 'note';
+  /** aria-live: для плашки с ролью «note», которую всё же нужно зачитать, когда она появилась (role «status» на странице не нужен). */
+  live?: 'polite' | 'assertive';
   className?: string;
 }
 
 /** Плашка с пояснением или ошибкой: один вид вместо россыпи «rounded-xl bg-warning/10 p-3». */
-export function Notice({ tone = 'info', children, icon, action, role, className }: NoticeProps) {
+export function Notice({ tone = 'info', children, icon, action, role, live, className }: NoticeProps) {
   return (
-    <div role={role ?? (tone === 'danger' ? 'alert' : 'status')} className={cn('rounded-control p-3', TONES[tone], className)}>
+    <div role={role ?? (tone === 'danger' ? 'alert' : 'status')} aria-live={live} className={cn('rounded-control p-3', TONES[tone], className)}>
       <div className={cn(icon && 'flex items-start gap-2')}>
         {icon && <Icon name={icon} size={18} className="mt-0.5 shrink-0" />}
         <div className="min-w-0 flex-1">{children}</div>
