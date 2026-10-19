@@ -35,12 +35,12 @@ describe('Switch', () => {
     expect(onChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('название берётся из видимой подписи (labelledBy), а не из aria-label; disabled не нажимается; busy виден в aria-busy', async () => {
+  it('название берётся из видимой подписи (labelledBy), aria-label не ставится; disabled не нажимается; busy виден в aria-busy', async () => {
     const onChange = vi.fn();
     render(
       <>
         <span id="lbl">Замок</span>
-        <Switch checked labelledBy="lbl" label="лишнее" disabled busy onChange={onChange} />
+        <Switch checked labelledBy="lbl" disabled busy onChange={onChange} />
       </>,
     );
     const sw = screen.getByRole('switch', { name: 'Замок' });

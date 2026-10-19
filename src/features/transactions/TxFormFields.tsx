@@ -25,13 +25,13 @@ const KINDS: readonly SegmentOption<TxKind>[] = [
 
 /**
  * Невысокий экран (iPhone в Safari с панелями): клавиши и поле суммы чуть компактнее, чтобы цифры и категории помещались
- * без прокрутки. Высота клавиш не меньше 44 px — это минимум для касания. Диапазоны высоты не пересекаются.
+ * без прокрутки. Цифры не ниже 44 px — это минимум для касания; знаки действий 44 px, а в окнах ≤ 700 px — 40 px (иначе форма не помещается). Диапазоны высоты не пересекаются.
  * Правила касаются только клавиатуры ([data-pad], [data-op]) и рамки суммы ([data-amount-card]): всплывающая над суммой
  * комиссия живёт внутри того же AmountInput, и её поле и кнопки не должны меняться. Шрифт суммы уменьшает сам AmountInput (compact).
  */
 const COMPACT_KEYPAD =
   '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-pad]_button]:!min-h-[46px] ' +
-  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-op]]:!h-10 [@media(min-height:701px)_and_(max-height:800px)]:[&_[data-amount-card]_.items-baseline]:!py-1 [@media(min-height:701px)_and_(max-height:800px)]:!gap-3 ' +
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-amount-card]_.items-baseline]:!py-1 [@media(min-height:701px)_and_(max-height:800px)]:!gap-3 ' +
   '[@media(max-height:700px)]:[&_[data-pad]_button]:!min-h-[44px] [@media(max-height:700px)]:[&_[data-op]]:!h-10 [@media(max-height:700px)]:!gap-1 ' +
   '[@media(max-height:700px)]:[&_[data-amount-card]_.items-baseline]:!py-0';
 

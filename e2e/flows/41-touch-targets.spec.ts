@@ -25,8 +25,10 @@ async function hitMisses(loc: Locator): Promise<string[]> {
   });
 }
 
+// 750 и 800 — типичная высота окна Safari на iPhone и Chrome на Android: знаки калькулятора там 44 px, не 40
 const SIZES = [
   { width: 320, height: 640 },
+  { width: 390, height: 750 },
   { width: 390, height: 844 },
 ];
 
@@ -59,7 +61,7 @@ test.describe('41. Области касания ≥ 44 px', () => {
       await expectTapTarget(dlg.getByRole('button', { name: 'Комиссия', exact: true }), '«Комиссия» (%)', size);
       await expectTapTarget(dlg.getByRole('button', { name: /^Дата:/ }), 'дата', size);
 
-      // знаки калькулятора: на высоких экранах 44 px, в низких окнах (≤ 700 px) не ниже 40
+      // знаки калькулятора: 44 px, а в низких окнах (≤ 700 px) не ниже 40
       const ops = dlg.locator('[data-op]');
       const count = await ops.count();
       expect(count, 'знаки калькулятора не найдены').toBeGreaterThan(0);

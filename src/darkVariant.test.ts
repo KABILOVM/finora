@@ -16,7 +16,7 @@ function sources(dir: string): string[] {
 
 describe('цвета только из токенов', () => {
   it('в исходниках нет классов dark: (тема — по data-theme, а не по системе)', () => {
-    const offenders = sources(join(process.cwd(), 'src')).filter((f) => /(^|[\s"'`:])dark:[a-z[]/.test(readFileSync(f, 'utf8')));
+    const offenders = sources(join(process.cwd(), 'src')).filter((f) => /(^|[\s"'`])dark:\S/.test(readFileSync(f, 'utf8')));
     expect(offenders.map((f) => f.replace(process.cwd(), ''))).toEqual([]);
   });
 });

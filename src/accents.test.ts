@@ -176,6 +176,14 @@ describe('цвета акцентов (src/index.css)', () => {
         expect(ratio('on-danger', 'danger'), 'on-danger на danger').toBeGreaterThanOrEqual(4.5);
       });
 
+      it('переключатель: выключенная дорожка видна на поверхностях, ручка видна на дорожке в обоих состояниях (≥ 3:1, WCAG 1.4.11)', () => {
+        for (const surface of ['bg', 'surface', 'surface-2']) {
+          expect(ratio('border-strong', surface), `дорожка (border-strong) на ${surface}`).toBeGreaterThanOrEqual(3);
+        }
+        expect(ratio('surface', 'border-strong'), 'выключено: ручка (surface) на дорожке (border-strong)').toBeGreaterThanOrEqual(3);
+        expect(ratio('on-brand', 'brand'), 'включено: ручка (on-brand) на дорожке (brand)').toBeGreaterThanOrEqual(3);
+      });
+
       it('brand читается на подсвеченной плашке (выбранный чип: bg-brand/10 и /15 на surface)', () => {
         for (const alpha of [0.1, 0.15]) {
           expect(ratio('brand', over(color('brand'), alpha, color('surface'))), `bg-brand/${alpha * 100}`).toBeGreaterThanOrEqual(4.5);
@@ -224,36 +232,45 @@ describe('цвета денег и состояний (доход, расход,
     for (const [id, block] of BLOCKS) for (const k of MONEY) expect(block[k], `${id}: ${k}`).toBeUndefined();
   });
 
-  /** Угол между тонами двух цветов (0–180°). */
-  const hueDistance = (a: Rgb, b: Rgb): number => {
-    const hue = ([r, g, bl]: Rgb): number => {
-      const [x, y, z] = [r / 255, g / 255, bl / 255];
-      const max = Math.max(x, y, z);
-      const d = max - Math.min(x, y, z);
-      if (d === 0) return 0;
-      const h = max === x ? ((y - z) / d) % 6 : max === y ? (z - x) / d + 2 : (x - y) / d + 4;
-      return (h * 60 + 360) % 360;
-    };
-    const diff = Math.abs(hue(a) - hue(b));
-    return Math.min(diff, 360 - diff);
+  /** Расстояние между двумя цветами в OKLab (равномерное по восприятию; учитывает светлоту, насыщенность и тон). */
+  const oklab = ([r, g, b]: Rgb): [number, number, number] => {
+    const [lr, lg, lb] = [toLinear(r), toLinear(g), toLinear(b)];
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+    const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+    const sCone = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    return [
+      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * sCone,
+      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * sCone,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * sCone,
+    ];
+  };
+  const distance = (a: Rgb, b: Rgb): number => {
+    const [x, y] = [oklab(a), oklab(b)];
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
   };
 
   /**
-   * Главный цвет акцента не должен совпадать по тону с цветом денег или состояния: иначе кнопка выглядит как «ошибка», а ссылка —
-   * как «расход». Известные совпадения закреплены здесь явно (их выбрал человек, акцент остаётся): у красного главный цвет ≈ цвет
-   * ошибки, у оранжевого ≈ цвет предупреждения. Суммы всегда подписаны знаком («+», «−») и значком, цвет не единственный признак.
-   * Новый акцент с таким же совпадением не пройдёт, пока его не добавят сюда; убранное совпадение тоже придётся убрать из списка.
+   * Главный цвет акцента не должен сливаться с цветом денег или состояния: иначе кнопка выглядит как «ошибка», а ссылка — как
+   * «расход». Совпадения, которые есть сейчас, закреплены здесь явно (акцент выбрал человек, он остаётся): красный ≈ ошибка и расход,
+   * оранжевый ≈ предупреждение и ошибка, зелёный и бирюзовый ≈ доход (в светлой теме). Суммы всегда подписаны знаком («+», «−»)
+   * и значком, цвет — не единственный признак. Новый акцент или правка палитры с таким же сближением не пройдут, пока его не
+   * внесут сюда; убранное сближение тоже придётся убрать из списка.
    */
-  const KNOWN_NEAR: Record<string, readonly string[]> = { red: ['danger'], orange: ['warning'] };
-  const NEAR_DEGREES = 12;
+  const KNOWN_NEAR: Record<string, readonly string[]> = {
+    red: ['danger', 'expense'],
+    orange: ['danger', 'warning'],
+    green: ['income'],
+    teal: ['income'],
+  };
+  const NEAR_DISTANCE = 0.07;
 
-  it(`главный цвет акцента отличается по тону от цветов денег и состояний не меньше чем на ${NEAR_DEGREES}°, кроме известных совпадений`, () => {
+  it(`главный цвет акцента отличается от цветов денег и состояний не меньше чем на ${NEAR_DISTANCE} (OKLab), кроме известных сближений`, () => {
     const found: Record<string, string[]> = {};
     for (const [id, block] of BLOCKS) {
       const near = new Set<string>();
       for (const [suffix, theme] of [['l', LIGHT], ['d', DARK]] as const) {
         const brand = rgb(block[`ac-brand-${suffix}`], `${id}: brand-${suffix}`);
-        for (const k of MONEY) if (hueDistance(brand, rgb(theme[k], k)) < NEAR_DEGREES) near.add(k);
+        for (const k of MONEY) if (distance(brand, rgb(theme[k], k)) < NEAR_DISTANCE) near.add(k);
       }
       if (near.size > 0) found[id] = [...near].sort();
     }
