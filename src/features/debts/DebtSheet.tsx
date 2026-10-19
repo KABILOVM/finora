@@ -14,7 +14,7 @@ import { endSentence } from '@/features/transactions/txDisplay';
 import { NOTE_MAX } from '@/features/transactions/txForm';
 import { addDays, todayLocal } from '@/lib/dates';
 import { freshPlanIds, saveNewDebt, saveTopUp } from './debtActions';
-import { emptyDebtForm, validateDebtForm, type DebtFormErrors, type DebtFormState } from './debtForm';
+import { emptyDebtForm, isDebtFormDirty, validateDebtForm, type DebtFormErrors, type DebtFormState } from './debtForm';
 import { findMatchingDebts, normName } from './debtMatch';
 import type { DebtItem } from './debtSummary';
 import { DIRECTION_ACTION, DIRECTION_LABEL, DIRECTION_NAME_LABEL, ruDateShort, TOP_UP_AMOUNT_LABEL } from './debtText';
@@ -84,6 +84,8 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   const [form, setForm] = useState<DebtFormState>(() =>
     orig ? formFromDebt(orig) : emptyDebtForm(defaultDirection, base, todayLocal()),
   );
+  const [baseline] = useState(form);
+  const dirty = isDebtFormDirty(form, baseline, editing);
   const [errors, setErrors] = useState<DebtFormErrors>({});
   const [wanted, setWanted] = useState(true);
   const [walletPick, setWalletPick] = useState<string | null>(null);
@@ -236,6 +238,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
     <Sheet
       open
       onClose={onClose}
+      isDirty={dirty}
       dismissible={!saving}
       title={editing ? 'Правка долга' : joined ? 'Ещё в долг' : 'Новый долг'}
       footer={

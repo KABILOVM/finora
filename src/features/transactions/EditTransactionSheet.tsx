@@ -16,7 +16,7 @@ import { Receipt } from '@/features/shopping/Receipt';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
-import { changedFields, formFromTx, GENERIC_SAVE_ERROR } from './txForm';
+import { changedFields, formFromTx, GENERIC_SAVE_ERROR, isFormDirty } from './txForm';
 import { TxFormFields } from './TxFormFields';
 import { useCloseDuplicateEntry } from './useCloseDuplicateEntry';
 import { useScrollToError } from './useScrollToError';
@@ -65,7 +65,7 @@ export default function EditTransactionSheet({ id, onClose }: EditTransactionShe
   if (gone) {
     if (closing.current) return null;
     return (
-      <Sheet open onClose={onClose} title={TITLE}>
+      <Sheet open onClose={onClose} history={false} title={TITLE}>
         <EmptyState
           icon="alert"
           title="Операция не найдена"
@@ -77,7 +77,7 @@ export default function EditTransactionSheet({ id, onClose }: EditTransactionShe
   }
   if (settings === null || found.tx === null) {
     return (
-      <Sheet open onClose={onClose} title={TITLE}>
+      <Sheet open onClose={onClose} history={false} title={TITLE}>
         <EmptyState icon="cloud" title="Данные ещё загружаются" text="Подождите немного и откройте операцию снова." />
       </Sheet>
     );
@@ -227,6 +227,8 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
       <Sheet
         open
         onClose={onClose}
+        history={false}
+        isDirty={isFormDirty(c.form, initial, true)}
         dismissible={!busy}
         title={TITLE}
         headerAction={<DateChip c={c} />}

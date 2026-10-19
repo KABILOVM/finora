@@ -13,6 +13,7 @@ import {
   formatRate,
   formFromTx,
   fxSourceOf,
+  isFormDirty,
   parseRateText,
   pickDefaultWallet,
   rankByCount,
@@ -391,5 +392,29 @@ describe('computeFee: комиссия в процентах', () => {
 
   it('режим «сумма» берёт сумму как есть', () => {
     expect(computeFee({ feeMode: 'amount', feeAmount: 120, feePct: '1,15' }, 3000)).toBe(120);
+  });
+});
+
+describe('isFormDirty: есть ли что терять при закрытии окна', () => {
+  const start = emptyForm('w1');
+  it('нетронутая форма и один выбор (вид, кошелёк, дата) — не ввод', () => {
+    expect(isFormDirty(start, start, false)).toBe(false);
+    expect(isFormDirty({ ...start, kind: 'income', walletId: 'w2', date: { mode: 'date', value: '2026-10-01' } }, start, false)).toBe(false);
+  });
+  it('сумма, категория, заметка, комиссия, курс — это ввод', () => {
+    expect(isFormDirty({ ...start, amountMinor: 0 }, start, false)).toBe(true);
+    expect(isFormDirty({ ...start, categoryId: 'c1' }, start, false)).toBe(true);
+    expect(isFormDirty({ ...start, note: 'обед' }, start, false)).toBe(true);
+    expect(isFormDirty({ ...start, feeAmount: 100 }, start, false)).toBe(true);
+    expect(isFormDirty({ ...start, feePct: '1,5' }, start, false)).toBe(true);
+    expect(isFormDirty({ ...start, rateText: '10,9' }, start, false)).toBe(true);
+  });
+  it('правка: любое отличие от операции, в том числе кошелёк и дата', () => {
+    expect(isFormDirty(start, start, true)).toBe(false);
+    expect(isFormDirty({ ...start, walletId: 'w2' }, start, true)).toBe(true);
+    expect(isFormDirty({ ...start, date: { mode: 'date', value: '2026-10-01' } }, start, true)).toBe(true);
+    expect(isFormDirty({ ...start, kind: 'income' }, start, true)).toBe(true);
+    const dated = { ...start, date: { mode: 'date' as const, value: '2026-10-01' } };
+    expect(isFormDirty({ ...dated }, dated, true)).toBe(false);
   });
 });

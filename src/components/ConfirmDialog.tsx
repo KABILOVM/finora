@@ -15,6 +15,8 @@ export interface ConfirmDialogProps {
   loading?: boolean;
   /** Подтвердить пока нельзя (например, не выбран вариант): кнопка недоступна, «Отмена» работает. */
   confirmDisabled?: boolean;
+  /** «Назад» закрывает диалог (по умолчанию да). Выключают, если сразу после подтверждения страница меняет адрес. */
+  history?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -29,6 +31,7 @@ export function ConfirmDialog({
   danger = false,
   loading = false,
   confirmDisabled = false,
+  history,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -40,6 +43,7 @@ export function ConfirmDialog({
       placement="center"
       role="alertdialog"
       dismissible={!loading}
+      history={history}
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={onCancel} disabled={loading} data-autofocus>

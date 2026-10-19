@@ -220,7 +220,7 @@ test.describe('18. Долги и кредиты', () => {
     await expect(page.getByTestId('debt-summary')).toContainText('Закрыт');
     await expect(remaining(page)).toContainText(money('200 с.'));
     await dismissToasts(page);
-    await page.getByRole('link', { name: 'Все долги' }).click();
+    await page.getByRole('main').getByRole('link', { name: 'Долги', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeVisible();
     await expect(debtLink(page, 'Бобур')).toHaveCount(0);
     const fold = page.getByRole('button', { name: 'Закрытые · 1' });
@@ -239,7 +239,7 @@ test.describe('18. Долги и кредиты', () => {
     await page.getByRole('button', { name: 'Открыть снова', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Закрыть долг', exact: true })).toBeVisible();
     await dismissToasts(page);
-    await page.getByRole('link', { name: 'Все долги' }).click();
+    await page.getByRole('main').getByRole('link', { name: 'Долги', exact: true }).click();
     await expect(debtLink(page, 'Бобур')).toContainText('Просрочен на 3 дня');
   });
 

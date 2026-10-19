@@ -116,8 +116,8 @@ describe('шапка телефона: индикаторы в одну стро
 
   it('без сети «Офлайн» появляется в том же контейнере, а слово «Sumoima» на узком экране уступает место (остаётся для скринридера)', async () => {
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
-    renderAt('/wallets');
-    await findByRole('heading', { name: 'Кошельки', level: 1 });
+    renderAt('/');
+    await homeLoaded();
     expect(statusRow()).toHaveTextContent('Только на устройстве');
     expect(statusRow()).toHaveTextContent('Офлайн');
     expect(statusRow().querySelectorAll('[role="status"]')).toHaveLength(2);
@@ -126,11 +126,29 @@ describe('шапка телефона: индикаторы в одну стро
     expect(word.className).toContain('sr-only');
   });
 
-  it('с сетью слово «Sumoima» видно всегда', async () => {
-    renderAt('/wallets');
-    await findByRole('heading', { name: 'Кошельки', level: 1 });
+  it('с сетью слово «Sumoima» на «Главной» видно', async () => {
+    renderAt('/');
+    await homeLoaded();
     const word = Array.from(document.querySelectorAll('.sticky span')).find((s) => s.textContent === 'Sumoima') as HTMLElement;
     expect(word.className).not.toContain('sr-only');
+  });
+
+  it('знак и «Sumoima» — только на «Главной»; на вложенных и остальных экранах их в шапке нет, индикатор на месте', async () => {
+    renderAt('/wallets');
+    await findByRole('heading', { name: 'Кошельки', level: 1 });
+    const sticky = document.querySelector('.sticky') as HTMLElement;
+    expect(sticky.textContent).not.toContain('Sumoima');
+    expect(sticky.querySelector('svg[aria-label], [data-logo]')).toBeNull();
+    expect(statusRow()).toHaveTextContent('Только на устройстве');
+  });
+
+  it('переключателя темы в шапке телефона нет (он в «Настройки → Оформление» и в боковой панели ПК)', async () => {
+    renderAt('/');
+    await homeLoaded();
+    const sticky = document.querySelector('.sticky') as HTMLElement;
+    expect(sticky.querySelector('button[aria-label*="тему"]')).toBeNull();
+    const side = document.querySelector('aside') as HTMLElement;
+    expect(side.querySelector('button[aria-label*="тему"]')).not.toBeNull();
   });
 });
 

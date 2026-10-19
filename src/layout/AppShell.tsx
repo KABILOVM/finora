@@ -3,7 +3,6 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Spinner } from '@/components/Button';
 import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { useOnline } from '@/components/OnlineBadge';
 import { cn } from '@/lib/cn';
 import { BottomNav } from './BottomNav';
@@ -37,16 +36,17 @@ export function AppShell({ status }: AppShellProps) {
       <SideNav status={status} />
       <div className="md:pl-64">
         <div className="sticky top-0 z-20 bg-bg/55 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
-          <div className="flex min-h-[52px] items-center justify-between gap-2 px-4">
-            <div className="flex shrink-0 items-center gap-2">
-              <Logo size={28} />
-              {/* Без сети на узком экране слово «Sumoima» уступает место индикаторам: они должны уместиться в одну строку. */}
-              <Wordmark className={cn('text-lg', !online && 'max-[419px]:sr-only')} />
-            </div>
-            <div className="flex min-w-0 items-center gap-1">
-              {status && <div className="header-status">{status}</div>}
-              <ThemeToggle />
-            </div>
+          {/* Знак и слово «Sumoima» — только на «Главной»; на остальных экранах шапка тоньше, слева место под «Назад» самой страницы.
+              Тема переключается в «Настройки → Оформление» (на ПК — кнопкой в боковой панели). */}
+          <div className={cn('flex items-center gap-2 px-4', pathname === '/' ? 'min-h-[52px] justify-between' : 'min-h-[40px] justify-end')}>
+            {pathname === '/' && (
+              <div className="flex shrink-0 items-center gap-2">
+                <Logo size={28} />
+                {/* Без сети на узком экране слово «Sumoima» уступает место индикаторам: они должны уместиться в одну строку. */}
+                <Wordmark className={cn('text-lg', !online && 'max-[419px]:sr-only')} />
+              </div>
+            )}
+            {status && <div className="header-status flex min-w-0 items-center gap-1">{status}</div>}
           </div>
         </div>
         <main

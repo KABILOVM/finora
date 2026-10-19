@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
-import { Icon } from '@/components/Icon';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { DEBT_OVERFLOW_MESSAGE } from '@/db';
@@ -24,20 +23,12 @@ import { useDebtsData } from './useDebtsData';
 
 type Dialog = { kind: 'remind' } | { kind: 'merge'; target: DebtItem } | { kind: 'net'; currency: CurrencyCode } | null;
 
-function BackLink() {
-  return (
-    <Link to="/debts?dir=people" className="-ml-1 inline-flex min-h-[44px] items-center gap-1 pr-3 text-base font-semibold text-brand">
-      <Icon name="chevron" size={18} className="rotate-180" />
-      Все долги
-    </Link>
-  );
-}
+const BACK = { to: '/debts?dir=people', label: 'Долги' } as const;
 
 function Notice({ title, text }: { title: string; text: string }) {
   return (
     <>
-      <BackLink />
-      <PageHeader title="Человек" />
+      <PageHeader title="Человек" back={BACK} />
       <EmptyState
         icon="alert"
         title={title}
@@ -102,8 +93,7 @@ export default function PersonDebtsPage() {
   if (data === undefined || people === null) {
     return (
       <>
-        <BackLink />
-        <PageHeader title="Человек" />
+        <PageHeader title="Человек" back={BACK} />
         <p role="status" className="py-10 text-center text-muted">
           Загрузка…
         </p>
@@ -134,8 +124,7 @@ export default function PersonDebtsPage() {
 
   return (
     <>
-      <BackLink />
-      <PageHeader title={person.name} subtitle={`${person.open.length} ${pluralRu(person.open.length, 'открытый долг', 'открытых долга', 'открытых долгов')}`} />
+      <PageHeader back={BACK} title={person.name} subtitle={`${person.open.length} ${pluralRu(person.open.length, 'открытый долг', 'открытых долга', 'открытых долгов')}`} />
 
       {person.overflow ? (
         <p role="alert" className="mb-4 font-medium text-danger">

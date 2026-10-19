@@ -1,6 +1,5 @@
 import { Glyph } from '@/components/Glyph';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -74,11 +73,8 @@ export default function CategoriesPage() {
 
   return (
     <>
-      <Link to="/settings" className="-ml-1 inline-flex min-h-[44px] items-center gap-1 rounded-lg px-1 font-semibold text-brand">
-        <Icon name="chevron" size={18} className="rotate-180" />
-        Настройки
-      </Link>
       <PageHeader
+        back={{ to: '/settings', label: 'Настройки' }}
         title="Категории"
         actions={
           <Button icon="plus" onClick={() => setSheet({ kind: 'new' })} disabled={all === undefined}>

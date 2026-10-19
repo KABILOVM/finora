@@ -270,6 +270,14 @@ export async function openCategories(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
 }
 
+/** Окно с несохранённым вводом на «×», Esc и «назад» сначала спрашивает «Закрыть без сохранения?»: отвечаем «Закрыть». */
+export async function confirmDiscard(page: Page): Promise<void> {
+  const ask = page.getByRole('alertdialog', { name: 'Закрыть без сохранения?' });
+  await expect(ask).toBeVisible();
+  await ask.locator('button', { hasText: /^Закрыть$/ }).click();
+  await expect(ask).toBeHidden();
+}
+
 /** Кнопка «+»: на телефоне — кругляш в нижней панели, на ПК — «Добавить операцию» в боковой панели. */
 export function addLink(page: Page): Locator {
   const all = page.locator('a[href="#/add"]:visible');

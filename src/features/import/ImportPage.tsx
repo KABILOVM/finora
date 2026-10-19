@@ -165,7 +165,7 @@ export default function ImportPage() {
 
   return (
     <>
-      <PageHeader title="Импорт из Дзен-мани" subtitle={SUBTITLE[stage.name]} />
+      <PageHeader back={{ to: '/settings', label: 'Настройки' }} title="Импорт из Дзен-мани" subtitle={SUBTITLE[stage.name]} />
       {(settings === undefined || dbRows === undefined) && (
         <p role="status" className="py-10 text-center text-muted">
           Загрузка…

@@ -4,6 +4,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
+import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { Segmented } from '@/components/Segmented';
@@ -182,7 +183,7 @@ export default function DebtsPage() {
           defaultDirection={direction}
           base={base}
           onClose={() => setSheet(false)}
-          onCreated={(d) => setView(d.direction)}
+          onCreated={(d) => runWithoutModalAnchor(() => setView(d.direction))}
         />
       )}
     </>

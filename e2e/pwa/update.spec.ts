@@ -239,6 +239,7 @@ test('Вторая вкладка с вводом: как только ввод 
   expect(await tab2.evaluate(() => document.body.textContent)).toContain('Ещё A');
   // человек закрыл окно — вкладка переходит на B без нажатий
   await tab2.keyboard.press('Escape');
+  await tab2.getByRole('alertdialog', { name: 'Закрыть без сохранения?' }).locator('button', { hasText: /^Закрыть$/ }).click(); // сумма набрана
   await expect(navLabel(tab2)).toHaveText('Ещё B', { timeout: 15_000 });
   await ctx.close();
 });

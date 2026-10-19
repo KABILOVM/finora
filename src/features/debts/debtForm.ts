@@ -18,6 +18,20 @@ export interface DebtFormState {
   note: string;
 }
 
+/** Есть ли в форме долга несохранённый ввод. Новый долг: имя, сумма, заметка; правка: любое отличие от долга. */
+export function isDebtFormDirty(form: DebtFormState, initial: DebtFormState, editing: boolean): boolean {
+  const typed = form.counterparty.trim() !== initial.counterparty.trim() || form.amountMinor !== initial.amountMinor || form.note !== initial.note;
+  if (!editing) return typed;
+  return (
+    typed ||
+    form.direction !== initial.direction ||
+    form.currency !== initial.currency ||
+    form.openedOn !== initial.openedOn ||
+    form.hasDue !== initial.hasDue ||
+    (form.hasDue && form.dueOn !== initial.dueOn)
+  );
+}
+
 export interface DebtFormErrors {
   counterparty?: string;
   amount?: string;

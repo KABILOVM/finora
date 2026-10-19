@@ -1,4 +1,4 @@
-import { addTx, openCategories, openCategoryList, createWallet, dismissToasts, expect, fillTx, goSection, openApp, shot, sheet, test } from '../helpers';
+import { addTx, confirmDiscard, openCategories, openCategoryList, createWallet, dismissToasts, expect, fillTx, goSection, openApp, shot, sheet, test } from '../helpers';
 
 test.describe('8. Категории и настройки', () => {
   test('добавить категорию, она доступна при внесении; архивировать — пропадает из выбора, возвращается из архива', async ({ page }, testInfo) => {
@@ -51,6 +51,7 @@ test.describe('8. Категории и настройки', () => {
     await expect(add2.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Кафе', exact: true })).toHaveCount(0);
     await expect(add2.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Еда', exact: true })).toBeVisible();
     await add2.getByRole('button', { name: 'Закрыть' }).click();
+    await confirmDiscard(page); // сумма уже набрана — окно спрашивает «Закрыть без сохранения?»
     await expect(add2).toBeHidden();
 
     // Старая операция осталась со своей категорией
