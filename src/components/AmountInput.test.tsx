@@ -57,7 +57,7 @@ describe('Keypad', () => {
       const b = key(n);
       expect(b.textContent, `${n}: значок, а не символ шрифта`).toBe('');
       expect(b.querySelector('svg')).not.toBeNull();
-      expect(b.className).toContain('h-10');
+      expect(b.className, `${n}: область касания 44 px`).toContain('h-11');
     }
     expect(key('5').className).toContain('min-h-[56px]');
   });

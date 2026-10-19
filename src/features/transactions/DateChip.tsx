@@ -29,7 +29,7 @@ export function DateChip({ c }: { c: TxFormController }) {
         aria-expanded={shown}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3 text-sm font-semibold transition-colors',
+          'inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-sm font-semibold transition-colors',
           errors.date
             ? 'border-danger text-danger'
             : shown

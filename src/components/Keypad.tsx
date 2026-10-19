@@ -41,12 +41,12 @@ const BASE_KEY =
   'shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_6px_14px_-9px_rgb(var(--brand)/0.55)]';
 const KEY_CLASS = `${BASE_KEY} border-border/80 bg-surface text-text active:bg-brand/10`;
 const SERVICE_CLASS = `${BASE_KEY} border-border/60 bg-surface-2 text-muted active:bg-border`;
-// Знаки действий нужны реже цифр: узкая строка над цифрами (36–40 px), значки рисуются сами — шрифт «÷» и «×» искажал.
+// Знаки действий нужны реже цифр: строка над цифрами 44 px (в низких окнах — 40, см. COMPACT_KEYPAD), значки рисуются сами — шрифт «÷» и «×» искажал.
 const OP_CLASS =
-  'flex h-10 min-h-0 select-none items-center justify-center rounded-xl border border-brand/25 bg-brand/10 text-brand transition duration-150 ease-spring ' +
+  'flex h-11 min-h-0 select-none items-center justify-center rounded-xl border border-brand/25 bg-brand/10 text-brand transition duration-150 ease-spring ' +
   'active:scale-[0.93] active:bg-brand/25 disabled:opacity-40 disabled:active:scale-100';
 const EQUAL_CLASS =
-  'flex h-10 min-h-0 select-none items-center justify-center rounded-xl border border-transparent bg-gradient-to-br from-brand to-accent text-brand-fg ' +
+  'flex h-11 min-h-0 select-none items-center justify-center rounded-xl border border-transparent bg-gradient-to-br from-brand to-accent text-brand-fg ' +
   'transition duration-150 ease-spring active:scale-[0.93] active:brightness-90 disabled:bg-none disabled:bg-brand/30 disabled:active:scale-100';
 
 /** Значки действий: линии одной толщины, одинаковые на любом телефоне. */

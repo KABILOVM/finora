@@ -31,8 +31,8 @@ const KINDS: readonly SegmentOption<TxKind>[] = [
  */
 const COMPACT_KEYPAD =
   '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-pad]_button]:!min-h-[46px] ' +
-  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-op]]:!h-8 [@media(min-height:701px)_and_(max-height:800px)]:[&_[data-amount-card]_.items-baseline]:!py-1 [@media(min-height:701px)_and_(max-height:800px)]:!gap-3 ' +
-  '[@media(max-height:700px)]:[&_[data-pad]_button]:!min-h-[44px] [@media(max-height:700px)]:[&_[data-op]]:!h-8 [@media(max-height:700px)]:!gap-1 ' +
+  '[@media(min-height:701px)_and_(max-height:800px)]:[&_[data-op]]:!h-10 [@media(min-height:701px)_and_(max-height:800px)]:[&_[data-amount-card]_.items-baseline]:!py-1 [@media(min-height:701px)_and_(max-height:800px)]:!gap-3 ' +
+  '[@media(max-height:700px)]:[&_[data-pad]_button]:!min-h-[44px] [@media(max-height:700px)]:[&_[data-op]]:!h-10 [@media(max-height:700px)]:!gap-1 ' +
   '[@media(max-height:700px)]:[&_[data-amount-card]_.items-baseline]:!py-0';
 
 export interface TxFormFieldsProps {
@@ -68,7 +68,7 @@ function SideButton({
       data-side=""
       onClick={onClick}
       className={cn(
-        'relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
+        'tap-44 relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
         active ? 'border-brand bg-brand/10 text-brand' : 'border-border bg-surface text-muted hover:bg-surface-2',
       )}
     >
