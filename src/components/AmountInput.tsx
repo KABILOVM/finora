@@ -50,6 +50,11 @@ export interface AmountInputProps {
    * а черновик («2,» или «2,0») остаётся здесь. Пока поля нет на экране — null.
    */
   keyRef?: MutableRefObject<((key: KeypadKey) => void) | null>;
+  /**
+   * Enter в поле суммы (ПК): «сохранить»; Ctrl/⌘+Enter — «сохранить и добавить ещё» (more = true). Пока в поле выражение,
+   * Enter считает его (как «=»), а не отправляет форму.
+   */
+  onSubmit?: (more: boolean) => void;
   /** Невысокий экран (до 700 px): потолок шрифта суммы ниже (text-4xl вместо text-5xl), ступени по длине остаются. */
   compact?: boolean;
 }
@@ -85,6 +90,7 @@ export function AmountInput({
   onActivate,
   onKeyIntercept,
   keyRef,
+  onSubmit,
   compact = false,
 }: AmountInputProps) {
   const id = useId();
@@ -282,6 +288,9 @@ export function AmountInput({
                     if (calculator && expr !== null && (e.key === '=' || e.key === 'Enter') && calc?.kind === 'ok') {
                       e.preventDefault();
                       equals();
+                    } else if (onSubmit && e.key === 'Enter' && expr === null && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      onSubmit(e.ctrlKey || e.metaKey);
                     }
                   }}
                   aria-invalid={message ? true : undefined}

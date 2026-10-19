@@ -253,13 +253,16 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     setForm((f) => {
       if (f.walletId === id) return f;
       const sameTarget = f.toWalletId === id;
+      // Комиссия расхода (сумма или процент) от кошелька не зависит, пока валюта та же: «Карта» → «Карта 2» её не стирает.
+      // У перевода «Получено» считается по паре кошельков, поэтому там комиссия сбрасывается, как и прежде.
+      const keepFee = f.kind === 'expense' && wallets.find((w) => w.id === f.walletId)?.currency === wallets.find((w) => w.id === id)?.currency;
       return {
         ...f,
         walletId: id,
         toWalletId: sameTarget ? firstOtherWallet(wallets, id) : f.toWalletId,
         // «Получено» и ручной курс относились к прежней паре кошельков
         toAmountOverride: undefined,
-        ...NO_FEE,
+        ...(keepFee ? {} : NO_FEE),
         rateText: '',
       };
     });

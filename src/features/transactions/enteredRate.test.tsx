@@ -77,7 +77,7 @@ describe('курс набран в «Новой операции»', () => {
     await pickWallet('Доллары · USD');
     await tapAmount('10');
     await user.type(rateField(), '11');
-    await user.click(screen.getByRole('button', { name: 'Сохранить и добавить ещё' }));
+    await clickSave('Сохранить и добавить ещё');
     await waitFor(() => expect(td.rates.listEnteredRates()).toHaveLength(1));
 
     // форма очищена; курс подставлен сам и подписан

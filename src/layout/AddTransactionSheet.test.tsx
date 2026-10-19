@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventually } from '@/app/testkit';
-import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { act, findByRole, fire, screen, user, waitFor } from '@/components/testUtils';
 import {
   catBtn,
+  CATEGORY_NUDGE,
   catQuery,
   allTxs,
   amountField,
@@ -27,12 +28,19 @@ import { addDays, todayLocal } from '@/lib/dates';
 
 afterEach(() => vi.restoreAllMocks());
 
+/** Кнопка внутри окна подтверждения (под нею в странице есть своя «Сохранить»). */
+const dialogButton = (dialog: HTMLElement, name: string): HTMLElement => {
+  const hit = Array.from(dialog.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim() === name);
+  if (!hit) throw new Error(`В окне нет кнопки «${name}»`);
+  return hit;
+};
+
 describe('обычный расход', () => {
   it('сумма «12,5» → категория → «Сохранить»: в базе 1250, кошелёк и дата подставились сами', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('12,5');
     await user.click(catBtn('Еда'));
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 
     const [tx, ...rest] = await liveTxs(td);
@@ -65,17 +73,53 @@ describe('обычный расход', () => {
     expect((await liveTxs(td))[0]?.amountMinor).toBe(1250);
   });
 
-  it('категорию можно не выбирать; повторное касание выбранной категории снимает выбор', async () => {
+  it('категорию можно не выбирать: «Без категории» — осознанный выбор, напоминания при «Сохранить» нет', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('30');
-    const food = catBtn('Еда');
-    await user.click(food);
-    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'true');
     await user.click(catBtn('Еда'));
-    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'false');
-    await clickSave();
+    expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Без категории' }));
+    expect(screen.getByRole('button', { name: 'Категория: без категории' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(screen.queryByText(CATEGORY_NUDGE)).toBeNull();
+    expect((await liveTxs(td))[0]).toMatchObject({ amountMinor: 3000, categoryId: null });
+  });
+
+  it('категория не выбрана: первое «Сохранить» только напоминает и открывает список, второе — сохраняет без категории', async () => {
+    const { td, onClose } = await openAddSheet();
+    await tapAmount('30');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await waitFor(() => screen.getByText(CATEGORY_NUDGE))).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Категория' })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await liveTxs(td)).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]).toMatchObject({ amountMinor: 3000, categoryId: null });
+  });
+
+  it('после напоминания выбор категории сохраняет операцию с ней одним нажатием; без суммы напоминания нет — сначала ошибка суммы', async () => {
+    const { td, onClose } = await openAddSheet();
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await waitFor(() => screen.getByText('Введите сумму'))).toBeInTheDocument();
+    expect(screen.queryByText(CATEGORY_NUDGE)).toBeNull();
+    await tapAmount('30');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await waitFor(() => screen.getByText(CATEGORY_NUDGE))).toBeInTheDocument();
+    await user.click(catBtn('Еда'));
+    expect(screen.queryByText(CATEGORY_NUDGE)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect((await liveTxs(td))[0]?.categoryId).toBe((await categoryByName(td, 'Еда'))?.id);
+  });
+
+  it('категории в списке — сеткой: значок и название, «Новая» и «Без категории» рядом', async () => {
+    await openAddSheet();
+    expect(catBtn('Еда').querySelector('svg, img, span')).not.toBeNull();
+    expect(screen.getByRole('group', { name: 'Категория' }).className).toContain('grid-cols-4');
+    expect(screen.getByRole('button', { name: 'Новая категория' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Без категории' })).toBeInTheDocument();
   });
 
   it('заметка сохраняется без лишних пробелов', async () => {
@@ -102,14 +146,38 @@ describe('обычный расход', () => {
     await tapAmount('7');
     await pickDate('Другая дата');
     setDateInput(dateInput(), '2000-01-01');
-    await user.click(screen.getByRole('button', { name: 'Сохранить и добавить ещё' }));
+    await clickSave('Сохранить и добавить ещё');
     await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
 
     await tapAmount('8');
     setDateInput(dateInput(), '2100-01-01');
     await clickSave();
+    // дата в будущем — не ошибка, но спрашиваем
+    const ask = await findByRole('alertdialog', { name: 'Дата в будущем' });
+    await user.click(dialogButton(ask, 'Сохранить'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect((await liveTxs(td)).map((t) => t.occurredOn).sort()).toEqual(['2000-01-01', '2100-01-01']);
+  });
+
+  it('дата в будущем: «Изменить дату» ничего не сохраняет и оставляет форму как есть; в прошлом и сегодня вопроса нет', async () => {
+    const { td, onClose } = await openAddSheet();
+    await tapAmount('7');
+    await user.click(catBtn('Еда'));
+    await pickDate('Другая дата');
+    const future = addDays(todayLocal(), 30);
+    setDateInput(dateInput(), future);
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    const ask = await findByRole('alertdialog', { name: 'Дата в будущем' });
+    expect(ask).toHaveTextContent('Остаток кошелька изменится сразу');
+    await user.click(dialogButton(ask, 'Изменить дату'));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await liveTxs(td)).toHaveLength(0);
+    setDateInput(dateInput(), todayLocal());
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect((await liveTxs(td))[0]?.occurredOn).toBe(todayLocal());
   });
 });
 
@@ -266,6 +334,7 @@ describe('защита от двойного нажатия и повтора', 
   it('два нажатия «Сохранить» подряд — одна операция', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('42');
+    await user.click(catBtn('Еда')); // с категорией напоминания нет: сохранение идёт сразу
     const button = screen.getByRole('button', { name: 'Сохранить' });
     // оба нажатия — до того как React успел перерисовать кнопку
     act(() => {
@@ -293,7 +362,7 @@ describe('защита от двойного нажатия и повтора', 
     await clickSave();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled());
     expect(screen.getByRole('button', { name: 'Сохранить и добавить ещё' })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     release();
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(spy).toHaveBeenCalledTimes(1);
@@ -340,19 +409,62 @@ describe('тост «Сохранено» и отмена', () => {
   });
 });
 
+describe('Enter и подпись кнопки «ещё»', () => {
+  const enter = (ctrl = false) =>
+    fire(amountField(), new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: ctrl, bubbles: true, cancelable: true }));
+
+  it('кнопка «ещё» короткая («Ещё одну»), а для скринридера и подсказки называется полностью — в одну строку', async () => {
+    await openAddSheet();
+    const more = screen.getByRole('button', { name: 'Сохранить и добавить ещё' });
+    expect(more.textContent).toContain('Ещё одну');
+    expect(more.getAttribute('title')).toContain('Ctrl+Enter');
+  });
+
+  it('Enter в поле суммы сохраняет операцию и закрывает окно', async () => {
+    const { td, onClose } = await openAddSheet();
+    await tapAmount('15');
+    await user.click(catBtn('Еда'));
+    act(() => {
+      amountField().focus();
+    });
+    enter();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect((await liveTxs(td))[0]).toMatchObject({ amountMinor: 1500 });
+  });
+
+  it('Ctrl+Enter сохраняет и оставляет окно открытым для следующей; без категории Enter сначала напоминает о ней', async () => {
+    const { td, onClose } = await openAddSheet();
+    await tapAmount('15');
+    act(() => {
+      amountField().focus();
+    });
+    enter(true);
+    expect(await waitFor(() => screen.getByText(CATEGORY_NUDGE))).toBeInTheDocument();
+    expect(await liveTxs(td)).toHaveLength(0);
+    await user.click(catBtn('Еда'));
+    act(() => {
+      amountField().focus();
+    });
+    enter(true);
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(amountField().value).toBe('');
+  });
+});
+
 describe('«Сохранить и добавить ещё»', () => {
   it('сохраняет, очищает сумму и категорию, оставляет шит открытым; вторая операция — отдельная', async () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('5');
     await user.click(catBtn('Еда'));
-    await user.click(screen.getByRole('button', { name: 'Сохранить и добавить ещё' }));
+    await clickSave('Сохранить и добавить ещё');
     await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
     expect(onClose).not.toHaveBeenCalled();
     await waitFor(() => expect((amountField() as HTMLInputElement).value).toBe(''));
     expect(catBtn('Еда')).toHaveAttribute('aria-pressed', 'false');
 
     await tapAmount('7');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     const rows = await liveTxs(td);
     expect(rows.map((r) => r.amountMinor).sort()).toEqual([500, 700]);

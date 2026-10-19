@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
@@ -16,7 +18,8 @@ import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
-import { emptyForm, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet } from '@/features/transactions/txForm';
+import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet } from '@/features/transactions/txForm';
+import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
 import { useCloseDuplicateEntry } from '@/features/transactions/useCloseDuplicateEntry';
@@ -135,6 +138,10 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   // Сохранили и закрываем: если шит на миг задержится на экране, второе «Сохранить» с тем же номером молча вернуло бы
   // старую операцию, а набранное потерялось бы. Поэтому после успешного «Сохранить» форму прячем сразу.
   const [finished, setFinished] = useState(false);
+  // Категория не выбрана: при «Сохранить» напоминаем один раз (список откроется сам), дальше — как решит человек
+  const [categoryState, setCategoryState] = useState<CategoryState>('untouched');
+  // Дата в будущем: спрашиваем «Сохранить?»; again — какой из двух кнопок сохраняли
+  const [futureAsk, setFutureAsk] = useState<{ notice: string; again: boolean } | null>(null);
 
   const kind = c.form.kind;
   const categoryOptions = useMemo(() => {
@@ -144,15 +151,31 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const walletsRanked = useMemo(() => rankWallets(wallets, pop), [wallets, pop]);
 
   useScrollToError(formRef, c.errors);
+  // Другой вид операции — другие категории: прежнее решение про категорию не в счёт
+  useEffect(() => setCategoryState('untouched'), [kind]);
 
   const focusAmount = () => formRef.current?.querySelector<HTMLInputElement>('input.money')?.focus({ preventScroll: true });
   // Сумма — главное: фокус на ней (после фокуса, который шит ставит сам). На телефоне экранная клавиатура не появляется.
   useEffect(focusAmount, []);
 
-  const save = async (again: boolean) => {
+  const save = async (again: boolean, dateConfirmed = false) => {
     if (savingRef.current) return; // второе нажатие, пока идёт сохранение
     const prepared = c.prepare();
     if (!prepared) return;
+    const { input } = prepared;
+    if (input.kind !== 'transfer' && input.categoryId === null) {
+      // Напоминаем один раз; сохранили после напоминания — человек решил обойтись без категории
+      if (categoryState === 'untouched' && categoryOptions.length > 0) {
+        setCategoryState('nudged');
+        return;
+      }
+      if (categoryState === 'nudged') setCategoryState('skipped');
+    }
+    const notice = dateConfirmed ? null : futureDateNotice(input.occurredOn, todayLocal());
+    if (notice) {
+      setFutureAsk({ notice, again });
+      return;
+    }
     savingRef.current = true;
     setSaving(again ? 'more' : 'close');
     try {
@@ -163,6 +186,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       if (again) {
         idRef.current = newId();
         c.resetForNext();
+        setCategoryState('untouched');
         focusAmount();
       } else {
         setFinished(true);
@@ -227,16 +251,18 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
               {c.errors.form}
             </p>
           )}
-          <div className="grid grid-cols-[1fr_1.2fr] gap-2 md:grid-cols-[1.3fr_1fr]">
+          <div className="grid grid-cols-[auto_1fr] gap-2">
             <Button
               variant="secondary"
               size="lg"
-              className="!text-sm leading-tight"
+              aria-label="Сохранить и добавить ещё"
+              title="Сохранить и добавить ещё одну операцию (Ctrl+Enter)"
               loading={saving === 'more'}
               disabled={saving !== null}
               onClick={() => void save(true)}
             >
-              Сохранить и добавить ещё
+              <Icon name="plus" size={18} />
+              Ещё одну
             </Button>
             <Button size="lg" loading={saving === 'close'} disabled={saving !== null} onClick={() => void save(false)}>
               Сохранить
@@ -251,6 +277,9 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           c={c}
           wallets={walletsRanked}
           categories={categoryOptions}
+          categoryState={categoryState}
+          onCategorySkip={() => setCategoryState('skipped')}
+          onSubmit={(more) => void save(more)}
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
             <span className="h-11 w-11 shrink-0">
@@ -259,6 +288,19 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           }
         />
       </div>
+      <ConfirmDialog
+        open={futureAsk !== null}
+        title="Дата в будущем"
+        message={futureAsk?.notice}
+        confirmLabel="Сохранить"
+        cancelLabel="Изменить дату"
+        onCancel={() => setFutureAsk(null)}
+        onConfirm={() => {
+          const again = futureAsk?.again ?? false;
+          setFutureAsk(null);
+          void save(again, true);
+        }}
+      />
     </Sheet>
   );
 }

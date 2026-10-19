@@ -1,11 +1,11 @@
 import { Glyph } from '@/components/Glyph';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChipPicker, type ChipOption } from '@/components/ChipPicker';
 import { Floating, useDismiss } from '@/components/Floating';
 import { Icon } from '@/components/Icon';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { cn } from '@/lib/cn';
-import { CategoryPicker } from './CategoryPicker';
+import { CategoryGrid } from './CategoryGrid';
 import { FieldGroup } from './FieldGroup';
 import type { TxFormController } from './useTxFormController';
 
@@ -14,6 +14,9 @@ export function walletOptions(wallets: readonly LocalRow<Wallet>[]): ChipOption[
   const mixed = new Set(wallets.map((w) => w.currency)).size > 1;
   return wallets.map((w) => ({ value: w.id, icon: w.icon, color: w.color, label: mixed ? `${w.name} · ${w.currency}` : w.name }));
 }
+
+/** Напоминание при «Сохранить» без категории (текст над сеткой). */
+export const CATEGORY_NUDGE = 'Выберите категорию или оставьте без неё';
 
 type Panel = 'wallet' | 'toWallet' | 'category' | null;
 
@@ -60,18 +63,28 @@ function Tile({
   );
 }
 
+/**
+ * Что человек уже сказал про категорию новой операции: 'nudged' — при «Сохранить» напомнили выбрать (список открыт сам),
+ * 'skipped' — выбрал «Без категории». Нужно, чтобы напоминание было один раз, а плитка не звала «Выбрать» после осознанного отказа.
+ */
+export type CategoryState = 'untouched' | 'nudged' | 'skipped';
+
 export interface ContextRowProps {
   c: TxFormController;
   wallets: readonly LocalRow<Wallet>[];
   /** Категории вида операции, самые частые первыми; у перевода их нет. */
   categories: readonly ChipOption[];
+  /** Только в «Новой операции»: см. CategoryState. В правке не задаётся (там «Без категории» — просто пустое значение). */
+  categoryState?: CategoryState;
+  /** «Без категории» выбрано явно. */
+  onCategorySkip?: () => void;
 }
 
 /**
  * Две плитки «куда пойдут деньги»: категория и счёт (у перевода — «Откуда» и «Куда»). Подставляются сами, видны над клавиатурой;
  * нажатие открывает список поверх формы. Дата — в шапке окна (DateChip).
  */
-export function ContextRow({ c, wallets, categories }: ContextRowProps) {
+export function ContextRow({ c, wallets, categories, categoryState, onCategorySkip }: ContextRowProps) {
   const { form, errors } = c;
   const [panel, setPanel] = useState<Panel>(null);
   const isTransfer = form.kind === 'transfer';
@@ -79,12 +92,19 @@ export function ContextRow({ c, wallets, categories }: ContextRowProps) {
   const label = (id: string | null) => options.find((o) => o.value === id)?.label;
   const toOptions = options.filter((o) => o.value !== form.walletId);
   const category = categories.find((o) => o.value === form.categoryId);
+  // Пустая категория: в правке и после «Без категории» это осознанное «нет категории», в новой операции — ещё не выбрана
+  const noCategory = category === undefined && (categoryState === 'skipped' || (categoryState === undefined && c.editing));
 
   // Ошибка у скрытого списка не должна теряться: панель с ошибкой раскрыта сама
   const show: Panel = errors.wallet ? 'wallet' : errors.toWallet ? 'toWallet' : errors.category ? 'category' : panel;
   const toggle = (p: Exclude<Panel, null>) => setPanel((cur) => (cur === p ? null : p));
   const boxRef = useRef<HTMLDivElement>(null);
   useDismiss(panel !== null, () => setPanel(null), boxRef);
+  // Напомнили о категории при «Сохранить»: список открывается сам, поверх формы; решение принято — список закрывается
+  useEffect(() => {
+    if (categoryState === 'nudged') setPanel('category');
+    else setPanel((p) => (p === 'category' ? null : p));
+  }, [categoryState]);
 
   const walletName = label(form.walletId) ?? 'не выбран';
   const noTarget = isTransfer && toOptions.length === 0;
@@ -123,8 +143,8 @@ export function ContextRow({ c, wallets, categories }: ContextRowProps) {
               caption="Категория"
               icon={category?.icon ?? '🏷️'}
               color={category?.color}
-              label={category?.label ?? 'Выбрать'}
-              ariaLabel={`Категория: ${category?.label ?? 'не выбрана'}`}
+              label={category?.label ?? (noCategory ? 'Без категории' : 'Выбрать')}
+              ariaLabel={`Категория: ${category?.label ?? (noCategory ? 'без категории' : 'не выбрана')}`}
               open={show === 'category'}
               invalid={!!errors.category}
               onClick={() => toggle('category')}
@@ -183,16 +203,20 @@ export function ContextRow({ c, wallets, categories }: ContextRowProps) {
             </FieldGroup>
           )}
           {show === 'category' && (
-            <CategoryPicker
+            <CategoryGrid
               options={categories}
               kind={form.kind === 'income' ? 'income' : 'expense'}
               value={form.categoryId}
-              onChange={(id) => {
+              onPick={(id) => {
                 c.set({ categoryId: id });
-                if (id !== null) setPanel(null);
+                setPanel(null);
               }}
-              error={errors.category}
-              expanded
+              onSkip={() => {
+                c.set({ categoryId: null });
+                onCategorySkip?.();
+                setPanel(null);
+              }}
+              hint={errors.category ?? (categoryState === 'nudged' && form.categoryId === null ? CATEGORY_NUDGE : null)}
             />
           )}
         </Floating>

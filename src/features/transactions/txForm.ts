@@ -179,6 +179,15 @@ export function checkDate(value: string): string | null {
   return null;
 }
 
+/**
+ * Дата позже сегодняшней — не ошибка (платёж вперёд бывает), но чаще это опечатка в годе: текст вопроса «Сохранить?» или null,
+ * если дата не в будущем. Остаток кошелька считается по всем операциям, поэтому изменится сразу.
+ */
+export function futureDateNotice(date: string, today: IsoDate): string | null {
+  if (!isValidIsoDate(date) || date <= today) return null;
+  return `Дата в будущем: ${ruDate(date)}. Остаток кошелька изменится сразу.`;
+}
+
 /** '2026-10-05' → '05.10.2026'. Не дату возвращает как есть. */
 export function ruDate(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);

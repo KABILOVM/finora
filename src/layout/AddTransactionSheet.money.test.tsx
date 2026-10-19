@@ -371,6 +371,28 @@ describe('переводы', () => {
     expect((await liveTxs(td))[0]).toMatchObject({ kind: 'expense', amountMinor: 10_200 });
   });
 
+  it('комиссия расхода не пропадает при смене кошелька в той же валюте и убирается при смене валюты', async () => {
+    const td = opsDeps([table()], {
+      setup: async (st) => {
+        await withCard(st);
+        await withUsd(st);
+      },
+    });
+    const { onClose } = await openAddSheet(td);
+    await tapAmount('100');
+    await user.click(screen.getByRole('button', { name: 'Комиссия' }));
+    await user.click(screen.getByRole('radio', { name: 'Проценты' }));
+    await user.type(screen.getByRole('textbox', { name: 'Комиссия в процентах' }), '2');
+    expect(screen.getByText('Итого спишется: 102 с.')).toBeInTheDocument();
+    // «Наличные» → «Карта»: обе в сомони — комиссия остаётся
+    await pickWallet('Карта · TJS');
+    expect(screen.getByText('Итого спишется: 102 с.')).toBeInTheDocument();
+    // другая валюта — как и раньше, комиссия сбрасывается
+    await pickWallet('Доллары · USD');
+    expect(screen.queryByText(/Итого спишется/)).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('неверный процент: понятная ошибка, расход не сохраняется', async () => {
     const td = opsDeps([], { setup: withCard });
     const { onClose } = await openAddSheet(td);
