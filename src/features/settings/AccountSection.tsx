@@ -4,6 +4,7 @@ import { useAppEnv } from '@/app/env';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
+import { Notice } from '@/components/Notice';
 import { useStore } from '@/db';
 import { pluralRu } from '@/lib/plural';
 import { useSyncStatus } from '@/sync/syncContext';
@@ -107,9 +108,7 @@ export function AccountSection() {
     <SettingsSection title="Аккаунт">
       <div className="break-all text-lg font-semibold">{email}</div>
       {offlineKnown && (
-        <p role="status" className="rounded-xl bg-warning/10 p-3 text-warning">
-          Нет связи с аккаунтом. Работаете с данными на устройстве, вход подтвердится при появлении сети.
-        </p>
+        <Notice tone="warning">Нет связи с аккаунтом. Работаете с данными на устройстве, вход подтвердится при появлении сети.</Notice>
       )}
       <div className="flex flex-col gap-2">
         <Button variant="secondary" onClick={() => setPasswordOpen(true)}>

@@ -1,5 +1,6 @@
 import { Button } from '@/components/Button';
 import { Field, inputClasses } from '@/components/Field';
+import { Notice } from '@/components/Notice';
 import { cn } from '@/lib/cn';
 import { DENIED_HELP, explainSupport } from '@/push/subscription';
 import { useReminders, type RemindersModel } from '@/push/useReminders';
@@ -48,14 +49,16 @@ function Body({ m }: { m: RemindersModel }) {
       );
     case 'load-failed':
       return (
-        <>
-          <p role="alert" className="font-medium text-danger">
-            {m.loadError ?? 'Не удалось получить настройки напоминаний.'}
-          </p>
-          <Button variant="secondary" icon="refresh" onClick={m.reload}>
-            Повторить
-          </Button>
-        </>
+        <Notice
+          tone="danger"
+          action={
+            <Button variant="secondary" icon="refresh" onClick={m.reload}>
+              Повторить
+            </Button>
+          }
+        >
+          {m.loadError ?? 'Не удалось получить настройки напоминаний.'}
+        </Notice>
       );
     case 'ready':
       return <Ready m={m} />;

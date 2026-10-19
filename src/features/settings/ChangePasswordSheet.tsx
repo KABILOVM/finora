@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import { TextInput } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
+import { Notice } from '@/components/Notice';
 
 /** Смена пароля: новый пароль дважды. Проверка длины и совпадения — до отправки на сервер. */
 export function ChangePasswordSheet({ onClose }: { onClose: () => void }) {
@@ -60,9 +61,7 @@ export function ChangePasswordSheet({ onClose }: { onClose: () => void }) {
           onChange={(e) => setRepeat(e.target.value)}
         />
         {error && (
-          <p role="alert" className="rounded-xl bg-danger/10 p-3 font-medium text-danger">
-            {error}
-          </p>
+          <Notice tone="danger">{error}</Notice>
         )}
       </form>
     </Sheet>

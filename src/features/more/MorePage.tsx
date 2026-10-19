@@ -27,7 +27,7 @@ function Row({ section, status }: { section: Section; status: AttentionItem | un
         </Link>
         {/* Статус в потоке под названием: строка растёт, если текст длинный, и соседние строки не налезают друг на друга. */}
         {status && (
-          <p className={cn('break-words text-xs font-semibold leading-snug', status.tone === 'danger' ? 'text-danger' : 'text-warning')}>
+          <p className={cn('break-words text-caption font-semibold', status.tone === 'danger' ? 'text-danger' : 'text-warning')}>
             {status.text}
           </p>
         )}
