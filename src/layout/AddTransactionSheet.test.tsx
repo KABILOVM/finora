@@ -4,6 +4,7 @@ import { act, findByRole, fire, screen, user, waitFor } from '@/components/testU
 import {
   catBtn,
   CATEGORY_NUDGE,
+  NUDGE_READ_MS,
   catQuery,
   allTxs,
   amountField,
@@ -94,6 +95,11 @@ describe('обычный расход', () => {
     expect(screen.getByRole('group', { name: 'Категория' })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(await liveTxs(td)).toHaveLength(0);
+    // двойной тап (сразу же) — это не решение: напоминание остаётся, ничего не сохранено
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await liveTxs(td)).toHaveLength(0);
+    await new Promise((r) => setTimeout(r, NUDGE_READ_MS));
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]).toMatchObject({ amountMinor: 3000, categoryId: null });
@@ -112,6 +118,21 @@ describe('обычный расход', () => {
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect((await liveTxs(td))[0]?.categoryId).toBe((await categoryByName(td, 'Еда'))?.id);
+  });
+
+  it('после выбора категории фокус возвращается в поле суммы: Enter сразу сохраняет', async () => {
+    await openAddSheet();
+    await tapAmount('15');
+    await user.click(catBtn('Еда'));
+    expect(document.activeElement).toBe(amountField());
+  });
+
+  it('категория не выбрана, но состояние «Без категории» от прошлой операции не прилипает к новой выбранной', async () => {
+    await openAddSheet();
+    await tapAmount('15');
+    await user.click(catBtn('Еда'));
+    expect(screen.getByRole('button', { name: 'Категория: Еда' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Категория: без категории' })).toBeNull();
   });
 
   it('категории в списке — сеткой: значок и название, «Новая» и «Без категории» рядом', async () => {
@@ -146,7 +167,7 @@ describe('обычный расход', () => {
     await tapAmount('7');
     await pickDate('Другая дата');
     setDateInput(dateInput(), '2000-01-01');
-    await clickSave('Сохранить и добавить ещё');
+    await clickSave('Сохранить и добавить ещё одну');
     await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
 
     await tapAmount('8');
@@ -157,6 +178,23 @@ describe('обычный расход', () => {
     await user.click(dialogButton(ask, 'Сохранить'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect((await liveTxs(td)).map((t) => t.occurredOn).sort()).toEqual(['2000-01-01', '2100-01-01']);
+  });
+
+  it('дата в будущем подтверждена один раз — серия «Ещё одну» с той же датой не переспрашивает', async () => {
+    const { td } = await openAddSheet();
+    await tapAmount('7');
+    await user.click(catBtn('Еда'));
+    await pickDate('Другая дата');
+    setDateInput(dateInput(), addDays(todayLocal(), 30));
+    await user.click(screen.getByRole('button', { name: 'Сохранить и добавить ещё одну' }));
+    const ask = await findByRole('alertdialog', { name: 'Дата в будущем' });
+    await user.click(dialogButton(ask, 'Сохранить'));
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
+    await tapAmount('8');
+    await user.click(catBtn('Еда'));
+    await user.click(screen.getByRole('button', { name: 'Сохранить и добавить ещё одну' }));
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(2));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   it('дата в будущем: «Изменить дату» ничего не сохраняет и оставляет форму как есть; в прошлом и сегодня вопроса нет', async () => {
@@ -361,7 +399,7 @@ describe('защита от двойного нажатия и повтора', 
     await tapAmount('42');
     await clickSave();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled());
-    expect(screen.getByRole('button', { name: 'Сохранить и добавить ещё' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Сохранить и добавить ещё одну' })).toBeDisabled();
     await clickSave();
     release();
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
@@ -415,7 +453,7 @@ describe('Enter и подпись кнопки «ещё»', () => {
 
   it('кнопка «ещё» короткая («Ещё одну»), а для скринридера и подсказки называется полностью — в одну строку', async () => {
     await openAddSheet();
-    const more = screen.getByRole('button', { name: 'Сохранить и добавить ещё' });
+    const more = screen.getByRole('button', { name: 'Сохранить и добавить ещё одну' });
     expect(more.textContent).toContain('Ещё одну');
     expect(more.getAttribute('title')).toContain('Ctrl+Enter');
   });
@@ -457,7 +495,7 @@ describe('«Сохранить и добавить ещё»', () => {
     const { td, onClose } = await openAddSheet();
     await tapAmount('5');
     await user.click(catBtn('Еда'));
-    await clickSave('Сохранить и добавить ещё');
+    await clickSave('Сохранить и добавить ещё одну');
     await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
     expect(onClose).not.toHaveBeenCalled();
     await waitFor(() => expect((amountField() as HTMLInputElement).value).toBe(''));

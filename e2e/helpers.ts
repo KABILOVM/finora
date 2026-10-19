@@ -383,8 +383,14 @@ export const CATEGORY_NUDGE = 'Выберите категорию или ост
  */
 export async function saveNewTx(dlg: Locator, name = 'Сохранить'): Promise<void> {
   const button = dlg.getByRole('button', { name, exact: true });
+  const nudge = dlg.getByText(CATEGORY_NUDGE);
   await button.click();
-  if (await dlg.getByText(CATEGORY_NUDGE).isVisible()) await button.click();
+  // либо окно закрылось (сохранилось), либо появилось напоминание о категории
+  await expect.poll(async () => (await nudge.isVisible()) || !(await dlg.isVisible()), { timeout: 5000 }).toBe(true);
+  if (await nudge.isVisible()) {
+    await dlg.page().waitForTimeout(450); // второе нажатие раньше ~350 мс — дрожание пальца, а не решение
+    await button.click();
+  }
 }
 
 /** Внести операцию целиком: заполнить, «Сохранить», дождаться закрытия шита. */

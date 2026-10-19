@@ -73,6 +73,9 @@ test.describe('43. Новая операция: сетка категорий, �
     await tapAmount(page, '9');
     await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(dlg.getByText(CATEGORY_NUDGE)).toBeVisible();
+    await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click(); // сразу же: двойной тап не считается
+    await expect(dlg).toBeVisible();
+    await page.waitForTimeout(450);
     await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(dlg).toBeHidden();
   });
@@ -99,7 +102,7 @@ test.describe('43. Новая операция: сетка категорий, �
     const pad = dlg.getByRole('group', { name: 'Цифровая клавиатура' });
     const first = await pad.getByRole('button').evaluateAll((els) => els.slice(5, 14).map((e) => (e.textContent ?? '').trim()));
     expect(first).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
-    const more = dlg.getByRole('button', { name: 'Сохранить и добавить ещё' });
+    const more = dlg.getByRole('button', { name: 'Сохранить и добавить ещё одну' });
     const save = dlg.getByRole('button', { name: 'Сохранить', exact: true });
     await expect(more).toContainText('Ещё одну');
     const [hm, hs] = await Promise.all([more.boundingBox(), save.boundingBox()]);

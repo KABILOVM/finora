@@ -119,6 +119,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
   };
   // Тап мимо закрывает панель; клавиатура суммы и сама сумма «свои»: тапы по ним панель не закрывают
   const amountBoxRef = useRef<HTMLDivElement>(null);
+  const focusAmount = () => amountBoxRef.current?.querySelector<HTMLInputElement>('input.money')?.focus({ preventScroll: true });
   useDismiss(feeShown && !errors.fee, closeFee, amountBoxRef);
   useDismiss(noteOpen && !errors.note, () => setNoteOpen(false), amountBoxRef);
 
@@ -167,6 +168,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           categories={isTransfer ? [] : categories}
           categoryState={categoryState}
           onCategorySkip={onCategorySkip}
+          onPicked={focusAmount}
         />
         <FxNotice
           fx={c.fx}

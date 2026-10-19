@@ -263,7 +263,8 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         // «Получено» и ручной курс относились к прежней паре кошельков
         toAmountOverride: undefined,
         ...(keepFee ? {} : NO_FEE),
-        rateText: '',
+        // Расход в той же валюте: набранный курс остаётся (он зависит от валюты, а не от кошелька)
+        rateText: keepFee ? f.rateText : '',
       };
     });
     clearErrors(CLEARS.walletId ?? []);

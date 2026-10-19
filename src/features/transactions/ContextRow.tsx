@@ -78,13 +78,15 @@ export interface ContextRowProps {
   categoryState?: CategoryState;
   /** «Без категории» выбрано явно. */
   onCategorySkip?: () => void;
+  /** Выбрали кошелёк или категорию и список закрылся: вернуть фокус в поле суммы (иначе он пропадает вместе с нажатой кнопкой). */
+  onPicked?: () => void;
 }
 
 /**
  * Две плитки «куда пойдут деньги»: категория и счёт (у перевода — «Откуда» и «Куда»). Подставляются сами, видны над клавиатурой;
  * нажатие открывает список поверх формы. Дата — в шапке окна (DateChip).
  */
-export function ContextRow({ c, wallets, categories, categoryState, onCategorySkip }: ContextRowProps) {
+export function ContextRow({ c, wallets, categories, categoryState, onCategorySkip, onPicked }: ContextRowProps) {
   const { form, errors } = c;
   const [panel, setPanel] = useState<Panel>(null);
   const isTransfer = form.kind === 'transfer';
@@ -93,7 +95,7 @@ export function ContextRow({ c, wallets, categories, categoryState, onCategorySk
   const toOptions = options.filter((o) => o.value !== form.walletId);
   const category = categories.find((o) => o.value === form.categoryId);
   // Пустая категория: в правке и после «Без категории» это осознанное «нет категории», в новой операции — ещё не выбрана
-  const noCategory = category === undefined && (categoryState === 'skipped' || (categoryState === undefined && c.editing));
+  const noCategory = category === undefined && form.categoryId === null && (categoryState === 'skipped' || (categoryState === undefined && c.editing));
 
   // Ошибка у скрытого списка не должна теряться: панель с ошибкой раскрыта сама
   const show: Panel = errors.wallet ? 'wallet' : errors.toWallet ? 'toWallet' : errors.category ? 'category' : panel;
@@ -185,6 +187,7 @@ export function ContextRow({ c, wallets, categories, categoryState, onCategorySk
                 onChange={(id) => {
                   c.setWallet(id);
                   setPanel(null);
+                  onPicked?.();
                 }}
               />
             </FieldGroup>
@@ -198,6 +201,7 @@ export function ContextRow({ c, wallets, categories, categoryState, onCategorySk
                 onChange={(id) => {
                   c.setToWallet(id);
                   setPanel(null);
+                  onPicked?.();
                 }}
               />
             </FieldGroup>
@@ -210,11 +214,13 @@ export function ContextRow({ c, wallets, categories, categoryState, onCategorySk
               onPick={(id) => {
                 c.set({ categoryId: id });
                 setPanel(null);
+                onPicked?.();
               }}
               onSkip={() => {
                 c.set({ categoryId: null });
                 onCategorySkip?.();
                 setPanel(null);
+                onPicked?.();
               }}
               hint={errors.category ?? (categoryState === 'nudged' && form.categoryId === null ? CATEGORY_NUDGE : null)}
             />

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
@@ -18,7 +17,7 @@ import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
-import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet } from '@/features/transactions/txForm';
+import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet, resolveDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
@@ -31,6 +30,8 @@ export interface AddTransactionSheetProps {
 }
 
 const TITLE = 'Новая операция';
+/** Второе «Сохранить» раньше этого срока — дрожание пальца или двойной тап, а не решение обойтись без категории. */
+const NUDGE_GRACE_MS = 350;
 
 /**
  * Шит «Новая операция»: расход, доход или перевод. Расход вносится за 3–4 касания: сумма → категория → «Сохранить»;
@@ -140,6 +141,9 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const [finished, setFinished] = useState(false);
   // Категория не выбрана: при «Сохранить» напоминаем один раз (список откроется сам), дальше — как решит человек
   const [categoryState, setCategoryState] = useState<CategoryState>('untouched');
+  const nudgedAt = useRef(0);
+  // Дату в будущем уже подтвердили для этой даты (серия «Ещё одну» с той же датой не переспрашивает каждый раз)
+  const futureConfirmed = useRef<string | null>(null);
   // Дата в будущем: спрашиваем «Сохранить?»; again — какой из двух кнопок сохраняли
   const [futureAsk, setFutureAsk] = useState<{ notice: string; again: boolean } | null>(null);
 
@@ -166,12 +170,16 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     if (input.kind !== 'transfer' && input.categoryId === null) {
       // Напоминаем один раз; сохранили после напоминания — человек решил обойтись без категории
       if (categoryState === 'untouched' && categoryOptions.length > 0) {
+        nudgedAt.current = performance.now();
         setCategoryState('nudged');
         return;
       }
-      if (categoryState === 'nudged') setCategoryState('skipped');
+      if (categoryState === 'nudged') {
+        if (performance.now() - nudgedAt.current < NUDGE_GRACE_MS) return; // человек ещё не успел прочитать напоминание
+        setCategoryState('skipped');
+      }
     }
-    const notice = dateConfirmed ? null : futureDateNotice(input.occurredOn, todayLocal());
+    const notice = dateConfirmed || futureConfirmed.current === input.occurredOn ? null : futureDateNotice(input.occurredOn, todayLocal());
     if (notice) {
       setFutureAsk({ notice, again });
       return;
@@ -255,13 +263,13 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
             <Button
               variant="secondary"
               size="lg"
-              aria-label="Сохранить и добавить ещё"
+              icon="plus"
+              aria-label="Сохранить и добавить ещё одну"
               title="Сохранить и добавить ещё одну операцию (Ctrl+Enter)"
               loading={saving === 'more'}
               disabled={saving !== null}
               onClick={() => void save(true)}
             >
-              <Icon name="plus" size={18} />
               Ещё одну
             </Button>
             <Button size="lg" loading={saving === 'close'} disabled={saving !== null} onClick={() => void save(false)}>
@@ -283,7 +291,10 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
             <span className="h-11 w-11 shrink-0">
-              {kind === 'expense' && <IconButton icon="mic" variant="secondary" label="Продиктовать расходы" onClick={() => setDictating(true)} />}
+              {kind === 'expense' && <IconButton icon="mic" variant="secondary" label="Продиктовать расходы" onClick={() => {
+                    setCategoryState((st) => (st === 'nudged' ? 'untouched' : st)); // напоминание не возвращается вместе с формой
+                    setDictating(true);
+                  }} />}
             </span>
           }
         />
@@ -297,6 +308,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
         onCancel={() => setFutureAsk(null)}
         onConfirm={() => {
           const again = futureAsk?.again ?? false;
+          futureConfirmed.current = resolveDate(c.form.date);
           setFutureAsk(null);
           void save(again, true);
         }}

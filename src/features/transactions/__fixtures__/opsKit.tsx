@@ -371,8 +371,13 @@ export { CATEGORY_NUDGE };
  */
 export async function clickSave(name = 'Сохранить'): Promise<void> {
   await user.click(screen.getByRole('button', { name }));
-  if (screen.queryByText(CATEGORY_NUDGE)) await user.click(screen.getByRole('button', { name }));
+  if (screen.queryByText(CATEGORY_NUDGE)) {
+    await new Promise((r) => setTimeout(r, NUDGE_READ_MS)); // второе нажатие раньше этого срока — дрожание пальца, а не решение
+    await user.click(screen.getByRole('button', { name }));
+  }
 }
+/** Дольше, чем AddTransactionSheet.NUDGE_GRACE_MS. */
+export const NUDGE_READ_MS = 400;
 export const amountField = (): HTMLInputElement => screen.getByRole('textbox', { name: /^Сумма/ }) as HTMLInputElement;
 
 /** Второй кошелёк в той же валюте (для переводов и проверки «последнего кошелька»). */

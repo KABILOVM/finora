@@ -290,7 +290,7 @@ export function AmountInput({
                       equals();
                     } else if (onSubmit && e.key === 'Enter' && expr === null && !e.nativeEvent.isComposing) {
                       e.preventDefault();
-                      onSubmit(e.ctrlKey || e.metaKey);
+                      if (!e.repeat) onSubmit(e.ctrlKey || e.metaKey); // зажатый Enter не должен отправлять форму снова и снова
                     }
                   }}
                   aria-invalid={message ? true : undefined}

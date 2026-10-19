@@ -625,6 +625,16 @@ describe('Enter в поле суммы (ПК)', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it('зажатый Enter (автоповтор) не отправляет форму снова и снова', async () => {
+    const onSubmit = vi.fn();
+    render(<Submit onSubmit={onSubmit} />);
+    await user.type(input(), '5');
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true }));
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('без onSubmit Enter ничего не делает', async () => {
     render(<Harness />);
     await user.type(input(), '5');
