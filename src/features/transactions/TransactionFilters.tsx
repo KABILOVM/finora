@@ -149,7 +149,7 @@ export function TransactionFilters({ filters, onChange, wallets, categories, cur
         <input
           type="search"
           aria-label="Поиск по операциям"
-          placeholder="Заметка, категория, кошелёк, сумма"
+          placeholder="Заметка, категория, сумма"
           value={filters.search}
           autoComplete="off"
           onChange={(e) => onChange({ search: e.target.value })}

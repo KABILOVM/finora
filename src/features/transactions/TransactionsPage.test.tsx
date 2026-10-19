@@ -396,6 +396,16 @@ describe('фильтры живут в адресе', () => {
     await waitFor(() => expect(currentSearch()).toBe('?period=all'));
   });
 
+  it('«Показать всё» после поиска сразу очищает его: список не ждёт паузы в наборе', async () => {
+    await openList();
+    await user.type(screen.getByRole('textbox', { name: 'Поиск по операциям' }), 'qqqq');
+    await waitFor(() => screen.getByText('Ничего не найдено'));
+    await user.click(screen.getByRole('button', { name: 'Показать всё' }));
+    // без ожидания 300 мс: поле пусто — список уже полный
+    expect(screen.queryByText('Ничего не найдено')).toBeNull();
+    await waitFor(() => expect(has('Работа')).toBe(true));
+  });
+
   it('«Другой месяц» держится, даже когда выбран текущий месяц', async () => {
     await openList();
     await period('Другой месяц');

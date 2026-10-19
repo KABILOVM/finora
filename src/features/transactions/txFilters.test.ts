@@ -137,6 +137,16 @@ describe('matchesSearch: заметка, категория, кошелёк, с�
     expect(hit(lunch, '500')).toBe(false); // «500» — не начало 1500,50
     expect(hit(lunch, '1500,51')).toBe(false);
   });
+  it('то, что видно в строке: «Долг» у движения по долгу (а не «без категории»), «Регулярный платёж», «комиссия»', () => {
+    const debt = { ...lunch, categoryId: null, debtId: 'd1' };
+    expect(hit(debt, 'долг')).toBe(true);
+    expect(hit(debt, 'без категории')).toBe(false);
+    expect(hit({ ...lunch, recurringRuleId: 'r1' }, 'регулярный')).toBe(true);
+    expect(hit(lunch, 'регулярный')).toBe(false);
+    const fee = { kind: 'transfer' as const, walletId: 'w1', toWalletId: 'w2', categoryId: null, amountMinor: 10_000, toAmountMinor: 9800, note: '' };
+    expect(hit(fee, 'комиссия')).toBe(true);
+    expect(hit(move, 'комиссия')).toBe(false); // обмен валют — комиссии нет
+  });
   it('перевод между валютами ищется и по сумме зачисления', () => {
     expect(hit(move, '110')).toBe(true);
     expect(hit(move, '10')).toBe(true); // 10 $ на счёте зачисления
@@ -145,24 +155,30 @@ describe('matchesSearch: заметка, категория, кошелёк, с�
 
 describe('фильтры в адресе: filtersToParams ↔ filtersFromParams', () => {
   const today = '2026-10-15';
-  const back = (f: ListFilters) => ({ ...defaultFilters(today), ...filtersFromParams(filtersToParams(f), today) });
+  const back = (f: ListFilters) => ({ ...defaultFilters(today), ...filtersFromParams(filtersToParams(f, today), today) });
 
   it('обычные фильтры — пустой адрес', () => {
-    expect(filtersToParams(defaultFilters(today)).toString()).toBe('');
+    expect(filtersToParams(defaultFilters(today), today).toString()).toBe('');
   });
   it.each<[string, Partial<ListFilters>]>([
     ['прошлый месяц', { period: 'prev' }],
     ['всё время', { period: 'all' }],
     ['другой месяц (не текущий)', { period: 'month', month: '2026-03' }],
     ['«Другой месяц», пока выбран именно текущий — не превращается в «Этот месяц»', { period: 'month', month: '2026-10' }],
+    ['запомненный месяц при «Всё время» и «Этот месяц» не теряется', { period: 'all', month: '2026-07' }],
+    ['…и при обычном периоде «Этот месяц»', { period: 'this', month: '2026-07' }],
     ['кошелёк, вид, категория', { walletId: 'w-1', kind: 'expense', categoryId: 'c-1' }],
     ['без категории', { categoryId: NO_CATEGORY, kind: 'income' }],
   ])('туда и обратно: %s', (_, patch) => {
     const f = { ...defaultFilters(today), ...patch };
     expect(back(f)).toEqual(f);
   });
+  it('запомненный месяц пишется вместе с явным периодом: адрес не читается как «Другой месяц»', () => {
+    expect(filtersToParams({ ...defaultFilters(today), period: 'this', month: '2026-07' }, today).toString()).toBe('period=this&month=2026-07');
+    expect(filtersToParams({ ...defaultFilters(today), period: 'month', month: '2026-07' }, today).toString()).toBe('period=month&month=2026-07');
+  });
   it('поиск в адрес не попадает', () => {
-    expect(filtersToParams({ ...defaultFilters(today), search: 'обед' }).toString()).toBe('');
+    expect(filtersToParams({ ...defaultFilters(today), search: 'обед' }, today).toString()).toBe('');
   });
   it('явный period главнее month; period=month без месяца пропускается', () => {
     expect(filtersFromParams(new URLSearchParams('period=all&month=2026-03'), today)).toEqual({ period: 'all', month: '2026-03' });

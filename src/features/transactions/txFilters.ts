@@ -99,11 +99,16 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
   return out;
 }
 
-/** Обратное к filtersFromParams: только то, что отличается от «по умолчанию» (пустой адрес = обычный список). */
-export function filtersToParams(f: ListFilters): URLSearchParams {
+/**
+ * Обратное к filtersFromParams: только то, что отличается от «по умолчанию» (пустой адрес = обычный список). Выбранный не текущий
+ * месяц пишется всегда, даже при другом периоде: вернёмся на «Другой месяц» — он на месте; период тогда пишется явно, иначе
+ * `month` без `period` прочлось бы как «Другой месяц».
+ */
+export function filtersToParams(f: ListFilters, today: IsoDate): URLSearchParams {
   const q = new URLSearchParams();
-  if (f.period !== 'this') q.set('period', f.period);
-  if (f.period === 'month') q.set('month', f.month); // запомненный месяц при других периодах не пишем: адрес остаётся коротким
+  const rememberMonth = f.period === 'month' || f.month !== monthKey(today);
+  if (f.period !== 'this' || rememberMonth) q.set('period', f.period);
+  if (rememberMonth) q.set('month', f.month);
   if (f.walletId !== '') q.set('wallet', f.walletId);
   if (f.categoryId === NO_CATEGORY) q.set('category', 'none');
   else if (f.categoryId !== '') q.set('category', f.categoryId);
@@ -286,7 +291,10 @@ export interface SearchLookups {
   currencyOf: (walletId: string) => CurrencyCode | undefined;
 }
 
-type SearchItem = Pick<Transaction, 'kind' | 'walletId' | 'toWalletId' | 'categoryId' | 'amountMinor' | 'toAmountMinor' | 'note'>;
+type SearchItem = Pick<Transaction, 'kind' | 'walletId' | 'toWalletId' | 'categoryId' | 'amountMinor' | 'toAmountMinor' | 'note'> & {
+  debtId?: Transaction['debtId'] | undefined;
+  recurringRuleId?: Transaction['recurringRuleId'] | undefined;
+};
 
 const NO_SPACES = /[\s\u00a0\u202f]/g;
 const AMOUNT_QUERY = /^\d+(?:[.,]\d*)?$/;
@@ -301,7 +309,13 @@ export function matchesSearch(tx: SearchItem, query: string, look: SearchLookups
   if (needle === '') return true;
   const texts = [tx.note, look.walletName(tx.walletId)];
   if (tx.toWalletId) texts.push(look.walletName(tx.toWalletId));
-  if (tx.kind !== 'transfer') texts.push(tx.categoryId === null ? 'без категории' : look.categoryName(tx.categoryId));
+  if (tx.kind !== 'transfer') {
+    if (tx.categoryId !== null) texts.push(look.categoryName(tx.categoryId));
+    else texts.push(tx.debtId ? 'долг' : 'без категории'); // как подписана строка на экране
+  }
+  if (tx.debtId) texts.push('долг');
+  if (tx.recurringRuleId) texts.push('регулярный платёж');
+  if (transferFeeMinor(tx, look.currencyOf) > 0) texts.push('комиссия');
   if (texts.some((t) => t !== undefined && t.toLocaleLowerCase('ru').includes(needle))) return true;
 
   const digits = needle.replace(NO_SPACES, '');

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -15,7 +15,7 @@ import { useSyncEnabled } from '@/sync/syncContext';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionRow } from './TransactionRow';
 import { useCategoryIndex, useWalletIndex } from './txData';
-import { dayTotal, matchesSearch, toTxFilter, totalsByCurrency, type ListFilters } from './txFilters';
+import { dayTotal, matchesSearch, toTxFilter, totalsByCurrency } from './txFilters';
 import { useListFilters } from './useListFilters';
 
 /** Сколько операций показываем сразу (целыми днями) и сколько добавляет «Показать ещё». */
@@ -34,7 +34,7 @@ export default function TransactionsPage() {
   const categories = useCategories(undefined, { includeArchived: true });
 
   const today = todayLocal();
-  const { filters, search, change: changeFilters, showAll } = useListFilters(today);
+  const { filters, search, change, showAll } = useListFilters(today);
   const [limit, setLimit] = useState(PAGE_SIZE);
   // Поиск (заметка, категория, кошелёк, сумма) считаем здесь, а не в запросе к базе: названия лежат в справочниках, не в операции.
   const filter = useMemo(() => toTxFilter(filters, '', today), [filters, today]);
@@ -51,10 +51,9 @@ export default function TransactionsPage() {
     return found.filter((t) => matchesSearch(t, search, look));
   }, [found, search, walletIndex, categoryIndex]);
 
-  const change = (patch: Partial<ListFilters>) => {
-    changeFilters(patch);
-    setLimit(PAGE_SIZE);
-  };
+  // другой список (фильтр, поиск, вкладка «Операции», «Показать всё») — снова с первой страницы
+  const filterKey = JSON.stringify(filter);
+  useEffect(() => setLimit(PAGE_SIZE), [filterKey, search]);
 
   const { groups, shown } = useMemo(() => {
     const byDay = new Map<string, LocalRow<Transaction>[]>();
