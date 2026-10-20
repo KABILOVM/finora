@@ -127,5 +127,7 @@ export default defineConfig({
     exclude: ['e2e/**', 'node_modules/**'],
     globals: false,
     testTimeout: 20000,
+    // В CI один повтор для редких гонок (тест «выйти и удалить данные» иногда не успевает за удалением базы); локально — без повторов, чтобы флаки были видны
+    retry: process.env.CI ? 1 : 0,
   },
 });
