@@ -153,7 +153,7 @@ test.describe('26. Пошаговая настройка после регист
     await openApp(page, '/', { onboarding: true });
     await wizard(page).getByRole('button', { name: /Перенести из другого приложения/ }).click();
     await wizard(page).getByRole('button', { name: /Из своей копии Sumoima \(JSON\)/ }).click();
-    await expect(page).toHaveURL(/#\/settings$/);
+    await expect(page).toHaveURL(/#\/settings\?section=data$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Настройки' })).toBeVisible();
     await page.goto('/#/');
     await expect(wizard(page).getByRole('heading', { name: 'Как начнём?' })).toBeVisible();

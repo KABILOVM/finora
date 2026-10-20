@@ -35,6 +35,17 @@ export function AppShell({ status }: AppShellProps) {
     <div className="min-h-dvh">
       <SideNav status={status} />
       <div className="md:pl-64">
+        {/* HashRouter: обычная ссылка #main заменила бы адрес страницы, поэтому фокус переводим сами */}
+        <a
+          href="#main"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById('main')?.focus();
+          }}
+          className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-xl focus:bg-surface focus:px-4 focus:py-3 focus:font-semibold focus:text-brand focus:shadow-float"
+        >
+          К содержимому
+        </a>
         <div className="sticky top-0 z-20 bg-bg/55 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
           {/* Знак и слово «Sumoima» — только на «Главной»; на остальных экранах шапка тоньше, слева место под «Назад» самой страницы.
               Тема переключается в «Настройки → Оформление» (на ПК — кнопкой в боковой панели). */}
@@ -51,6 +62,7 @@ export function AppShell({ status }: AppShellProps) {
         </div>
         <main
           id="main"
+          tabIndex={-1}
           className="mx-auto w-full max-w-3xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 md:px-8 md:pb-12 md:pt-8"
         >
           {/* key — по пути страницы: при переходе новая страница плавно «всплывает», а граница сбоя раздела начинает с чистого листа */}

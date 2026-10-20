@@ -49,7 +49,7 @@ export default function LoginPage() {
 
         <div className="mt-5 w-full">
           {method === 'password' || signUp ? (
-            <PasswordLoginForm key={mode} email={email} onEmailChange={setEmail} signUp={signUp} />
+            <PasswordLoginForm key={mode} email={email} onEmailChange={setEmail} signUp={signUp} onUseCode={() => changeMethod('code')} />
           ) : (
             <CodeLoginForm email={email} onEmailChange={setEmail} flow={codeFlow} />
           )}

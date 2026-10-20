@@ -144,6 +144,23 @@ describe('экран входа', () => {
     expect(fake.calls.signIn).toBe(1);
   });
 
+  it('неверный пароль: предлагается войти по коду на почту, почта в поле остаётся', async () => {
+    const { fake } = await openLogin();
+    await user.type(screen.getByRole('textbox', { name: 'Почта' }), ALICE.email);
+    await user.type(document.querySelector('input[type="password"]') as HTMLInputElement, 'совсем-не-тот-пароль');
+    await user.click(screen.getByRole('button', { name: 'Войти' }));
+    expect(await findByRole('alert')).toHaveTextContent('Неверная почта или пароль');
+    expect(fake.calls.signIn).toBe(1);
+    await user.click(screen.getByRole('button', { name: 'Забыли пароль? Войти по коду на почту' }));
+    expect(screen.getByRole('radio', { name: 'Код на почту' })).toBeChecked();
+    expect((screen.getByRole('textbox', { name: 'Почта' }) as HTMLInputElement).value).toBe(ALICE.email);
+  });
+
+  it('другая ошибка (нет сети и т. п.) кнопку «Забыли пароль?» не показывает', async () => {
+    await openLogin();
+    expect(screen.queryByRole('button', { name: /Забыли пароль/ })).toBeNull();
+  });
+
   it('без сети под кнопкой подсказка «Нет сети»', async () => {
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
     await openLogin();

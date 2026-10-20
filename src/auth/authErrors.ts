@@ -1,5 +1,8 @@
 /** Перевод ошибок входа и смены пароля на понятный русский. Английские тексты Supabase человеку не показываем. */
 
+/** Текст при неверном пароле: по нему форма входа предлагает войти по коду (забытый пароль). */
+export const INVALID_CREDENTIALS_TEXT = 'Неверная почта или пароль';
+
 export type AuthAction = 'sign-in' | 'sign-up' | 'password' | 'other';
 
 interface ErrorLike {
@@ -38,16 +41,16 @@ export function describeAuthError(e: unknown, action: AuthAction = 'other'): str
     return 'Эта почта уже зарегистрирована. Войдите.';
   }
   if (c === 'signup_disabled' || /signups? (not allowed|(are )?disabled)/i.test(msg)) {
-    return 'Регистрация отключена. Обратитесь к владельцу приложения.';
+    return 'Регистрация отключена: новых пользователей добавляет владелец приложения. Если у вас уже есть аккаунт, войдите.';
   }
   if (c === 'email_address_invalid' || c === 'validation_failed' || /invalid .*email|unable to validate email/i.test(msg)) {
     return 'Проверьте почту: она указана неверно.';
   }
   if (c === 'invalid_credentials' || /invalid login credentials|invalid credentials/i.test(msg)) {
-    return 'Неверная почта или пароль';
+    return INVALID_CREDENTIALS_TEXT;
   }
   if (c === 'email_not_confirmed' || /email not confirmed/i.test(msg)) {
-    return 'Почта не подтверждена. Обратитесь к владельцу приложения.';
+    return 'Почта не подтверждена. Откройте письмо со ссылкой подтверждения или войдите по коду на почту.';
   }
   if (c === 'user_banned' || /banned/i.test(msg)) return 'Этот аккаунт отключён. Обратитесь к владельцу приложения.';
   if (c === 'over_request_rate_limit' || c === 'over_email_send_rate_limit' || status === 429) {
