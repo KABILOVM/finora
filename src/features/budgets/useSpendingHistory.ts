@@ -31,7 +31,7 @@ export function useSpendingHistory(): MonthSpend[] | null | undefined {
           month,
           settings.baseCurrency,
         );
-        return { month, byCategory: s.byCategory, expenseMinor: s.expenseMinor };
+        return { month, byCategory: s.byCategory, expenseMinor: s.expenseMinor, excludedCount: s.excludedCount };
       });
     } catch (e) {
       if (e instanceof RangeError) return [];

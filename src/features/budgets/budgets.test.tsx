@@ -867,8 +867,17 @@ describe('экран «Бюджеты»: ссылки и пояснения', ()
     expect(link.getAttribute('href')).toBe('/budgets?new=1');
   });
 
-  it('прошлый месяц: пояснение, что считается по сегодняшним лимитам; в текущем его нет', async () => {
+  it('прошлый месяц: пояснение, что считается по сегодняшним лимитам; в текущем его нет; без лимитов его нет совсем', async () => {
     await openPage(baseSetup);
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    expect(document.querySelector('[data-testid="budgets-past-note"]')).toBeNull(); // лимитов нет — пояснять нечего
+  });
+
+  it('прошлый месяц с лимитом: пояснение есть, в текущем месяце — нет', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: i.cats['Еда'] ?? null, amountMinor: 50_000 });
+    });
     expect(document.querySelector('[data-testid="budgets-past-note"]')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
     expect(text(document.querySelector('[data-testid="budgets-past-note"]'))).toContain('по сегодняшним суммам лимитов');
@@ -882,6 +891,72 @@ describe('экран «Бюджеты»: ссылки и пояснения', ()
     const name = rowButton('Еда').getAttribute('aria-label') ?? '';
     expect(norm(name)).toContain(`${fmt(40_000)} из ${fmt(50_000)}`);
     expect(norm(name)).toMatch(/[^.]\. Изменить$/); // одна точка перед «Изменить», а не «с.. Изменить»
+  });
+});
+
+describe('новый лимит: сумма не переезжает между областями', () => {
+  it('сумма из подсказки остаётся только у той области, для которой подсказана; у другой поле пустое', async () => {
+    await openPage(pastSetup);
+    await openNew();
+    choose('На что лимит', 'Еда');
+    await waitFor(() => expect(hints()).not.toBeNull());
+    await user.click(screen.getByRole('button', { name: /^Как в прошлом месяце/ }));
+    expect((screen.getByRole('textbox', { name: /^Сумма лимита/ }) as HTMLInputElement).value).toBe('440');
+    choose('На что лимит', 'Транспорт');
+    expect((screen.getByRole('textbox', { name: /^Сумма лимита/ }) as HTMLInputElement).value).toBe('');
+  });
+
+  it('а набранная руками сумма при смене области остаётся: человек её вводил', async () => {
+    await openPage(pastSetup);
+    await openNew();
+    choose('На что лимит', 'Транспорт');
+    await tapAmount('77');
+    choose('На что лимит', 'Еда');
+    expect((screen.getByRole('textbox', { name: /^Сумма лимита/ }) as HTMLInputElement).value).toBe('77');
+  });
+});
+
+describe('область лимита: категории в «кольце» родителей не пропадают', () => {
+  it('A → B → A: обе остаются в списке «На что лимит»', async () => {
+    await openPage(async (s) => {
+      await pastSetup(s);
+      const a = await s.categories.create({ name: 'Кольцо А', kind: 'expense', color: '#16a34a', icon: '🔁' });
+      const b = await s.categories.create({ name: 'Кольцо Б', kind: 'expense', color: '#16a34a', icon: '🔁' });
+      await s.db.categories.update(a.id, { parentId: b.id });
+      await s.db.categories.update(b.id, { parentId: a.id });
+    });
+    await openNew();
+    const options = Array.from((screen.getByRole('combobox', { name: 'На что лимит' }) as HTMLSelectElement).options).map((o) => norm(o.textContent));
+    expect(options).toContain('Кольцо А');
+    expect(options).toContain('Кольцо Б');
+  });
+});
+
+describe('подсказка суммы: операции в прежней основной валюте', () => {
+  it('траты прошлого месяца в другой валюте не вошли — сказано словами, а не «в прошлом месяце ничего»', async () => {
+    await openPage(async (s) => {
+      const i = await ids(s);
+      await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 43_700, categoryId: i.cats['Еда'] ?? null, occurredOn: '2026-09-10' });
+      // снимок суммы в прежней основной валюте (RUB): при основной TJS она в итог не входит
+      const row = (await s.db.transactions.toArray()).find((t) => t.occurredOn === '2026-09-10');
+      if (row) await s.db.transactions.update(row.id, { baseCurrency: 'RUB' });
+    });
+    await openNew();
+    await waitFor(() => expect(hints()).not.toBeNull());
+    expect(text(hints())).toContain('в другой основной валюте');
+    expect(text(hints())).not.toContain('ничего');
+  });
+});
+
+describe('имя строки лимита: уровень и темп', () => {
+  it('почти исчерпанный лимит: слово уровня есть в имени кнопки', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: i.cats['Еда'] ?? null, amountMinor: 44_000 }); // 400 из 440 = 90%
+    });
+    const name = norm(rowButton('Еда').getAttribute('aria-label'));
+    expect(name).toContain('Потрачено 90%');
+    expect(name).toMatch(/Почти исчерпан|Внимание|Лимит исчерпан/);
   });
 });
 

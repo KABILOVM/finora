@@ -160,7 +160,7 @@ export default function BudgetsPage() {
     content = (
       <>
         <MonthSwitcher month={month} max={currentMonth} onChange={(m) => setPicked(m === currentMonth ? null : m)} />
-        {month !== currentMonth && (
+        {month !== currentMonth && active.length > 0 && (
           <p data-testid="budgets-past-note" className="mb-2 px-1 text-sm text-muted">
             Лимиты действуют на каждый месяц: прошлые месяцы считаются по сегодняшним суммам лимитов.
           </p>

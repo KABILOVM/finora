@@ -9,6 +9,8 @@ export interface MonthSpend {
   month: string;
   byCategory: readonly SpendRow[];
   expenseMinor: Minor;
+  /** Сколько операций месяца не вошло в итог: они внесены в другой основной валюте, чем сейчас. */
+  excludedCount?: number;
 }
 
 /**
@@ -26,11 +28,17 @@ export function spentInScope(m: MonthSpend, categoryId: UUID | null, parentOf: R
   return spent;
 }
 
-/** Округление вверх до «красивой» суммы лимита: до 10 целых единиц валюты, а от 1 000 — до 100 (1 234 → 1 300, 87 → 90). */
-export function niceCeil(minor: Minor, currency: CurrencyCode): Minor {
+/**
+ * Округление до «красивой» суммы лимита по порядку величины (а не по числу единиц валюты: сум и тенге — это тысячи):
+ * до 20 целых единиц — до целой, до 100 — до 5, дальше — две значащие цифры (437 → 440, 1 234 → 1 200, 437 812 → 440 000).
+ * Округляется к ближайшему: подсказка остаётся близкой к тратам, а не завышает их до 10 %. Меньше одной единицы не бывает.
+ */
+export function niceRound(minor: Minor, currency: CurrencyCode): Minor {
   const factor = 10 ** exponentOf(currency);
-  const unit = (minor >= 1000 * factor ? 100 : 10) * factor;
-  return Math.ceil(minor / unit) * unit;
+  const units = minor / factor;
+  const digits = Math.floor(Math.log10(Math.max(units, 1))) + 1; // число цифр в целой части
+  const step = units < 20 ? 1 : units < 100 ? 5 : 10 ** (digits - 2);
+  return Math.max(step, Math.round(units / step) * step) * factor;
 }
 
 export interface LimitHints {
@@ -38,7 +46,7 @@ export interface LimitHints {
   lastMonth: Minor | null;
   /** «Обычно»: середина трат по месяцам, в которых они были (null — таких месяцев меньше двух). */
   typical: Minor | null;
-  /** Предлагаемые суммы лимита: те же числа, округлённые вверх. */
+  /** Предлагаемые суммы лимита: те же числа, округлённые до «красивых». */
   lastMonthLimit: Minor | null;
   typicalLimit: Minor | null;
 }
@@ -70,8 +78,8 @@ export function limitHints(
     return {
       lastMonth,
       typical,
-      lastMonthLimit: lastMonth === null ? null : niceCeil(lastMonth, currency),
-      typicalLimit: typical === null ? null : niceCeil(typical, currency),
+      lastMonthLimit: lastMonth === null ? null : niceRound(lastMonth, currency),
+      typicalLimit: typical === null ? null : niceRound(typical, currency),
     };
   } catch (e) {
     if (e instanceof RangeError) return empty; // суммы слишком велики — подсказки просто нет

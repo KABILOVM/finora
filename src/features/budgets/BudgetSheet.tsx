@@ -64,6 +64,8 @@ function scopeOptions(categories: readonly LocalRow<Category>[]): ScopeOption[] 
     }
   };
   walk(null, 0);
+  // Категории «в кольце» родителей (A → B → A, их мог создать слияние данных с двух устройств) обходом от корня недостижимы — не теряем их
+  for (const c of categories) if (!seen.has(c.id)) out.push({ id: c.id, name: c.name, depth: 0 });
   return out;
 }
 
@@ -84,6 +86,8 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
   const categoryId = scope === null || scope === TOTAL ? null : scope;
   const wrongCurrency = editing && budget.currency !== base;
   const [amount, setAmount] = useState<Minor | null>(editing && !wrongCurrency ? budget.amountMinor : null);
+  // Сумма подставлена программой (подсказка, лимит, который уже есть), а не набрана: при смене области её не переносим
+  const [autoAmount, setAutoAmount] = useState(false);
   const [amountError, setAmountError] = useState<string | null>(null);
   const [scopeError, setScopeError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -106,6 +110,7 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
     () => (history && scope !== null ? limitHints(history, categoryId, parentOf, base) : null),
     [history, scope, categoryId, parentOf, base],
   );
+  const hasExcluded = (history ?? []).some((m) => (m.excludedCount ?? 0) > 0);
   const chips = useMemo(() => {
     if (!hints || scope === null) return [];
     const list: { label: string; value: Minor }[] = [];
@@ -120,7 +125,13 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
     setFormError(null);
     const same = budgets.find((b) => b.categoryId === (value === TOTAL ? null : value));
     // у лимита, который уже есть, показываем его сумму: меняют её, а не вводят с нуля
-    if (same && same.currency === base) setAmount(same.amountMinor);
+    if (same && same.currency === base) {
+      setAmount(same.amountMinor);
+      setAutoAmount(true);
+    } else if (autoAmount) {
+      setAmount(null); // сумма чужой области (из подсказки или чужого лимита) к этой не относится
+      setAutoAmount(false);
+    }
   };
 
   const fail = (e: unknown, fallback: string) => {
@@ -238,12 +249,19 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
           </div>
         )}
 
-        {hints && (hints.lastMonth !== null || hints.typical !== null) && (
+        {hints && (hints.lastMonth !== null || hints.typical !== null || hasExcluded) && (
           <div className="flex flex-col gap-2" data-testid="limit-hints">
-            <p className="text-center text-sm text-muted">
-              Потрачено: {hints.lastMonth !== null ? `в прошлом месяце ${formatMinor(hints.lastMonth, base)}` : 'в прошлом месяце ничего'}
-              {hints.typical !== null ? `, обычно ${formatMinor(hints.typical, base)} в месяц` : ''}.
-            </p>
+            {(hints.lastMonth !== null || hints.typical !== null) && (
+              <p className="text-center text-sm text-muted">
+                Потрачено: {hints.lastMonth !== null ? `в прошлом месяце ${formatMinor(hints.lastMonth, base)}` : 'в прошлом месяце ничего'}
+                {hints.typical !== null ? `, обычно ${formatMinor(hints.typical, base)} в месяц` : ''}.
+              </p>
+            )}
+            {hasExcluded && (
+              <p className="text-center text-sm font-medium text-warning">
+                Часть прошлых операций внесена в другой основной валюте, чем сейчас ({base}), и в подсказку не вошла.
+              </p>
+            )}
             {chips.length > 0 && (
               <div role="group" aria-label="Подсказки суммы" className="flex flex-wrap justify-center gap-2">
                 {chips.map((c) => (
@@ -253,6 +271,7 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
                     aria-pressed={amount === c.value}
                     onClick={() => {
                       setAmount(c.value);
+                      setAutoAmount(true);
                       setAmountError(null);
                       setFormError(null);
                     }}
@@ -277,6 +296,7 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
             error={amountError}
             onChange={(v) => {
               setAmount(v);
+              setAutoAmount(false);
               setAmountError(null);
               setFormError(null);
             }}

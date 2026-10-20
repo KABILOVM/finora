@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { limitHints, niceCeil, spentInScope, type MonthSpend } from './budgetHints';
+import { limitHints, niceRound, spentInScope, type MonthSpend } from './budgetHints';
 
 const month = (m: string, expense: number, rows: { categoryId: string | null; totalMinor: number; kind?: 'fee' }[] = []): MonthSpend => ({
   month: m,
@@ -9,17 +9,24 @@ const month = (m: string, expense: number, rows: { categoryId: string | null; to
 
 const noParents = new Map<string, string | null>();
 
-describe('niceCeil: «красивая» сумма лимита', () => {
-  it('до 1 000 — вверх до 10 целых единиц, от 1 000 — до 100', () => {
-    expect(niceCeil(8700, 'TJS')).toBe(9000); // 87 → 90
-    expect(niceCeil(9000, 'TJS')).toBe(9000); // уже круглое — не растёт
-    expect(niceCeil(123_400, 'TJS')).toBe(130_000); // 1 234 → 1 300
-    expect(niceCeil(100_000, 'TJS')).toBe(100_000);
-    expect(niceCeil(1, 'TJS')).toBe(1000); // 1 дирам → 10 с.
+describe('niceRound: «красивая» сумма лимита по порядку величины', () => {
+  it('до 20 — до целой единицы, до 100 — до 5, дальше — две значащие цифры; к ближайшему', () => {
+    expect(niceRound(1, 'TJS')).toBe(100); // 0,01 → не меньше одной единицы
+    expect(niceRound(1500, 'TJS')).toBe(1500); // 15 с.
+    expect(niceRound(8700, 'TJS')).toBe(8500); // 87 → 85
+    expect(niceRound(43_700, 'TJS')).toBe(44_000); // 437 → 440
+    expect(niceRound(31_850, 'TJS')).toBe(32_000); // 318,5 → 320
+    expect(niceRound(123_400, 'TJS')).toBe(120_000); // 1 234 → 1 200
+    expect(niceRound(100_001, 'TJS')).toBe(100_000); // 1000,01 не прыгает на 1 100
+    expect(niceRound(99_901, 'TJS')).toBe(100_000);
+  });
+  it('большие номиналы (сум, тенге) тоже округляются, а не остаются как есть', () => {
+    expect(niceRound(437_812_00, 'KZT')).toBe(440_000_00);
+    expect(niceRound(5_432_100_00, 'UZS')).toBe(5_400_000_00);
   });
   it('валюта без дробной части (иена): единицы — целые, а не сотые', () => {
-    expect(niceCeil(87, 'JPY')).toBe(90);
-    expect(niceCeil(1234, 'JPY')).toBe(1300);
+    expect(niceRound(87, 'JPY')).toBe(85);
+    expect(niceRound(1234, 'JPY')).toBe(1200);
   });
 });
 
