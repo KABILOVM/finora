@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addTx, dismissToasts, expect, goSection, norm, openApp, shot, sheet, test } from '../helpers';
+import { addTx, dismissToasts, expect, goSection, norm, openApp, shot, sheet, tapAmount, test } from '../helpers';
 
 /** «Сегодня» закреплено: 15 октября 2026 (14:00 в Душанбе). Прошлые месяцы для подсказок — сентябрь и август. */
 const NOW = new Date('2026-10-15T09:00:00Z');
@@ -61,6 +61,17 @@ test.describe('44. Бюджеты: подсказки суммы, ссылка �
     await expect(page.getByRole('heading', { level: 1, name: 'Бюджеты' })).toBeVisible();
     await expect(sheet(page, 'Новый лимит')).toHaveCount(0);
 
+    // лимитов нет — пояснять про прошлые месяцы нечего; поставили лимит — пояснение появляется только в прошлом месяце
+    await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
+    await expect(page.getByTestId('budgets-past-note')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Следующий месяц' }).click();
+    await page.getByRole('button', { name: 'Добавить лимит', exact: true }).click();
+    const add = sheet(page, 'Новый лимит');
+    await expect(add).toBeVisible();
+    await tapAmount(page, '1000');
+    await add.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    await expect(add).toBeHidden();
+    await dismissToasts(page);
     await expect(page.getByTestId('budgets-past-note')).toHaveCount(0);
     await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
     await expect(page.getByTestId('budgets-past-note')).toContainText('по сегодняшним суммам лимитов');
