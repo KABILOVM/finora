@@ -10,7 +10,7 @@ import type { RateTable, Transaction } from '@/domain/types';
 import { createRateService } from '@/rates/service';
 import { createMemoryRateStorage } from '@/rates/storage';
 import { bankDifference, reconcileWallet } from './reconcile';
-import { computeWalletsTotal } from './walletTotals';
+import { computeWalletsTotal } from '@/rates/walletsTotal';
 import { cleanName, sameName } from './walletUi';
 import WalletsPage from './WalletsPage';
 
@@ -154,7 +154,7 @@ describe('computeWalletsTotal', () => {
       'TJS',
       lookup({ EUR: { rate: 12 } }),
     );
-    expect(t?.missing).toEqual(['USD']);
+    expect(t?.missing).toEqual([{ currency: 'USD', balanceMinor: 10_000 }]);
     expect(t?.totalMinor).toBe(100_000 + 60_000);
     expect(t?.approximate).toBe(true);
   });
@@ -162,7 +162,17 @@ describe('computeWalletsTotal', () => {
   it('если курса нет ни у одной иностранной валюты, «≈» не нужен (итог точен, но неполон)', () => {
     const t = computeWalletsTotal([{ id: 'a', currency: 'TJS' }, { id: 'b', currency: 'USD' }], balances, 'TJS', lookup({}));
     expect(t?.approximate).toBe(false);
-    expect(t?.missing).toEqual(['USD']);
+    expect(t?.missing).toEqual([{ currency: 'USD', balanceMinor: 10_000 }]);
+  });
+
+  it('валюта с нулевым остатком и без курса не попадает в «нет курса» (так же, как на Главной)', () => {
+    const zero = new Map([
+      ['a', 100_000],
+      ['b', 0],
+    ]);
+    const t = computeWalletsTotal([{ id: 'a', currency: 'TJS' }, { id: 'b', currency: 'USD' }], zero, 'TJS', lookup({}));
+    expect(t?.missing).toEqual([]);
+    expect(t?.totalMinor).toBe(100_000);
   });
 
   it('устаревшие курсы перечисляются', () => {

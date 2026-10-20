@@ -2,7 +2,8 @@ import { daysBetween, endOfMonth } from '@/domain/forecast';
 import { addMinor } from '@/domain/money';
 import { totalInBase } from '@/domain/totals';
 import type { CurrencyCode, DebtDirection, IsoDate, Minor } from '@/domain/types';
-import { balanceSeries, type HomeTotal } from '@/features/home/homeData';
+import { balanceSeries } from '@/features/home/homeData';
+import type { WalletsTotal } from '@/rates/walletsTotal';
 import { shiftMonth } from '@/features/transactions/txFilters';
 import { monthKey } from '@/lib/dates';
 
@@ -45,8 +46,8 @@ export interface NetWorth {
 }
 
 export interface NetWorthArgs {
-  /** Итог по кошелькам (computeHomeTotal). */
-  wallets: Pick<HomeTotal, 'totalMinor' | 'approximate' | 'missing'>;
+  /** Итог по кошелькам (computeWalletsTotal). */
+  wallets: Pick<WalletsTotal, 'totalMinor' | 'approximate' | 'missing'>;
   /** Открытые долги с остатком > 0 (закрытые, архивные и погашенные вызывающий отфильтровал). */
   debts: readonly NetDebt[];
   base: CurrencyCode;
