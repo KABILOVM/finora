@@ -82,6 +82,15 @@ export function useTransactions(
   }, [store, key]);
 }
 
+/**
+ * Есть ли хоть одна неудалённая операция. undefined — ещё считается. Отдельный запрос вместо useTransactions({}, { limit: 1 }):
+ * тот читает и сортирует ВСЕ операции, а здесь остановка на первой подходящей.
+ */
+export function useHasTransactions(): boolean | undefined {
+  const store = useStore();
+  return useLiveQuery(async () => (await store.db.transactions.filter((t) => t.deletedAt === null).first()) !== undefined, [store]);
+}
+
 /** Что показать человеку, когда суммы не помещаются в расчёт (см. useBalancesState). */
 export const BALANCES_OVERFLOW_MESSAGE = 'Сумма слишком большая, проверьте данные';
 
