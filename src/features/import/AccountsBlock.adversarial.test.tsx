@@ -43,6 +43,21 @@ describe('сопоставление счетов: заблокированны�
     expect(options.filter((t) => /Создать новый кошелёк/.test(t))).toEqual([]);
   });
 
+  it('кошелёк прошлого импорта в архиве: кнопка «Вернуть из архива» отдаёт его id; заблокированные счета — первыми', async () => {
+    const plan = await blockedPlan();
+    const target = plan.wallets[0]!.target;
+    expect(target.kind === 'blocked' && target.restoreId).toBeTruthy();
+    const restored: string[] = [];
+    render(
+      <MemoryRouter>
+        <AccountsBlock wallets={plan.wallets} onChoose={() => undefined} onRestore={(id) => void restored.push(id)} />
+      </MemoryRouter>,
+    );
+    document.querySelector<HTMLButtonElement>('button')!.click();
+    expect(restored).toEqual([target.kind === 'blocked' ? target.restoreId : '']);
+    expect(document.body.textContent).toContain('Вернуть кошелёк из архива');
+  });
+
   it('когда новый кошелёк правда создастся, пункт есть; когда кошелёк прошлого импорта уже существует — нет', async () => {
     const parsed = parseZenmoney(TEXT);
     const ids = await computeIds('u', parsed);

@@ -37,7 +37,7 @@ export function resolveWallet(
   const fresh = (): WalletTarget => {
     if (!det) return { kind: 'create', id: detId, name: account.name };
     if (!isLive(det)) return { kind: 'blocked', reason: `Кошелёк «${det.name}», созданный прошлым импортом, удалён. Выберите другой кошелёк для этого счёта.` };
-    if (!isUsable(det)) return { kind: 'blocked', reason: `Кошелёк «${det.name}», созданный прошлым импортом, лежит в архиве. Верните его из архива или выберите другой кошелёк.` };
+    if (!isUsable(det)) return { kind: 'blocked', reason: `Кошелёк «${det.name}», созданный прошлым импортом, лежит в архиве. Верните его из архива или выберите другой кошелёк.`, restoreId: det.id };
     return { kind: 'existing', id: det.id, name: det.name, how: 'saved' };
   };
 
