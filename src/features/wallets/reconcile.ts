@@ -79,3 +79,14 @@ export function reconcileWallet(wallet: WalletLike, txs: readonly TxLike[]): Rec
   r.totalMinor = total;
   return r;
 }
+
+/**
+ * Сверка с банком: сколько не хватает приложению, чтобы остаток совпал с фактическим. Положительная разница — в банке больше,
+ * чем в приложении. `negative` — фактический остаток отрицательный (кредитка, овердрафт). RangeError — суммы не помещаются в целое.
+ */
+export function bankDifference(actualMinor: number, negative: boolean, appTotalMinor: number): number {
+  const target = negative ? -actualMinor : actualMinor;
+  const diff = target - appTotalMinor + 0; // + 0: «−0» не должен просочиться в разницу
+  if (!Number.isSafeInteger(target) || !Number.isSafeInteger(diff)) throw new RangeError('Сумма слишком велика');
+  return diff;
+}
