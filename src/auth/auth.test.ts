@@ -122,6 +122,8 @@ describe('describeAuthError', () => {
       'Неверная почта или пароль',
     );
     expect(describeAuthError(err('AuthApiError', 'Invalid login credentials'), 'sign-in')).toBe('Неверная почта или пароль');
+    // «почта не подтверждена» не отсылает в пустоту: названо, что делать
+    expect(describeAuthError(err('AuthApiError', 'Email not confirmed'), 'sign-in')).toContain('войдите по коду на почту');
   });
 
   it('нет сети при входе → точная фраза про первый вход', () => {

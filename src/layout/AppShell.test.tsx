@@ -24,6 +24,17 @@ const hintShown = () =>
     return el;
   });
 
+describe('ссылка «К содержимому»', () => {
+  it('переводит фокус на основную область и не меняет адрес страницы (HashRouter)', async () => {
+    renderAt('/settings');
+    const link = await findByRole('link', { name: 'К содержимому' });
+    const before = window.location.hash;
+    await user.click(link);
+    expect(document.activeElement?.id).toBe('main');
+    expect(window.location.hash).toBe(before);
+  });
+});
+
 beforeEach(() => {
   localStorage.clear();
 });

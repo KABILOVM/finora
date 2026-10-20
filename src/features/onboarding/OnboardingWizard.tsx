@@ -38,7 +38,7 @@ export default function OnboardingWizard({ progress, update }: OnboardingWizardP
           }}
           onBackup={() => {
             update((p) => ({ ...p, path: 'import' }));
-            navigate('/settings');
+            navigate('/settings?section=data');
             toast.show('Найдите «Резервная копия» и нажмите «Загрузить копию».', { tone: 'info' });
           }}
           onSkip={() => close(null, true)}
@@ -59,7 +59,7 @@ export default function OnboardingWizard({ progress, update }: OnboardingWizardP
           onBack={back}
           onFirstOperation={() => close('/add')}
           onHome={() => close(null)}
-          onSettings={() => close('/settings')}
+          onSettings={() => close('/settings?section=security')}
         />
       );
   }

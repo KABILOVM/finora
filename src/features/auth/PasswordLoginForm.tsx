@@ -1,8 +1,10 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
+import { INVALID_CREDENTIALS_TEXT } from '@/auth/authErrors';
 import { checkNewPassword, MIN_PASSWORD_LENGTH } from '@/auth/passwordRules';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/Field';
+import { Notice } from '@/components/Notice';
 import { FormError, OfflineNotice } from './LoginNotices';
 import { PasswordField } from './PasswordField';
 
@@ -11,6 +13,8 @@ export interface PasswordLoginFormProps {
   onEmailChange(value: string): void;
   /** true — регистрация (почта, пароль и его повтор), иначе вход. */
   signUp?: boolean;
+  /** «Войти по коду на почту»: предлагается после неверного пароля (забыли пароль). */
+  onUseCode?: () => void;
 }
 
 /**
@@ -18,7 +22,7 @@ export interface PasswordLoginFormProps {
  * пароль именно через это): autocomplete username / current-password, постоянные id и name, подпись клавиши Enter.
  * method="post": если страница по какой-то причине отправит форму сама, пароль уйдёт в теле запроса, а не в адресе.
  */
-export function PasswordLoginForm({ email, onEmailChange, signUp = false }: PasswordLoginFormProps) {
+export function PasswordLoginForm({ email, onEmailChange, signUp = false, onUseCode }: PasswordLoginFormProps) {
   const auth = useAuth();
   const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState('');
@@ -112,12 +116,15 @@ export function PasswordLoginForm({ email, onEmailChange, signUp = false }: Pass
       )}
 
       {confirmSent && (
-        <p role="status" className="rounded-xl bg-income/10 p-3 font-medium text-income">
-          Мы отправили письмо на {email.trim()}. Подтвердите почту по ссылке в нём, затем войдите.
-        </p>
+        <Notice tone="success">Мы отправили письмо на {email.trim()}. Подтвердите почту по ссылке в нём, затем войдите.</Notice>
       )}
       <OfflineNotice />
       <FormError message={error} />
+      {!signUp && onUseCode && error === INVALID_CREDENTIALS_TEXT && (
+        <Button variant="secondary" fullWidth onClick={onUseCode}>
+          Забыли пароль? Войти по коду на почту
+        </Button>
+      )}
 
       <Button type="submit" size="lg" fullWidth loading={busy}>
         {signUp ? 'Создать аккаунт' : 'Войти'}
