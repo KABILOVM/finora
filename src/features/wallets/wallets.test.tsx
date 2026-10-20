@@ -414,7 +414,9 @@ describe('экран «Кошельки»', () => {
     await write(() => s.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 50_000, occurredOn: '2026-10-05' }));
     await write(() => s.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 12_345, occurredOn: '2026-10-06' })); // в приложении 1376,55
 
-    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
     const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
     await waitFor(() => expect(dialog).toHaveTextContent('= Остаток'));
     // пока ничего не введено — кнопки исправления нет
@@ -439,7 +441,9 @@ describe('экран «Кошельки»', () => {
     const cash = (await s.db.wallets.toArray())[0];
     if (!cash) throw new Error('нет кошелька');
     await write(() => s.wallets.update(cash.id, { openingBalanceMinor: 100_000 }));
-    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
     await findByRole('dialog', { name: 'Сверка: Наличные' });
     await user.type(await findByRole('textbox', { name: /^Сколько на самом деле/ }), '1000');
     await waitFor(() => expect(screen.getByText('Совпадает: в приложении столько же.')).toBeInTheDocument());
