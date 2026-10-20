@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useCashCalendar } from '@/features/analytics/useCashCalendar';
 import { useDebtsData } from '@/features/debts/useDebtsData';
 import { budgetLabel } from '@/features/budgets/budgetText';
 import { useBudgetsData } from '@/features/budgets/useBudgetsData';
@@ -22,9 +23,12 @@ export function useAttention(): AttentionItem[] | undefined {
   const lookups = useRecurringLookups();
   const budgets = useBudgetsData(monthKey(today));
   const goals = useGoals();
+  // те же настройки, с какими календарь открывается по умолчанию: цифра на «Главной» совпадает с календарём
+  const calendar = useCashCalendar({ includeUsual: true, includeReceivables: false });
 
   return useMemo(() => {
-    if (!debts || !upcoming || !lookups || budgets === undefined || !goals) return undefined;
+    if (!debts || !upcoming || !lookups || budgets === undefined || !goals || calendar === undefined) return undefined;
+    const cashShortfallOn = calendar !== null && calendar.status === 'ok' ? calendar.firstNegativeDate : null;
     const overduePayments = groupUpcoming(upcoming).overdue.map((i) => viewRule(i.rule, lookups.wallets, lookups.categories, lookups.base).title);
     const overBudgets: string[] = [];
     if (budgets && !('overflow' in budgets) && budgets.progress.ok) {
@@ -33,6 +37,6 @@ export function useAttention(): AttentionItem[] | undefined {
       }
     }
     const savingNudges = goals.filter((g) => g.nudge !== null).map((g) => g.wallet.name);
-    return buildAttention({ today, debts: debts.items, overduePayments, overBudgets, savingNudges });
-  }, [today, debts, upcoming, lookups, budgets, goals]);
+    return buildAttention({ today, debts: debts.items, overduePayments, cashShortfallOn, overBudgets, savingNudges });
+  }, [today, debts, upcoming, lookups, budgets, goals, calendar]);
 }

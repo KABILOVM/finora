@@ -1,11 +1,12 @@
 import type { IsoDate } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
+import { longDate } from '@/features/budgets/budgetText';
 import { isOwing, type DebtItem } from '@/features/debts/debtSummary';
 
-export type AttentionKind = 'debt' | 'payment' | 'budget' | 'saving';
+export type AttentionKind = 'debt' | 'payment' | 'cash' | 'budget' | 'saving';
 
 /** Адреса, куда ведёт строка «Требует внимания». */
-export type AttentionPath = '/debts' | '/recurring' | '/budgets' | '/wallets' | `/debts/${string}`;
+export type AttentionPath = '/debts' | '/recurring' | '/budgets' | '/wallets' | '/analytics?tab=calendar' | `/debts/${string}`;
 
 export interface AttentionItem {
   /** Стабильный ключ для списка. */
@@ -24,6 +25,8 @@ export interface AttentionInput {
   debts: readonly DebtItem[];
   /** Названия просроченных платежей (в порядке даты). */
   overduePayments: readonly string[];
+  /** Первый день, когда по календарю на 30 дней денег на руках не хватит; null — хватает (или календарь недоступен). */
+  cashShortfallOn?: IsoDate | null;
   /** Названия лимитов, которые уже превышены. */
   overBudgets: readonly string[];
   /** Названия кошельков-накоплений, в которые «пора отложить». */
@@ -37,7 +40,7 @@ function listed(one: (name: string) => string, many: (n: number) => string, name
 }
 
 /**
- * Что требует внимания на «Главной», от важного к менее важному: просроченные долги и платежи, превышенные лимиты (красным), «пора
+ * Что требует внимания на «Главной», от важного к менее важному: просроченные долги и платежи, «денег не хватит с …» по календарю на 30 дней, превышенные лимиты (красным), «пора
  * отложить» (жёлтым). Пусто — всё спокойно, строки на экране нет. Чистая функция: данные читает хук useAttention.
  */
 export function buildAttention(input: AttentionInput): AttentionItem[] {
@@ -64,6 +67,10 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       to: '/recurring',
       tone: 'danger',
     });
+  }
+
+  if (input.cashShortfallOn) {
+    out.push({ id: 'cash', kind: 'cash', text: `Денег не хватит с ${longDate(input.cashShortfallOn)}`, to: '/analytics?tab=calendar', tone: 'danger' });
   }
 
   if (input.overBudgets.length > 0) {
