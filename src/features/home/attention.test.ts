@@ -18,6 +18,16 @@ describe('buildAttention: что требует внимания на «Глав
     expect(buildAttention(input())).toEqual([]);
   });
 
+  it('денег не хватит: дата словами, ссылка на календарь аналитики, красным; после просроченных платежей и перед лимитами', () => {
+    expect(buildAttention(input({ cashShortfallOn: '2026-10-27' }))).toEqual([
+      { id: 'cash', kind: 'cash', text: 'Денег не хватит с 27 октября', to: '/analytics?tab=calendar', tone: 'danger' },
+    ]);
+    const all = buildAttention(input({ overduePayments: ['Аренда'], cashShortfallOn: '2026-10-27', overBudgets: ['Еда'] }));
+    expect(all.map((i) => i.kind)).toEqual(['payment', 'cash', 'budget']);
+    // не задано или null — строки нет
+    expect(buildAttention(input({ cashShortfallOn: null }))).toEqual([]);
+  });
+
   it('один просроченный долг: фраза с именем и ссылка прямо на этот долг, красным', () => {
     const r = buildAttention(input({ debts: [debt('d1', 'Рустам', '2026-10-10')] }));
     expect(r).toEqual([{ id: 'debts', kind: 'debt', text: 'Долг просрочен: Рустам', to: '/debts/d1', tone: 'danger' }]);

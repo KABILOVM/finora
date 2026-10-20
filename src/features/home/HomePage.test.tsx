@@ -388,6 +388,21 @@ describe('«Требует внимания»', () => {
   });
 });
 
+describe('«Требует внимания»: денег не хватит', () => {
+  it('крупный платёж через пять дней больше денег на руках — строка со ссылкой на календарь', async () => {
+    await openHome({
+      setup: async (s) => {
+        hist = await seedHistory(s);
+        await s.recurring.create({ kind: 'expense', walletId: hist.cash, amountMinor: 90_000_000, frequency: 'monthly', startOn: '2026-10-20', note: 'Большая покупка' });
+      },
+    });
+    await waitFor(() => expect(document.querySelector('[data-testid="attention-row"]')).not.toBeNull());
+    const row = document.querySelector('[data-testid="attention-row"]');
+    expect(text(row)).toContain('Денег не хватит с 20 октября');
+    expect(row?.querySelector('a')).toHaveAttribute('href', '/analytics?tab=calendar');
+  });
+});
+
 describe('последние операции', () => {
   it('пять последних, новые сверху, и ссылка «Все операции»', async () => {
     await openHome();
