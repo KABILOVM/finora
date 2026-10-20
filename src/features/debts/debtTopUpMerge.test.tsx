@@ -372,7 +372,7 @@ describe('новый долг тому же человеку: предложен
     expect(await debtOf(td)).toMatchObject({ principalMinor: 80_000, counterparty: 'Алишер' });
     expect((await issueTxs(td)).find((t) => t.amountMinor === 30_000)).toMatchObject({ walletId: cash(), occurredOn: '2026-10-15' });
     expect(await balanceOf(td, cash())).toBe(20_000);
-    expect(text(await findByRole('link', { name: /^Алишер/ }))).toContain(fmt(80_000));
+    await waitFor(() => expect(text(screen.getByRole('link', { name: /^Алишер/ }))).toContain(fmt(80_000))); // список обновляется следом за записью
   });
 
   it('«Создать отдельный долг» прячет плашку, и долг создаётся как обычно', async () => {

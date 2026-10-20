@@ -9,9 +9,11 @@ import { useDebtView, useStore, ValidationError, type FromRuleOptions } from '@/
 import { paymentKind } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import type { IsoDate, LocalRow, Minor, RecurringRule } from '@/domain/types';
+import { DayField } from '@/features/debts/DebtDates';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { FxNotice } from '@/features/transactions/FxNotice';
 import { GENERIC_SAVE_ERROR, NOTE_MAX, ruDate } from '@/features/transactions/txForm';
+import { isValidIsoDate } from '@/lib/dates';
 import { fxViewFor } from '@/recurring/fx';
 import {
   initialPostForm,
@@ -31,7 +33,7 @@ import type { RecurringLookups } from './useRecurringData';
 
 export interface PostSheetProps {
   rule: LocalRow<RecurringRule>;
-  /** Дата платежа из расписания — на неё будет записана операция. */
+  /** Дата платежа из расписания. Для просроченного платежа операция записывается на дату оплаты (по умолчанию сегодня), иначе — на неё. */
   date: IsoDate;
   today: IsoDate;
   lookups: RecurringLookups;
@@ -39,8 +41,10 @@ export interface PostSheetProps {
 }
 
 /**
- * «Провести платёж»: сумма и заметка берутся из правила и до подтверждения правятся. Дата не меняется (от неё зависит
- * id операции: так один платёж нельзя провести дважды). Кошелёк не в базовой валюте — нужен курс, как в обычной операции.
+ * «Провести платёж»: сумма и заметка берутся из правила и до подтверждения правятся. Дата по расписанию не меняется (от неё
+ * зависит id операции: так один платёж нельзя провести дважды); у просроченного платежа можно указать, когда его на самом деле
+ * оплатили (по умолчанию сегодня) — иначе он попал бы в прошлый день, а то и месяц. Кошелёк не в базовой валюте — нужен курс,
+ * как в обычной операции.
  */
 export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProps) {
   const store = useStore();
@@ -63,6 +67,9 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
     if (debtLeft === null || amountTouched) return;
     setForm((f) => (f.amountMinor === fittedAmount ? f : { ...f, amountMinor: fittedAmount }));
   }, [debtLeft, fittedAmount, amountTouched]);
+  // Просроченный платёж оплатили сегодня, а не в день по расписанию: дата оплаты по умолчанию — сегодня
+  const overdue = date < today;
+  const [paidOn, setPaidOn] = useState<IsoDate>(overdue ? today : date);
   const [errors, setErrors] = useState<PostErrors>({});
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -118,15 +125,34 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
       setErrors(prepared.errors);
       return;
     }
+    if (overdue) {
+      if (!isValidIsoDate(paidOn)) {
+        setErrors({ form: 'Укажите дату оплаты.' });
+        return;
+      }
+      if (paidOn > today) {
+        setErrors({ form: 'Дата оплаты не может быть в будущем.' });
+        return;
+      }
+    }
     busyRef.current = true;
     setBusy(true);
     setErrors({});
     try {
+      // платёж по долгу не может быть раньше самого долга (как и в окне платежа на странице долга); долг читаем здесь, а не из
+      // хука: к моменту нажатия он мог ещё не прочитаться
+      if (overdue && rule.debtId !== null) {
+        const debt = await store.db.debts.get(rule.debtId);
+        if (debt && paidOn < debt.openedOn) {
+          setErrors({ form: 'Платёж не может быть раньше даты долга.' });
+          return;
+        }
+      }
       // Сумму не трогали — репозиторий сам сверит её с остатком долга на момент записи (fitToDebt). Введённая руками
       // записывается как есть (без fitToDebt), даже если совпала с суммой плана.
-      let opts: FromRuleOptions = prepared.opts;
+      let opts: FromRuleOptions = overdue && paidOn !== date ? { ...prepared.opts, occurredOn: paidOn } : prepared.opts;
       if (!amountTouched) {
-        const { amountMinor: _auto, ...rest } = prepared.opts;
+        const { amountMinor: _auto, ...rest } = opts;
         opts = { ...rest, fitToDebt: true };
       }
       const tx = await store.transactions.createFromRule(rule.id, date, opts);
@@ -193,6 +219,17 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
             </p>
           </div>
         </div>
+
+        {overdue && (
+          <DayField
+            label="Дата оплаты"
+            value={paidOn}
+            onChange={(d) => {
+              setPaidOn(d);
+              setErrors((e) => ({ ...e, form: undefined }));
+            }}
+          />
+        )}
 
         {!wallet && (
           <p role="alert" className="text-sm font-medium text-danger">
