@@ -5,7 +5,10 @@ import { HeaderStatus } from '@/app/HeaderStatus';
 import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { SYNC_TABLES } from '@/sync/tables';
+import { deleteAccountOnServer, DeleteAccountError } from '@/auth/deleteAccount';
 import SettingsPage from './SettingsPage';
+
+vi.mock('@/auth/deleteAccount', async (orig) => ({ ...(await orig<typeof import('@/auth/deleteAccount')>()), deleteAccountOnServer: vi.fn() }));
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({ needRefresh: [false, vi.fn()], offlineReady: [false, vi.fn()], updateServiceWorker: vi.fn() }),
@@ -203,6 +206,45 @@ describe('Настройки: аккаунт', () => {
     await openCloudSettings({ td, auth: { session: null, getSession: 'hang' }, bootTimeoutMs: 40 });
     expect(await waitFor(() => screen.getByText(/Нет связи с аккаунтом/))).toBeInTheDocument();
     expect(screen.getByText(ALICE.email)).toBeInTheDocument();
+  });
+});
+
+describe('Настройки: удаление аккаунта', () => {
+  const open = async () => {
+    const ctx = await openCloudSettings();
+    await user.click(screen.getByRole('button', { name: 'Удалить аккаунт…' }));
+    const dlg = await findByRole('dialog', { name: 'Удалить аккаунт' });
+    return { ...ctx, dlg };
+  };
+  const confirmButton = () => screen.getByRole('button', { name: 'Удалить аккаунт навсегда' });
+
+  it('кнопка недоступна, пока не набрана своя почта; чужая почта не подходит', async () => {
+    await open();
+    expect(confirmButton()).toBeDisabled();
+    await user.type(screen.getByRole('textbox', { name: /введите свою почту/ }), BOB.email);
+    expect(confirmButton()).toBeDisabled();
+  });
+
+  it('набрана почта → сервер удаляет аккаунт, затем выход и стирание данных устройства', async () => {
+    vi.mocked(deleteAccountOnServer).mockResolvedValue(undefined);
+    const { td, fake } = await open();
+    await user.type(screen.getByRole('textbox', { name: /введите свою почту/ }), ` ${ALICE.email.toUpperCase()} `);
+    expect(confirmButton()).toBeEnabled();
+    await user.click(confirmButton());
+    await waitFor(() => expect(td.deleted).toEqual([ALICE.id]));
+    expect(deleteAccountOnServer).toHaveBeenCalledWith(ALICE.email);
+    expect(fake.calls.signOut).toBe(1);
+  });
+
+  it('сервер не удалил аккаунт → причина на экране, выхода нет, данные устройства целы', async () => {
+    vi.mocked(deleteAccountOnServer).mockRejectedValue(new DeleteAccountError('Удаление аккаунта ещё не установлено на сервере.'));
+    const { td, fake } = await open();
+    await user.type(screen.getByRole('textbox', { name: /введите свою почту/ }), ALICE.email);
+    await user.click(confirmButton());
+    expect(await findByRole('alert')).toHaveTextContent('ещё не установлено на сервере');
+    expect(td.deleted).toEqual([]);
+    expect(fake.calls.signOut).toBe(0);
+    expect(confirmButton()).toBeEnabled();
   });
 });
 

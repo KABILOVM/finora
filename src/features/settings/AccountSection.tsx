@@ -9,6 +9,7 @@ import { useStore } from '@/db';
 import { pluralRu } from '@/lib/plural';
 import { useSyncStatus } from '@/sync/syncContext';
 import { ChangePasswordSheet } from './ChangePasswordSheet';
+import { DeleteAccountSheet } from './DeleteAccountSheet';
 import { SettingsSection } from './SettingsSection';
 
 type Pending = { kind: 'sign-out' | 'wipe'; pending: number; quarantined: number } | null;
@@ -24,6 +25,7 @@ export function AccountSection() {
   const status = useSyncStatus();
   const [confirm, setConfirm] = useState<Pending>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // Без облака входа нет — и показывать нечего
@@ -124,7 +126,13 @@ export function AccountSection() {
       </Button>
       {hasUnsent && <p className="-mt-1 text-sm text-muted">Недоступно: не всё ещё отправлено в облако.</p>}
 
+      <Button variant="ghost" className="!text-danger" disabled={offlineKnown} onClick={() => setDeleteOpen(true)}>
+        Удалить аккаунт…
+      </Button>
+      {offlineKnown && <p className="-mt-1 text-sm text-muted">Удалить аккаунт можно, когда есть связь с сервером.</p>}
+
       {passwordOpen && <ChangePasswordSheet onClose={() => setPasswordOpen(false)} />}
+      {deleteOpen && <DeleteAccountSheet onClose={() => setDeleteOpen(false)} />}
 
       <ConfirmDialog
         open={confirm?.kind === 'sign-out'}
