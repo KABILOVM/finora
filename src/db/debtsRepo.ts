@@ -68,8 +68,10 @@ export interface DebtsRepo {
   /**
    * «Добавить ещё в долг»: сумма долга растёт на deltaMinor (закрытый долг при этом открывается снова). Сама операция выдачи
    * или получения денег — отдельно (debtActions.saveTopUp), здесь только долг. dueOn — новый срок (undefined — не менять).
+   * journal — строка для истории: дописывается в конец заметки долга как есть, повтор тоже записывается (так «пополнение на бумаге»
+   * оставляет след). Не помещается — уходят самые старые строки, а не новая.
    */
-  increase(id: UUID, deltaMinor: Minor, opts?: { dueOn?: IsoDate | null }): Promise<LocalRow<Debt>>;
+  increase(id: UUID, deltaMinor: Minor, opts?: { dueOn?: IsoDate | null; journal?: string }): Promise<LocalRow<Debt>>;
   /**
    * Объединение долгов ОДНОЙ транзакцией базы: всё из sourceIds переходит в targetId, источники удаляются (мягко).
    * Долги обязаны быть живыми, не в архиве, одного направления и одной валюты. Деньги в кошельках не двигаются.
@@ -139,6 +141,25 @@ function joinNotes(notes: readonly string[]): string {
   const last = cut.charCodeAt(cut.length - 1);
   if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1); // «голова» пары без «хвоста»
   return `${cut.trimEnd()}…`;
+}
+
+/**
+ * Дописать строку в конец заметки (без слияния дублей: два одинаковых пополнения — две записи). Не помещается в предел — убираются
+ * самые старые строки целиком (спереди остаётся «…»), новая строка сохраняется. Одна строка длиннее предела режется с конца.
+ */
+export function appendNoteLine(note: string, line: string): string {
+  const add = line.trim();
+  const lines = note.trim() === '' ? [] : note.trim().split(NOTE_SEPARATOR);
+  if (add === '') return lines.join(NOTE_SEPARATOR);
+  lines.push(add);
+  let dropped = false;
+  const joined = () => (dropped ? '…' + NOTE_SEPARATOR : '') + lines.join(NOTE_SEPARATOR);
+  while (joined().length > LIMITS.note && lines.length > 1) {
+    lines.shift();
+    dropped = true;
+  }
+  const out = joined();
+  return out.length <= LIMITS.note ? out : joinNotes([add]);
 }
 
 const ruDay = (iso: IsoDate): string => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
@@ -215,12 +236,14 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
     async increase(id, deltaMinor, opts) {
       if (!isMinor(deltaMinor) || deltaMinor <= 0) throw new ValidationError('Сумма пополнения должна быть больше нуля');
       const due = opts?.dueOn;
+      const journal = opts?.journal?.trim() ?? '';
       return save(id, (cur) => {
         if (cur.archivedAt !== null) throw new ValidationError(`Долг «${cur.counterparty}» в архиве: сначала верните его из архива`);
         return parseDebtData({
           ...dataOf(cur),
           principalMinor: addMinor(cur.principalMinor, deltaMinor),
           ...(due !== undefined ? { dueOn: due } : {}),
+          ...(journal !== '' ? { note: appendNoteLine(cur.note, journal) } : {}),
           closedAt: null,
         });
       });

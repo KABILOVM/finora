@@ -3,6 +3,7 @@ import type { Debt, LocalRow, Transaction, Wallet } from '@/domain/types';
 import {
   buildDebtItems,
   compareDebts,
+  defaultDirection,
   groupDebts,
   isOwing,
   nearestDue,
@@ -116,6 +117,57 @@ describe('compareDebts и groupDebts', () => {
     expect(lent.closed.map((i) => i.debt.id)).toEqual(['l2']);
     expect(lent.archived.map((i) => i.debt.id)).toEqual(['l3']);
     expect(groupDebts(items, 'borrowed').active.map((i) => i.debt.id)).toEqual(['b1']);
+  });
+
+  it('выплаченный полностью, но не закрытый долг — в «Погашены», а не среди открытых; закрытый и архивный остаются на своих местах', () => {
+    const items = buildDebtItems(
+      [
+        debt({ id: 'open' }),
+        debt({ id: 'paid', principalMinor: 5_000 }),
+        debt({ id: 'paid-closed', principalMinor: 5_000, closedAt: '2026-10-09T00:00:00.000Z' }),
+        debt({ id: 'paid-archived', principalMinor: 5_000, archivedAt: '2026-10-09T00:00:00.000Z' }),
+      ],
+      [pay('p1', 'paid', 5_000), pay('p2', 'paid-closed', 5_000), pay('p3', 'paid-archived', 5_000)],
+      wallets,
+    );
+    const g = groupDebts(items, 'lent');
+    expect(g.active.map((i) => i.debt.id)).toEqual(['open']);
+    expect(g.settled.map((i) => i.debt.id)).toEqual(['paid']);
+    expect(g.closed.map((i) => i.debt.id)).toEqual(['paid-closed']);
+    expect(g.archived.map((i) => i.debt.id)).toEqual(['paid-archived']);
+  });
+
+  it('долг, у которого остаток не посчитан (state === null), в «Погашены» не попадает', () => {
+    const items = [{ debt: debt({ id: 'x' }), state: null }];
+    const g = groupDebts(items, 'lent');
+    expect(g.active).toHaveLength(1);
+    expect(g.settled).toHaveLength(0);
+  });
+});
+
+describe('defaultDirection: какая вкладка открывается, когда адрес её не называет', () => {
+  const TODAY = '2026-10-15';
+  const items = (...specs: Array<{ id: string; direction: 'lent' | 'borrowed'; dueOn?: string | null; paid?: boolean; closed?: boolean }>) =>
+    buildDebtItems(
+      specs.map((x) => debt({ id: x.id, direction: x.direction, dueOn: x.dueOn ?? null, principalMinor: 5_000, closedAt: x.closed ? '2026-10-09T00:00:00.000Z' : null })),
+      specs.filter((x) => x.paid).map((x) => pay(`p-${x.id}`, x.id, 5_000)),
+      wallets,
+    );
+
+  it('ничего нет — «Мне должны»', () => {
+    expect(defaultDirection([], TODAY)).toBe('lent');
+  });
+  it('открытые долги только у «Я должен» — «Я должен» (не пустой экран)', () => {
+    expect(defaultDirection(items({ id: 'b', direction: 'borrowed' }), TODAY)).toBe('borrowed');
+  });
+  it('закрытые и погашенные долги «Мне должны» не считаются открытыми', () => {
+    expect(defaultDirection(items({ id: 'l1', direction: 'lent', closed: true }, { id: 'l2', direction: 'lent', paid: true }, { id: 'b', direction: 'borrowed' }), TODAY)).toBe('borrowed');
+  });
+  it('открытые есть с обеих сторон — «Мне должны», кроме случая, когда просрочка только у «Я должен»', () => {
+    const both = [{ id: 'l', direction: 'lent' as const }, { id: 'b', direction: 'borrowed' as const }];
+    expect(defaultDirection(items(...both), TODAY)).toBe('lent');
+    expect(defaultDirection(items(both[0]!, { ...both[1]!, dueOn: '2026-10-01' }), TODAY)).toBe('borrowed');
+    expect(defaultDirection(items({ ...both[0]!, dueOn: '2026-10-01' }, { ...both[1]!, dueOn: '2026-10-01' }), TODAY)).toBe('lent');
   });
 });
 

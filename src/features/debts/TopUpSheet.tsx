@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
+import { ToggleRow } from '@/components/ToggleRow';
 import { useToast } from '@/components/Toast';
-import { ValidationError, newId, useSettings, useStore, useWallets } from '@/db';
-import type { DebtState } from '@/domain/debts';
+import { ValidationError, newId, useRecurringRules, useSettings, useStore, useWallets } from '@/db';
+import { isLivePlanOf, type DebtState } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, IsoDate, LocalRow, Minor } from '@/domain/types';
 import { rankWallets, usePopularity } from '@/features/transactions/popularity';
@@ -14,9 +15,10 @@ import { NOTE_MAX } from '@/features/transactions/txForm';
 import { addDays, todayLocal } from '@/lib/dates';
 import { saveTopUp } from './debtActions';
 import { validateTopUp, type TopUpFormErrors } from './debtForm';
-import { TOP_UP_ACTION, TOP_UP_AMOUNT_LABEL } from './debtText';
+import { ruDateShort, TOP_UP_ACTION, TOP_UP_AMOUNT_LABEL } from './debtText';
 import { DayField, DueField } from './DebtDates';
 import { DebtMoneySection } from './DebtMoneySection';
+import { planEndFor } from './payoff';
 import { useWalletFx } from './useWalletFx';
 
 export interface TopUpSheetProps {
@@ -40,13 +42,32 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
   const [wanted, setWanted] = useState(true);
   const [walletPick, setWalletPick] = useState<string | null>(null);
   const [date, setDate] = useState<IsoDate>(() => todayLocal());
+  // Долг был закрыт или выплачен, а прежний срок давно прошёл: открыть его снова с тем же сроком значит сразу получить просрочку.
+  // Предлагаем новый срок (через 30 дней); человек может поменять его или снять.
+  const dueRefreshed = (debt.closedAt !== null || state.settled) && debt.dueOn !== null && debt.dueOn < todayLocal();
   const [hasDue, setHasDue] = useState(debt.dueOn !== null);
-  const [dueOn, setDueOn] = useState<IsoDate>(() => debt.dueOn ?? addDays(todayLocal(), 30));
+  const [dueOn, setDueOn] = useState<IsoDate>(() => (dueRefreshed ? addDays(todayLocal(), 30) : (debt.dueOn ?? addDays(todayLocal(), 30))));
+  const [extend, setExtend] = useState(true);
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<TopUpFormErrors & { form?: string; rate?: string }>({});
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
   const txId = useRef(newId());
+
+  // Остаток после пополнения: сумма долга + пополнение − уже выплачено (переплата покрывает часть пополнения)
+  const grownRemaining =
+    amount !== null && amount > 0 && Number.isSafeInteger(state.principalMinor + amount) ? Math.max(0, state.principalMinor + amount - state.paidMinor) : null;
+  // План «Платить частями»: если он закончится раньше, чем будет выплачен выросший долг, предлагаем продлить
+  const rules = useRecurringRules();
+  const plans = useMemo(() => (rules ?? []).filter((r) => isLivePlanOf(r, debt)), [rules, debt]);
+  const plan = plans.length === 1 ? plans[0] : undefined;
+  // Считаем со следующего дня: платёж на сегодня либо уже проведён (он в остатке), либо ещё впереди. В худшем случае дата получится
+  // на один платёж позже нужной, а не раньше, — план всё равно остановится сам, когда долг будет выплачен.
+  const planEnd = useMemo(
+    () => (plan && plan.endOn !== null && grownRemaining !== null ? planEndFor(plan, grownRemaining, addDays(todayLocal(), 1)) : null),
+    [plan, grownRemaining],
+  );
+  const extendTo = plan && plan.endOn !== null && planEnd !== null && planEnd > plan.endOn ? planEnd : null;
 
   const pop = usePopularity();
   const candidates = (wallets ?? []).filter((w) => w.currency === debt.currency);
@@ -93,13 +114,15 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
         occurredOn: date,
         note,
         ...(dueChanged ? { dueOn: newDue } : {}),
+        ...(extendTo !== null && extend && plan ? { extendPlan: { ruleId: plan.id, endOn: extendTo } } : {}),
         movement:
           moneyOn && walletId !== null
             ? { walletId, txId: txId.current, ...(resolved?.ok && resolved.fx ? { fx: resolved.fx } : {}) }
             : null,
       });
       if (resolved?.ok) resolved.remember();
-      toast.success(moneyOn ? 'Добавлено к долгу, деньги учтены в кошельке' : 'Добавлено к долгу «на бумаге»');
+      const extended = extendTo !== null && extend && plan ? ` План платежей продлён до ${ruDateShort(extendTo)}.` : '';
+      toast.success(`${moneyOn ? 'Добавлено к долгу, деньги учтены в кошельке.' : 'Добавлено к долгу «на бумаге».'}${extended}`);
       onClose();
     } catch (e) {
       if (e instanceof ValidationError) setErrors({ form: e.message });
@@ -114,6 +137,8 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
   };
 
   const grown = amount !== null && amount > 0 && Number.isSafeInteger(state.principalMinor + amount) ? state.principalMinor + amount : null;
+  // сколько нового покроет переплата (платежей уже больше суммы долга)
+  const coveredByOverpay = amount !== null && state.overpaidMinor > 0 ? Math.min(state.overpaidMinor, amount) : 0;
 
   return (
     <Sheet
@@ -154,8 +179,17 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
               clear('amount', 'form');
             }}
           />
-          {grown !== null && (
-            <p className="text-center text-sm text-muted">Сумма долга станет {endSentence(formatMinor(grown, debt.currency))}</p>
+          {grown !== null && grownRemaining !== null && (
+            <div className="text-center text-sm text-muted">
+              <p>Сумма долга станет {endSentence(formatMinor(grown, debt.currency))}</p>
+              <p className="font-semibold text-text" data-testid="topup-remaining">
+                Остаток станет {endSentence(formatMinor(grownRemaining, debt.currency))}
+              </p>
+              {coveredByOverpay > 0 && <p>Из пополнения {endSentence(formatMinor(coveredByOverpay, debt.currency))} покроет переплата.</p>}
+              {debt.closedAt !== null && state.remainingMinor > 0 && (
+                <p>В остаток войдёт и прежний неоплаченный {endSentence(formatMinor(state.remainingMinor, debt.currency))}</p>
+              )}
+            </div>
           )}
         </div>
 
@@ -168,10 +202,17 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
           }}
           error={errors.date}
         />
+        {dueRefreshed && (
+          <p className="-mb-3 text-sm text-warning">
+            Прежний срок ({debt.dueOn ? ruDateShort(debt.dueOn) : ''}) уже прошёл, поэтому предложен новый. Его можно изменить или снять.
+          </p>
+        )}
         <DueField
           hasDue={hasDue}
           dueOn={dueOn}
           openedOn={debt.openedOn}
+          minDate={date}
+          current={debt.dueOn}
           error={errors.dueOn}
           onChange={(p) => {
             if (p.hasDue !== undefined) {
@@ -182,6 +223,14 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
             clear('dueOn', 'form');
           }}
         />
+        {extendTo !== null && plan && (
+          <ToggleRow
+            label={`Продлить план платежей до ${ruDateShort(extendTo)}`}
+            hint={`Сейчас план заканчивается ${ruDateShort(plan.endOn ?? '')} — раньше, чем будет выплачен выросший долг. Платежи прекратятся сами, когда долг будет выплачен.`}
+            checked={extend}
+            onChange={setExtend}
+          />
+        )}
         <TextInput
           label="Заметка"
           hint={note.trim().length > NOTE_MAX - 50 ? `${note.trim().length} из ${NOTE_MAX}` : 'Необязательно'}

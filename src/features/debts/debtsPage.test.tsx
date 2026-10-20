@@ -16,7 +16,14 @@ import {
   unpinToday,
   type OpsDeps,
 } from '@/features/transactions/__fixtures__/opsKit';
+import { useLocation } from 'react-router-dom';
 import DebtsPage from './DebtsPage';
+
+/** Строка запроса адреса (?dir=…): по ней видно, какую вкладку записало приложение. */
+function SearchProbe() {
+  return <p data-testid="search">{useLocation().search}</p>;
+}
+const search = () => document.querySelector('[data-testid="search"]')?.textContent ?? '';
 
 beforeEach(pinToday);
 afterEach(() => {
@@ -37,6 +44,7 @@ async function openPage(setup?: Setup, path = '/debts', tables = [table()]) {
     <>
       <DebtsPage />
       <LocationProbe />
+      <SearchProbe />
     </>,
     td,
     path,
@@ -310,5 +318,116 @@ describe('шит «Новый долг»', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый долг' })).toBeNull());
     expect((await storeOf(td).db.debts.toArray())[0]).toMatchObject({ dueOn: '2026-10-20', note: 'на ремонт' });
     expect(text(await findByRole('link', { name: /^Алишер/ }))).toContain('через 5 дней');
+  });
+});
+
+describe('экран «Долги»: какая вкладка открывается', () => {
+  const borrow = (s: Store, over: Partial<Parameters<Store['debts']['create']>[0]> = {}) => lend(s, { direction: 'borrowed', counterparty: 'Банк', ...over });
+  const tab = (name: string) => screen.getByRole('radio', { name });
+
+  it('адрес без вкладки и открытые долги только у «Я должен» — сразу «Я должен», без пустого экрана', async () => {
+    await openPage(async (s) => void (await borrow(s)));
+    expect(tab('Я должен').getAttribute('aria-checked')).toBe('true');
+    expect(rowLink('Банк')).toBeTruthy();
+  });
+
+  it('адрес без вкладки и долги «Мне должны» есть — «Мне должны»', async () => {
+    await openPage(async (s) => {
+      await lend(s);
+      await borrow(s);
+    });
+    expect(tab('Мне должны').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('вкладка названа в адресе — остаётся, даже пустая: «Мне должны» не перескакивает сама', async () => {
+    await openPage(async (s) => void (await borrow(s)), '/debts?dir=lent');
+    expect(tab('Мне должны').getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('heading', { name: 'Вам пока никто не должен' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Банк/ })).toBeNull();
+  });
+
+  it('мусор вместо вкладки в адресе (?dir=что-то) — как будто вкладки нет: выбор по данным', async () => {
+    await openPage(async (s) => void (await borrow(s)), '/debts?dir=мусор');
+    expect(tab('Я должен').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('нажатие на вкладку пишет её в адрес, «Мне должны» тоже', async () => {
+    await openPage(async (s) => void (await borrow(s)));
+    await user.click(tab('Мне должны'));
+    await waitFor(() => expect(search()).toBe('?dir=lent'));
+    expect(screen.getByRole('heading', { name: 'Вам пока никто не должен' })).toBeTruthy();
+    await user.click(tab('Я должен'));
+    await waitFor(() => expect(search()).toBe('?dir=borrowed'));
+  });
+});
+
+describe('экран «Долги»: погашенные, но не закрытые', () => {
+  const paidDebt = async (s: Store, counterparty: string) => {
+    const cash = await cashOf(s);
+    const d = await lend(s, { counterparty, principalMinor: 5_000 });
+    await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 5_000, occurredOn: '2026-10-05', debtId: d.id });
+    return d;
+  };
+
+  it('выплаченный долг уходит из открытых в раздел «Погашены» с кнопкой «Закрыть»; итог «Вам должны всего» его не включает', async () => {
+    await openPage(async (s) => {
+      await lend(s, { counterparty: 'Бобур', principalMinor: 30_000 });
+      await paidDebt(s, 'Алишер');
+    });
+    const open = screen.getByRole('list', { name: 'Мне должны' });
+    expect(open.textContent).toContain('Бобур');
+    expect(open.textContent).not.toContain('Алишер');
+    const settled = document.querySelector('[data-testid="debts-settled"]')!;
+    expect(text(settled)).toContain('Погашены · 1');
+    expect(settled.textContent).toContain('Алишер');
+    expect(screen.getByRole('button', { name: 'Закрыть погашенный долг' }).textContent).toBe('Закрыть');
+    expect(text(document.querySelector('[data-testid="debts-totals"]'))).toContain(fmt(30_000));
+  });
+
+  it('«Закрыть все» закрывает все погашенные; «Отменить» открывает их снова', async () => {
+    const td = await openPage(async (s) => {
+      await paidDebt(s, 'Алишер');
+      await paidDebt(s, 'Бобур');
+    });
+    expect(text(document.querySelector('[data-testid="debts-settled"]'))).toContain('Погашены · 2');
+    await user.click(screen.getByRole('button', { name: 'Закрыть все погашенные долги: 2' }));
+    await waitFor(() => expect(document.querySelector('[data-testid="debts-settled"]')).toBeNull());
+    const debts = await storeOf(td).db.debts.toArray();
+    expect(debts.every((d) => d.closedAt !== null)).toBe(true);
+    expect(screen.getByRole('button', { name: /Закрытые · 2/ })).toBeTruthy();
+    await user.click(await findByRole('button', { name: 'Отменить' }));
+    await waitFor(() => expect(text(document.querySelector('[data-testid="debts-settled"]'))).toContain('Погашены · 2'));
+    expect((await storeOf(td).db.debts.toArray()).every((d) => d.closedAt === null)).toBe(true);
+  });
+
+  it('когда есть только погашенные, «Открытых долгов нет» не пишем: раздел «Погашены» сам всё объясняет', async () => {
+    await openPage(async (s) => void (await paidDebt(s, 'Алишер')));
+    expect(screen.queryByText('Открытых долгов нет.')).toBeNull();
+    expect(document.querySelector('[data-testid="debts-settled"]')).not.toBeNull();
+  });
+});
+
+describe('экран «Долги»: «Закрыть все» при частичном сбое', () => {
+  it('один долг закрыть не удалось — остальные закрыты, сказано «2 из 3», «Отменить» открывает закрытые снова', async () => {
+    const td = await openPage(async (s) => {
+      const cash = await cashOf(s);
+      for (const name of ['Алишер', 'Бобур', 'Вали']) {
+        const d = await lend(s, { counterparty: name, principalMinor: 5_000 });
+        await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 5_000, occurredOn: '2026-10-05', debtId: d.id });
+      }
+    });
+    const store = storeOf(td);
+    const real = store.debts.close.bind(store.debts);
+    const bobur = (await store.db.debts.toArray()).find((d) => d.counterparty === 'Бобур')!;
+    vi.spyOn(store.debts, 'close').mockImplementation((id: string) => (id === bobur.id ? Promise.reject(new Error('сбой')) : real(id)));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await user.click(screen.getByRole('button', { name: 'Закрыть все погашенные долги: 3' }));
+    await waitFor(() => expect(document.body.textContent).toContain('Закрыто долгов: 2 из 3. Остальные закрыть не удалось.'));
+    const closed = (await store.db.debts.toArray()).filter((d) => d.closedAt !== null).map((d) => d.counterparty).sort();
+    expect(closed).toEqual(['Алишер', 'Вали']);
+    await waitFor(() => expect(text(document.querySelector('[data-testid="debts-settled"]'))).toContain('Погашены · 1')); // Бобур остался
+    vi.restoreAllMocks();
+    await user.click(await findByRole('button', { name: 'Отменить' }));
+    await waitFor(() => expect(text(document.querySelector('[data-testid="debts-settled"]'))).toContain('Погашены · 3'));
   });
 });

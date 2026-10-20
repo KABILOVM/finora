@@ -1,7 +1,5 @@
 import type { Page } from '@playwright/test';
-import {
-  addTx, dismissToasts, expect, goSection, homeTotalText, money, moneyExact, monthRow, openApp, sheet, shot, tapAmount, test, walletRowText,
-} from '../helpers';
+import { addTx, dismissToasts, expect, goSection, homeTotalText, money, moneyExact, monthRow, openApp, sheet, shot, tapAmount, test, walletRowText, debtAction } from '../helpers';
 
 /** «Сегодня» закреплено: 15 октября 2026. */
 const NOW = new Date('2026-10-15T09:00:00Z');
@@ -32,7 +30,7 @@ async function setup(page: Page): Promise<void> {
 }
 
 const openDelete = async (page: Page) => {
-  await page.getByRole('button', { name: 'Удалить долг', exact: true }).click();
+  await debtAction(page, 'Удалить долг');
   const dlg = page.getByRole('alertdialog', { name: /Удалить долг «Алишер»/ });
   await expect(dlg).toBeVisible();
   return dlg;

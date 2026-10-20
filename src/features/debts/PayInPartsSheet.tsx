@@ -4,6 +4,7 @@ import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/Button';
 import { ChipPicker } from '@/components/ChipPicker';
 import { Sheet } from '@/components/Sheet';
+import { ToggleRow } from '@/components/ToggleRow';
 import { useToast } from '@/components/Toast';
 import { newId, useSettings, useStore, useWallets, ValidationError } from '@/db';
 import type { DebtState } from '@/domain/debts';
@@ -199,13 +200,12 @@ export function PayInPartsSheet({ debt, state, onClose }: PayInPartsSheetProps) 
               }}
               error={errors.startOn}
             />
-            <label className="flex min-h-[44px] cursor-pointer items-start gap-3">
-              <input type="checkbox" checked={autoPost} onChange={(e) => setAutoPost(e.target.checked)} className="mt-0.5 h-6 w-6 shrink-0 accent-brand" />
-              <span>
-                <span className="block font-medium">Проводить само</span>
-                <span className="block text-sm text-muted">Платёж запишется в день срока, когда вы откроете приложение. Иначе он будет ждать в «Платежах».</span>
-              </span>
-            </label>
+            <ToggleRow
+              label="Проводить само"
+              hint="Платёж запишется в день срока, когда вы откроете приложение. Иначе он будет ждать в «Платежах»."
+              checked={autoPost}
+              onChange={setAutoPost}
+            />
           </>
         )}
       </div>

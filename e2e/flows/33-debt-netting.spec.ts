@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { dismissToasts, expect, goSection, money, openApp, shot, sheet, tapAmount, test } from '../helpers';
+import { dismissToasts, expect, goSection, money, openApp, shot, sheet, tapAmount, test, debtAction, openActionMenu, closeActionMenu } from '../helpers';
 
 /** «Сегодня» закреплено: 15 октября 2026 (четверг). */
 const NOW = new Date('2026-10-15T09:00:00Z');
@@ -69,7 +69,7 @@ test.describe('33. Долги: взаимозачёт и «платить час
     // «Получать частями» по долгу «мне должны»: 500 по 150 → 4 платежа, последний 15 января
     await goSection(page, 'Долги');
     await page.getByRole('list', { name: 'Мне должны' }).getByRole('link', { name: /^Алишер/ }).click();
-    await page.getByRole('button', { name: 'Получать частями' }).click();
+    await debtAction(page, 'Получать частями');
     const parts = sheet(page, 'Получать частями');
     await expect(parts).toBeVisible();
     await tapAmount(page, '150');
@@ -82,7 +82,9 @@ test.describe('33. Долги: взаимозачёт и «платить час
     await dismissToasts(page);
     // план виден на странице долга; второй план тому же долгу не создать — кнопка спрятана
     await expect(page.getByTestId('debt-plan')).toContainText('каждый месяц');
-    await expect(page.getByRole('button', { name: 'Получать частями' })).toHaveCount(0);
+    const menu33 = await openActionMenu(page);
+    await expect(menu33.getByRole('button', { name: 'Получать частями' })).toHaveCount(0);
+    await closeActionMenu(page);
     await shot(page, '33-debt-plan-card', testInfo);
 
     // правило видно среди регулярных платежей
