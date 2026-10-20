@@ -211,7 +211,7 @@ describe('случайные файлы: изменения человека м�
           const rows2 = mut.shuffle ? [...extra, ...rows1].reverse() : [...rows1, ...extra];
           const b = parseIt(rows2);
           if (!b) return;
-          let choices: Record<string, string> = {};
+          const choices: Record<string, string> = {};
           if (mut.choose) {
             const p0 = await plan(b);
             for (const w of p0.wallets) if (w.target.kind === 'blocked' && w.candidates[0]) choices[w.key] = w.candidates[0].id;
