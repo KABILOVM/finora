@@ -176,6 +176,8 @@ test.describe('39. Главная: компактная, с «Требует в�
   test('спокойно: ни долгов, ни просрочек — строки «Требует внимания» нет, а блоки не прыгают', async ({ page }) => {
     await page.clock.install({ time: NOW });
     await openApp(page);
+    // деньги на руках есть (доход больше траты): иначе честно появилось бы «Денег не хватит с …»
+    await addTx(page, { kind: 'income', amount: '1000', category: 'Зарплата' });
     await addTx(page, { amount: '50', category: 'Еда' });
     await dismissToasts(page);
     await goSection(page, 'Главная');
