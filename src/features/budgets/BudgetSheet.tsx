@@ -1,14 +1,19 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/Button';
 import { Field, inputClasses } from '@/components/Field';
 import { Glyph } from '@/components/Glyph';
+import { cn } from '@/lib/cn';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { ValidationError, useStore } from '@/db';
+import { formatMinor } from '@/domain/money';
 import type { Budget, Category, CurrencyCode, LocalRow, Minor, UUID } from '@/domain/types';
 import { UNDO_MS } from '@/features/transactions/txActions';
+import { categoryCovers } from '@/domain/budgetLevels';
+import { limitHints } from './budgetHints';
 import { budgetLabel } from './budgetText';
+import { useSpendingHistory } from './useSpendingHistory';
 
 const TOTAL = 'total';
 
@@ -21,8 +26,8 @@ export interface BudgetSheetProps {
   budgets: readonly LocalRow<Budget>[];
   /** Категории расходов, которые можно выбрать (не архивные). */
   categories: readonly LocalRow<Category>[];
-  /** Все категории (для названия при правке). */
-  names: ReadonlyMap<UUID, Pick<Category, 'name' | 'icon' | 'color'>>;
+  /** Все категории (для названия при правке и родителей подкатегорий). */
+  names: ReadonlyMap<UUID, Pick<Category, 'name' | 'icon' | 'color'> & { parentId?: UUID | null }>;
   onClose: () => void;
 }
 
@@ -31,6 +36,42 @@ function existingNote(existing: LocalRow<Budget> | undefined, isTotal: boolean):
   if (!existing) return null;
   if (existing.archivedAt !== null) return 'Такой лимит лежал в архиве — вернём его с новой суммой.';
   return isTotal ? 'Общий лимит уже есть — изменим сумму.' : 'Лимит на эту категорию уже есть — изменим сумму.';
+}
+
+interface ScopeOption {
+  id: UUID;
+  name: string;
+  /** Глубина вложенности: подкатегории идут под родителем со сдвигом. */
+  depth: number;
+}
+
+/** Категории деревом: родитель, под ним его подкатегории. Категория, чьего родителя нет в списке (архив), считается верхней. */
+function scopeOptions(categories: readonly LocalRow<Category>[]): ScopeOption[] {
+  const ids = new Set(categories.map((c) => c.id));
+  const children = new Map<UUID | null, LocalRow<Category>[]>();
+  for (const c of categories) {
+    const parent = c.parentId !== null && ids.has(c.parentId) ? c.parentId : null;
+    children.set(parent, [...(children.get(parent) ?? []), c]);
+  }
+  const out: ScopeOption[] = [];
+  const seen = new Set<UUID>();
+  const walk = (parent: UUID | null, depth: number) => {
+    for (const c of children.get(parent) ?? []) {
+      if (seen.has(c.id)) continue; // защита от петли в данных
+      seen.add(c.id);
+      out.push({ id: c.id, name: c.name, depth });
+      walk(c.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+/** «Лимит охватывает и подкатегории: Фрукты, Овощи» — до трёх названий, остальные числом. */
+function subcategoriesNote(subs: readonly ScopeOption[]): string {
+  const shown = subs.slice(0, 3).map((o) => o.name);
+  const rest = subs.length - shown.length;
+  return `Лимит охватывает и подкатегории: ${shown.join(', ')}${rest > 0 ? ` и ещё ${rest}` : ''}.`;
 }
 
 /** Новый лимит или правка суммы: «на что» (все расходы или категория) и сколько в месяц. Деньги вводятся только через AmountInput. */
@@ -51,6 +92,27 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
 
   const existing = !editing && scope !== null ? budgets.find((b) => b.categoryId === categoryId) : undefined;
   const label = editing ? budgetLabel(budget.categoryId, names) : null;
+  const options = useMemo(() => scopeOptions(categories), [categories]);
+  const parentOf = useMemo(() => new Map([...names].map(([id, c]) => [id, c.parentId ?? null] as const)), [names]);
+  // Лимит на категорию охватывает и её подкатегории: говорим об этом, когда они есть
+  const subcategories = useMemo(
+    () => (categoryId === null ? [] : options.filter((o) => o.id !== categoryId && categoryCovers(categoryId, o.id, parentOf))),
+    [options, categoryId, parentOf],
+  );
+
+  // Подсказки суммы по прошлым тратам в той же области, что и лимит
+  const history = useSpendingHistory();
+  const hints = useMemo(
+    () => (history && scope !== null ? limitHints(history, categoryId, parentOf, base) : null),
+    [history, scope, categoryId, parentOf, base],
+  );
+  const chips = useMemo(() => {
+    if (!hints || scope === null) return [];
+    const list: { label: string; value: Minor }[] = [];
+    if (hints.lastMonthLimit !== null) list.push({ label: 'Как в прошлом месяце', value: hints.lastMonthLimit });
+    if (hints.typicalLimit !== null && hints.typicalLimit !== hints.lastMonthLimit) list.push({ label: 'Как обычно', value: hints.typicalLimit });
+    return list;
+  }, [hints, scope]);
 
   const pickScope = (value: string) => {
     setScope(value);
@@ -164,14 +226,46 @@ export function BudgetSheet({ budget, base, budgets, categories, names, onClose 
                   </option>
                 )}
                 <option value={TOTAL}>Все расходы</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+                {options.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.depth > 0 ? `${'\u00a0\u00a0'.repeat(o.depth)}↳ ${o.name}` : o.name}
                   </option>
                 ))}
               </select>
             </Field>
             {note && <p className="text-sm font-medium text-brand">{note}</p>}
+            {subcategories.length > 0 && <p className="text-sm text-muted">{subcategoriesNote(subcategories)}</p>}
+          </div>
+        )}
+
+        {hints && (hints.lastMonth !== null || hints.typical !== null) && (
+          <div className="flex flex-col gap-2" data-testid="limit-hints">
+            <p className="text-center text-sm text-muted">
+              Потрачено: {hints.lastMonth !== null ? `в прошлом месяце ${formatMinor(hints.lastMonth, base)}` : 'в прошлом месяце ничего'}
+              {hints.typical !== null ? `, обычно ${formatMinor(hints.typical, base)} в месяц` : ''}.
+            </p>
+            {chips.length > 0 && (
+              <div role="group" aria-label="Подсказки суммы" className="flex flex-wrap justify-center gap-2">
+                {chips.map((c) => (
+                  <button
+                    key={c.label}
+                    type="button"
+                    aria-pressed={amount === c.value}
+                    onClick={() => {
+                      setAmount(c.value);
+                      setAmountError(null);
+                      setFormError(null);
+                    }}
+                    className={cn(
+                      'inline-flex min-h-[44px] items-center rounded-full border px-3.5 text-sm font-semibold transition-colors',
+                      amount === c.value ? 'border-brand bg-brand/10 text-brand' : 'border-border bg-surface text-text hover:bg-surface-2',
+                    )}
+                  >
+                    {c.label} · {formatMinor(c.value, base)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
+import { Notice } from '@/components/Notice';
+import { SectionHeader } from '@/components/SectionHeader';
+import { Skeleton } from '@/components/Skeleton';
 import { cn } from '@/lib/cn';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
@@ -84,6 +88,7 @@ export default function BudgetsPage() {
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [params, setParams] = useSearchParams();
 
   const progressById = useMemo(() => {
     const map = new Map<string, BudgetProgress>();
@@ -106,6 +111,14 @@ export default function BudgetsPage() {
   };
 
   const ready = data !== undefined && data !== null && !('overflow' in data);
+
+  // Ссылка «Поставить лимит» (/budgets?new=1) открывает форму сразу; параметр убираем, чтобы «Назад» и обновление не открывали её снова
+  const wantsNew = params.get('new') === '1';
+  useEffect(() => {
+    if (!wantsNew || !ready) return;
+    setSheet({ kind: 'new' });
+    setParams({}, { replace: true });
+  }, [wantsNew, ready, setParams]);
   const addButton = (
     // Короткая подпись, как на «Кошельках» и «Категориях»: с длинной на узком экране (320px) заголовок «Бюджеты» обрезался до «Бюд…».
     // Для скринридера и поиска по имени кнопка по-прежнему «Добавить лимит».
@@ -116,10 +129,27 @@ export default function BudgetsPage() {
 
   let content;
   if (data === undefined) {
+    // Заглушка в форме будущего списка; слово «Считаем…» — для скринридера
     content = (
-      <p role="status" className="py-10 text-center text-muted">
-        Считаем…
-      </p>
+      <div role="status" aria-busy="true">
+        <span className="sr-only">Считаем…</span>
+        <Card padding="none" aria-hidden="true">
+          <div className="divide-y divide-border">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-11 w-11 !rounded-2xl" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </div>
+                <Skeleton className="mt-3 h-3 w-full !rounded-pill" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
     );
   } else if (data === null) {
     content = <EmptyState icon="cloud" title="Данные ещё загружаются" text="Подождите немного: после первой загрузки здесь появятся лимиты." />;
@@ -130,6 +160,11 @@ export default function BudgetsPage() {
     content = (
       <>
         <MonthSwitcher month={month} max={currentMonth} onChange={(m) => setPicked(m === currentMonth ? null : m)} />
+        {month !== currentMonth && (
+          <p data-testid="budgets-past-note" className="mb-2 px-1 text-sm text-muted">
+            Лимиты действуют на каждый месяц: прошлые месяцы считаются по сегодняшним суммам лимитов.
+          </p>
+        )}
         <LevelChips items={progress.ok ? progress.items : []} />
         {active.length === 0 ? (
           <EmptyState
@@ -178,7 +213,11 @@ export default function BudgetsPage() {
           </Card>
         )}
 
-        {summary.excludedCount > 0 && <p className="mt-3 text-sm font-medium text-warning">{excludedText(summary.excludedCount, base)}</p>}
+        {summary.excludedCount > 0 && (
+          <Notice tone="warning" className="mt-3">
+            {excludedText(summary.excludedCount, base)}
+          </Notice>
+        )}
 
         {active.length > 0 && <AlertsToggle />}
 
@@ -228,9 +267,7 @@ export default function BudgetsPage() {
       <div className="flex flex-col gap-4">
         <ForecastCard forecast={forecast} />
         <section aria-labelledby="budgets-title">
-          <h2 id="budgets-title" className="mb-2 text-lg font-bold">
-            Лимиты на месяц
-          </h2>
+          <SectionHeader id="budgets-title">Лимиты на месяц</SectionHeader>
           {content}
         </section>
       </div>

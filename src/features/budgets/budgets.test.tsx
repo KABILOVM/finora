@@ -775,3 +775,113 @@ describe('подсказка о темпе «лимит закончится о�
   });
 });
 
+/** Траты прошлых месяцев для подсказок: Еда 437 в сентябре и 200 в августе (на руках есть деньги: доход в сентябре). */
+async function pastSetup(s: Store): Promise<Ids> {
+  const i = await ids(s);
+  const income = (await s.db.categories.toArray()).find((c) => c.kind === 'income' && c.name === 'Зарплата');
+  await s.transactions.create({ kind: 'income', walletId: i.cash, amountMinor: 900_000, categoryId: income?.id ?? null, occurredOn: '2026-08-01' });
+  await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 43_700, categoryId: i.cats['Еда'] ?? null, occurredOn: '2026-09-10' });
+  await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 20_000, categoryId: i.cats['Еда'] ?? null, occurredOn: '2026-08-05' });
+  return i;
+}
+
+const hints = () => document.querySelector('[data-testid="limit-hints"]');
+const openNew = async () => {
+  await user.click(screen.getByRole('button', { name: 'Добавить лимит' }));
+  await findByRole('dialog', { name: 'Новый лимит' });
+};
+
+describe('новый лимит: подсказки суммы по прошлым тратам', () => {
+  it('«в прошлом месяце» и «обычно» и две кнопки с округлёнными суммами; нажатие подставляет сумму', async () => {
+    const td = await openPage(pastSetup);
+    await openNew();
+    choose('На что лимит', 'Транспорт');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(hints()).toBeNull(); // у категории без прошлых трат подсказки нет
+    choose('На что лимит', 'Еда');
+    await waitFor(() => expect(hints()).not.toBeNull());
+    expect(text(hints())).toContain(`в прошлом месяце ${fmt(43_700)}`);
+    expect(text(hints())).toContain(`обычно ${fmt(31_850)} в месяц`);
+    await user.click(screen.getByRole('button', { name: new RegExp(`^Как в прошлом месяце · ${fmt(44_000)}`) }));
+    expect((screen.getByRole('textbox', { name: /^Сумма лимита/ }) as HTMLInputElement).value).toBe('440');
+    await user.click(screen.getByRole('button', { name: new RegExp(`^Как обычно · ${fmt(32_000)}`) }));
+    expect((screen.getByRole('textbox', { name: /^Сумма лимита/ }) as HTMLInputElement).value).toBe('320');
+    expect(screen.getByRole('button', { name: /^Как обычно/ })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((await storeOf(td).db.budgets.toArray())[0]).toMatchObject({ amountMinor: 32_000 });
+  });
+
+  it('общий лимит: подсказка по всем расходам; у области без трат подсказки нет', async () => {
+    await openPage(pastSetup);
+    await openNew();
+    choose('На что лимит', 'Все расходы');
+    await waitFor(() => expect(hints()).not.toBeNull());
+    expect(text(hints())).toContain(fmt(43_700));
+    choose('На что лимит', 'Транспорт');
+    await waitFor(() => expect(hints()).toBeNull());
+  });
+
+  it('в прошлых месяцах трат не было — блока подсказок нет совсем', async () => {
+    await openPage(baseSetup); // траты только в октябре (текущий месяц)
+    await openNew();
+    expect(hints()).toBeNull();
+  });
+});
+
+describe('новый лимит: подкатегории', () => {
+  const withChild = async (s: Store) => {
+    const i = await pastSetup(s);
+    const child = await s.categories.create({ name: 'Фрукты', kind: 'expense', parentId: i.cats['Еда'] ?? null, color: '#16a34a', icon: '🍎' });
+    await s.transactions.create({ kind: 'expense', walletId: i.cash, amountMinor: 10_000, categoryId: child.id, occurredOn: '2026-09-12' });
+    return i;
+  };
+
+  it('подкатегория стоит под родителем со сдвигом; у родителя сказано, что лимит охватывает и её', async () => {
+    await openPage(withChild);
+    await openNew();
+    const options = Array.from((screen.getByRole('combobox', { name: 'На что лимит' }) as HTMLSelectElement).options).map((o) => norm(o.textContent));
+    const food = options.indexOf('Еда');
+    expect(food).toBeGreaterThan(-1);
+    expect(options[food + 1]).toBe('↳ Фрукты');
+    choose('На что лимит', 'Еда');
+    expect(screen.getByText('Лимит охватывает и подкатегории: Фрукты.')).toBeTruthy();
+    // в подсказку входят траты подкатегории: 437 + 100 в сентябре
+    await waitFor(() => expect(text(hints())).toContain(`в прошлом месяце ${fmt(53_700)}`));
+  });
+});
+
+describe('экран «Бюджеты»: ссылки и пояснения', () => {
+  it('/budgets?new=1 открывает «Новый лимит» сразу; после закрытия форма не возвращается', async () => {
+    await openPage(baseSetup, '/budgets?new=1');
+    await findByRole('dialog', { name: 'Новый лимит' });
+    await user.click(screen.getByRole('button', { name: 'Закрыть' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('«Поставить лимит» на «Главной» ведёт на /budgets?new=1', async () => {
+    await openWidget(baseSetup);
+    const link = await waitFor(() => screen.getByRole('link', { name: 'Поставить лимит' }));
+    expect(link.getAttribute('href')).toBe('/budgets?new=1');
+  });
+
+  it('прошлый месяц: пояснение, что считается по сегодняшним лимитам; в текущем его нет', async () => {
+    await openPage(baseSetup);
+    expect(document.querySelector('[data-testid="budgets-past-note"]')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    expect(text(document.querySelector('[data-testid="budgets-past-note"]'))).toContain('по сегодняшним суммам лимитов');
+  });
+
+  it('имя строки лимита несёт суммы: сколько потрачено, из скольких, сколько осталось', async () => {
+    await openPage(async (s) => {
+      const i = await baseSetup(s);
+      await s.budgets.create({ categoryId: i.cats['Еда'] ?? null, amountMinor: 50_000 });
+    });
+    const name = rowButton('Еда').getAttribute('aria-label') ?? '';
+    expect(norm(name)).toContain(`${fmt(40_000)} из ${fmt(50_000)}`);
+    expect(norm(name)).toMatch(/[^.]\. Изменить$/); // одна точка перед «Изменить», а не «с.. Изменить»
+  });
+});
+
