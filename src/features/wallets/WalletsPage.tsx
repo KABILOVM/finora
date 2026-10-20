@@ -1,20 +1,27 @@
 import { Glyph } from '@/components/Glyph';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
+import { IconButton } from '@/components/IconButton';
 import { Icon } from '@/components/Icon';
 import { ListRow } from '@/components/ListRow';
 import { MoneyText } from '@/components/MoneyText';
+import { Notice } from '@/components/Notice';
 import { PageHeader } from '@/components/PageHeader';
+import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
-import { useBalances, useSettings, useStore, useWallets } from '@/db';
-import { formatMinor } from '@/domain/money';
-import type { LocalRow, Wallet } from '@/domain/types';
+import { BALANCES_OVERFLOW_MESSAGE, useBalancesState, useRecurringRules, useSettings, useStore, useWallets } from '@/db';
+import { addMinor, formatMinor } from '@/domain/money';
+import type { Category, CurrencyCode, LocalRow, Minor, RecurringRule, Wallet } from '@/domain/types';
+import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
+import { walletOpsQuery } from '@/features/transactions/txFilters';
 import { formatDayInline } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { enteredNote } from '@/rates/enteredText';
+import { viewRule } from '@/recurring/ruleView';
 import { useRates } from '@/rates/hooks';
 import { GoalLine } from './GoalLine';
 import { ReconcileSheet } from './ReconcileSheet';
@@ -23,7 +30,31 @@ import { WALLET_KIND_LABELS } from './walletUi';
 import { useGoals } from './useGoals';
 import { WalletSheet } from './WalletSheet';
 
+/** «Интернет, Свет и ещё 2»: до трёх названий регулярных платежей (как в их списке: заметка, иначе категория), остальные числом. */
+function rulesList(
+  rules: readonly LocalRow<RecurringRule>[],
+  wallets: ReadonlyMap<string, LocalRow<Wallet>>,
+  categories: ReadonlyMap<string, LocalRow<Category>>,
+  base: CurrencyCode,
+): string {
+  const names = rules.slice(0, 3).map((r) => viewRule(r, wallets, categories, base).title);
+  const rest = rules.length - names.length;
+  return rest > 0 ? `${names.join(', ')} и ещё ${rest}` : names.join(', ');
+}
+
 type SheetState = { kind: 'new' } | { kind: 'edit'; wallet: LocalRow<Wallet> };
+
+/** Остаток не посчитан (слишком большая сумма): прочерк, а не «0». */
+function Unavailable() {
+  return (
+    <>
+      <span aria-hidden="true" className="text-muted">
+        —
+      </span>
+      <span className="sr-only">остаток недоступен</span>
+    </>
+  );
+}
 
 function WalletIcon({ wallet }: { wallet: Wallet }) {
   return <Glyph value={wallet.icon} color={wallet.color} size={40} />;
@@ -34,8 +65,13 @@ export default function WalletsPage() {
   const store = useStore();
   const toast = useToast();
   const wallets = useWallets({ includeArchived: true });
-  const balances = useBalances();
+  const balancesState = useBalancesState();
+  const balances = balancesState?.ok ? balancesState.balances : undefined;
   const settings = useSettings();
+  const rules = useRecurringRules();
+  const walletIndex = useWalletIndex();
+  const categoryIndex = useCategoryIndex();
+  const [params, setParams] = useSearchParams();
   const { getRate } = useRates();
   const goals = useGoals();
 
@@ -55,14 +91,47 @@ export default function WalletsPage() {
     () => (base && balances ? computeWalletsTotal(active, balances, base, getRate) : undefined),
     [active, balances, base, getRate],
   );
+  // Остатки по валютам (активные кошельки): «TJS 3 500 с. · USD 120 $» — видно, из чего сложилось «Всего»
+  const byCurrency = useMemo(() => {
+    if (!balances) return [];
+    const sums = new Map<CurrencyCode, Minor>();
+    try {
+      for (const w of active) sums.set(w.currency, addMinor(sums.get(w.currency) ?? 0, balances.get(w.id) ?? 0));
+    } catch (e) {
+      if (e instanceof RangeError) return [];
+      throw e;
+    }
+    // базовая валюта первой, остальные в порядке кошельков
+    return [...sums.entries()].sort(([a], [b]) => Number(b === base) - Number(a === base));
+  }, [active, balances, base]);
+  // Остаток в архиве: фразу «в итог не входят» показываем, только когда там есть что не учесть
+  const archivedHasMoney = !!balances && archived.some((w) => (balances.get(w.id) ?? 0) !== 0);
+  // Регулярные платежи, привязанные к кошельку в архивной очереди: после архивации они перестанут проводиться
+  const archivingRules = useMemo(
+    () => (archiving && rules ? rules.filter((r) => r.walletId === archiving.id || r.toWalletId === archiving.id) : []),
+    [archiving, rules],
+  );
 
-  if (wallets === undefined || balances === undefined || settings === undefined) {
+  // Ссылка «Создать кошелёк» (/wallets?new=1) открывает форму сразу; параметр убираем, чтобы «Назад» и обновление её не открывали снова
+  const wantsNew = params.get('new') === '1';
+  const canAdd = !!base && wallets !== undefined;
+  useEffect(() => {
+    if (!wantsNew || !canAdd) return;
+    setSheet({ kind: 'new' });
+    setParams({}, { replace: true });
+  }, [wantsNew, canAdd, setParams]);
+
+  if (wallets === undefined || balancesState === undefined || settings === undefined) {
     return (
       <>
         <PageHeader title="Кошельки" />
-        <p role="status" className="py-10 text-center text-muted">
-          Загрузка…
-        </p>
+        <div role="status" aria-busy="true">
+          <span className="sr-only">Загрузка…</span>
+          <div aria-hidden="true" className="flex flex-col gap-4">
+            <Skeleton className="h-28 !rounded-card" />
+            <Skeleton className="h-52 !rounded-card" />
+          </div>
+        </div>
       </>
     );
   }
@@ -101,7 +170,8 @@ export default function WalletsPage() {
     }
   };
 
-  const balanceOf = (w: Wallet) => balances.get(w.id) ?? 0;
+  const overflow = balancesState.ok === false;
+  const balanceOf = (w: Wallet): Minor => balances?.get(w.id) ?? 0;
   const archivingBalance = archiving ? balanceOf(archiving) : 0;
 
   return (
@@ -115,6 +185,12 @@ export default function WalletsPage() {
         }
       />
 
+      {overflow && (
+        <Notice tone="danger" className="mb-4">
+          {BALANCES_OVERFLOW_MESSAGE}. Откройте операции кошелька: среди них есть слишком большая сумма.
+        </Notice>
+      )}
+
       {base && total !== undefined && (
         <Card className="mb-4">
           <div className="text-sm font-semibold text-muted">Всего</div>
@@ -126,6 +202,11 @@ export default function WalletsPage() {
                 {total.approximate && <span title="Приблизительно, по курсу">≈ </span>}
                 <MoneyText minor={total.totalMinor} currency={base} tone="none" />
               </div>
+              {(byCurrency.length > 1 || (byCurrency.length === 1 && byCurrency[0]![0] !== base)) && (
+                <p className="mt-1 text-sm text-muted" data-testid="wallets-by-currency">
+                  {byCurrency.map(([currency, minor]) => formatMinor(minor, currency)).join(' · ')}
+                </p>
+              )}
               {total.approximate && total.viaOtherRates && (
                 <p className="mt-1 text-sm text-muted">Итог пересчитан по курсам и поэтому приблизительный.</p>
               )}
@@ -135,17 +216,17 @@ export default function WalletsPage() {
                 </p>
               )}
               {total.stale.length > 0 && (
-                <p role="alert" className="mt-1 text-sm text-warning">
-                  Курс устарел:{' '}
-                  {total.stale.map((s) => `${s.currency} (от ${formatDayInline(s.asOf)})`).join(', ')}. Обновите курсы в Настройках.
-                </p>
+                <Notice tone="warning" role="alert" className="mt-2">
+                  Курс устарел: {total.stale.map((s) => `${s.currency} (от ${formatDayInline(s.asOf)})`).join(', ')}. Обновите курсы в
+                  Настройках.
+                </Notice>
               )}
               {total.missing.length > 0 && (
-                <p role="alert" className="mt-1 text-sm text-warning">
+                <Notice tone="warning" role="alert" className="mt-2">
                   Нет курса, в итог не вошли: {total.missing.join(', ')}. Задайте курс в Настройках.
-                </p>
+                </Notice>
               )}
-              <p className="mt-1 text-sm text-muted">Архивные кошельки в итог не входят.</p>
+              {archivedHasMoney && <p className="mt-1 text-sm text-muted">Архивные кошельки в итог не входят.</p>}
             </>
           )}
         </Card>
@@ -167,18 +248,22 @@ export default function WalletsPage() {
               return (
                 <li key={w.id}>
                   <div className="flex items-center pr-2">
+                    {/* вся строка — ссылка на историю кошелька (период «Всё время»), правка — отдельная кнопка-карандаш */}
                     <ListRow
                       className="min-w-0 flex-1"
+                      to={`/transactions?${walletOpsQuery(w.id)}`}
                       leading={<WalletIcon wallet={w} />}
                       title={w.name}
                       subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
-                      trailing={<MoneyText minor={bal} currency={w.currency} tone={bal < 0 ? 'expense' : 'none'} className="font-semibold" />}
-                      onClick={() => setSheet({ kind: 'edit', wallet: w })}
+                      trailing={
+                        overflow ? (
+                          <Unavailable />
+                        ) : (
+                          <MoneyText minor={bal} currency={w.currency} tone={bal < 0 ? 'expense' : 'none'} className="font-semibold" />
+                        )
+                      }
                     />
-                    {/* узкие px: на экране 320 px каждая клетка нужна названию и валюте кошелька */}
-                    <Button variant="ghost" className="shrink-0 !px-2" aria-label={`Сверка: ${w.name}`} onClick={() => setReconciling(w)}>
-                      Сверка
-                    </Button>
+                    <IconButton icon="edit" label={`Изменить: ${w.name}`} onClick={() => setSheet({ kind: 'edit', wallet: w })} />
                   </div>
                   {goal && <GoalLine item={goal} />}
                 </li>
@@ -211,7 +296,8 @@ export default function WalletsPage() {
                       leading={<WalletIcon wallet={w} />}
                       title={w.name}
                       subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
-                      trailing={<MoneyText minor={balanceOf(w)} currency={w.currency} tone="none" />}
+                      to={`/transactions?${walletOpsQuery(w.id)}`}
+                      trailing={overflow ? <Unavailable /> : <MoneyText minor={balanceOf(w)} currency={w.currency} tone="none" />}
                     />
                     <Button variant="secondary" aria-label={`Вернуть: ${w.name}`} disabled={busy} onClick={() => void restore(w)}>
                       Вернуть
@@ -246,6 +332,14 @@ export default function WalletsPage() {
                 }
               : undefined
           }
+          onReconcile={
+            sheet.kind === 'edit'
+              ? () => {
+                  setReconciling(sheet.wallet);
+                  setSheet(null);
+                }
+              : undefined
+          }
         />
       )}
       {/* берём кошелёк из живого списка, а не снимок на момент нажатия: правка с другого устройства не должна давать ложное «не совпадает» */}
@@ -263,7 +357,18 @@ export default function WalletsPage() {
           archiving ? (
             <>
               <p>Кошелёк пропадёт из выбора, но все операции по нему и остаток сохранятся. Его можно вернуть из архива.</p>
-              {archivingBalance !== 0 && (
+              {archivingRules.length > 0 && base && walletIndex && categoryIndex && (
+                <p className="mt-2 font-medium text-warning">
+                  К кошельку привязаны регулярные платежи: {rulesList(archivingRules, walletIndex, categoryIndex, base)}. После архивации они перестанут проводиться — перенесите
+                  их на другой кошелёк в «Регулярных платежах» или уберите в архив.
+                </p>
+              )}
+              {overflow && (
+                <p className="mt-2 font-medium text-warning">
+                  Остаток кошелька не удалось посчитать: в «Всего» он учитываться не будет. Если деньги переехали — сначала внесите перевод.
+                </p>
+              )}
+              {!overflow && archivingBalance !== 0 && (
                 <p className="mt-2 font-medium text-warning">
                   В кошельке остаток {formatMinor(archivingBalance, archiving.currency)}: в «Всего» он учитываться не будет. Если деньги
                   переехали — сначала внесите перевод.

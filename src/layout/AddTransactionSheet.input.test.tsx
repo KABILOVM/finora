@@ -6,6 +6,7 @@ import {
   amountField,
   clickSave,
   currentPath,
+  currentSearch,
   dateInput,
   liveTxs,
   openAddSheet,
@@ -151,6 +152,7 @@ describe('нет кошельков', () => {
     expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Создать кошелёк' }));
     await waitFor(() => expect(currentPath()).toBe('/wallets'));
+    expect(currentSearch()).toBe('?new=1'); // сразу форма «Новый кошелёк»
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -163,6 +165,10 @@ describe('нет кошельков', () => {
     await openAddSheet(td);
     expect(screen.getByText('Все кошельки в архиве')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Открыть кошельки' })).toBeInTheDocument();
+    // подсказка предлагает вернуть кошелёк из архива — форму нового кошелька поверх списка не открываем
+    await user.click(screen.getByRole('button', { name: 'Открыть кошельки' }));
+    await waitFor(() => expect(currentPath()).toBe('/wallets'));
+    expect(currentSearch()).toBe('');
   });
 
   it('закрытие крестиком вызывает onClose', async () => {

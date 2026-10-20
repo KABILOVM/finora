@@ -7,9 +7,7 @@ import type { Page } from '@playwright/test';
 /** Что видит человек: названия кошельков с остатками (экран «Кошельки») и число строк в «Операциях» за всё время. */
 async function snapshotOf(page: Page) {
   await goSection(page, 'Кошельки');
-  const wallets = (await page.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Сверка:/ }) }).allInnerTexts()).map((t) =>
-    norm(t).replace(/\s*Сверка\s*$/, ''),
-  );
+  const wallets = (await page.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Изменить:/ }) }).allInnerTexts()).map(norm);
   await goSection(page, 'Операции');
   await page.getByRole('button', { name: 'Всё время' }).click();
   const rows = await page.getByRole('region').getByRole('button').allInnerTexts();

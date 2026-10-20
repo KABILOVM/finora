@@ -90,7 +90,11 @@ function NoWalletSheet({ onClose, hasArchived }: { onClose: () => void; hasArchi
             : 'Деньги учитываются по кошелькам: например, «Наличные» или «Карта». Создайте первый — это занимает полминуты.'
         }
         action={
-          <Button size="lg" onClick={() => navigate('/wallets', { replace: true })}>
+          <Button size="lg" onClick={() => {
+              // все кошельки в архиве: показываем список (архив там можно раскрыть), а не форму нового кошелька поверх него
+              if (hasArchived) navigate('/wallets', { replace: true });
+              else navigate('/wallets?new=1', { replace: true });
+            }}>
             {hasArchived ? 'Открыть кошельки' : 'Создать кошелёк'}
           </Button>
         }

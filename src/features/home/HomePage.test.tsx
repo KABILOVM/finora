@@ -418,7 +418,7 @@ describe('пустые состояния', () => {
       },
     });
     expect(screen.getByText('Начните с кошелька')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Создать кошелёк' })).toHaveAttribute('href', '/wallets');
+    expect(screen.getByRole('link', { name: 'Создать кошелёк' })).toHaveAttribute('href', '/wallets?new=1');
     expect(total()).toBeNull();
   });
 

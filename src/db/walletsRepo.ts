@@ -34,6 +34,11 @@ export interface WalletsRepo {
   /** В архив (скрыть из выбора). Операции и остаток сохраняются. Повтор безопасен. */
   archive(id: UUID): Promise<LocalRow<Wallet>>;
   restore(id: UUID): Promise<LocalRow<Wallet>>;
+  /**
+   * Валюта кошелька закреплена: по нему есть операции (даже удалённые) или регулярные платежи. Одно правило для хранилища
+   * и для формы, чтобы форма не разрешала то, что хранилище потом откажет.
+   */
+  isCurrencyLocked(id: UUID): Promise<boolean>;
 }
 
 const INPUT_KEYS = ['name', 'currency', 'kind', 'openingBalanceMinor', 'color', 'icon', 'goalMinor', 'goalOn'] as const;
@@ -71,7 +76,7 @@ export function createWalletsRepo(ctx: RepoContext): WalletsRepo {
   const { db } = ctx;
 
   /** Любая операция (даже удалённая) по кошельку закрепляет его валюту: иначе при восстановлении операции суммы поменяют смысл. */
-  async function hasTransactions(walletId: UUID): Promise<boolean> {
+  async function currencyLocked(walletId: UUID): Promise<boolean> {
     if ((await db.transactions.where('walletId').equals(walletId).count()) > 0) return true;
     if ((await db.transactions.where('toWalletId').equals(walletId).count()) > 0) return true;
     // регулярный платёж тоже закрепляет валюту: его сумма задана в валюте кошелька
@@ -83,9 +88,9 @@ export function createWalletsRepo(ctx: RepoContext): WalletsRepo {
       const cur = await getLiveWallet(ctx, id);
       const next = change(cur);
       if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
-      if (next.currency !== cur.currency && (await hasTransactions(id))) {
+      if (next.currency !== cur.currency && (await currencyLocked(id))) {
         throw new ValidationError(
-          `Нельзя менять валюту кошелька «${cur.name}»: по нему уже есть операции. Заведите новый кошелёк.`,
+          `Нельзя менять валюту кошелька «${cur.name}»: по нему уже есть операции или регулярные платежи. Заведите новый кошелёк.`,
         );
       }
       const row = withDirtyGroups<LocalRow<Wallet>>('wallets', cur, { ...cur, ...next, ...touch(ctx).fields });
@@ -132,5 +137,7 @@ export function createWalletsRepo(ctx: RepoContext): WalletsRepo {
     async restore(id) {
       return save(id, (cur) => ({ ...dataOf(cur), archivedAt: null }));
     },
+
+    isCurrencyLocked: currencyLocked,
   };
 }
