@@ -23,10 +23,10 @@ test.describe('30. Аналитика', () => {
     await dismissToasts(page);
 
     await goSection(page, 'Аналитика');
-    // октябрь: 120 + 300 + 45 = 465; сентябрь: 200 → на 133% больше
+    // октябрь: 120 + 300 + 45 = 465. Месяц идёт, поэтому сравниваем с 1–15 сентября: там трат не было (200 — 20 сентября)
     await expect(summary(page)).toContainText('Расходы за октябрь 2026');
     await expect(summary(page)).toContainText(money('465 с.'));
-    await expect(page.getByTestId('analytics-trend')).toHaveText('На 133% больше, чем в прошлом месяце');
+    await expect(page.getByTestId('analytics-trend')).toHaveText('За те же 15 дней прошлого месяца расходов не было');
     await expect(summary(page)).toContainText(money('3 000 с.'));
     await shot(page, '30-analytics-top', testInfo);
 
@@ -36,13 +36,18 @@ test.describe('30. Аналитика', () => {
     expect(await h('bar-expense-2026-10')).toBeGreaterThan(0);
     expect(await h('bar-income-2026-10')).toBeGreaterThan(await h('bar-expense-2026-10'));
 
-    // категории: «Еда» первая, «новая»; «Продукты» (сентябрьская) — «нет трат»
+    // категории: «Еда» первая, «новая», с долей 90% (420 из 465); «Продукты» (20 сентября) в сравнение с 1–15 сентября не попали
     const cats = page.getByRole('list', { name: 'Расходы по категориям' });
     await expect(cats.getByRole('listitem').first()).toContainText('Еда');
     await expect(cats.getByRole('listitem').first()).toContainText(money('420 с.'));
+    await expect(cats.getByRole('listitem').first()).toContainText('90%');
     await expect(cats.getByRole('listitem').first()).toContainText('новая');
-    await expect(cats.getByRole('listitem').filter({ hasText: 'Продукты' })).toContainText('нет трат');
+    await expect(cats.getByRole('listitem').filter({ hasText: 'Продукты' })).toHaveCount(0);
     await shot(page, '30-analytics-categories', testInfo);
+    // тёмная тема: те же цвета денег и полоски долей читаются на тёмном фоне
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await shot(page, '30-analytics-categories-dark', testInfo);
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
 
     // чистый капитал: деньги в кошельках 3 000 − 120 − 300 − 45 − 200 (сентябрьская трата) = 2 335, долгов нет
     await expect(page.getByTestId('networth-total')).toContainText(money('2 335 с.'));
@@ -52,7 +57,7 @@ test.describe('30. Аналитика', () => {
     await shot(page, '30-analytics-networth', testInfo);
 
     // дни недели: 12 октября — понедельник (300), 15-го — четверг (120 + 45); понедельников до 15-го два (5 и 12)
-    await expect(page.getByTestId('weekday-summary')).toContainText('Чаще всего вы тратите по понедельникам');
+    await expect(page.getByTestId('weekday-summary')).toContainText('Больше всего вы тратите по понедельникам');
     await expect(page.getByTestId('weekday-summary')).toContainText(money('150 с.')); // 300 ÷ 2 понедельника (5 и 12 октября)
     await shot(page, '30-analytics-weekdays', testInfo);
 
@@ -77,6 +82,60 @@ test.describe('30. Аналитика', () => {
     await expect(summary(page)).toContainText(money('200 с.'));
     await expect(page.getByTestId('analytics-trend')).toHaveText('В прошлом месяце расходов не было');
     expect(norm(await page.getByRole('list', { name: 'Самые крупные расходы' }).innerText())).toContain('базар');
+  });
+
+  test('месяц и вкладка в адресе: «Назад» из списка операций возвращает на тот же месяц; нажатие на месяц под графиком листает', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    await openApp(page);
+    await addTx(page, { amount: '120', category: 'Еда', note: 'обед' });
+    await addTx(page, { amount: '200', category: 'Продукты', note: 'базар', date: '2026-09-20' });
+    await dismissToasts(page);
+
+    await goSection(page, 'Аналитика');
+    await expect(page).toHaveURL(/#\/analytics$/);
+    // под графиком — числа выбранного месяца; нажатие на «сен» показывает сентябрь и пишет его в адрес
+    await expect(page.getByTestId('monthly-selected')).toContainText('Октябрь 2026');
+    // кнопки месяцев под графиком — не уже и не ниже 44 px (на 320 px их шесть в одном ряду)
+    await page.setViewportSize({ width: 320, height: 700 });
+    const monthButtons = page.getByRole('group', { name: 'Месяцы' }).getByRole('button');
+    await expect(monthButtons).toHaveCount(6);
+    const boxes = await Promise.all((await monthButtons.all()).map((b) => b.boundingBox()));
+    for (const box of boxes) {
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(43.9);
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(43.9);
+    }
+    await page.getByRole('button', { name: 'Сентябрь 2026' }).click();
+    await expect(summary(page)).toContainText('Расходы за сентябрь 2026');
+    await expect(page).toHaveURL(/#\/analytics\?month=2026-09$/);
+    await shot(page, '30-analytics-month-in-url', testInfo);
+
+    // в операции категории и обратно: сентябрь остаётся, а не прыгает на октябрь
+    await page.getByRole('list', { name: 'Расходы по категориям' }).getByRole('link', { name: /Продукты/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Операции' })).toBeVisible();
+    await page.goBack();
+    await expect(summary(page)).toContainText('Расходы за сентябрь 2026');
+
+    // вкладка «Календарь» тоже в адресе и переживает обновление страницы
+    await page.getByRole('radio', { name: 'Календарь' }).click();
+    await expect(page).toHaveURL(/#\/analytics\?tab=calendar&month=2026-09$/);
+    await page.reload();
+    await expect(page.getByRole('radio', { name: 'Календарь' })).toBeChecked();
+  });
+
+  test('листание месяцев и вкладок не засоряет «Назад»: возврат ведёт туда, откуда пришли', async ({ page }) => {
+    await page.clock.install({ time: NOW });
+    await openApp(page);
+    await addTx(page, { amount: '120', category: 'Еда', note: 'обед' });
+    await dismissToasts(page);
+
+    await goSection(page, 'Аналитика');
+    await page.getByRole('button', { name: 'Предыдущий месяц' }).click();
+    await expect(page).toHaveURL(/#\/analytics\?month=2026-09$/);
+    await page.getByRole('radio', { name: 'Календарь' }).click();
+    await expect(page).toHaveURL(/#\/analytics\?tab=calendar&month=2026-09$/);
+    // обе перестановки заменили запись истории: один шаг «Назад» уводит с «Аналитики», а не на предыдущий месяц
+    await page.goBack();
+    await expect(page).not.toHaveURL(/analytics/);
   });
 
   test('пустой экран понятен; после первой траты «Аналитика» показывает текущий месяц', async ({ page }, testInfo) => {

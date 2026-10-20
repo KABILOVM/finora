@@ -50,7 +50,7 @@ export function WeekdayBars({ points, base }: { points: readonly WeekdayPoint[];
           'Расходов в этом месяце пока нет.'
         ) : (
           <>
-            Чаще всего вы тратите по {WEEKDAYS_DATIVE_PLURAL[best.weekday]}: в среднем{' '}
+            Больше всего вы тратите по {WEEKDAYS_DATIVE_PLURAL[best.weekday]}: в среднем{' '}
             <span className="money font-semibold text-text">{formatMinor(best.avgMinor, base)}</span> в такой день.
           </>
         )}
