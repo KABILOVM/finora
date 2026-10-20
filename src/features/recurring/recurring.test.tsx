@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually, write } from '@/app/testkit';
 import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import { uuidV5, type RecurringInput, type Store } from '@/db';
+import { formatMinor } from '@/domain/money';
 import { addDays } from '@/lib/dates';
-import { opsDeps, pinToday, showApp, storeOf, table, unpinToday, type OpsDeps } from '@/features/transactions/__fixtures__/opsKit';
+import { chip, opsDeps, pinToday, setDateInput, showApp, storeOf, table, unpinToday, type OpsDeps } from '@/features/transactions/__fixtures__/opsKit';
 import { resetAutoPostState } from '@/recurring/autoPostState';
 import RecurringPage from './RecurringPage';
 
@@ -88,7 +89,7 @@ describe('экран «Регулярные платежи»: разделы', (
     // красным и словами
     const overdue = screen.getByText('Просрочено на 3 дня');
     expect(overdue.className).toContain('text-danger');
-    expect(screen.getByRole('heading', { name: 'Просроченные' }).className).toContain('text-danger');
+    expect(screen.getByRole('heading', { name: 'Просроченные' }).querySelector('span')?.className).toContain('text-danger');
     expect(screen.getByRole('button', { name: /^Провести: Старый долг/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Провести: Аренда, Сегодня/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Провести: Интернет/ })).toBeInTheDocument();
@@ -417,3 +418,134 @@ function within(root: HTMLElement, name: string): HTMLElement {
   if (!hit) throw new Error(`В окне нет кнопки «${name}»`);
   return hit;
 }
+
+describe('«Провести» просроченный платёж: дата оплаты', () => {
+  const overdueRule = (s: Store, ids: { cash: string }) =>
+    rule(s, { walletId: ids.cash, startOn: day(-3), frequency: 'weekly', intervalN: 8, note: 'Старый долг', amountMinor: 20_000 });
+  const openPosting = async () => {
+    await user.click(screen.getByRole('button', { name: /^Провести: Старый долг/ }));
+    return findByRole('dialog', { name: 'Провести платёж' });
+  };
+
+  it('по умолчанию платёж записывается на сегодня (когда оплатили), а id остаётся от даты по расписанию', async () => {
+    const { td } = await openPage(async (s, ids) => void (await overdueRule(s, ids)));
+    const dlg = await openPosting();
+    expect(dlg).toHaveTextContent(`Дата платежа: 12.10.2026`); // по расписанию
+    expect(chip('Дата оплаты', 'Сегодня').getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(dlg, 'Провести'));
+    await waitFor(() => expect(screen.getByText(/Платёж проведён: Старый долг/)).toBeInTheDocument());
+    const [tx] = await live(td);
+    const r = (await storeOf(td).db.recurring_rules.toArray())[0];
+    expect(tx).toMatchObject({ occurredOn: TODAY, recurringRuleId: r?.id, id: await uuidV5(r?.id ?? '', day(-3)) });
+    // этот платёж больше не просрочен и не предлагается заново
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Провести: Старый долг/ })).toBeNull());
+  });
+
+  it('«Вчера» — операция на вчера', async () => {
+    const { td } = await openPage(async (s, ids) => void (await overdueRule(s, ids)));
+    const dlg = await openPosting();
+    await user.click(chip('Дата оплаты', 'Вчера'));
+    await user.click(within(dlg, 'Провести'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((await live(td))[0]?.occurredOn).toBe(day(-1));
+  });
+
+  it('платёж по долгу нельзя записать раньше даты долга; пустую дату оплаты окно не пропускает', async () => {
+    const { td } = await openPage(async (s, ids) => {
+      const debt = await s.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 500_000, currency: 'TJS', openedOn: day(-10) });
+      await rule(s, { walletId: ids.cash, startOn: day(-3), frequency: 'weekly', intervalN: 8, note: 'Платёж банку', amountMinor: 25_000, debtId: debt.id });
+    });
+    await user.click(screen.getByRole('button', { name: /^Провести: Платёж банку/ }));
+    const dlg = await findByRole('dialog', { name: 'Провести платёж' });
+    await user.click(chip('Дата оплаты', 'Другая дата'));
+    const input = dlg.querySelector('input[type="date"]') as HTMLInputElement;
+    setDateInput(input, day(-20));
+    await user.click(within(dlg, 'Провести'));
+    await waitFor(() => expect(dlg).toHaveTextContent('Платёж не может быть раньше даты долга'));
+    setDateInput(input, '');
+    await user.click(within(dlg, 'Провести'));
+    await waitFor(() => expect(dlg).toHaveTextContent('Укажите дату оплаты'));
+    expect(await live(td)).toHaveLength(0);
+    // правильная дата — платёж проходит
+    setDateInput(input, day(-2));
+    await user.click(within(dlg, 'Провести'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((await live(td))[0]?.occurredOn).toBe(day(-2));
+  });
+
+  it('платёж в срок или впереди: поля «Дата оплаты» нет, операция на дату по расписанию', async () => {
+    const { td } = await openPage(async (s, ids) => void (await rule(s, { walletId: ids.cash, startOn: day(2), note: 'Интернет' })));
+    await user.click(screen.getByRole('button', { name: /^Провести: Интернет/ }));
+    const dlg = await findByRole('dialog', { name: 'Провести платёж' });
+    expect(screen.queryByRole('group', { name: 'Дата оплаты' })).toBeNull();
+    await user.click(within(dlg, 'Провести'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((await live(td))[0]?.occurredOn).toBe(day(2));
+  });
+});
+
+describe('экран «Регулярные платежи»: сводка «в месяц» и порядок блоков', () => {
+  const fmtMoney = (minor: number, currency = 'TJS') => (formatMinor(minor, currency) ?? '').replace(/[\s  ]+/g, ' ').trim();
+  const summary = () => document.querySelector<HTMLElement>('[data-testid="recurring-monthly"]');
+  const norm = (s: string | null | undefined) => (s ?? '').replace(/[\s  ]+/g, ' ').trim();
+
+  it('платежи и поступления в месяц по валютам; недельный пересчитан, перевод, архив и закончившийся не входят', async () => {
+    await openPage(async (s, ids) => {
+      await rule(s, { walletId: ids.cash, startOn: day(10), note: 'Аренда', amountMinor: 50_000 });
+      await rule(s, { walletId: ids.cash, startOn: day(10), note: 'Спортзал', amountMinor: 12_000, frequency: 'weekly', intervalN: 2 }); // 12 000 × 52 / 24 = 26 000
+      await rule(s, { walletId: ids.cash, startOn: day(10), note: 'Зарплата', kind: 'income', categoryId: ids.salary, amountMinor: 200_000 });
+      await rule(s, { walletId: ids.usd, startOn: day(10), note: 'Облако', amountMinor: 1_000 });
+      await rule(s, { walletId: ids.cash, toWalletId: ids.card, startOn: day(10), note: 'Перевод', kind: 'transfer', amountMinor: 99_999 });
+      const old = await rule(s, { walletId: ids.cash, startOn: day(10), note: 'Старый', amountMinor: 11_111 });
+      await s.recurring.archive(old.id);
+      await rule(s, { walletId: ids.cash, startOn: day(-60), endOn: day(-30), note: 'Закончился', amountMinor: 22_222 });
+    });
+    const text = norm(summary()?.textContent);
+    expect(text).toContain(fmtMoney(76_000)); // 500 + 260
+    expect(text).toContain(fmtMoney(200_000));
+    expect(text).toContain(fmtMoney(1_000, 'USD'));
+    for (const absent of [99_999, 11_111, 22_222]) expect(text).not.toContain(fmtMoney(absent));
+    // базовая валюта первой
+    expect(text.indexOf(fmtMoney(76_000))).toBeLessThan(text.indexOf(fmtMoney(1_000, 'USD')));
+  });
+
+  it('план по закрытому долгу остановлен — в «В месяц» его нет', async () => {
+    await openPage(async (s, ids) => {
+      await rule(s, { walletId: ids.cash, startOn: day(10), note: 'Аренда', amountMinor: 10_000 });
+      const debt = await s.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 500_000, currency: 'TJS', openedOn: '2026-10-01' });
+      await rule(s, { walletId: ids.cash, startOn: day(10), note: 'Платёж банку', amountMinor: 25_000, debtId: debt.id });
+      await s.debts.close(debt.id);
+    });
+    await waitFor(() => expect(summary()).not.toBeNull());
+    const text = norm(summary()?.textContent);
+    expect(text).toContain(fmtMoney(10_000));
+    expect(text).not.toContain(fmtMoney(35_000));
+  });
+
+  it('нет платежей, которые можно посчитать, — карточки нет', async () => {
+    await openPage(async (s, ids) => {
+      await rule(s, { walletId: ids.cash, toWalletId: ids.card, startOn: day(10), kind: 'transfer', amountMinor: 1_000 });
+    });
+    expect(summary()).toBeNull();
+  });
+
+  it('порядок: сводка → Просроченные → Сегодня → Скоро → «Похоже на подписки» → Все правила', async () => {
+    await openPage(async (s, ids) => {
+      await rule(s, { walletId: ids.cash, startOn: day(-3), frequency: 'weekly', intervalN: 8, note: 'Старый долг' });
+      await rule(s, { walletId: ids.cash, startOn: TODAY, note: 'Аренда' });
+      await rule(s, { walletId: ids.cash, startOn: day(10), note: 'Интернет' });
+      for (const d of ['2026-07-03', '2026-08-03', '2026-09-03', '2026-10-03']) {
+        await s.transactions.create({ kind: 'expense', walletId: ids.cash, amountMinor: 4_900, occurredOn: d, note: 'Netflix' });
+      }
+    });
+    await waitFor(() => expect(document.querySelector('[data-testid="subscriptions-card"]')).not.toBeNull());
+    const el = (sel: string) => document.querySelector(sel) as HTMLElement;
+    const before = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const h = (name: string) => screen.getByRole('heading', { name: new RegExp(`^${name}`) });
+    expect(before(summary()!, h('Просроченные'))).toBe(true);
+    expect(before(h('Просроченные'), h('Сегодня'))).toBe(true);
+    expect(before(h('Сегодня'), h('Скоро'))).toBe(true);
+    expect(before(h('Скоро'), el('[data-testid="subscriptions-card"]'))).toBe(true);
+    expect(before(el('[data-testid="subscriptions-card"]'), h('Все правила'))).toBe(true);
+  });
+});

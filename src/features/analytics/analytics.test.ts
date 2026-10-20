@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { CategoryTotal } from '@/db/queries';
-import { categoryDeltas, monthlySeries, topExpenses, weekdayOf, weekdayProfile } from './analytics';
+import { shiftMonth } from '@/features/transactions/txFilters';
+import {
+  categoryDeltas,
+  compareThroughDay,
+  isCompareReady,
+  monthlySeries,
+  previousPhrase,
+  summarizeThroughDay,
+  topExpenses,
+  weekdayOf,
+  weekdayProfile,
+} from './analytics';
 
 type Tx = Parameters<typeof monthlySeries>[0][number] & { id: string };
 let n = 0;
@@ -181,5 +192,68 @@ describe('topExpenses: самые крупные траты', () => {
 
   it('месяц без расходов — пусто', () => {
     expect(topExpenses(txs, '2026-07', 'TJS')).toEqual([]);
+  });
+});
+
+describe('сравнение идущего месяца с тем же отрезком прошлого', () => {
+  it('compareThroughDay: пока месяц идёт — столько дней, сколько прошло; месяц закончился или дни сравнялись — null (целиком)', () => {
+    expect(compareThroughDay(15, '2026-09')).toBe(15); // 15 октября против 1–15 сентября
+    expect(compareThroughDay(1, '2026-09')).toBe(1);
+    expect(compareThroughDay(29, '2026-09')).toBe(29);
+    expect(compareThroughDay(30, '2026-09')).toBeNull(); // в сентябре 30 дней: 30 октября — это уже весь сентябрь
+    expect(compareThroughDay(31, '2026-09')).toBeNull(); // 31 октября против 30 сентября
+    expect(compareThroughDay(null, '2026-09')).toBeNull(); // прошедший месяц
+    expect(compareThroughDay(30, '2026-02')).toBeNull();
+    expect(compareThroughDay(27, '2026-02')).toBe(27); // февраль 28 дней
+    expect(compareThroughDay(28, '2026-02')).toBeNull(); // 28 марта против 28 февраля — весь февраль
+    expect(compareThroughDay(28, '2028-02')).toBe(28); // високосный февраль: 29 дней
+    expect(compareThroughDay(29, '2028-02')).toBeNull();
+    expect(compareThroughDay(10, shiftMonth('2027-01', -1))).toBe(10); // январь против декабря: через границу года
+  });
+
+  it('isCompareReady: первые два числа месяца не сравниваем, с третьего — да; закончившийся месяц сравнивается целиком', () => {
+    expect(isCompareReady(null)).toBe(true);
+    expect(isCompareReady(1)).toBe(false);
+    expect(isCompareReady(2)).toBe(false);
+    expect(isCompareReady(3)).toBe(true);
+    expect(isCompareReady(15)).toBe(true);
+  });
+
+  it('categoryDeltas: категория, которой не было в тех же днях, но была позже в прошлом месяце, — «later», а не «new»', () => {
+    const cat = (categoryId: string, totalMinor: number) => ({ categoryId, totalMinor }) as CategoryTotal;
+    const rows = categoryDeltas(
+      [cat('food', 800), cat('gift', 300)],
+      [], // первые 15 дней прошлого месяца: пусто
+      [cat('food', 2_000)], // а целиком в прошлом месяце «Еда» была (20-го)
+    );
+    const by = Object.fromEntries(rows.map((r) => [r.key, r]));
+    expect(by['food']).toMatchObject({ status: 'later', percent: null, previousMinor: 0 });
+    expect(by['gift']).toMatchObject({ status: 'new' });
+    // без третьего аргумента — прежнее поведение
+    expect(categoryDeltas([cat('food', 800)], []).map((r) => r.status)).toEqual(['new']);
+    // в тех днях трат было — обычное сравнение, «later» не вмешивается
+    expect(categoryDeltas([cat('food', 800)], [cat('food', 400)], [cat('food', 2_000)])[0]).toMatchObject({ status: 'up', percent: 100 });
+  });
+
+  it('summarizeThroughDay: только дни с 1-го по заданный включительно, остальные и чужие месяцы не входят', () => {
+    const txs = [
+      tx({ occurredOn: '2026-09-01', kind: 'expense', baseAmountMinor: 100 }),
+      tx({ occurredOn: '2026-09-15', kind: 'expense', baseAmountMinor: 200 }),
+      tx({ occurredOn: '2026-09-16', kind: 'expense', baseAmountMinor: 4_000 }),
+      tx({ occurredOn: '2026-10-05', kind: 'expense', baseAmountMinor: 8_000 }),
+      tx({ occurredOn: '2026-09-10', kind: 'expense', baseAmountMinor: 50, debtId: 'd' }), // долг — не расход
+    ];
+    expect(summarizeThroughDay(txs, '2026-09', 15, 'TJS').expenseMinor).toBe(300);
+    expect(summarizeThroughDay(txs, '2026-09', 16, 'TJS').expenseMinor).toBe(4_300);
+    expect(summarizeThroughDay(txs, '2026-09', 1, 'TJS').expenseMinor).toBe(100);
+  });
+
+  it('previousPhrase: «в прошлом месяце» или «за те же N дней прошлого месяца» со склонением', () => {
+    expect(previousPhrase(null)).toBe('в прошлом месяце');
+    expect(previousPhrase(1)).toBe('за первое число прошлого месяца');
+    expect(previousPhrase(2)).toBe('за те же 2 дня прошлого месяца');
+    expect(previousPhrase(3)).toBe('за те же 3 дня прошлого месяца');
+    expect(previousPhrase(15)).toBe('за те же 15 дней прошлого месяца');
+    expect(previousPhrase(21)).toBe('за те же 21 день прошлого месяца');
   });
 });

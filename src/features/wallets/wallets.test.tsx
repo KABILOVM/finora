@@ -9,7 +9,7 @@ import { formatMinor } from '@/domain/money';
 import type { RateTable, Transaction } from '@/domain/types';
 import { createRateService } from '@/rates/service';
 import { createMemoryRateStorage } from '@/rates/storage';
-import { reconcileWallet } from './reconcile';
+import { bankDifference, reconcileWallet } from './reconcile';
 import { computeWalletsTotal } from './walletTotals';
 import { cleanName, sameName } from './walletUi';
 import WalletsPage from './WalletsPage';
@@ -31,6 +31,18 @@ const tx = (over: Partial<TxIn>): TxIn => ({
   toAmountMinor: null,
   deletedAt: null,
   ...over,
+});
+
+describe('bankDifference', () => {
+  it('в банке больше — разница положительная, меньше — отрицательная, минус (кредитка) считается от нуля вниз', () => {
+    expect(bankDifference(140_000, false, 137_655)).toBe(2_345);
+    expect(bankDifference(100_000, false, 137_655)).toBe(-37_655);
+    expect(bankDifference(5_000, true, 1_000)).toBe(-6_000); // в банке −50, в приложении +10
+    expect(bankDifference(0, true, 0)).toBe(0);
+  });
+  it('сумма не помещается в целое — RangeError', () => {
+    expect(() => bankDifference(Number.MAX_SAFE_INTEGER, true, 10)).toThrow(RangeError);
+  });
 });
 
 describe('reconcileWallet', () => {
@@ -261,10 +273,10 @@ describe('экран «Кошельки»', () => {
     if (!cash) throw new Error('нет кошелька');
     await write(() => s.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 500, occurredOn: '2026-10-05' }));
 
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Валюта' })).toBeDisabled());
-    expect(screen.getByText(/по этому кошельку уже есть операции/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/по этому кошельку уже есть операции/)).toBeInTheDocument());
   });
 
   it('если репозиторий всё же отверг смену валюты (ValidationError) — понятное объяснение у поля валюты, ничего не меняется', async () => {
@@ -273,7 +285,7 @@ describe('экран «Кошельки»', () => {
     vi.spyOn(s.wallets, 'update').mockRejectedValue(
       new ValidationError('Нельзя менять валюту кошелька «Наличные»: по нему уже есть операции. Заведите новый кошелёк.'),
     );
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     pick(screen.getByRole('combobox', { name: 'Валюта' }), 'USD');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
@@ -294,7 +306,7 @@ describe('экран «Кошельки»', () => {
       icon: '💳',
     }));
     await waitFor(() => expect(screen.getByText('Кредитка')).toBeInTheDocument());
-    await user.click(screen.getByText('Кредитка'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Кредитка' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     expect(screen.getByText(/начальный остаток отрицательный/)).toBeInTheDocument();
     await user.clear(screen.getByRole('textbox', { name: 'Название' }));
@@ -311,7 +323,7 @@ describe('экран «Кошельки»', () => {
     await write(() => s.wallets.create({ name: 'Старый', currency: 'TJS', kind: 'cash', openingBalanceMinor: 7_000, color: '#2563eb', icon: '💰' }));
     await waitFor(() => expect(screen.getByText('Старый')).toBeInTheDocument());
 
-    await user.click(screen.getByText('Старый'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Старый' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
     const confirm = await findByRole('alertdialog');
@@ -334,7 +346,7 @@ describe('экран «Кошельки»', () => {
     const s = store(td);
     const cash = (await s.db.wallets.toArray())[0];
     expect((await s.settings.get())?.defaultWalletId).toBe(cash?.id);
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
     await findByRole('alertdialog');
@@ -380,7 +392,9 @@ describe('экран «Кошельки»', () => {
     const gone = await write(() => s.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 99_999, occurredOn: '2026-10-07' }));
     await write(() => s.transactions.softDelete(gone.id));
 
-    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
     const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
     await waitFor(() => expect(dialog).toHaveTextContent('= Остаток'));
     const text = dialog.textContent ?? '';
@@ -389,6 +403,47 @@ describe('экран «Кошельки»', () => {
     expect(text).toContain('1 операция');
     expect(text).not.toContain(formatMinor(99_999, 'TJS')); // удалённая не считается
     expect(await waitFor(() => screen.getByText('Совпадает с остатком на экране «Кошельки».'))).toBeInTheDocument();
+  });
+
+  it('«Сверить с банком»: разница видна, кнопка правит начальный остаток, остаток совпадает с банком, «Отменить» возвращает', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const cash = (await s.db.wallets.toArray())[0];
+    if (!cash) throw new Error('нет кошелька');
+    await write(() => s.wallets.update(cash.id, { openingBalanceMinor: 100_000 }));
+    await write(() => s.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 50_000, occurredOn: '2026-10-05' }));
+    await write(() => s.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 12_345, occurredOn: '2026-10-06' })); // в приложении 1376,55
+
+    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
+    await waitFor(() => expect(dialog).toHaveTextContent('= Остаток'));
+    // пока ничего не введено — кнопки исправления нет
+    expect(screen.queryByRole('button', { name: 'Исправить остаток' })).toBeNull();
+
+    // в банке 1400: в приложении не хватает 23,45
+    await user.type(screen.getByRole('textbox', { name: /^Сколько на самом деле/ }), '1400');
+    const diff = await waitFor(() => document.querySelector('[data-testid="bank-diff"]'));
+    expect(diff?.textContent).toBe(formatMinor(2_345, 'TJS'));
+    await user.click(screen.getByRole('button', { name: 'Исправить остаток' }));
+    await waitFor(async () => expect((await s.db.wallets.get(cash.id))?.openingBalanceMinor).toBe(102_345));
+    expect(await s.db.transactions.filter((t) => t.deletedAt === null).count()).toBe(2); // операции не тронуты
+
+    // «Отменить» в тосте возвращает прежний начальный остаток
+    await user.click(await findByRole('button', { name: 'Отменить' }));
+    await waitFor(async () => expect((await s.db.wallets.get(cash.id))?.openingBalanceMinor).toBe(100_000));
+  });
+
+  it('«Сверить с банком»: если сумма совпадает, сказано «Совпадает», а исправлять нечего', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const cash = (await s.db.wallets.toArray())[0];
+    if (!cash) throw new Error('нет кошелька');
+    await write(() => s.wallets.update(cash.id, { openingBalanceMinor: 100_000 }));
+    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await findByRole('dialog', { name: 'Сверка: Наличные' });
+    await user.type(await findByRole('textbox', { name: /^Сколько на самом деле/ }), '1000');
+    await waitFor(() => expect(screen.getByText('Совпадает: в приложении столько же.')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Исправить остаток' })).toBeNull();
   });
 
   it('«Сверка» с операцией с некорректной суммой говорит, где её найти, а не отправляет в несуществующий раздел', async () => {
@@ -400,7 +455,9 @@ describe('экран «Кошельки»', () => {
     // так бывает только с повреждёнными данными: все пути записи такую сумму не пропускают
     await write(() => s.db.transactions.update(bad.id, { amountMinor: 0 }));
 
-    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
     const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
     await waitFor(() => expect(dialog).toHaveTextContent('Пропущено операций с некорректной суммой: 1'));
     const text = (dialog.textContent ?? '').replace(/\s+/g, ' ');

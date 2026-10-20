@@ -12,7 +12,13 @@ import {
   table,
   unpinToday,
 } from '@/features/transactions/__fixtures__/opsKit';
+import { useLocation } from 'react-router-dom';
 import AnalyticsPage, { expenseTrend } from './AnalyticsPage';
+
+/** Строка запроса адреса: по ней видно, что экран записал (?tab=…&month=…). */
+function SearchProbe() {
+  return <p data-testid="search">{useLocation().search}</p>;
+}
 
 /** «Сегодня» = четверг 15 октября 2026. Октябрь: расходы 12,50 (обед) + 3 (такси) + 109 (кофе, 10 $ по курсу) = 124,50; сентябрь: 45 + 2 = 47. */
 beforeEach(pinToday);
@@ -61,6 +67,14 @@ describe('expenseTrend: расходы месяца против прошлог�
     [0, 0, null],
     [0, 100, 'На 100% меньше, чем в прошлом месяце'],
   ])('%i против %i → %s', (cur, prev, expected) => expect(expenseTrend(cur, prev)).toBe(expected));
+
+  it.each([
+    [200, 100, 'На 100% больше, чем за те же 15 дней прошлого месяца'],
+    [50, 100, 'На 50% меньше, чем за те же 15 дней прошлого месяца'],
+    [100, 100, 'Столько же, сколько за те же 15 дней прошлого месяца'],
+    [100, 0, 'За те же 15 дней прошлого месяца расходов не было'],
+    [0, 0, null],
+  ])('идущий месяц, первые 15 дней: %i против %i → %s', (cur, prev, expected) => expect(expenseTrend(cur, prev, 15)).toBe(expected));
 });
 
 describe('экран «Аналитика»', () => {
@@ -69,7 +83,8 @@ describe('экран «Аналитика»', () => {
     const summary = tid('analytics-summary')!;
     expect(text(summary)).toContain('Расходы за октябрь 2026');
     expect(text(summary)).toContain(fmt(12_450));
-    expect(text(tid('analytics-trend'))).toBe('На 165% больше, чем в прошлом месяце'); // (124,50 − 47) ÷ 47
+    // 15 октября сравниваем с 1–15 сентября (там только «без категории» 2,00), а не со всем сентябрем (47)
+    expect(text(tid('analytics-trend'))).toBe('На 6125% больше, чем за те же 15 дней прошлого месяца'); // (124,50 − 2) ÷ 2
     expect(text(summary)).toContain(fmt(500_000, 'always'));
     expect(text(summary)).toContain(fmt(487_550, 'always')); // доходы 5 000 − расходы 124,50
   });
@@ -95,8 +110,10 @@ describe('экран «Аналитика»', () => {
     expect(rows[0]).toContain(fmt(12_150)); // обед 12,50 + кофе 109
     expect(rows[0]).toContain('новая');
     expect(rows[1]).toContain('Транспорт');
+    // идущий месяц сравнивается с теми же днями прошлого: «Продукты» (20 сентября) в сравнение не попали, «без категории» (3 сентября) — да
     const gone = rows.filter((r) => r.includes('нет трат'));
-    expect(gone.some((r) => r.includes('Продукты') && r.includes(`В прошлом месяце ${fmt(4_500)}`))).toBe(true);
+    expect(gone.some((r) => r.includes('Без категории') && r.includes(`За те же 15 дней прошлого месяца ${fmt(200)}`))).toBe(true);
+    expect(rows.some((r) => r.includes('Продукты'))).toBe(false);
     const food = list.querySelector<HTMLAnchorElement>('a[data-testid^="compare-"]')!;
     expect(food.getAttribute('href')).toMatch(/^\/transactions\?month=2026-10&category=[\w-]+&kind=expense$/);
     expect(tid('compare-none')?.getAttribute('href')).toBe('/transactions?month=2026-10&category=none&kind=expense');
@@ -111,7 +128,7 @@ describe('экран «Аналитика»', () => {
   it('дни недели: самый «дорогой» день выделен и назван словами, среднее считается по числу таких дней', async () => {
     await openPage();
     // среды октября до 15-го: 7 и 14 → расход 14-го (такси 3 + кофе 109) ÷ 2 = 56; четверги 1, 8, 15 → 12,50 ÷ 3 = 4,16
-    expect(text(tid('weekday-summary'))).toBe(`Чаще всего вы тратите по средам: в среднем ${fmt(5_600)} в такой день.`);
+    expect(text(tid('weekday-summary'))).toBe(`Больше всего вы тратите по средам: в среднем ${fmt(5_600)} в такой день.`);
     expect(heightOf('weekday-bar-2')).toBeGreaterThan(heightOf('weekday-bar-3'));
     expect(heightOf('weekday-bar-0')).toBe(0); // по понедельникам не тратили
   });
@@ -147,7 +164,7 @@ describe('экран «Аналитика»', () => {
     expect(text(tid('analytics-summary'))).toContain('Расходы за сентябрь 2026');
   });
 
-  it.each(['/analytics?month=2027-03', '/analytics?month=ой', '/analytics?month='])('%s — открывается текущий месяц', async (path) => {
+  it.each(['/analytics?month=2027-03', '/analytics?month=ой', '/analytics?month=', '/analytics?month=0000-01', '/analytics?month=1999-12'])('%s — открывается текущий месяц', async (path) => {
     await openPage({ path });
     expect(text(tid('analytics-summary'))).toContain('Расходы за октябрь 2026');
   });
@@ -196,7 +213,7 @@ describe('«Темп трат» для идущего месяца', () => {
     const projection = tid('pace-projection')!;
     expect(text(projection)).toContain(`≈ ${fmt(25_730)}`);
     expect(text(projection)).toContain('(15 из 31)');
-    expect(text(tid('pace-previous'))).toBe(`В прошлом месяце было ${fmt(4_700)}`);
+    expect(text(tid('pace-previous'))).toBe(`В прошлом месяце целиком было ${fmt(4_700)}`);
   });
 
   it('в прошедшем месяце карточки нет: прогнозировать нечего', async () => {
@@ -344,3 +361,227 @@ describe('«Чистый капитал»', () => {
   });
 });
 
+describe('экран «Аналитика»: вкладка и месяц в адресе', () => {
+  const search = () => document.querySelector('[data-testid="search"]')?.textContent ?? '';
+
+  async function openWithSearch(path: string) {
+    const td = opsDeps([table()], { setup: async (s) => void (await seedHistory(s)) });
+    await showApp(
+      <>
+        <AnalyticsPage />
+        <SearchProbe />
+      </>,
+      td,
+      path,
+    );
+    await findByRole('heading', { name: 'Аналитика', level: 1 });
+    await waitFor(() => expect(screen.queryByText('Считаем…')).toBeNull());
+  }
+
+  it('по умолчанию адрес чистый; листание месяца пишет ?month=, возврат к текущему — снова чистый адрес', async () => {
+    await openWithSearch('/analytics');
+    expect(search()).toBe('');
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    await waitFor(() => expect(search()).toBe('?month=2026-09'));
+    await user.click(screen.getByRole('button', { name: 'Следующий месяц' }));
+    await waitFor(() => expect(search()).toBe(''));
+  });
+
+  it('вкладка «Календарь» пишется в адрес и открывается по ссылке; «Обзор» — снова чистый адрес', async () => {
+    await openWithSearch('/analytics?tab=calendar');
+    expect(screen.getByRole('radio', { name: 'Календарь' }).getAttribute('aria-checked')).toBe('true');
+    await user.click(screen.getByRole('radio', { name: 'Обзор' }));
+    await waitFor(() => expect(search()).toBe(''));
+    expect(tid('analytics-summary')).not.toBeNull();
+    await user.click(screen.getByRole('radio', { name: 'Календарь' }));
+    await waitFor(() => expect(search()).toBe('?tab=calendar'));
+  });
+
+  it('вкладка и выбранный месяц живут вместе: ?tab=calendar&month=2026-08 сохраняет оба', async () => {
+    await openWithSearch('/analytics?month=2026-08');
+    await user.click(screen.getByRole('radio', { name: 'Календарь' }));
+    await waitFor(() => expect(search()).toBe('?tab=calendar&month=2026-08'));
+    await user.click(screen.getByRole('radio', { name: 'Обзор' }));
+    await waitFor(() => expect(search()).toBe('?month=2026-08'));
+    expect(text(tid('analytics-summary'))).toContain('Расходы за август 2026');
+  });
+
+  it('мусорная вкладка в адресе — «Обзор»', async () => {
+    await openWithSearch('/analytics?tab=что-то');
+    expect(screen.getByRole('radio', { name: 'Обзор' }).getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+describe('экран «Аналитика»: идущий и прошедший месяц', () => {
+  it('идущий месяц: сказано, что сравнение — с теми же днями прошлого', async () => {
+    await openPage();
+    expect(text(document.body)).toContain('Месяц ещё идёт, поэтому сравниваем с числами 1–15 прошлого месяца, а не со всем месяцем');
+  });
+
+  it('прошедший месяц сравнивается с целым прошлым: оговорки нет, текст прежний', async () => {
+    await openPage({ path: '/analytics?month=2026-09' });
+    expect(text(document.body)).not.toContain('Месяц ещё идёт');
+    expect(text(tid('analytics-trend'))).toBe('В прошлом месяце расходов не было');
+  });
+});
+
+describe('экран «Аналитика»: категории с долями', () => {
+  it('у категории — доля от всех расходов месяца и полоска; мелкая доля — «<1%»', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s);
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        const c = await s.categories.create({ name: 'Мелочь', kind: 'expense', color: '#f97316', icon: '🛒' });
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 1, categoryId: c.id, occurredOn: '2026-10-13' });
+      },
+    });
+    // расходы октября 124,51: «Еда» 121,50 → 97%, «Транспорт» 3,00 → 2%, «Мелочь» 0,01 → меньше процента
+    const rows = Array.from(screen.getByRole('list', { name: 'Расходы по категориям' }).querySelectorAll('li'));
+    const row = (name: string) => rows.find((li) => text(li).includes(name))!;
+    expect(text(row('Еда').querySelector('[data-testid^="share-"]'))).toBe('97%');
+    expect(text(row('Транспорт').querySelector('[data-testid^="share-"]'))).toBe('2%');
+    expect(text(row('Мелочь').querySelector('[data-testid^="share-"]'))).toBe('<1%');
+    // у самой мелкой категории полоска всё равно видна (не меньше 2% ширины)
+    expect(row('Мелочь').querySelector<HTMLElement>('span[class~="bg-brand/70"]')?.style.width).toBe('2%');
+  });
+
+  it('больше восьми категорий: восемь сразу, «Показать ещё 4 категории» раскрывает остальные, «Свернуть» возвращает', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s);
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        for (let i = 1; i <= 9; i++) {
+          const c = await s.categories.create({ name: `Кат ${i}`, kind: 'expense', color: '#f97316', icon: '🛒' });
+          await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 100 * i, categoryId: c.id, occurredOn: '2026-10-13' });
+        }
+      },
+    });
+    // Еда, Транспорт + 9 новых = 11 с тратами, и «Без категории» из первых дней сентября (в октябре её нет) = 12 строк
+    const list = () => screen.getByRole('list', { name: 'Расходы по категориям' });
+    expect(list().querySelectorAll('li')).toHaveLength(8);
+    const more = screen.getByRole('button', { name: 'Показать ещё 4 категории' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    await user.click(more);
+    expect(list().querySelectorAll('li')).toHaveLength(12);
+    const less = screen.getByRole('button', { name: 'Свернуть' });
+    expect(less.getAttribute('aria-expanded')).toBe('true');
+    await user.click(less);
+    expect(list().querySelectorAll('li')).toHaveLength(8);
+    expect(screen.getByRole('button', { name: 'Показать ещё 4 категории' })).toBeTruthy();
+  });
+
+  it('категория, которой не было в первых 15 днях сентября, но была 20-го, — «без сравнения», а не «новая»', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s); // «Продукты» в сентябре — 45 с. 20-го
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        const food = (await s.db.categories.toArray()).find((c) => c.name === 'Продукты' && c.kind === 'expense')!.id;
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 8_000, categoryId: food, occurredOn: '2026-10-14' });
+      },
+    });
+    const rows = Array.from(screen.getByRole('list', { name: 'Расходы по категориям' }).querySelectorAll('li')).map((li) => text(li));
+    const products = rows.find((r) => r.includes('Продукты'))!;
+    expect(products).toContain('без сравнения');
+    expect(products).not.toContain('новая');
+    expect(products).toContain('За те же 15 дней прошлого месяца трат не было');
+    // «Еда» в сентябре не тратилась совсем — для неё «новая» по-прежнему верно
+    expect(rows.find((r) => r.startsWith('Еда'))).toContain('новая');
+  });
+
+  it('идущий месяц без расходов, а в прошлом они были позже: «в этом месяце пока нет», а не «в этом и прошлом нет»', async () => {
+    await openPage({
+      setup: async (s) => {
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        const food = (await s.db.categories.toArray()).find((c) => c.name === 'Продукты' && c.kind === 'expense')!.id;
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 4_500, categoryId: food, occurredOn: '2026-09-20' });
+      },
+    });
+    const section = document.getElementById('analytics-categories')!.parentElement!;
+    expect(text(section)).toContain('В этом месяце расходов пока нет.');
+    expect(text(section)).not.toContain('в этом и прошлом месяце нет');
+  });
+});
+
+describe('экран «Аналитика»: первые дни и операции из будущего', () => {
+  it('2 октября: сравнения нет — «Месяц только начался», у категорий нет «новая» и «нет трат»', async () => {
+    vi.setSystemTime(new Date(2026, 9, 2, 12, 0, 0));
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s);
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        const food = (await s.db.categories.toArray()).find((c) => c.name === 'Еда' && c.kind === 'expense')!.id;
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 5_000, categoryId: food, occurredOn: '2026-10-02' });
+      },
+    });
+    expect(tid('analytics-trend')).toBeNull();
+    expect(text(tid('analytics-trend-early'))).toBe('Месяц только начался: сравнение с прошлым появится на 3-й день.');
+    const list = screen.getByRole('list', { name: 'Расходы по категориям' });
+    const rows = Array.from(list.querySelectorAll('li')).map((li) => text(li));
+    expect(rows).toHaveLength(1); // только «Еда» этого месяца; «Без категории» из сентября не вылезает строкой «нет трат»
+    expect(rows[0]).toContain('Еда');
+    expect(rows[0]).not.toMatch(/новая|нет трат|без сравнения|прошлого месяца/);
+    expect(text(tid('compare-note'))).toBe('Месяц только начался: сравнение с прошлым месяцем появится через пару дней.');
+  });
+
+  it('3 октября сравнение уже есть: с числами 1–3 сентября', async () => {
+    vi.setSystemTime(new Date(2026, 9, 3, 12, 0, 0));
+    await openPage();
+    expect(tid('analytics-trend-early')).toBeNull();
+    expect(text(tid('compare-note'))).toContain('с числами 1–3 прошлого месяца');
+  });
+
+  it('операция с датой позже сегодняшней: в итоге месяца есть, в сравнение не входит, об этом сказано', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s);
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        const rent = await s.categories.create({ name: 'Аренда', kind: 'expense', color: '#f97316', icon: '🏠' });
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 50_000, categoryId: rent.id, occurredOn: '2026-10-25' });
+      },
+    });
+    // 124,50 + 500 = 624,50 в заголовке; тренд считается по 124,50 (до сегодня) против 2 с. за те же дни сентября
+    expect(text(tid('analytics-summary'))).toContain(fmt(62_450));
+    expect(text(tid('analytics-trend'))).toBe('На 6125% больше, чем за те же 15 дней прошлого месяца');
+    expect(text(tid('analytics-planned'))).toContain(fmt(50_000));
+    // «Аренды» в сравнении нет (она ещё не случилась), а доли — от расходов до сегодняшнего дня
+    const rows = Array.from(screen.getByRole('list', { name: 'Расходы по категориям' }).querySelectorAll('li')).map((li) => text(li));
+    expect(rows.some((r) => r.includes('Аренда'))).toBe(false);
+    expect(text(tid(`share-${document.querySelector<HTMLElement>('a[data-testid^="compare-"]')!.dataset['testid']!.replace('compare-', '')}`))).toBe('97%');
+  });
+
+  it('без операций из будущего строки «Из них…» нет', async () => {
+    await openPage();
+    expect(tid('analytics-planned')).toBeNull();
+  });
+});
+
+describe('экран «Аналитика»: график по месяцам и порядок блоков', () => {
+  it('под графиком — числа выбранного месяца; нажатие на месяц переключает экран на него', async () => {
+    await openPage();
+    expect(text(tid('monthly-selected'))).toBe(
+      `Октябрь 2026: доходы ${fmt(500_000)} · расходы ${fmt(12_450)} · разница ${fmt(487_550, 'always')}`,
+    );
+    await user.click(screen.getByRole('button', { name: 'Сентябрь 2026' }));
+    await waitFor(() => expect(text(tid('analytics-summary'))).toContain('Расходы за сентябрь 2026'));
+    expect(text(tid('monthly-selected'))).toContain('Сентябрь 2026: доходы');
+    expect(screen.getByRole('button', { name: 'Сентябрь 2026' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('порядок: итог → темп → категории → крупные расходы → по месяцам → дни недели → деньги в кошельках', async () => {
+    await openPage();
+    await waitFor(() => expect(tid('networth-total')).not.toBeNull());
+    const order = [
+      tid('analytics-summary'),
+      tid('pace-card'),
+      document.getElementById('analytics-categories'),
+      document.getElementById('analytics-top'),
+      document.getElementById('analytics-months'),
+      document.getElementById('analytics-weekdays'),
+      tid('networth-total'),
+    ];
+    expect(order.every((el) => el !== null)).toBe(true);
+    // в jsdom нет вёрстки: порядок проверяем по положению в документе
+    const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    for (let i = 0; i < order.length - 1; i++) expect(follows(order[i]!, order[i + 1]!), `блок ${i} раньше блока ${i + 1}`).toBe(true);
+  });
+});

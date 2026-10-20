@@ -51,4 +51,34 @@ describe('Floating + useDismiss', () => {
     fire(document.body, new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(onSheetClose).toHaveBeenCalled();
   });
+
+  it('поверх окна с панелью открыт диалог: Esc закрывает диалог, а панель под ним остаётся', async () => {
+    const onDialogClose = vi.fn();
+    function WithDialog() {
+      const [open, setOpen] = useState(true);
+      const box = useRef<HTMLDivElement>(null);
+      useDismiss(open, () => setOpen(false), box);
+      return (
+        <>
+          <Sheet open onClose={() => {}} title="Окно">
+            <div ref={box} className="relative">
+              {open && (
+                <Floating>
+                  <button>Внутри</button>
+                </Floating>
+              )}
+            </div>
+          </Sheet>
+          <Sheet open onClose={onDialogClose} title="Вопрос" role="alertdialog" placement="center">
+            <p>Сохранить?</p>
+          </Sheet>
+        </>
+      );
+    }
+    render(<WithDialog />);
+    expect(inside()).not.toBeNull();
+    fire(document.body, new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(inside()).not.toBeNull(); // панель под диалогом не тронута
+    expect(onDialogClose).toHaveBeenCalledTimes(1);
+  });
 });

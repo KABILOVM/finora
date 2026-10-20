@@ -10,7 +10,7 @@ import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import type { LocalRow, TxKind, Wallet } from '@/domain/types';
-import { ContextRow } from './ContextRow';
+import { ContextRow, type CategoryState } from './ContextRow';
 import { FeeField, applyPctKey } from './FeeField';
 import { FxNotice } from './FxNotice';
 import { ReceivedField } from './ReceivedField';
@@ -43,6 +43,11 @@ export interface TxFormFieldsProps {
   categories: readonly ChipOption[];
   /** Кнопка справа от переключателя вида (например, «Продиктовать расходы»): не удлиняет форму. */
   kindAction?: ReactNode;
+  /** Новая операция: что сказано про категорию (см. ContextRow). */
+  categoryState?: CategoryState;
+  onCategorySkip?: () => void;
+  /** Enter в поле суммы сохраняет операцию; Ctrl/⌘+Enter — сохраняет и открывает новую (more). */
+  onSubmit?: (more: boolean) => void;
 }
 
 /** Круглая кнопка у края суммы (комиссия слева, заметка справа). */
@@ -79,7 +84,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -114,6 +119,7 @@ export function TxFormFields({ c, wallets, categories, kindAction }: TxFormField
   };
   // Тап мимо закрывает панель; клавиатура суммы и сама сумма «свои»: тапы по ним панель не закрывают
   const amountBoxRef = useRef<HTMLDivElement>(null);
+  const focusAmount = () => amountBoxRef.current?.querySelector<HTMLInputElement>('input.money')?.focus({ preventScroll: true });
   useDismiss(feeShown && !errors.fee, closeFee, amountBoxRef);
   useDismiss(noteOpen && !errors.note, () => setNoteOpen(false), amountBoxRef);
 
@@ -156,7 +162,14 @@ export function TxFormFields({ c, wallets, categories, kindAction }: TxFormField
 
       {/* Кошелёк и дата видны над клавиатурой: человек всегда знает, куда запишется операция */}
       <div className="flex flex-col gap-3">
-        <ContextRow c={c} wallets={wallets} categories={isTransfer ? [] : categories} />
+        <ContextRow
+          c={c}
+          wallets={wallets}
+          categories={isTransfer ? [] : categories}
+          categoryState={categoryState}
+          onCategorySkip={onCategorySkip}
+          onPicked={focusAmount}
+        />
         <FxNotice
           fx={c.fx}
           amountMinor={form.amountMinor}
@@ -179,6 +192,7 @@ export function TxFormFields({ c, wallets, categories, kindAction }: TxFormField
           compact
           calculator
           autoFocus
+          onSubmit={feeTyping ? undefined : onSubmit}
           start={
             feeAvailable ? (
               <SideButton label="Комиссия" active={feeShown || hasFee} onClick={toggleFee} dot={hasFee && !feeShown}>

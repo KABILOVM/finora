@@ -35,6 +35,7 @@ export {
   useWallets,
   useCategories,
   useTransactions,
+  useHasTransactions,
   useBalances,
   useBalancesState,
   useSettings,

@@ -72,6 +72,11 @@ export function describeTx(
   if (tx.kind === 'transfer') {
     const to = tx.toWalletId === null ? undefined : wallets.get(tx.toWalletId);
     const crossCurrency = to !== undefined && to.currency !== currency && tx.toAmountMinor !== null;
+    // одна валюта и зачислили меньше, чем списали: разница — комиссия (расход)
+    const fee =
+      to !== undefined && to.currency === currency && tx.toAmountMinor !== null && tx.amountMinor > tx.toAmountMinor
+        ? tx.amountMinor - tx.toAmountMinor
+        : 0;
     return {
       icon: '↔️',
       color: null,
@@ -80,7 +85,12 @@ export function describeTx(
       currency,
       signedMinor: tx.amountMinor,
       tone: 'none',
-      second: crossCurrency && to && tx.toAmountMinor !== null ? `→ ${formatMinor(tx.toAmountMinor, to.currency)}` : null,
+      second:
+        crossCurrency && to && tx.toAmountMinor !== null
+          ? `→ ${formatMinor(tx.toAmountMinor, to.currency)}`
+          : fee > 0
+            ? `комиссия ${formatMinor(fee, currency)}`
+            : null,
     };
   }
 

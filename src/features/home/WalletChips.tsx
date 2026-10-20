@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Glyph } from '@/components/Glyph';
 import type { LocalRow, Minor, UUID, Wallet } from '@/domain/types';
+import { walletOpsQuery } from '@/features/transactions/txFilters';
 import { useGoals } from '@/features/wallets/useGoals';
 import { HomeMoney } from './hideAmounts';
 
@@ -10,7 +11,7 @@ export interface WalletChipsProps {
 }
 
 /**
- * Кошельки одной лентой чипов (значок, название, остаток), листается пальцем. Чип ведёт в «Кошельки». У накопления с целью —
+ * Кошельки одной лентой чипов (значок, название, остаток), листается пальцем. Чип ведёт в операции этого кошелька. У накопления с целью —
  * тонкая полоска прогресса внизу чипа. Чипы появляются по очереди с пружиной, остатки «набегают».
  */
 export function WalletChips({ wallets, balances }: WalletChipsProps) {
@@ -28,8 +29,8 @@ export function WalletChips({ wallets, balances }: WalletChipsProps) {
           return (
             <li key={w.id} style={{ '--i': i } as React.CSSProperties} className="pop-spring shrink-0 snap-start">
               <Link
-                to="/wallets"
-                className="press relative flex min-h-[52px] items-center gap-2 overflow-hidden rounded-2xl border border-border/70 bg-surface/75 py-2 pl-2 pr-3.5 shadow-card backdrop-blur-xl hover:bg-surface-2"
+                to={`/transactions?${walletOpsQuery(w.id)}`}
+                className="press relative flex min-h-[52px] items-center gap-2 overflow-hidden rounded-2xl border border-border/70 bg-surface/85 py-2 pl-2 pr-3.5 shadow-card hover:bg-surface-2"
               >
                 <Glyph value={w.icon} color={w.color} size={28} />
                 <span className="min-w-0">

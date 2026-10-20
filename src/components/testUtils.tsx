@@ -385,3 +385,60 @@ export const user = {
     if (isTextField(el)) editText(el, text);
   },
 };
+
+/** Имена действий в меню «⋯» (ActionMenu): меню открывается, имена читаются, меню закрывается. */
+export async function menuActions(): Promise<string[]> {
+  await user.click(screen.getByRole('button', { name: /^Ещё действия/ }));
+  const dlg = await findByRole('dialog');
+  const names = Array.from(dlg.querySelectorAll('li button')).map((b) => b.getAttribute('aria-label') ?? (b.textContent ?? '').trim());
+  await user.keyboard('{Escape}');
+  await waitFor(() => {
+    if (screen.queryAllByRole('dialog').length > 0) throw new Error('меню ещё открыто');
+  });
+  return names;
+}
+
+/**
+ * Набор действий меню «⋯», когда он перестал меняться: часть данных страницы (планы, другие долги) приходит позже самой страницы,
+ * и сразу после загрузки пункта может не быть лишь потому, что данных ещё нет. Читаем, пока три чтения подряд не совпадут.
+ */
+export async function menuActionsStable(): Promise<string[]> {
+  let last = await menuActions();
+  let same = 1;
+  while (same < 3) {
+    await new Promise((r) => setTimeout(r, 60));
+    const now = await menuActions();
+    if (now.join('\n') === last.join('\n')) same++;
+    else {
+      last = now;
+      same = 1;
+    }
+  }
+  return last;
+}
+
+/** Ждать, пока набор действий меню «⋯» не станет таким, как нужно (данные страницы приходят не сразу). */
+export async function waitForMenu(ok: (names: string[]) => boolean, timeoutMs = 10_000): Promise<void> {
+  const until = performance.now() + timeoutMs;
+  let names: string[] = [];
+  for (;;) {
+    names = await menuActions();
+    if (ok(names)) return;
+    if (performance.now() > until) throw new Error(`Меню «⋯» не стало таким, как нужно. Сейчас: ${names.join(' | ')}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+/**
+ * Выбрать действие в меню «⋯» (ActionMenu). Кнопка с таким именем уже на виду — нажимается она, иначе открывается меню и ждётся
+ * нужное действие (пока страница читает данные, его может не быть).
+ */
+export async function chooseMenuAction(name: string): Promise<void> {
+  if (screen.queryAllByRole('button', { name }).length > 0) {
+    await user.click(screen.getByRole('button', { name }));
+    return;
+  }
+  await waitForMenu((names) => names.includes(name));
+  await user.click(screen.getByRole('button', { name: /^Ещё действия/ }));
+  await user.click(await findByRole('button', { name }));
+}

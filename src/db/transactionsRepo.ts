@@ -86,6 +86,11 @@ export interface FromRuleOptions {
    * Два устройства без связи могут записать одну операцию (тот же id) с разной суммой — при обмене побеждает поздняя правка.
    */
   fitToDebt?: boolean;
+  /**
+   * Фактическая дата оплаты, если платёж проведён не в день по расписанию (просроченный платёж оплатили сегодня). Операция
+   * записывается на неё, а id остаётся выведенным из ДАТЫ ПО РАСПИСАНИЮ (date): по нему платёж не проведут дважды и не предложат снова.
+   */
+  occurredOn?: IsoDate;
 }
 
 export interface TransactionsRepo {
@@ -282,24 +287,30 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
   }
 
   /** Операция по расписанию: правило живо, не в архиве, а дата входит в его расписание. */
-  async function checkRule(f: TxFields): Promise<void> {
+  async function checkRule(f: TxFields, scheduledOn: IsoDate = f.occurredOn): Promise<void> {
     if (f.recurringRuleId === null) return;
     const rule = await db.recurring_rules.get(f.recurringRuleId);
     if (!rule) throw new ValidationError('Регулярный платёж не найден');
     if (rule.deletedAt !== null) throw new ValidationError('Регулярный платёж удалён');
     if (rule.archivedAt !== null) throw new ValidationError('Регулярный платёж в архиве: верните его из архива');
-    if (!isOccurrence(rule, f.occurredOn)) {
-      throw new ValidationError(`Дата ${f.occurredOn} не входит в расписание регулярного платежа`);
+    if (!isOccurrence(rule, scheduledOn)) {
+      throw new ValidationError(`Дата ${scheduledOn} не входит в расписание регулярного платежа`);
     }
   }
 
   /** Новая строка со всеми проверками. Вызывать ТОЛЬКО внутри writeTx(scope()). */
-  async function insertNew(fields: TxFields, fx: Fx | null, givenId: UUID | undefined, deleted: boolean): Promise<LocalRow<Transaction>> {
+  async function insertNew(
+    fields: TxFields,
+    fx: Fx | null,
+    givenId: UUID | undefined,
+    deleted: boolean,
+    scheduledOn?: IsoDate,
+  ): Promise<LocalRow<Transaction>> {
     const settings = await requireSettings(ctx);
     const { wallet, toWallet } = await loadWallets(ctx, fields);
     await checkCategoryOf(ctx, fields);
     await checkDebtLink(ctx, fields, wallet);
-    await checkRule(fields);
+    await checkRule(fields, scheduledOn);
     const f: TxFields = { ...fields, toAmountMinor: resolveToAmount(fields, wallet, toWallet, true) };
     checkTransferAmounts(f, wallet, toWallet);
     const row = assemble(null, f, buildSnapshot(f, wallet, toWallet, settings.baseCurrency, fx), givenId, deleted);
@@ -386,14 +397,21 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     async createFromRule(rule, date, opts = {}) {
       const ruleId = ruleIdOf(rule);
       const day = reqDate(date, 'Дата платежа');
-      const o = cleanPatch(opts, ['amountMinor', 'toAmountMinor', 'note', 'fx', 'fitToDebt'] as const, 'Операция по расписанию');
+      const o = cleanPatch(opts, ['amountMinor', 'toAmountMinor', 'note', 'fx', 'fitToDebt', 'occurredOn'] as const, 'Операция по расписанию');
       const fx = o.fx === undefined ? undefined : parseFx(o.fx);
+      const paidOn = o.occurredOn === undefined ? day : reqDate(o.occurredOn, 'Дата оплаты');
       const id = await uuidV5(ruleId, day);
       return writeTx(ctx, scope(), async () => {
         const existing = await db.transactions.get(id);
         if (existing) return existing;
         const fitted = o.fitToDebt === true && o.amountMinor === undefined ? await debtFit(ruleId) : undefined;
-        return insertNew(await fieldsFromRule(ruleId, day, fitted === undefined ? o : { ...o, amountMinor: fitted }), fx ?? null, id, false);
+        return insertNew(
+          await fieldsFromRule(ruleId, paidOn, fitted === undefined ? o : { ...o, amountMinor: fitted }),
+          fx ?? null,
+          id,
+          false,
+          day,
+        );
       });
     },
 

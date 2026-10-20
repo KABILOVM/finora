@@ -1,7 +1,9 @@
-import { summarizeDay, summarizeMonth, type CategoryTotal } from '@/db/queries';
+import { summarizeDay, summarizeMonth, type CategoryTotal, type MonthSummary } from '@/db/queries';
 import { endOfMonth, floorDiv } from '@/domain/forecast';
+import { MIN_PACE_DAYS } from '@/domain/pace';
 import type { CurrencyCode, IsoDate, Minor, Transaction, UUID } from '@/domain/types';
 import { shiftMonth } from '@/features/transactions/txFilters';
+import { pluralRu } from '@/lib/plural';
 
 /**
  * Чистые расчёты для экрана «Аналитика» (без React и без базы). Правила учёта те же, что у «Итогов месяца» (db/queries.ts):
@@ -32,7 +34,45 @@ export function monthlySeries(txs: readonly Tx[], endMonth: string, count: numbe
   return out;
 }
 
-export type DeltaStatus = 'new' | 'gone' | 'up' | 'down' | 'same';
+/**
+ * Сколько дней прошлого месяца сравнивать с идущим: тех же, что уже прошли в этом (сегодняшний включён). null — сравниваем целиком:
+ * месяц уже закончился, или прошло столько же дней, сколько в прошлом месяце (31 октября против 30 сентября).
+ * Иначе в начале месяца неполный текущий месяц сравнивался бы с полным прошлым («на 85% меньше» только потому, что месяц начался).
+ */
+export function compareThroughDay(elapsedDays: number | null, previousMonth: string): number | null {
+  if (elapsedDays === null) return null;
+  const total = Number(endOfMonth(`${previousMonth}-01`).slice(8, 10));
+  return elapsedDays < total ? Math.max(1, elapsedDays) : null;
+}
+
+/** Итоги месяца `month` только за дни с 1-го по `throughDay` (включительно). */
+export function summarizeThroughDay(txs: readonly Tx[], month: string, throughDay: number, base: CurrencyCode): MonthSummary {
+  const last = `${month}-${String(throughDay).padStart(2, '0')}`;
+  const prefix = `${month}-`;
+  return summarizeMonth(
+    txs.filter((t) => t.occurredOn.startsWith(prefix) && t.occurredOn <= last),
+    month,
+    base,
+  );
+}
+
+/**
+ * Первые дни месяца с прошлым не сравниваем: одно-два числа против одного-двух дают «+1900%» и «новую» почти у каждой категории.
+ * Порог тот же, что у прогноза «Темп трат» (MIN_PACE_DAYS).
+ */
+export const MIN_COMPARE_DAYS = MIN_PACE_DAYS;
+
+/** Можно ли сравнивать: месяц закончился (сравниваем целиком) или прошло достаточно дней. */
+export const isCompareReady = (throughDay: number | null): boolean => throughDay === null || throughDay >= MIN_COMPARE_DAYS;
+
+/** С чем сравниваем: «в прошлом месяце» или «за те же 15 дней прошлого месяца». */
+export function previousPhrase(throughDay: number | null): string {
+  if (throughDay === null) return 'в прошлом месяце';
+  if (throughDay === 1) return 'за первое число прошлого месяца';
+  return `за те же ${throughDay} ${pluralRu(throughDay, 'день', 'дня', 'дней')} прошлого месяца`;
+}
+
+export type DeltaStatus = 'new' | 'later' | 'gone' | 'up' | 'down' | 'same';
 
 export interface CategoryDelta {
   /** Для списка и ссылок: id категории, «none» (без категории) или «fee» (комиссии переводов). */
@@ -43,7 +83,7 @@ export interface CategoryDelta {
   previousMinor: Minor;
   /** current − previous (отрицательное — стали тратить меньше). */
   deltaMinor: Minor;
-  /** Изменение в процентах от прошлого месяца, целое; null — в прошлом месяце трат не было. */
+  /** Изменение в процентах от прошлого месяца (или его первых дней), целое; null — тогда трат не было. */
   percent: number | null;
   status: DeltaStatus;
 }
@@ -52,16 +92,21 @@ const keyOf = (c: CategoryTotal): string => (c.kind === 'fee' ? 'fee' : (c.categ
 
 /**
  * Расходы по категориям этого месяца против прошлого. «new» — в прошлом месяце не тратили, «gone» — в этом не тратите.
+ * Идущий месяц сравнивается с первыми днями прошлого (`previous`), а `wholePrevious` — прошлый месяц целиком: категория, которой в
+ * тех днях не было, но позже в прошлом месяце была, — «later», а не «new».
  * Порядок: больше трат в этом месяце — выше; ушедшие категории — в конце.
  */
-export function categoryDeltas(current: readonly CategoryTotal[], previous: readonly CategoryTotal[]): CategoryDelta[] {
+export function categoryDeltas(current: readonly CategoryTotal[], previous: readonly CategoryTotal[], wholePrevious: readonly CategoryTotal[] = previous): CategoryDelta[] {
   const prev = new Map(previous.map((c) => [keyOf(c), c] as const));
+  const spentBefore = new Set(wholePrevious.filter((c) => c.totalMinor > 0).map(keyOf));
   const seen = new Set<string>();
   const out: CategoryDelta[] = [];
   const push = (row: CategoryTotal, currentMinor: Minor, previousMinor: Minor) => {
     const deltaMinor = currentMinor - previousMinor;
     const status: DeltaStatus =
-      previousMinor === 0 ? 'new' : currentMinor === 0 ? 'gone' : deltaMinor > 0 ? 'up' : deltaMinor < 0 ? 'down' : 'same';
+      previousMinor === 0
+        ? spentBefore.has(keyOf(row)) ? 'later' : 'new'
+        : currentMinor === 0 ? 'gone' : deltaMinor > 0 ? 'up' : deltaMinor < 0 ? 'down' : 'same';
     out.push({
       key: keyOf(row),
       categoryId: row.categoryId,

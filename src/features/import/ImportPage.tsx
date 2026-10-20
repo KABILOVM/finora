@@ -1,9 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { Notice } from '@/components/Notice';
 import { PageHeader } from '@/components/PageHeader';
-import { useSettings, useStore } from '@/db';
+import { Skeleton } from '@/components/Skeleton';
+import { useBalances, useSettings, useStore } from '@/db';
 import { ImportFileError, type ImportPlan, type WalletChoice } from '@/import/types';
 import { buildPlan } from '@/import/plan';
+import { undoImport } from '@/import/undoImport';
 import { runImport, type ImportProgress, type ImportReport } from '@/import/runImport';
 import { useRates } from '@/rates/hooks';
 import { DoneStep } from './DoneStep';
@@ -20,13 +23,27 @@ type Stage =
   | { name: 'running'; session: ImportSession; progress: ImportProgress; stopping: boolean }
   | { name: 'done'; report: ImportReport };
 
+/** Под заголовком: на каком шаге из трёх человек и что от него нужно. */
 const SUBTITLE: Record<Stage['name'], string> = {
-  pick: 'Перенос истории операций из файла',
-  reading: 'Читаем файл',
-  preview: 'Проверьте, что будет добавлено',
-  running: 'Идёт импорт',
+  pick: 'Шаг 1 из 3 · Выберите файл',
+  reading: 'Шаг 1 из 3 · Читаем файл',
+  preview: 'Шаг 2 из 3 · Проверьте, что будет добавлено',
+  running: 'Шаг 3 из 3 · Идёт импорт',
   done: 'Готово',
 };
+
+/** Заглушка на время чтения настроек, кошельков и файла: для скринридера — «Загрузка…». */
+function Loading({ text }: { text: string }) {
+  return (
+    <div role="status" aria-busy="true">
+      <span className="sr-only">{text}</span>
+      <div aria-hidden="true" className="flex flex-col gap-4">
+        <Skeleton className="h-28 !rounded-card" />
+        <Skeleton className="h-40 !rounded-card" />
+      </div>
+    </div>
+  );
+}
 
 /** Курсы из текстов полей: непонятный текст — «курса нет». */
 function ratesOf(texts: Readonly<Record<string, string>>): Record<string, number | null> {
@@ -44,6 +61,7 @@ export default function ImportPage() {
   const store = useStore();
   const settings = useSettings();
   const { getRate } = useRates();
+  const balances = useBalances();
   const base = settings?.baseCurrency;
 
   const [stage, setStage] = useState<Stage>({ name: 'pick' });
@@ -166,24 +184,12 @@ export default function ImportPage() {
   return (
     <>
       <PageHeader back={{ to: '/settings', label: 'Настройки' }} title="Импорт из Дзен-мани" subtitle={SUBTITLE[stage.name]} />
-      {(settings === undefined || dbRows === undefined) && (
-        <p role="status" className="py-10 text-center text-muted">
-          Загрузка…
-        </p>
-      )}
-      {settings === null && (
-        <p role="alert" className="rounded-xl bg-danger/10 p-3 font-medium text-danger">
-          Настройки ещё не созданы: дождитесь первой загрузки данных и откройте импорт снова.
-        </p>
-      )}
+      {(settings === undefined || dbRows === undefined) && <Loading text="Загрузка…" />}
+      {settings === null && <Notice tone="danger">Настройки ещё не созданы: дождитесь первой загрузки данных и откройте импорт снова.</Notice>}
       {base && dbRows && (
         <>
           {stage.name === 'pick' && <PickStep onFile={(f) => void onFile(f)} error={error} />}
-          {stage.name === 'reading' && (
-            <p role="status" className="py-10 text-center text-muted">
-              Читаем файл «{stage.fileName}»…
-            </p>
-          )}
+          {stage.name === 'reading' && <Loading text={`Читаем файл «${stage.fileName}»…`} />}
           {stage.name === 'preview' && plan && (
             <PreviewStep
               plan={plan}
@@ -194,10 +200,14 @@ export default function ImportPage() {
               onBack={again}
               onStart={() => void start()}
               error={error}
+              balances={balances}
+              onRestore={async (id) => void (await store.wallets.restore(id))}
             />
           )}
           {stage.name === 'running' && <RunStep progress={stage.progress} stopping={stage.stopping} onStop={stop} />}
-          {stage.name === 'done' && <DoneStep report={stage.report} onAgain={again} />}
+          {stage.name === 'done' && (
+            <DoneStep report={stage.report} onAgain={again} onUndo={stage.report.journal ? () => undoImport(store, stage.report.journal!) : undefined} />
+          )}
         </>
       )}
     </>

@@ -99,7 +99,19 @@ export function BudgetRow({ progress, name, icon, color, base, onOpen, compact =
   );
 
   if (!onOpen) return <div className={compact ? 'py-2.5' : 'px-4 py-3'}>{body}</div>;
-  const label = progress.comparable ? `Лимит «${name}», ${spentWord(progress.percent)}. Изменить` : `Лимит «${name}». Изменить`;
+  // Имя кнопки несёт всё, что видно в строке (суммы, уровень, подсказку о темпе) и действие: у role=button содержимое скринридеру не отдаётся
+  const strip = (t: string) => t.replace(/[.!\s]+$/, '');
+  const label = progress.comparable
+    ? [
+        `Лимит «${name}», ${spentWord(progress.percent)}: ${formatMinor(progress.spentMinor, base)} из ${formatMinor(progress.limitMinor, base)}`,
+        restWord(progress, base),
+        progress.level !== 'ok' ? levelWord(progress) : null,
+        paceNote,
+      ]
+        .filter((p): p is string => typeof p === 'string' && p !== '')
+        .map(strip)
+        .join('. ') + '. Изменить'
+    : `Лимит «${name}». Изменить`;
   return (
     <button
       type="button"

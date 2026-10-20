@@ -54,7 +54,7 @@ describe('«Всего» на экране «Кошельки» и курс, в�
     await findByRole('heading', { name: 'Кошельки', level: 1 });
     await waitFor(() => expect(td.stores.length).toBeGreaterThan(0));
     await write(() => storeOf(td).wallets.create({ name: 'Кредитка', currency: 'TJS', kind: 'card', openingBalanceMinor: -50_000, color: '#2563eb', icon: '💳' }));
-    await user.click(await waitFor(() => screen.getByText('Кредитка')));
+    await user.click(await waitFor(() => screen.getByRole('button', { name: 'Изменить: Кредитка' })));
     await findByRole('dialog', { name: 'Правка кошелька' });
     const hint = screen.getByText(/Сейчас начальный остаток отрицательный/);
     expect(hint.textContent).not.toContain('..');

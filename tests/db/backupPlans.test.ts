@@ -356,10 +356,10 @@ describe('копия чужого аккаунта (без блока настр
     expect(await counts()).toEqual(before);
   });
 
-  it('операция с изменённой датой (id уже не выводится из даты) перекодируется как обычная и остаётся привязанной к правилу', async () => {
+  it('операция, оплаченная другим днём (дату правили): id всё равно выводится от НОВОГО правила и ДАТЫ ПО РАСПИСАНИЮ — платёж не вернётся в «Просроченные»', async () => {
     const alice = await fresh(USER_A);
     const k = await populated(alice);
-    await alice.transactions.update(k.done.id, { occurredOn: '2026-10-17' });
+    await alice.transactions.update(k.done.id, { occurredOn: '2026-10-17' }); // по расписанию 15 октября, оплачено 17-го
     const file = JSON.parse(JSON.stringify(withoutSettings(await exportBackup(alice))));
     const bob = await fresh(USER_B);
     await bob.settings.ensure({ baseCurrency: 'TJS' });
@@ -367,8 +367,26 @@ describe('копия чужого аккаунта (без блока настр
     const rule = (await bob.db.recurring_rules.toArray())[0]!;
     const moved = (await bob.db.transactions.where('recurringRuleId').equals(rule.id).toArray()).find((t) => t.occurredOn === '2026-10-17')!;
     expect(moved).toBeDefined();
-    expect(moved.id).not.toBe(await uuidV5(rule.id, '2026-10-17'));
+    expect(moved.id).toBe(await uuidV5(rule.id, '2026-10-15')); // от даты по расписанию, а не от даты оплаты
+    // дата по расписанию занята: createFromRule возвращает ту же строку и не плодит вторую
+    expect((await bob.transactions.createFromRule(rule.id, '2026-10-15')).id).toBe(moved.id);
+    expect(await bob.db.transactions.where('recurringRuleId').equals(rule.id).count()).toBe(2); // оплаченная и пропущенная
     expect(await importBackup(bob, file)).toMatchObject({ added: 0 });
+  });
+
+  it('оплата в другом месяце и через createFromRule(occurredOn) тоже сохраняет связь после переноса', async () => {
+    const alice = await fresh(USER_A);
+    await alice.settings.ensure({ baseCurrency: 'TJS' });
+    const wallet = await alice.wallets.create({ name: 'Наличные', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#16a34a', icon: '💵' });
+    const r = await alice.recurring.create({ kind: 'expense', walletId: wallet.id, amountMinor: 5_000, frequency: 'monthly', startOn: '2026-10-15' });
+    await alice.transactions.createFromRule(r.id, '2026-10-15', { occurredOn: '2026-11-20' });
+    const file = JSON.parse(JSON.stringify(withoutSettings(await exportBackup(alice))));
+    const bob = await fresh(USER_B);
+    await bob.settings.ensure({ baseCurrency: 'TJS' });
+    await importBackup(bob, file);
+    const rule = (await bob.db.recurring_rules.toArray())[0]!;
+    const tx = (await bob.db.transactions.where('recurringRuleId').equals(rule.id).toArray())[0]!;
+    expect(tx).toMatchObject({ occurredOn: '2026-11-20', id: await uuidV5(rule.id, '2026-10-15') });
   });
 
   it('стартовые категории: копия известного аккаунта сопоставляется со стартовыми записями Боба, бюджет ложится на его стартовую категорию', async () => {

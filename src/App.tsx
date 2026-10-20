@@ -31,6 +31,7 @@ import { ADD_PATH } from '@/layout/nav';
 const HomePage = lazy(() => import('@/features/home/HomePage'));
 const TransactionsPage = lazy(() => import('@/features/transactions/TransactionsPage'));
 const WalletsPage = lazy(() => import('@/features/wallets/WalletsPage'));
+const WalletPage = lazy(() => import('@/features/wallets/WalletPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
 const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage'));
 const MorePage = lazy(() => import('@/features/more/MorePage'));
@@ -130,6 +131,7 @@ export function AppRoutes() {
             <Route path="/" element={<HomePage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/wallets" element={<WalletsPage />} />
+            <Route path="/wallets/:id" element={<WalletPage />} />
             <Route path="/more" element={<MorePage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />

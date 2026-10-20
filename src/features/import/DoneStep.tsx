@@ -1,9 +1,14 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { Notice } from '@/components/Notice';
+import { SectionHeader } from '@/components/SectionHeader';
 import { formatMinor } from '@/domain/money';
 import type { ImportReport } from '@/import/runImport';
-import { rowsWord } from './importText';
+import type { UndoResult } from '@/import/undoImport';
+import { opsWord, rowsWord } from './importText';
 
 const FAILED_SHOWN = 20;
 
@@ -21,10 +26,32 @@ function Row({ label, value, id, tone }: { label: string; value: number; id: str
 export interface DoneStepProps {
   report: ImportReport;
   onAgain: () => void;
+  /** «Отменить импорт»: убрать то, что записал этот запуск. Нет — кнопки нет (например, ничего не записано). */
+  onUndo?: () => Promise<UndoResult>;
 }
 
 /** Шаг 4. Итог: что добавлено и что нет, ошибки записи, остатки по файлу для сверки с банком. */
-export function DoneStep({ report, onAgain }: DoneStepProps) {
+export function DoneStep({ report, onAgain, onUndo }: DoneStepProps) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [undone, setUndone] = useState<UndoResult | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const journal = report.journal;
+  const canUndo = Boolean(onUndo && journal && journal.txIds.length > 0 && !undone);
+  const undo = async () => {
+    if (!onUndo || busy) return;
+    setConfirming(false);
+    setBusy(true);
+    setUndoError(null);
+    try {
+      setUndone(await onUndo());
+    } catch (e) {
+      console.error('Отмена импорта не удалась', e);
+      setUndoError('Не удалось отменить импорт. Уже убранное осталось убранным: попробуйте ещё раз.');
+    } finally {
+      setBusy(false);
+    }
+  };
   const shown = report.failed.slice(0, FAILED_SHOWN);
   const moreFailed = report.failedCount - shown.length;
   const title = report.fatal ? 'Импорт прерван' : report.stopped ? 'Импорт остановлен' : 'Импорт завершён';
@@ -33,9 +60,11 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
     <div className="flex flex-col gap-5">
       <Card className="flex flex-col gap-3" role="region" aria-label="Итог импорта">
         <h2 className="text-lg font-bold">{title}</h2>
-        {report.fatal && <p role="alert" className="font-medium text-danger">{report.fatal}</p>}
+        {report.fatal && <Notice tone="danger">{report.fatal}</Notice>}
         {report.stopped && !report.fatal && (
-          <p className="text-muted">Добавлено {report.added} из {report.total}. Загрузите файл ещё раз — импорт продолжится с того же места, повторов не будет.</p>
+          <Notice tone="warning" role="note">
+            Добавлено {report.added} из {report.total}. Загрузите файл ещё раз — импорт продолжится с того же места, повторов не будет.
+          </Notice>
         )}
         <dl className="divide-y divide-border">
           <Row id="added" label="Добавлено" value={report.added} />
@@ -61,9 +90,9 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
 
       {report.failedCount > 0 && (
         <section aria-labelledby="failed-h" className="flex flex-col gap-2">
-          <h2 id="failed-h" className="px-1 text-sm font-bold uppercase tracking-wide text-muted">
+          <SectionHeader id="failed-h" className="mb-0">
             Не импортировано: {report.failedCount}
-          </h2>
+          </SectionHeader>
           <Card className="flex flex-col gap-2">
             <ul className="divide-y divide-border" aria-label="Строки, которые не удалось записать">
               {shown.map((f) => (
@@ -85,9 +114,9 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
 
       {report.reconcile.length > 0 && (
         <section aria-labelledby="reconcile-h" className="flex flex-col gap-2">
-          <h2 id="reconcile-h" className="px-1 text-sm font-bold uppercase tracking-wide text-muted">
+          <SectionHeader id="reconcile-h" className="mb-0">
             Сверьте остатки
-          </h2>
+          </SectionHeader>
           <Card padding="none">
             <p className="px-4 pt-3 text-sm text-muted">
               Остатки считаются из операций, начальный остаток новых кошельков — 0. Сверьте цифры с банком; при расхождении поправьте начальный
@@ -110,6 +139,16 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
         </section>
       )}
 
+      {undone && (
+        <Notice tone="success" role="status">
+          Импорт отменён: убрано {undone.removedTxs} {opsWord(undone.removedTxs)}
+          {undone.archivedWallets + undone.archivedCategories > 0 ? `, в архив ушло кошельков: ${undone.archivedWallets}, категорий: ${undone.archivedCategories}` : ''}.
+          {undone.keptInUse > 0 ? ` Остались ${undone.keptInUse}: в них уже есть ваши операции.` : ''}
+          {undone.failed > 0 ? ` Не удалось убрать: ${undone.failed}.` : ''} Тот же файл эти строки не вернёт — как и удалённые вручную.
+        </Notice>
+      )}
+      {undoError && <Notice tone="danger">{undoError}</Notice>}
+
       <Card className="flex flex-col gap-3">
         <Link to="/transactions" className={buttonClasses('primary', 'lg', true)}>
           К операциям
@@ -117,7 +156,29 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
         <Button variant="secondary" onClick={onAgain}>
           Загрузить ещё файл
         </Button>
+        {canUndo && (
+          <Button variant="ghost" loading={busy} onClick={() => setConfirming(true)}>
+            Отменить импорт
+          </Button>
+        )}
       </Card>
+
+      <ConfirmDialog
+        open={confirming}
+        title="Отменить импорт?"
+        message={
+          <div className="flex flex-col gap-2">
+            <p>
+              Будет убрано операций: {journal?.txIds.length ?? 0}. Созданные импортом кошельки ({journal?.walletIds.length ?? 0}) и категории (
+              {journal?.categoryIds.length ?? 0}) уйдут в архив, если в них нет ваших операций.
+            </p>
+            <p>Операции, которые вы после импорта изменили, тоже уберутся. Тот же файл эти строки не вернёт — как и удалённые вручную.</p>
+          </div>
+        }
+        confirmLabel="Отменить импорт"
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => void undo()}
+      />
     </div>
   );
 }

@@ -72,7 +72,7 @@ export default function HomePage() {
           title="Начните с кошелька"
           text="Деньги учитываются по кошелькам: например, «Наличные» или «Карта». Создайте первый — и можно вносить операции."
           action={
-            <Link to="/wallets" className={buttonClasses('primary', 'lg')}>
+            <Link to="/wallets?new=1" className={buttonClasses('primary', 'lg')}>
               Создать кошелёк
             </Link>
           }

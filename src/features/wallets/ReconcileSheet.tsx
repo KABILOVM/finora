@@ -1,11 +1,17 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { AmountInput } from '@/components/AmountInput';
+import { Button } from '@/components/Button';
 import { MoneyText } from '@/components/MoneyText';
 import { Notice } from '@/components/Notice';
 import { Sheet } from '@/components/Sheet';
-import { useBalances, useTransactions } from '@/db';
+import { Switch } from '@/components/Switch';
+import { useToast } from '@/components/Toast';
+import { useBalances, useStore, useTransactions } from '@/db';
+import { formatMinor } from '@/domain/money';
 import type { LocalRow, Wallet } from '@/domain/types';
+import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { pluralRu } from '@/lib/plural';
-import { reconcileWallet, type Reconciliation } from './reconcile';
+import { bankDifference, reconcileWallet, type Reconciliation } from './reconcile';
 
 function Line({
   label,
@@ -28,6 +34,78 @@ function Line({
       </div>
       <div className="shrink-0 text-right text-lg font-semibold">{children}</div>
     </div>
+  );
+}
+
+/**
+ * «Сверить с банком»: человек вводит, сколько на самом деле, видит разницу и одной кнопкой правит начальный остаток кошелька.
+ * Операции не меняются и в доходы с расходами разница не попадает; исправление можно отменить.
+ */
+function BankCheck({ wallet, totalMinor }: { wallet: LocalRow<Wallet>; totalMinor: number }) {
+  const store = useStore();
+  const toast = useToast();
+  const [actual, setActual] = useState<number | null>(null);
+  const [negative, setNegative] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const c = wallet.currency;
+
+  let diff: number | null = null;
+  let tooBig = false;
+  if (actual !== null) {
+    try {
+      diff = bankDifference(actual, negative, totalMinor);
+    } catch {
+      tooBig = true;
+    }
+  }
+
+  const fix = async () => {
+    if (diff === null || diff === 0 || busy) return;
+    const before = wallet.openingBalanceMinor;
+    setBusy(true);
+    try {
+      await store.wallets.update(wallet.id, { openingBalanceMinor: before + diff });
+      setActual(null);
+      toastWithUndo(toast, 'Остаток исправлен', () => store.wallets.update(wallet.id, { openingBalanceMinor: before }), 'Остаток возвращён');
+    } catch (e) {
+      toast.error(humanError(e, 'Не удалось исправить остаток. Попробуйте ещё раз.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section aria-label="Сверить с банком" className="mb-4 rounded-2xl bg-surface-2/70 p-3" data-testid="bank-check">
+      <h3 className="font-semibold">Сверить с банком</h3>
+      <p className="mb-2 text-sm text-muted">Введите, сколько сейчас на счёте в банке или в кошельке.</p>
+      <AmountInput currency={c} value={actual} onChange={setActual} label="Сколько на самом деле" showKeypad={false} compact />
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <span id="bank-negative">Минус (я должен банку)</span>
+        <Switch checked={negative} onChange={setNegative} labelledBy="bank-negative" />
+      </div>
+      {tooBig && (
+        <Notice tone="danger" className="mt-2">
+          Сумма слишком велика для расчёта.
+        </Notice>
+      )}
+      {diff === 0 && (
+        <Notice tone="success" className="mt-2">
+          Совпадает: в приложении столько же.
+        </Notice>
+      )}
+      {diff !== null && diff !== 0 && (
+        <div className="mt-2 flex flex-col gap-2">
+          <Notice tone="warning" role="status">
+            {diff > 0 ? 'В приложении меньше, чем на самом деле' : 'В приложении больше, чем на самом деле'}:{' '}
+            <b data-testid="bank-diff">{formatMinor(Math.abs(diff), c)}</b>. Если все операции внесены верно, поправьте начальный остаток: он станет{' '}
+            {formatMinor(wallet.openingBalanceMinor + diff, c)}. Операции, доходы и расходы не изменятся.
+          </Notice>
+          <Button onClick={() => void fix()} loading={busy}>
+            Исправить остаток
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -59,6 +137,7 @@ export function ReconcileSheet({ wallet, onClose }: { wallet: LocalRow<Wallet>; 
       )}
       {result !== null && result !== 'overflow' && (
         <div>
+          <BankCheck wallet={wallet} totalMinor={result.totalMinor} />
           <p className="mb-2 text-muted">
             Остаток = начальный остаток + доходы − расходы + переводы на кошелёк − переводы с кошелька. Удалённые операции не считаются.
           </p>

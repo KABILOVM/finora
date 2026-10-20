@@ -1,4 +1,6 @@
+import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { Notice } from '@/components/Notice';
 import { cn } from '@/lib/cn';
 import type { ImportPlan } from '@/import/types';
 import { opsWord, ruDate } from './importText';
@@ -17,14 +19,26 @@ function Tile({ id, label, value, tone }: { id: string; label: string; value: nu
   );
 }
 
-/** Итоги разбора файла: что добавится, что уже есть, что нужно проверить, что пропущено. */
-export function SummaryTiles({ plan, fileName }: { plan: ImportPlan; fileName: string }) {
+export interface SummaryTilesProps {
+  plan: ImportPlan;
+  fileName: string;
+  /** «Другой файл»: вернуться к выбору файла. */
+  onBack: () => void;
+}
+
+/** Итоги разбора файла: что добавится, что уже есть, что нужно проверить, что пропущено; что мешает добавить остальное. */
+export function SummaryTiles({ plan, fileName, onBack }: SummaryTilesProps) {
   const c = plan.counts;
   return (
     <Card className="flex flex-col gap-3" aria-label="Итоги разбора файла" role="region">
-      <p className="truncate text-sm text-muted">
-        Файл: <span className="font-semibold text-text">{fileName}</span>
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-sm text-muted">
+          Файл: <span className="font-semibold text-text">{fileName}</span>
+        </p>
+        <Button variant="ghost" className="shrink-0" onClick={onBack}>
+          Другой файл
+        </Button>
+      </div>
       <dl className="grid grid-cols-2 gap-2">
         <Tile id="add" label="Будет добавлено" value={c.add} tone="income" />
         <Tile id="exists" label="Уже есть" value={c.exists} />
@@ -42,14 +56,14 @@ export function SummaryTiles({ plan, fileName }: { plan: ImportPlan; fileName: s
         </p>
       )}
       {c.waitRate > 0 && (
-        <p className="text-sm font-medium text-warning">
+        <Notice tone="warning" role="note">
           Ждут курса: {c.waitRate} {opsWord(c.waitRate)}. Укажите курс ниже, иначе они не добавятся.
-        </p>
+        </Notice>
       )}
       {c.blocked > 0 && (
-        <p className="text-sm font-medium text-danger">
+        <Notice tone="danger" role="note">
           Нет кошелька: {c.blocked} {opsWord(c.blocked)}. Выберите кошелёк для счёта ниже, иначе они не добавятся.
-        </p>
+        </Notice>
       )}
     </Card>
   );

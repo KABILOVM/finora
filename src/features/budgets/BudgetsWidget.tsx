@@ -141,7 +141,7 @@ export default function BudgetsWidget() {
       {budgetsData && !hasBudgets && (
         <p className="mt-2 text-sm text-muted">
           Лимитов пока нет.{' '}
-          <Link to="/budgets" className="font-semibold text-brand">
+          <Link to="/budgets?new=1" className="font-semibold text-brand">
             Поставить лимит
           </Link>
         </p>

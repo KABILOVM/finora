@@ -15,7 +15,7 @@ import { createSyncEngine, type SyncEngine } from '@/sync/engine';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
 import { toWire, type SyncTableName } from '@/sync/tables';
 import type { SyncTransport } from '@/sync/transport';
-import { tapAmount } from '@/features/transactions/__fixtures__/opsKit';
+import { clickSave, tapAmount } from '@/features/transactions/__fixtures__/opsKit';
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({ needRefresh: [false, vi.fn()], offlineReady: [false, vi.fn()], updateServiceWorker: vi.fn() }),
@@ -132,7 +132,7 @@ describe('атака 10: 5 000 операций', () => {
     await tapAmount('77');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'новая-среди-пяти-тысяч');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(text()).toMatch(/новая-среди-пяти-тысяч/), 30_000);
     const addReady = Date.now() - tAdd;
     process.stderr.write(`[volume] запись → экран ${addReady} мс\n`);

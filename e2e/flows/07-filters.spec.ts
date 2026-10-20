@@ -104,7 +104,7 @@ test.describe('7. Фильтры «Операций»', () => {
 
   test('поиск по заметке: находит, не зависит от регистра, «ничего не найдено» и «Показать всё»', async ({ page }, testInfo) => {
     await seed(page);
-    const search = page.getByRole('searchbox', { name: 'Поиск по заметке' });
+    const search = page.getByRole('searchbox', { name: 'Поиск по операциям' });
 
     await search.fill('такси');
     await expect(rows(page)).toHaveCount(1);

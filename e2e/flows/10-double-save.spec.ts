@@ -41,7 +41,7 @@ test.describe('10. Двойное нажатие «Сохранить»', () => 
   test('«Сохранить и добавить ещё», двойной клик — одна операция, форма очищена', async ({ page }) => {
     await openApp(page);
     const dlg = await fillTx(page, { amount: '15', category: 'Еда' });
-    await dlg.getByRole('button', { name: 'Сохранить и добавить ещё' }).dblclick();
+    await dlg.getByRole('button', { name: 'Сохранить и добавить ещё одну' }).dblclick();
     await expect(page.getByRole('status').filter({ hasText: 'Сохранено' }).first()).toBeVisible();
     await dlg.getByRole('button', { name: 'Закрыть' }).click();
     await expect(dlg).toBeHidden();

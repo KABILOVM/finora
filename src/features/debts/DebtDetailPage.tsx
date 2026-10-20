@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ActionMenu, type ActionMenuItem } from '@/components/ActionMenu';
 import { Button, buttonClasses } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
+import { IconButton } from '@/components/IconButton';
+import { runWithoutModalAnchor } from '@/components/modalHistory';
+import { Notice as Callout } from '@/components/Notice';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
 import { useDebtView, useRecurringRules, useStore, type DebtDeleteMode, type DebtDeletion } from '@/db';
@@ -154,7 +158,8 @@ export default function DebtDetailPage() {
             },
           },
         });
-        navigate(`/debts?dir=${debt.direction}`, { replace: true });
+        // меню «⋯» уже закрылось и снимает свою запись истории: переходим, когда она снята, иначе возврат занесёт на эту же страницу
+        runWithoutModalAnchor(() => navigate(`/debts?dir=${debt.direction}`, { replace: true }));
       },
     );
 
@@ -201,12 +206,32 @@ export default function DebtDetailPage() {
 
   const openTx = (txId: string) => navigate(`/edit/${txId}`, { state: { background: location } });
 
+  // Редкие действия — в меню «⋯»; на виду только то, что нужно чаще всего. «Закрыть долг» у погашенного долга вынесено на плашку ниже.
+  const partsAvailable = !archived && !closed && state.remainingMinor > 0 && rules !== undefined && plans.length === 0;
+  const menu: ActionMenuItem[] = [];
+  if (!archived) {
+    if (partsAvailable) menu.push({ key: 'parts', label: PARTS_ACTION[debt.direction], hint: 'Регулярные платежи до полного погашения', icon: 'repeat', onSelect: () => setDialog('parts') });
+    if (canMerge) menu.push({ key: 'merge', label: 'Объединить…', hint: 'С другими долгами этого человека', icon: 'transfer', onSelect: () => setDialog('merge') });
+    if (closed) menu.push({ key: 'reopen', label: 'Открыть снова', hint: 'Вернуть долг в открытые', icon: 'refresh', onSelect: () => void toggleClosed() });
+    else if (!state.settled) menu.push({ key: 'close', label: 'Закрыть долг', hint: 'Убрать из открытых и из итогов', icon: 'check', onSelect: () => setDialog('close') });
+    menu.push({ key: 'archive', label: 'В архив', hint: 'Скрыть из списков и итогов, платежи сохранятся', icon: 'box', onSelect: () => void archive() });
+  } else {
+    menu.push({ key: 'unarchive', label: 'Вернуть из архива', icon: 'box', onSelect: () => void unarchive() });
+  }
+  menu.push({ key: 'delete', label: 'Удалить долг', hint: 'Вместе с записью; операции можно оставить или удалить', icon: 'trash', tone: 'danger', onSelect: () => setDialog('delete') });
+
   return (
     <>
       <PageHeader
         title={debt.counterparty}
         subtitle={`${DIRECTION_LABEL[debt.direction]} · ${debt.currency}`}
-        back={backTo(debt.direction === 'borrowed' ? 'borrowed' : undefined)}
+        back={backTo(debt.direction)}
+        actions={
+          <>
+            {!archived && <IconButton icon="edit" label="Править" onClick={() => setDialog('edit')} />}
+            <ActionMenu items={menu} label="Ещё действия по долгу" title={`Долг: ${debt.counterparty}`} />
+          </>
+        }
       />
 
       {archived && (
@@ -216,6 +241,20 @@ export default function DebtDetailPage() {
       )}
 
       <DebtSummaryCard debt={debt} state={state} today={today} />
+      {!archived && !closed && state.settled && (
+        <Callout
+          tone="success"
+          icon="check"
+          className="mt-3"
+          action={
+            <Button variant="secondary" onClick={() => setDialog('close')}>
+              Закрыть долг
+            </Button>
+          }
+        >
+          Долг погашен полностью. Закройте его, чтобы он не висел среди открытых.
+        </Callout>
+      )}
       <DebtPlanCard debt={debt} state={state} plans={plans} today={today} busy={busy} onEdit={setEditingPlan} onStop={(r) => void stopPlan(r)} />
 
       <div className="mt-4 flex flex-col gap-2">
@@ -225,20 +264,8 @@ export default function DebtDetailPage() {
           </Button>
         )}
         {!archived && (
-          <div className={canMerge ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
-            <Button variant="secondary" icon="plus" onClick={() => setDialog('topup')}>
-              {TOP_UP_ACTION[debt.direction]}
-            </Button>
-            {canMerge && (
-              <Button variant="secondary" onClick={() => setDialog('merge')}>
-                Объединить…
-              </Button>
-            )}
-          </div>
-        )}
-        {!archived && !closed && state.remainingMinor > 0 && rules !== undefined && plans.length === 0 && (
-          <Button variant="secondary" onClick={() => setDialog('parts')}>
-            {PARTS_ACTION[debt.direction]}
+          <Button variant="secondary" icon="plus" onClick={() => setDialog('topup')}>
+            {TOP_UP_ACTION[debt.direction]}
           </Button>
         )}
         {remind !== null && (
@@ -251,35 +278,10 @@ export default function DebtDetailPage() {
             Все долги: {debt.counterparty}
           </Link>
         )}
-        {!archived && (
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" icon="edit" onClick={() => setDialog('edit')}>
-              Править
-            </Button>
-            {closed ? (
-              <Button variant="secondary" loading={busy} onClick={() => void toggleClosed()}>
-                Открыть снова
-              </Button>
-            ) : (
-              <Button variant="secondary" onClick={() => setDialog('close')}>
-                Закрыть долг
-              </Button>
-            )}
-          </div>
-        )}
-        {archived ? (
-          <Button variant="secondary" loading={busy} onClick={() => void unarchive()}>
-            Вернуть из архива
-          </Button>
-        ) : (
-          <Button variant="ghost" disabled={busy} onClick={() => void archive()}>
-            В архив
-          </Button>
-        )}
       </div>
 
       <IssuesNotice issues={state.issues} txs={lines.txs} wallets={lines.wallets} onOpen={openTx} />
-      <EntriesList entries={state.entries} currency={debt.currency} txs={lines.txs} wallets={lines.wallets} today={today} />
+      <EntriesList entries={state.entries} currency={debt.currency} txs={lines.txs} wallets={lines.wallets} today={today} onOpen={openTx} />
       <PaymentsList
         payments={state.payments}
         currency={debt.currency}
@@ -288,13 +290,8 @@ export default function DebtDetailPage() {
         today={today}
         readOnly={archived}
         onDelete={setDeleting}
+        onOpen={openTx}
       />
-
-      <div className="mt-8 flex justify-center">
-        <Button variant="ghost" className="!text-danger" disabled={busy} onClick={() => setDialog('delete')}>
-          Удалить долг
-        </Button>
-      </div>
 
       <DeleteDebtDialog
         open={dialog === 'delete'}

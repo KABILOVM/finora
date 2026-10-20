@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { dismissToasts, expect, goSection, openApp, shot, sheet, tapAmount, test } from '../helpers';
+import { dismissToasts, expect, goSection, openApp, shot, sheet, tapAmount, test, debtAction } from '../helpers';
 
 /**
  * Состязательные проверки «Долгов» в настоящем браузере: раскладка на узких телефонах (длинные имена без пробелов,
@@ -117,8 +117,11 @@ test.describe('самый узкий телефон 320 px', () => {
     expect(await widthProblems(page), 'журнал операций').toEqual([]);
     await openApp(page, '/debts');
     await page.getByRole('link', { name: /^Ш{10}/ }).click();
-    await page.getByRole('button', { name: 'В архив', exact: true }).click();
+    await debtAction(page, 'В архив');
     await expect(page.getByRole('status').filter({ hasText: 'убран в архив' })).toBeVisible();
+    // из меню «⋯» (оно закрывается и снимает запись истории) попадаем на список, а не остаёмся на странице долга
+    await expect(page).toHaveURL(/#\/debts\?dir=lent$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Долги' })).toBeVisible();
     expect(await widthProblems(page), 'уведомление об архиве').toEqual([]);
   });
 });

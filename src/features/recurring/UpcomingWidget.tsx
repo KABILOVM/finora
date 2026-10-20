@@ -8,6 +8,7 @@ import { useStore, useUpcoming, ValidationError, type UpcomingItem } from '@/db'
 import type { IsoDate } from '@/domain/types';
 import { formatMinor } from '@/domain/money';
 import { HomeMoney, useHideAmounts } from '@/features/home/hideAmounts';
+import { toastWithUndo } from '@/features/transactions/txActions';
 import { useRates } from '@/rates/hooks';
 import { needsFx, pickAutoRate } from '@/recurring/fx';
 import { viewRule } from '@/recurring/ruleView';
@@ -110,17 +111,32 @@ export default function UpcomingWidget() {
     busyRef.current.add(key);
     setBusyKeys(new Set(busyRef.current));
     try {
-      const tx = await store.transactions.createFromRule(item.rule.id, item.date, { fitToDebt: true, ...(fx ? { fx } : {}) });
+      // Просроченный платёж оплачивают сегодня, а не в день по расписанию: иначе операция попала бы в прошлый день, а то и месяц
+      // (как и в окне «Провести», где дата оплаты по умолчанию — сегодня).
+      const tx = await store.transactions.createFromRule(item.rule.id, item.date, {
+        fitToDebt: true,
+        ...(item.date < today ? { occurredOn: today } : {}),
+        ...(fx ? { fx } : {}),
+      });
       const v = viewRule(item.rule, lookups.wallets, lookups.categories, lookups.base);
       if (tx.deletedAt !== null) {
         toast.error('Этот платёж уже пропущен или удалён. Верните его в разделе «Регулярные платежи».');
-      } else if (item.rule.debtId !== null && tx.amountMinor < item.rule.amountMinor) {
-        // последний платёж по плану записан на остаток долга, а не на всю сумму плана — сумма должна быть видна
-        toast.success(
-          hidden ? `Платёж проведён на остаток долга: ${v.title}` : `Проведено ${formatMinor(tx.amountMinor, v.currency)} — остаток долга: ${v.title}`,
-        );
       } else {
-        toast.success(`Платёж проведён: ${v.title}`);
+        // последний платёж по плану записан на остаток долга, а не на всю сумму плана — сумма должна быть видна
+        const onRemainder = item.rule.debtId !== null && tx.amountMinor < item.rule.amountMinor;
+        const message = onRemainder
+          ? hidden
+            ? `Платёж проведён на остаток долга: ${v.title}`
+            : `Проведено ${formatMinor(tx.amountMinor, v.currency)} — остаток долга: ${v.title}`
+          : `Платёж проведён: ${v.title}`;
+        // Одним касанием можно провести не то: даём время опомниться. Отмена удаляет операцию, а дата по расписанию остаётся
+        // «пропущенной»: оттуда её можно вернуть («Регулярные платежи → Пропущенные»).
+        toastWithUndo(
+          toast,
+          message,
+          () => store.transactions.softDelete(tx.id),
+          'Платёж отменён. Вернуть его можно в «Регулярных платежах», в «Пропущенных»',
+        );
       }
     } catch (e) {
       if (e instanceof ValidationError) toast.error(e.message);

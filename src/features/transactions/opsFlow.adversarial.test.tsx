@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '@/App';
 import { makeTestDeps, renderAppRoot } from '@/app/testkit';
 import { findByRole, screen, user, waitFor } from '@/components/testUtils';
-import { balancesOf, tapAmount, liveTxs, allTxs } from './__fixtures__/opsKit';
+import { balancesOf, clickSave, tapAmount, liveTxs, allTxs } from './__fixtures__/opsKit';
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({ needRefresh: [false, vi.fn()], offlineReady: [false, vi.fn()], updateServiceWorker: vi.fn() }),
@@ -27,7 +27,7 @@ describe('весь путь: ввод → отмена → правка → уд
     await user.click(addLink());
     await findByRole('dialog', { name: 'Новая операция' });
     await tapAmount('25');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
     expect(await liveTxs(td)).toHaveLength(1);
     await user.click(screen.getByRole('button', { name: 'Отменить' }));
@@ -42,7 +42,7 @@ describe('весь путь: ввод → отмена → правка → уд
     await user.click(addLink());
     await findByRole('dialog', { name: 'Новая операция' });
     await tapAmount('3');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
     expect(screen.getByRole('heading', { name: 'Операции', level: 1 })).toBeInTheDocument();
     expect(await liveTxs(td)).toHaveLength(1);
@@ -55,7 +55,7 @@ describe('весь путь: ввод → отмена → правка → уд
     await tapAmount('12,5');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'хлеб');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
     const [orig] = await liveTxs(td);
     await user.click(await waitFor(() => screen.getByText(/хлеб/)));
@@ -82,7 +82,7 @@ describe('двойное касание «+» (шит ещё не успел н�
     click(); // второе касание, пока шит грузится
     await findByRole('dialog', { name: 'Новая операция' });
     await tapAmount('25');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(async () => expect(await liveTxs(td)).toHaveLength(1));
     // шит закрывается не мгновенно, а на загруженной машине тем более: ждём самого закрытия, а не фиксированные 200 мс
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
@@ -97,7 +97,7 @@ describe('двойное касание «+» (шит ещё не успел н�
     click();
     await findByRole('dialog', { name: 'Новая операция' });
     await tapAmount('25');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(async () => expect(await liveTxs(td)).toHaveLength(1));
     // Шит должен закрыться сам — даём ему на это щедрый срок (а не фиксированные 200 мс, которых на загруженной машине не хватает).
     // Остался открытым — идём по второму пути проверки.
@@ -106,7 +106,7 @@ describe('двойное касание «+» (шит ещё не успел н�
       // человек видит открытый шит, дописывает «5» и нажимает «Сохранить» ещё раз
       await tapAmount('5');
       const shown = (screen.getByRole('textbox', { name: /^Сумма/ }) as HTMLInputElement).value;
-      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+      await clickSave();
       const minor = Math.round(Number(shown.replace(/\s/g, '').replace(',', '.')) * 100);
       await waitFor(async () => expect((await liveTxs(td)).map((t) => t.amountMinor)).toContain(minor));
     } else {

@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, activeFilterLabels, filtersFromParams, NO_CATEGORY, totalsByCurrency, transactionsQuery, withKind } from './txFilters';
+import {
+  activeFilterCount,
+  activeFilterLabels,
+  dayTotal,
+  defaultFilters,
+  filtersFromParams,
+  filtersToParams,
+  matchesSearch,
+  NO_CATEGORY,
+  totalsByCurrency,
+  transactionsQuery,
+  transferFeeMinor,
+  walletOpsQuery,
+  withKind,
+  type ListFilters,
+  type SearchLookups,
+} from './txFilters';
 
 describe('фильтры из шита «Фильтры»: чистая логика', () => {
   it('activeFilterCount: считает только то, что лежит в шите (кошелёк, вид, категория)', () => {
@@ -43,9 +59,136 @@ describe('totalsByCurrency', () => {
       cur,
     );
     expect(r).toEqual([
-      { currency: 'TJS', incomeMinor: 0, expenseMinor: 750 },
-      { currency: 'USD', incomeMinor: 9000, expenseMinor: 2000 },
+      { currency: 'TJS', incomeMinor: 0, expenseMinor: 750, feeMinor: 0 },
+      { currency: 'USD', incomeMinor: 9000, expenseMinor: 2000, feeMinor: 0 },
     ]);
+  });
+
+  describe('комиссии переводов', () => {
+    const wallets = (id: string) => ({ a: 'TJS', b: 'TJS', c: 'USD' })[id as 'a' | 'b' | 'c'];
+    // 100 списали с «a», 97,50 зачислили на «b»: комиссия 2,50 — расход
+    const fee = { kind: 'transfer' as const, walletId: 'a', toWalletId: 'b', amountMinor: 10_000, toAmountMinor: 9750 };
+
+    it('transferFeeMinor: разница списания и зачисления при одной валюте; обмен валют и перевод без комиссии — 0', () => {
+      expect(transferFeeMinor(fee, wallets)).toBe(250);
+      expect(transferFeeMinor({ ...fee, toAmountMinor: 10_000 }, wallets)).toBe(0);
+      expect(transferFeeMinor({ ...fee, toWalletId: 'c', toAmountMinor: 900 }, wallets)).toBe(0); // обмен: комиссии по определению нет
+      expect(transferFeeMinor({ ...fee, toAmountMinor: null }, wallets)).toBe(0);
+      expect(transferFeeMinor({ ...fee, kind: 'expense' }, wallets)).toBe(0);
+    });
+
+    it('комиссия входит в расходы валюты и показана отдельно; сам перевод — нет', () => {
+      const r = totalsByCurrency([{ kind: 'expense', walletId: 'a', amountMinor: 500 }, fee, { ...fee, toAmountMinor: 10_000 }], wallets);
+      expect(r).toEqual([{ currency: 'TJS', incomeMinor: 0, expenseMinor: 750, feeMinor: 250 }]);
+    });
+
+    it('перевод без расходов и доходов: в итоге только комиссия', () => {
+      expect(totalsByCurrency([fee], wallets)).toEqual([{ currency: 'TJS', incomeMinor: 0, expenseMinor: 250, feeMinor: 250 }]);
+    });
+
+    it('список по кошельку: комиссию за перевод НА этот кошелёк платил другой — её нет', () => {
+      expect(totalsByCurrency([fee], wallets, 'b')).toEqual([]);
+      expect(totalsByCurrency([fee], wallets, 'a')).toEqual([{ currency: 'TJS', incomeMinor: 0, expenseMinor: 250, feeMinor: 250 }]);
+    });
+
+    it('dayTotal по кошельку: чужая комиссия не входит в итог дня', () => {
+      const t = { kind: 'transfer' as const, walletId: 'a', baseCurrency: 'TJS', baseAmountMinor: 250 };
+      expect(dayTotal([t], 'TJS')?.netMinor).toBe(-250);
+      expect(dayTotal([t], 'TJS', 'a')?.netMinor).toBe(-250);
+      expect(dayTotal([t], 'TJS', 'b')?.netMinor).toBe(0);
+    });
+  });
+});
+
+describe('matchesSearch: заметка, категория, кошелёк, сумма', () => {
+  const look: SearchLookups = {
+    walletName: (id) => ({ w1: 'Наличные', w2: 'Карта Alif', w3: 'Доллары' })[id],
+    categoryName: (id) => ({ c1: 'Еда', c2: 'Зарплата' })[id],
+    currencyOf: (id) => ({ w1: 'TJS', w2: 'TJS', w3: 'USD' })[id] as 'TJS' | 'USD' | undefined,
+  };
+  const lunch = { kind: 'expense' as const, walletId: 'w1', toWalletId: null, categoryId: 'c1', amountMinor: 150_050, toAmountMinor: null, note: 'Обед с Рустамом' };
+  const move = { kind: 'transfer' as const, walletId: 'w1', toWalletId: 'w3', categoryId: null, amountMinor: 11_000, toAmountMinor: 1000, note: '' };
+  const hit = (tx: Parameters<typeof matchesSearch>[0], q: string) => matchesSearch(tx, q, look);
+
+  it('пустой запрос подходит всему', () => {
+    expect(hit(lunch, '')).toBe(true);
+    expect(hit(lunch, '   ')).toBe(true);
+  });
+  it('заметка, категория и кошелёк — без учёта регистра', () => {
+    expect(hit(lunch, 'РУСТАМ')).toBe(true);
+    expect(hit(lunch, 'еда')).toBe(true);
+    expect(hit(lunch, 'налич')).toBe(true);
+    expect(hit(lunch, 'карта')).toBe(false);
+  });
+  it('«Без категории» ищется у расхода без категории, но не у перевода', () => {
+    const none = { ...lunch, categoryId: null };
+    expect(hit(none, 'без категории')).toBe(true);
+    expect(hit(move, 'без категории')).toBe(false);
+  });
+  it('перевод ищется по обоим кошелькам', () => {
+    expect(hit(move, 'доллар')).toBe(true);
+    expect(hit(move, 'налич')).toBe(true);
+  });
+  it('сумма: начало числа, пробелы и запятая не мешают', () => {
+    expect(hit(lunch, '1500')).toBe(true);
+    expect(hit(lunch, '1 500,50')).toBe(true);
+    expect(hit(lunch, '1500.5')).toBe(true);
+    expect(hit(lunch, '15')).toBe(true);
+    expect(hit(lunch, '500')).toBe(false); // «500» — не начало 1500,50
+    expect(hit(lunch, '1500,51')).toBe(false);
+  });
+  it('то, что видно в строке: «Долг» у движения по долгу (а не «без категории»), «Регулярный платёж», «комиссия»', () => {
+    const debt = { ...lunch, categoryId: null, debtId: 'd1' };
+    expect(hit(debt, 'долг')).toBe(true);
+    expect(hit(debt, 'без категории')).toBe(false);
+    expect(hit({ ...lunch, recurringRuleId: 'r1' }, 'регулярный')).toBe(true);
+    expect(hit(lunch, 'регулярный')).toBe(false);
+    const fee = { kind: 'transfer' as const, walletId: 'w1', toWalletId: 'w2', categoryId: null, amountMinor: 10_000, toAmountMinor: 9800, note: '' };
+    expect(hit(fee, 'комиссия')).toBe(true);
+    expect(hit(move, 'комиссия')).toBe(false); // обмен валют — комиссии нет
+  });
+  it('перевод между валютами ищется и по сумме зачисления', () => {
+    expect(hit(move, '110')).toBe(true);
+    expect(hit(move, '10')).toBe(true); // 10 $ на счёте зачисления
+  });
+});
+
+describe('фильтры в адресе: filtersToParams ↔ filtersFromParams', () => {
+  const today = '2026-10-15';
+  const back = (f: ListFilters) => ({ ...defaultFilters(today), ...filtersFromParams(filtersToParams(f, today), today) });
+
+  it('обычные фильтры — пустой адрес', () => {
+    expect(filtersToParams(defaultFilters(today), today).toString()).toBe('');
+  });
+  it.each<[string, Partial<ListFilters>]>([
+    ['прошлый месяц', { period: 'prev' }],
+    ['всё время', { period: 'all' }],
+    ['другой месяц (не текущий)', { period: 'month', month: '2026-03' }],
+    ['«Другой месяц», пока выбран именно текущий — не превращается в «Этот месяц»', { period: 'month', month: '2026-10' }],
+    ['запомненный месяц при «Всё время» и «Этот месяц» не теряется', { period: 'all', month: '2026-07' }],
+    ['…и при обычном периоде «Этот месяц»', { period: 'this', month: '2026-07' }],
+    ['кошелёк, вид, категория', { walletId: 'w-1', kind: 'expense', categoryId: 'c-1' }],
+    ['без категории', { categoryId: NO_CATEGORY, kind: 'income' }],
+  ])('туда и обратно: %s', (_, patch) => {
+    const f = { ...defaultFilters(today), ...patch };
+    expect(back(f)).toEqual(f);
+  });
+  it('запомненный месяц пишется вместе с явным периодом: адрес не читается как «Другой месяц»', () => {
+    expect(filtersToParams({ ...defaultFilters(today), period: 'this', month: '2026-07' }, today).toString()).toBe('period=this&month=2026-07');
+    expect(filtersToParams({ ...defaultFilters(today), period: 'month', month: '2026-07' }, today).toString()).toBe('period=month&month=2026-07');
+  });
+  it('поиск в адрес не попадает', () => {
+    expect(filtersToParams({ ...defaultFilters(today), search: 'обед' }, today).toString()).toBe('');
+  });
+  it('явный period главнее month; period=month без месяца пропускается', () => {
+    expect(filtersFromParams(new URLSearchParams('period=all&month=2026-03'), today)).toEqual({ period: 'all', month: '2026-03' });
+    expect(filtersFromParams(new URLSearchParams('period=month'), today)).toEqual({});
+    expect(filtersFromParams(new URLSearchParams('period=чушь'), today)).toEqual({});
+  });
+  it('кошелёк: id принимается, мусор — нет; ссылка с чипа кошелька', () => {
+    expect(filtersFromParams(new URLSearchParams('wallet=w-1'), today)).toEqual({ walletId: 'w-1' });
+    expect(filtersFromParams(new URLSearchParams('wallet=a%20b'), today)).toEqual({});
+    expect(filtersFromParams(new URLSearchParams(walletOpsQuery('w-1')), today)).toEqual({ walletId: 'w-1', period: 'all' });
   });
 });
 
