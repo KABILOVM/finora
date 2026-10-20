@@ -5,6 +5,7 @@ import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
 import { useOnline } from '@/components/OnlineBadge';
 import { cn } from '@/lib/cn';
+import { HideAmountsProvider } from '@/components/hideAmounts';
 import { BottomNav } from './BottomNav';
 import { SectionBoundary } from './SectionBoundary';
 import { SideNav } from './SideNav';
@@ -32,6 +33,7 @@ export function AppShell({ status }: AppShellProps) {
   const online = useOnline();
   const { pathname } = useLocation();
   return (
+    <HideAmountsProvider>
     <div className="min-h-dvh">
       <SideNav status={status} />
       <div className="md:pl-64">
@@ -77,5 +79,6 @@ export function AppShell({ status }: AppShellProps) {
       </div>
       <BottomNav />
     </div>
+    </HideAmountsProvider>
   );
 }

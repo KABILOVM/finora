@@ -173,6 +173,20 @@ test.describe('39. Главная: компактная, с «Требует в�
     expect(await text()).toMatch(/4 600/);
   });
 
+  test('«Скрывать суммы» в Настройках прячет суммы и на других экранах (Кошельки)', async ({ page }) => {
+    await page.clock.install({ time: NOW });
+    await openApp(page);
+    await addTx(page, { kind: 'income', amount: '1000', category: 'Зарплата' });
+    await dismissToasts(page);
+    await goSection(page, 'Кошельки');
+    await expect(page.getByTestId('wallets-total')).toContainText('1');
+    await goSection(page, 'Настройки');
+    await page.getByRole('switch', { name: 'Скрывать суммы' }).click();
+    await goSection(page, 'Кошельки');
+    await expect(page.getByTestId('wallets-total')).not.toContainText(/\d/);
+    await expect(page.getByTestId('wallets-total').getByRole('img', { name: 'Сумма скрыта' })).toBeVisible();
+  });
+
   test('спокойно: ни долгов, ни просрочек — строки «Требует внимания» нет, а блоки не прыгают', async ({ page }) => {
     await page.clock.install({ time: NOW });
     await openApp(page);
