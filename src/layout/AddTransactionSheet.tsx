@@ -115,10 +115,13 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const formRef = useRef<HTMLDivElement>(null);
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
-  const presetKind = (useLocation().state as { kind?: string } | null)?.kind;
+  const preset = useLocation().state as { kind?: string; walletId?: string } | null;
+  const presetKind = preset?.kind;
+  // Кнопки на экране кошелька открывают шит сразу с этим кошельком (если он ещё есть)
+  const presetWallet = preset?.walletId && wallets.some((w) => w.id === preset.walletId) ? preset.walletId : null;
   const [initial] = useState(() =>
     emptyForm(
-      pickDefaultWallet(wallets, stats.lastWalletId, settings.defaultWalletId),
+      presetWallet ?? pickDefaultWallet(wallets, stats.lastWalletId, settings.defaultWalletId),
       presetKind === 'income' || presetKind === 'transfer' ? presetKind : 'expense',
     ),
   );
