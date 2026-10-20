@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { Notice } from '@/components/Notice';
+import { SectionHeader } from '@/components/SectionHeader';
 import { formatMinor } from '@/domain/money';
 import type { ImportReport } from '@/import/runImport';
 import { rowsWord } from './importText';
@@ -33,9 +35,11 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
     <div className="flex flex-col gap-5">
       <Card className="flex flex-col gap-3" role="region" aria-label="Итог импорта">
         <h2 className="text-lg font-bold">{title}</h2>
-        {report.fatal && <p role="alert" className="font-medium text-danger">{report.fatal}</p>}
+        {report.fatal && <Notice tone="danger">{report.fatal}</Notice>}
         {report.stopped && !report.fatal && (
-          <p className="text-muted">Добавлено {report.added} из {report.total}. Загрузите файл ещё раз — импорт продолжится с того же места, повторов не будет.</p>
+          <Notice tone="warning" role="note">
+            Добавлено {report.added} из {report.total}. Загрузите файл ещё раз — импорт продолжится с того же места, повторов не будет.
+          </Notice>
         )}
         <dl className="divide-y divide-border">
           <Row id="added" label="Добавлено" value={report.added} />
@@ -61,9 +65,9 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
 
       {report.failedCount > 0 && (
         <section aria-labelledby="failed-h" className="flex flex-col gap-2">
-          <h2 id="failed-h" className="px-1 text-sm font-bold uppercase tracking-wide text-muted">
+          <SectionHeader id="failed-h" className="mb-0">
             Не импортировано: {report.failedCount}
-          </h2>
+          </SectionHeader>
           <Card className="flex flex-col gap-2">
             <ul className="divide-y divide-border" aria-label="Строки, которые не удалось записать">
               {shown.map((f) => (
@@ -85,9 +89,9 @@ export function DoneStep({ report, onAgain }: DoneStepProps) {
 
       {report.reconcile.length > 0 && (
         <section aria-labelledby="reconcile-h" className="flex flex-col gap-2">
-          <h2 id="reconcile-h" className="px-1 text-sm font-bold uppercase tracking-wide text-muted">
+          <SectionHeader id="reconcile-h" className="mb-0">
             Сверьте остатки
-          </h2>
+          </SectionHeader>
           <Card padding="none">
             <p className="px-4 pt-3 text-sm text-muted">
               Остатки считаются из операций, начальный остаток новых кошельков — 0. Сверьте цифры с банком; при расхождении поправьте начальный

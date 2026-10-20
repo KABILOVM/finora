@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { SectionHeader } from '@/components/SectionHeader';
 import type { PlanCategory } from '@/import/types';
 
 function CategoryState({ c }: { c: PlanCategory }) {
@@ -19,9 +20,9 @@ export function CategoriesBlock({ categories }: { categories: readonly PlanCateg
   const missing = categories.filter((c) => c.target.kind === 'missing').length;
   return (
     <section aria-labelledby="cats-h" className="flex flex-col gap-2">
-      <h2 id="cats-h" className="px-1 text-sm font-bold uppercase tracking-wide text-muted">
+      <SectionHeader id="cats-h" className="mb-0">
         Категории
-      </h2>
+      </SectionHeader>
       <Card className="flex flex-col gap-3">
         <p data-testid="categories-summary">
           Найдено у вас: {found}. Будет создано: {created}.
