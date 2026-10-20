@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useBalances, useSettings, useStore, useWallets } from '@/db';
 import type { CurrencyCode, IsoDate } from '@/domain/types';
 import { useDebtsData } from '@/features/debts/useDebtsData';
-import { computeHomeTotal } from '@/features/home/homeData';
+import { computeWalletsTotal } from '@/rates/walletsTotal';
 import { shiftMonth } from '@/features/transactions/txFilters';
 import { monthKey } from '@/lib/dates';
 import { useRates } from '@/rates/hooks';
@@ -22,7 +22,7 @@ export interface NetWorthData {
 export type NetWorthState = NetWorthData | { overflow: true } | null | undefined;
 
 /**
- * Чистый капитал (кошельки + мне должны − я должен) и деньги в кошельках по месяцам. Итог по кошелькам — тот же `computeHomeTotal`,
+ * Чистый капитал (кошельки + мне должны − я должен) и деньги в кошельках по месяцам. Итог по кошелькам — тот же `computeWalletsTotal`,
  * что и «Всего» на главной, поэтому цифры сходятся. Остатки долгов берутся из `useDebtsData`; закрытые и архивные не входят.
  */
 export function useNetWorth(today: IsoDate): NetWorthState {
@@ -40,7 +40,7 @@ export function useNetWorth(today: IsoDate): NetWorthState {
     if (settings === null || wallets.length === 0) return null;
     const base = settings.baseCurrency;
     try {
-      const total = computeHomeTotal(wallets, balances, base, getRate);
+      const total = computeWalletsTotal(wallets, balances, base, getRate);
       if (total === null) return { overflow: true };
       const open: NetDebt[] = [];
       for (const it of debts.items) {

@@ -4,7 +4,7 @@ import { findByRole, screen, user, waitFor } from '@/components/testUtils';
 import { formatMinor } from '@/domain/money';
 import { opsDeps, pinToday, storeOf, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
 import type { RateLookup } from '@/rates/types';
-import { computeWalletsTotal } from './walletTotals';
+import { computeWalletsTotal } from '@/rates/walletsTotal';
 import WalletsPage from './WalletsPage';
 
 vi.mock('virtual:pwa-register/react', () => ({

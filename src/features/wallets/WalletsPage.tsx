@@ -24,7 +24,7 @@ import { viewRule } from '@/recurring/ruleView';
 import { useRates } from '@/rates/hooks';
 import { GoalLine } from './GoalLine';
 import { ReconcileSheet } from './ReconcileSheet';
-import { computeWalletsTotal } from './walletTotals';
+import { computeWalletsTotal } from '@/rates/walletsTotal';
 import { WALLET_KIND_LABELS } from './walletUi';
 import { useGoals } from './useGoals';
 import { WalletSheet } from './WalletSheet';
@@ -222,7 +222,7 @@ export default function WalletsPage() {
               )}
               {total.missing.length > 0 && (
                 <Notice tone="warning" role="alert" className="mt-2">
-                  Нет курса, в итог не вошли: {total.missing.join(', ')}. Задайте курс в Настройках.
+                  Нет курса, в итог не вошли: {total.missing.map((m) => m.currency).join(', ')}. Задайте курс в Настройках.
                 </Notice>
               )}
               {archivedHasMoney && <p className="mt-1 text-sm text-muted">Архивные кошельки в итог не входят.</p>}

@@ -9,7 +9,7 @@ import BudgetsWidget from '@/features/budgets/BudgetsWidget';
 import UpcomingWidget from '@/features/recurring/UpcomingWidget';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
 import { useRates } from '@/rates/hooks';
-import { computeHomeTotal } from './homeData';
+import { computeWalletsTotal } from '@/rates/walletsTotal';
 import AttentionRow from './AttentionRow';
 import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
@@ -38,7 +38,7 @@ export default function HomePage() {
 
   const base = settings?.baseCurrency;
   const total = useMemo(
-    () => (wallets && balances && base ? computeHomeTotal(wallets, balances, base, getRate) : undefined),
+    () => (wallets && balances && base ? computeWalletsTotal(wallets, balances, base, getRate) : undefined),
     [wallets, balances, base, getRate],
   );
 

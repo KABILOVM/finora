@@ -17,7 +17,7 @@ import {
   type History,
   unpinToday,
 } from '@/features/transactions/__fixtures__/opsKit';
-import { computeHomeTotal } from './homeData';
+import { computeWalletsTotal } from '@/rates/walletsTotal';
 import HomePage from './HomePage';
 
 const HIDE_KEY = 'finora-hide-balance';
@@ -481,7 +481,7 @@ describe('расчёты главной (чистые функции)', () => {
       ['c', 1],
       ['d', 0],
     ]);
-    const r = computeHomeTotal(wallets, balances, 'TJS', (from) => (from === 'USD' ? lookup(0.5) : null));
+    const r = computeWalletsTotal(wallets, balances, 'TJS', (from) => (from === 'USD' ? lookup(0.5) : null));
     // 2 цента × 0,5 = 1 дирам (а не 0 + 0 из двух округлений 0,5 вниз)
     expect(r).toEqual({ totalMinor: 1001, approximate: true, missing: [], stale: [], entered: [], viaOtherRates: true });
   });
@@ -493,13 +493,13 @@ describe('расчёты главной (чистые функции)', () => {
       ['c', 0],
       ['d', 0],
     ]);
-    const r = computeHomeTotal(wallets, balances, 'TJS', () => null);
+    const r = computeWalletsTotal(wallets, balances, 'TJS', () => null);
     expect(r).toEqual({ totalMinor: 1000, approximate: false, missing: [{ currency: 'USD', balanceMinor: 500 }], stale: [], entered: [], viaOtherRates: false });
   });
 
   it('устаревший курс попадает в stale с датой', () => {
     const balances = new Map([['b', 500]]);
-    const r = computeHomeTotal(wallets, balances, 'TJS', () => lookup(10, { stale: true, asOf: '2026-09-01' }));
+    const r = computeWalletsTotal(wallets, balances, 'TJS', () => lookup(10, { stale: true, asOf: '2026-09-01' }));
     expect(r?.stale).toEqual([{ currency: 'USD', asOf: '2026-09-01' }]);
     expect(r?.approximate).toBe(true);
   });
@@ -513,7 +513,7 @@ describe('расчёты главной (чистые функции)', () => {
     ]);
     const two = [...wallets, { id: 'e', currency: 'TJS' }];
     balances.set('e', 9_000_000_000_000_000);
-    expect(computeHomeTotal(two, balances, 'TJS', () => null)).toBeNull();
+    expect(computeWalletsTotal(two, balances, 'TJS', () => null)).toBeNull();
   });
 });
 
@@ -585,9 +585,9 @@ describe('расчёты главной: откуда курс', () => {
   const balances = new Map([['a', 1000], ['b', 100]]);
 
   it('введённый курс попадает в entered с датой; viaOtherRates — только если был и обычный', () => {
-    const r = computeHomeTotal(wallets, balances, 'TJS', lookup(true));
+    const r = computeWalletsTotal(wallets, balances, 'TJS', lookup(true));
     expect(r).toMatchObject({ totalMinor: 2100, approximate: true, entered: [{ currency: 'USD', asOf: '2026-10-10' }], viaOtherRates: false });
-    const n = computeHomeTotal(wallets, balances, 'TJS', lookup(false));
+    const n = computeWalletsTotal(wallets, balances, 'TJS', lookup(false));
     expect(n).toMatchObject({ entered: [], viaOtherRates: true });
   });
 });

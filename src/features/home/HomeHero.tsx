@@ -6,13 +6,13 @@ import type { CurrencyCode, Minor } from '@/domain/types';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { ruDate } from '@/features/transactions/txForm';
 import { enteredNote } from '@/rates/enteredText';
-import type { HomeTotal } from './homeData';
+import type { WalletsTotal } from '@/rates/walletsTotal';
 import { HomeMoney, useHideAmounts } from './hideAmounts';
 import { Sparkline } from './Sparkline';
 import { useHomeFlow } from './useHomeFlow';
 
 export interface HomeHeroProps {
-  total: HomeTotal | null;
+  total: WalletsTotal | null;
   base: CurrencyCode;
 }
 
@@ -35,7 +35,7 @@ function Capsule({ testId, icon, index, children }: { testId: string; icon: 'inc
  * Пояснения к итогу: всё, что раньше стояло строками под суммой. Показываются по нажатию на ⓘ или на жёлтую строку.
  * Когда суммы скрыты глазом, вместо остатков называем только валюты.
  */
-function TotalNotes({ total, hidden }: { total: HomeTotal; hidden: boolean }) {
+function TotalNotes({ total, hidden }: { total: WalletsTotal; hidden: boolean }) {
   const notes: string[] = [];
   if (total.approximate && total.missing.length === 0 && total.viaOtherRates) notes.push('Остатки в других валютах пересчитаны по курсу.');
   if (total.entered.length > 0) notes.push(enteredNote(total.entered));
