@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { useBalances, useSettings, useStore } from '@/db';
 import { ImportFileError, type ImportPlan, type WalletChoice } from '@/import/types';
 import { buildPlan } from '@/import/plan';
+import { undoImport } from '@/import/undoImport';
 import { runImport, type ImportProgress, type ImportReport } from '@/import/runImport';
 import { useRates } from '@/rates/hooks';
 import { DoneStep } from './DoneStep';
@@ -203,7 +204,9 @@ export default function ImportPage() {
             />
           )}
           {stage.name === 'running' && <RunStep progress={stage.progress} stopping={stage.stopping} onStop={stop} />}
-          {stage.name === 'done' && <DoneStep report={stage.report} onAgain={again} />}
+          {stage.name === 'done' && (
+            <DoneStep report={stage.report} onAgain={again} onUndo={stage.report.journal ? () => undoImport(store, stage.report.journal!) : undefined} />
+          )}
         </>
       )}
     </>
