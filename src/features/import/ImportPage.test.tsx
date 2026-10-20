@@ -172,9 +172,32 @@ describe('Импорт из Дзен-мани: предпросмотр', () => 
     await findByRole('region', { name: 'Итоги разбора файла' });
     await user.click(screen.getByRole('button', { name: 'Импортировать 8 операций' }));
     const dlg = await findByRole('alertdialog');
-    expect(norm(dlg.textContent)).toContain('Отменить импорт одной кнопкой пока нельзя');
+    expect(norm(dlg.textContent)).toContain('на экране итога будет кнопка «Отменить импорт»');
     expect(norm(dlg.textContent)).toContain('Резервная копия импорт не откатит');
-    expect(norm(dlg.textContent)).not.toContain('сначала сделайте резервную копию');
+    expect(norm(dlg.textContent)).not.toContain('нельзя');
+  });
+});
+
+describe('Импорт из Дзен-мани: отмена', () => {
+  it('«Отменить импорт» на итоге: подтверждение, операции убраны, кнопка пропадает', async () => {
+    const td = await openImport();
+    chooseFile(fixtureText('basic.csv'), 'basic.csv');
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    await user.type(screen.getByRole('textbox', { name: /^Курс для пересчёта в TJS \(USD\)/ }), '10,9');
+    await waitFor(() => expect(text('count-add')).toBe('10'));
+    await user.click(screen.getByRole('button', { name: 'Импортировать 10 операций' }));
+    await findByRole('alertdialog');
+    await user.click(screen.getByRole('button', { name: 'Импортировать' }));
+    await findByRole('heading', { name: 'Импорт завершён', level: 2 });
+    await eventually(async () => expect(await store(td).db.transactions.filter((t) => t.deletedAt === null).count()).toBe(10));
+
+    await user.click(screen.getByRole('button', { name: 'Отменить импорт' }));
+    const dlg = await findByRole('alertdialog');
+    expect(dlg.textContent).toContain('Будет убрано операций: 10');
+    await user.click(Array.from(dlg.querySelectorAll('button')).find((b) => b.textContent === 'Отменить импорт')!);
+    await waitFor(() => expect(screen.getByText(/Импорт отменён: убрано 10 операций/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Отменить импорт' })).toBeNull();
+    expect(await store(td).db.transactions.filter((t) => t.deletedAt === null).count()).toBe(0);
   });
 });
 

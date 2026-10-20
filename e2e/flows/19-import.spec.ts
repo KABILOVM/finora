@@ -175,6 +175,23 @@ test.describe('19. Импорт из Дзен-мани (CSV)', () => {
     await expect(page.getByRole('listitem').filter({ has: page.getByText('Доллары', { exact: true }) })).toHaveCount(1);
   });
 
+  test('«Отменить импорт» на итоге убирает добавленное; операции и новые кошельки уходят', async ({ page }) => {
+    await openApp(page);
+    await openImport(page);
+    await pick(page, fixture('basic.csv'));
+    await rateField(page, 'USD').fill('10,9');
+    await expect(count(page, 'add')).toHaveText('10');
+    await confirmImport(page, 10);
+    await expect(page.getByRole('heading', { level: 2, name: 'Импорт завершён' })).toBeVisible();
+    await page.getByRole('button', { name: 'Отменить импорт' }).click();
+    const dlg = page.getByRole('alertdialog');
+    await expect(dlg).toContainText('Будет убрано операций: 10');
+    await dlg.getByRole('button', { name: 'Отменить импорт', exact: true }).click();
+    await expect(page.getByText(/Импорт отменён: убрано 10 операций/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Отменить импорт' })).toHaveCount(0);
+    expect(await countTx(page)).toEqual({ live: 0, total: 10 });
+  });
+
   test('чужой файл: понятный отказ словами; файл с BOM, точкой с запятой и запятой в числах читается', async ({ page }, testInfo) => {
     await openApp(page);
     await openImport(page);

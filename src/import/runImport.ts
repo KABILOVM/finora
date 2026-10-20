@@ -3,6 +3,7 @@ import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { categoryKey } from './ids';
 import type { ImportPlan, PlanCategory, PlanOp, PlanWallet } from './types';
+import type { ImportJournal } from './undoImport';
 
 /**
  * Запись плана в базу — только через репозитории (store.wallets / categories / transactions): все их проверки работают.
@@ -56,6 +57,8 @@ export interface ImportReport {
   createdCategories: number;
   reconcile: ReconcileLine[];
   elapsedMs: number;
+  /** Что записал этот запуск — для «Отменить импорт». Нет, если ничего не создано. */
+  journal?: ImportJournal;
 }
 
 export interface RunOptions {
@@ -142,10 +145,11 @@ async function ensureWallets(store: Store, plan: ImportPlan): Promise<{ failed: 
   return { failed, created };
 }
 
-async function ensureCategories(store: Store, plan: ImportPlan): Promise<{ failed: Map<string, string>; created: number }> {
+async function ensureCategories(store: Store, plan: ImportPlan): Promise<{ failed: Map<string, string>; created: number; createdIds: string[] }> {
   const failed = new Map<string, string>();
   const byKey = new Map<string, PlanCategory>(plan.categories.map((c) => [c.key, c]));
   let created = 0;
+  const createdIds: string[] = [];
   for (const c of plan.categories) {
     if (c.target.kind !== 'create' || !c.needed) continue;
     const parent = c.parentKey ? byKey.get(c.parentKey) : undefined;
@@ -162,12 +166,13 @@ async function ensureCategories(store: Store, plan: ImportPlan): Promise<{ faile
       }
       await store.categories.create({ name: c.name, kind: c.catKind, color: CATEGORY_COLOR, icon: CATEGORY_ICON, parentId }, { id: c.target.id });
       created++;
+      createdIds.push(c.target.id);
     } catch (e) {
       failed.set(c.key, e instanceof ValidationError ? e.message : `Не удалось создать категорию «${c.name}»`);
       if (!(e instanceof ValidationError)) console.error('Импорт: не создана категория', e);
     }
   }
-  return { failed, created };
+  return { failed, created, createdIds };
 }
 
 function label(op: PlanOp): string {
@@ -264,6 +269,9 @@ export async function runImport(store: Store, plan: ImportPlan, opts: RunOptions
     createdCategories: cats.created,
     reconcile: reconcileLines(plan, done, wallets.created),
     elapsedMs: Date.now() - started,
+    ...(done.size > 0 || wallets.created.size > 0 || cats.createdIds.length > 0
+      ? { journal: { txIds: [...done], walletIds: [...wallets.created], categoryIds: cats.createdIds } }
+      : {}),
   };
 }
 
