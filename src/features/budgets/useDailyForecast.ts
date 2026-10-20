@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { summarizeDay, summarizeMonth, uuidV5, useStore, type Store } from '@/db';
+import { isAdjustment } from '@/domain/adjustment';
 import { computeBalances } from '@/domain/balances';
 import { computeDebtState, debtPlanStop } from '@/domain/debts';
 import {
@@ -178,6 +179,7 @@ export async function loadForecastData(store: Store, today: IsoDate, horizonEnd:
       t.deletedAt === null &&
       (t.recurringRuleId === null || t.recurringRuleId === undefined) &&
       (t.debtId === null || t.debtId === undefined) &&
+      !isAdjustment(t) &&
       (t.kind === 'income' || t.kind === 'transfer') &&
       t.occurredOn >= addDays(today, -NEAR_DAYS) &&
       t.occurredOn <= addDays(today, NEAR_DAYS),

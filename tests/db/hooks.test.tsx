@@ -202,6 +202,7 @@ describe('useSettings / useMonthSummary', () => {
       debtInMinor: 0,
       debtOutMinor: 0,
       debtFlowMinor: 0,
+      adjustmentFlowMinor: 0,
       excludedCount: 0,
     }));
 

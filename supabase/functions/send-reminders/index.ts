@@ -433,6 +433,8 @@ export interface LevelTx {
   kind: string;
   categoryId: string | null;
   debtId: string | null;
+  /** 'adjust' — «Корректировка остатка» (domain/adjustment.ts): в расходы бюджета не входит. Нет поля = обычная операция. */
+  fxSource?: string | null | undefined;
   baseCurrency: string;
   baseAmountMinor: number;
 }
@@ -470,7 +472,7 @@ export function budgetLevelsOf(args: BudgetLevelsArgs): BudgetLevelRow[] {
       if (t.baseAmountMinor > 0) expense += BigInt(t.baseAmountMinor); // комиссия перевода: только в общий лимит
       continue;
     }
-    if (t.debtId !== null || t.kind === 'income') continue;
+    if (t.debtId !== null || t.kind === 'income' || t.fxSource === 'adjust') continue; // 'adjust' — «Корректировка остатка» (domain/adjustment.ts): не расход
     expense += BigInt(t.baseAmountMinor);
     byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0n) + BigInt(t.baseAmountMinor));
   }
@@ -1094,7 +1096,7 @@ export function parseCategoryRow(row: unknown): CategoryLite | null {
 
 export function parseSpendRow(row: unknown): LevelTx | null {
   if (!isRec(row)) return null;
-  const { kind, category_id: categoryId, debt_id: debtId, base_currency: baseCurrency, base_amount_minor: amount } = row;
+  const { kind, category_id: categoryId, debt_id: debtId, fx_source: fxSource, base_currency: baseCurrency, base_amount_minor: amount } = row;
   if (typeof kind !== 'string' || typeof baseCurrency !== 'string' || typeof amount !== 'number' || !Number.isSafeInteger(amount)) return null;
   if (categoryId !== null && (typeof categoryId !== 'string' || !isUuid(categoryId))) return null;
   if (debtId !== null && (typeof debtId !== 'string' || !isUuid(debtId))) return null;
@@ -1102,6 +1104,7 @@ export function parseSpendRow(row: unknown): LevelTx | null {
     kind,
     categoryId: categoryId === null ? null : categoryId.toLowerCase(),
     debtId: debtId === null ? null : debtId.toLowerCase(),
+    fxSource: typeof fxSource === 'string' ? fxSource : null,
     baseCurrency,
     baseAmountMinor: amount,
   };
@@ -1433,7 +1436,7 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
       const rows = await allRows(
         'transactions',
         [
-          ['select', 'id,kind,category_id,debt_id,base_currency,base_amount_minor'],
+          ['select', 'id,kind,category_id,debt_id,fx_source,base_currency,base_amount_minor'],
           ['user_id', `eq.${userId}`],
           ['deleted_at', 'is.null'],
           ['kind', 'in.(expense,transfer)'],

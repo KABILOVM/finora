@@ -4,9 +4,11 @@ import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
+import { AdjustmentView } from './AdjustmentView';
 import { DateChip } from './DateChip';
 import { useToast } from '@/components/Toast';
 import { useCategories, useSettings, useStore, useWallets } from '@/db';
+import { isAdjustment } from '@/domain/adjustment';
 import { formatMinor } from '@/domain/money';
 import type { Category, LocalRow, Settings, Transaction, Wallet } from '@/domain/types';
 import { overpayAfterEdit, type EditOverpay } from '@/features/debts/editOverpay';
@@ -81,6 +83,10 @@ export default function EditTransactionSheet({ id, onClose }: EditTransactionShe
         <EmptyState icon="cloud" title="Данные ещё загружаются" text="Подождите немного и откройте операцию снова." />
       </Sheet>
     );
+  }
+
+  if (isAdjustment(found.tx)) {
+    return <AdjustmentView tx={found.tx} wallet={wallets.find((w) => w.id === found.tx!.walletId)} onClose={onClose} closing={closing} />;
   }
 
   return (

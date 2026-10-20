@@ -54,6 +54,8 @@ export interface LevelTx {
   kind: string;
   categoryId: string | null;
   debtId: string | null;
+  /** 'adjust' — «Корректировка остатка» (domain/adjustment.ts): в расходы бюджета не входит. Нет поля = обычная операция. */
+  fxSource?: string | null | undefined;
   baseCurrency: string;
   baseAmountMinor: number;
 }
@@ -91,7 +93,7 @@ export function budgetLevelsOf(args: BudgetLevelsArgs): BudgetLevelRow[] {
       if (t.baseAmountMinor > 0) expense += BigInt(t.baseAmountMinor); // комиссия перевода: только в общий лимит
       continue;
     }
-    if (t.debtId !== null || t.kind === 'income') continue;
+    if (t.debtId !== null || t.kind === 'income' || t.fxSource === 'adjust') continue; // 'adjust' — «Корректировка остатка» (domain/adjustment.ts): не расход
     expense += BigInt(t.baseAmountMinor);
     byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0n) + BigInt(t.baseAmountMinor));
   }

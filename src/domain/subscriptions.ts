@@ -1,4 +1,5 @@
 import { addDays } from '@/lib/dates';
+import { isAdjustment } from './adjustment';
 import { daysBetween, floorDiv } from './forecast';
 import { nextOccurrence } from './schedule';
 import type { Frequency, IsoDate, Minor, RecurringRule, Transaction, UUID } from './types';
@@ -20,7 +21,7 @@ const MAX_SERIES = 12;
 export const WINDOW_DAYS = 400;
 const AMOUNT_TOLERANCE_PERCENT = 5;
 
-export type SubTx = Pick<Transaction, 'id' | 'kind' | 'walletId' | 'amountMinor' | 'categoryId' | 'occurredOn' | 'note' | 'debtId' | 'recurringRuleId' | 'deletedAt'>;
+export type SubTx = Pick<Transaction, 'id' | 'kind' | 'walletId' | 'amountMinor' | 'categoryId' | 'occurredOn' | 'note' | 'debtId' | 'recurringRuleId' | 'deletedAt'> & { fxSource?: string | null | undefined };
 export type SubRule = Pick<RecurringRule, 'kind' | 'walletId' | 'amountMinor' | 'categoryId' | 'note' | 'archivedAt' | 'deletedAt'>;
 
 interface Step {
@@ -91,7 +92,7 @@ const covers = (rule: SubRule, c: { walletId: UUID; categoryId: UUID | null; not
 export function detectRecurring(txs: readonly SubTx[], rules: readonly SubRule[], today: IsoDate): SubscriptionCandidate[] {
   const groups = new Map<string, SubTx[]>();
   for (const t of txs) {
-    if (t.deletedAt !== null || t.kind !== 'expense' || t.debtId !== null || t.recurringRuleId !== null) continue;
+    if (t.deletedAt !== null || t.kind !== 'expense' || t.debtId !== null || t.recurringRuleId !== null || isAdjustment(t)) continue;
     if (t.occurredOn > today || daysBetween(t.occurredOn, today) > WINDOW_DAYS) continue;
     const note = normNote(t.note);
     let key: string;

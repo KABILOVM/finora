@@ -10,7 +10,10 @@ import { useBalances, useStore, useTransactions } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
+import { fxSourceOf } from '@/features/transactions/txForm';
+import { todayLocal } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
+import { useRates } from '@/rates/hooks';
 import { bankDifference, reconcileWallet, type Reconciliation } from './reconcile';
 
 function Line({
@@ -47,6 +50,7 @@ function BankCheck({ wallet, totalMinor }: { wallet: LocalRow<Wallet>; totalMino
   const [actual, setActual] = useState<number | null>(null);
   const [negative, setNegative] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { getRate } = useRates();
   const c = wallet.currency;
 
   let diff: number | null = null;
@@ -69,6 +73,33 @@ function BankCheck({ wallet, totalMinor }: { wallet: LocalRow<Wallet>; totalMino
       toastWithUndo(toast, 'Остаток исправлен', () => store.wallets.update(wallet.id, { openingBalanceMinor: before }), 'Остаток возвращён');
     } catch (e) {
       toast.error(humanError(e, 'Не удалось исправить остаток. Попробуйте ещё раз.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** «Корректировка остатка» сегодняшним числом: видна в истории, но не доход и не расход. Отменяется. */
+  const adjust = async () => {
+    if (diff === null || diff === 0 || busy) return;
+    setBusy(true);
+    try {
+      // настройки читаем здесь, а не из хука: нажатие не должно молча пропадать, пока хук ещё загружается
+      const settings = await store.settings.get();
+      if (!settings) throw new Error('Настройки ещё не загружены. Попробуйте через секунду.');
+      let fx: { rate: number; source: string } | undefined;
+      if (c !== settings.baseCurrency) {
+        const hit = getRate(c, settings.baseCurrency);
+        if (!hit) {
+          toast.error(`Нет курса ${c} к ${settings.baseCurrency}: задайте его в Настройках → «Курсы валют» или поправьте начальный остаток.`);
+          return;
+        }
+        fx = { rate: hit.rate, source: fxSourceOf(hit) };
+      }
+      const row = await store.transactions.createAdjustment({ walletId: wallet.id, deltaMinor: diff, occurredOn: todayLocal(), ...(fx ? { fx } : {}) });
+      setActual(null);
+      toastWithUndo(toast, 'Корректировка записана', () => store.transactions.softDelete(row.id), 'Корректировка отменена');
+    } catch (e) {
+      toast.error(humanError(e, 'Не удалось записать корректировку. Попробуйте ещё раз.'));
     } finally {
       setBusy(false);
     }
@@ -102,6 +133,13 @@ function BankCheck({ wallet, totalMinor }: { wallet: LocalRow<Wallet>; totalMino
           </Notice>
           <Button onClick={() => void fix()} loading={busy}>
             Исправить остаток
+          </Button>
+          <p className="text-sm text-muted">
+            Или запишите разницу сегодняшним числом: «Корректировка остатка» появится в истории операций, но не будет считаться доходом или
+            расходом.
+          </p>
+          <Button variant="secondary" onClick={() => void adjust()} loading={busy}>
+            Записать корректировкой
           </Button>
         </div>
       )}

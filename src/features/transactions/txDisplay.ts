@@ -1,3 +1,4 @@
+import { ADJUSTMENT_NOTE, isAdjustment } from '@/domain/adjustment';
 import { formatMinor } from '@/domain/money';
 import type { Category, CurrencyCode, Minor, Transaction, Wallet } from '@/domain/types';
 
@@ -24,6 +25,8 @@ type TxLike = Pick<
   /** Нет поля (старые данные и тестовые заготовки) = нет долга / не по расписанию. */
   debtId?: Transaction['debtId'] | undefined;
   recurringRuleId?: Transaction['recurringRuleId'] | undefined;
+  /** 'adjust' — «Корректировка остатка» (domain/adjustment.ts). */
+  fxSource?: Transaction['fxSource'] | undefined;
 };
 
 /** Метка на строке операции: связь с долгом или с регулярным платежом. */
@@ -59,6 +62,7 @@ export function endSentence(text: string): string {
 
 const HEX = /^#[0-9a-f]{6}$/i;
 export const MISSING_WALLET = 'Кошелёк удалён';
+export const ADJUSTMENT_TITLE = 'Корректировка остатка';
 
 export function describeTx(
   tx: TxLike,
@@ -96,6 +100,19 @@ export function describeTx(
 
   const category = tx.categoryId === null ? undefined : categories.get(tx.categoryId);
   const isExpense = tx.kind === 'expense';
+  if (isAdjustment(tx)) {
+    // не доход и не расход: разница с банком на дату сверки; сумма со знаком, но без «красного/зелёного»
+    return {
+      icon: '⚖️',
+      color: null,
+      title: ADJUSTMENT_TITLE,
+      subtitle: [wallet?.name ?? MISSING_WALLET, note === ADJUSTMENT_NOTE ? '' : note].filter((x) => x !== '').join(' · '),
+      currency,
+      signedMinor: isExpense ? -tx.amountMinor : tx.amountMinor,
+      tone: 'none',
+      second: null,
+    };
+  }
   return {
     icon: category?.icon ?? (isExpense ? '➖' : '➕'),
     color: category && HEX.test(category.color) ? category.color : null,

@@ -445,6 +445,26 @@ describe('экран «Кошельки»', () => {
     await waitFor(async () => expect((await s.db.wallets.get(cash.id))?.openingBalanceMinor).toBe(100_000));
   });
 
+  it('«Сверить с банком»: «Записать корректировкой» ставит операцию сегодняшним числом, остаток совпадает с банком, «Отменить» убирает', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const cash = (await s.db.wallets.toArray())[0];
+    if (!cash) throw new Error('нет кошелька');
+    await write(() => s.wallets.update(cash.id, { openingBalanceMinor: 100_000 }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
+    await findByRole('dialog', { name: 'Сверка: Наличные' });
+    await user.type(await findByRole('textbox', { name: /^Сколько на самом деле/ }), '1400');
+    await user.click(await findByRole('button', { name: 'Записать корректировкой' }));
+    await eventually(async () => expect(await s.db.transactions.count()).toBe(1));
+    const adj = (await s.db.transactions.toArray())[0]!;
+    expect(adj).toMatchObject({ kind: 'income', amountMinor: 40_000, fxSource: 'adjust', categoryId: null });
+    expect((await s.db.wallets.get(cash.id))?.openingBalanceMinor).toBe(100_000); // начальный остаток не тронут
+    await user.click(await findByRole('button', { name: 'Отменить' }));
+    await eventually(async () => expect((await s.db.transactions.get(adj.id))?.deletedAt).not.toBeNull());
+  });
+
   it('«Сверить с банком»: если сумма совпадает, сказано «Совпадает», а исправлять нечего', async () => {
     const td = await openPage();
     const s = store(td);

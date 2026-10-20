@@ -1,3 +1,4 @@
+import { ADJUSTMENT_SOURCE } from '@/domain/adjustment';
 import { isValidCurrencyCode } from '@/domain/currency';
 import { isMinor } from '@/domain/money';
 import { readWeather, stringifyWeather } from '@/domain/weatherPlaces';
@@ -382,7 +383,7 @@ export function parseTxSnapshot(kind: TxKind, amountMinor: Minor, raw: Record<st
     return { baseCurrency, baseAmountMinor, fxRate: null, fxSource: null };
   }
   if (!isStorableRate(rate)) fail(`Курс операции: ${FX_RATE_RANGE_TEXT}`);
-  if (typeof source !== 'string' || !(source === 'same' || FX_SOURCES.includes(source))) {
+  if (typeof source !== 'string' || !(source === 'same' || source === ADJUSTMENT_SOURCE || FX_SOURCES.includes(source))) {
     fail('Источник курса операции: неизвестное значение');
   }
   if (source === 'same' && (rate !== 1 || baseAmountMinor !== amountMinor)) {
