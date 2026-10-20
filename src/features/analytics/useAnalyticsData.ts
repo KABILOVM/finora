@@ -15,7 +15,10 @@ import type { CurrencyCode, IsoDate, Minor, UUID } from '@/domain/types';
 import { shiftMonth } from '@/features/transactions/txFilters';
 import {
   categoryDeltas,
+  compareThroughDay,
+  isCompareReady,
   monthlySeries,
+  summarizeThroughDay,
   topExpenses,
   weekdayProfile,
   type CategoryDelta,
@@ -52,7 +55,17 @@ export interface AnalyticsData {
   month: string;
   series: MonthPoint[];
   current: MonthSummary;
+  /** Прошлый месяц целиком (для прогноза «Темп»). */
   previous: MonthSummary;
+  /**
+   * Что сравниваем: выбранный месяц по сегодняшний день включительно (операции с датой позже сегодняшней в сравнение не входят,
+   * иначе отрезки были бы неравными). У прошедшего месяца — он весь, как `current`.
+   */
+  through: MonthSummary;
+  /** С чем сравниваем расходы и категории: прошлый месяц за те же дни, что прошли в идущем (или целиком — compareDays null). */
+  compare: MonthSummary;
+  /** null — сравнение с прошлым месяцем целиком; число — первые столько дней прошлого месяца. */
+  compareDays: number | null;
   deltas: CategoryDelta[];
   weekday: WeekdayPoint[];
   top: TopExpense[];
@@ -96,6 +109,10 @@ export function useAnalyticsData(month: string, today: IsoDate): AnalyticsState 
       const current = summarizeMonth(rows, month, base);
       const previous = summarizeMonth(rows, shiftMonth(month, -1), base);
       const days = monthPace(month, today);
+      // идущий месяц сравниваем с тем же отрезком прошлого, а не с целым прошлым месяцем
+      const compareDays = compareThroughDay(days?.elapsedDays ?? null, shiftMonth(month, -1));
+      const compare = compareDays === null ? previous : summarizeThroughDay(rows, shiftMonth(month, -1), compareDays, base);
+      const through = days ? summarizeThroughDay(rows, month, days.elapsedDays, base) : current;
       let pace: PaceSummary | null = null;
       const budgetPaces: BudgetPaceItem[] = [];
       let unusual: UnusualCategory[] = [];
@@ -129,7 +146,13 @@ export function useAnalyticsData(month: string, today: IsoDate): AnalyticsState 
         series: monthlySeries(rows, month, SERIES_MONTHS, base),
         current,
         previous,
-        deltas: categoryDeltas(current.byCategory, previous.byCategory),
+        through,
+        compare,
+        compareDays,
+        // в первые дни месяца сравнивать не с чем: только категории этого месяца, без «было/стало»
+        deltas: isCompareReady(compareDays)
+          ? categoryDeltas(through.byCategory, compare.byCategory, previous.byCategory)
+          : categoryDeltas(through.byCategory, []),
         weekday: weekdayProfile(rows, month, today, base),
         top: topExpenses(rows, month, base),
         pace,

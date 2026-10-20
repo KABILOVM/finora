@@ -62,7 +62,7 @@ export function activeFilterLabels(
 export const MIN_MONTH = '2000-01';
 export const MAX_MONTH = '2100-12';
 
-const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
+export const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ID_PARAM = /^[0-9A-Za-z_-]{1,64}$/;
 
 /** Фильтры «по умолчанию»: этот месяц, всё остальное выключено. */

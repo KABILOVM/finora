@@ -29,7 +29,7 @@ export function PaceCard({ data }: { data: AnalyticsData }) {
           </p>
           {pace.previousMinor > 0 && (
             <p className="mt-0.5 text-sm text-muted" data-testid="pace-previous">
-              В прошлом месяце было <span className="money font-semibold text-text">{formatMinor(pace.previousMinor, base)}</span>
+              В прошлом месяце целиком было <span className="money font-semibold text-text">{formatMinor(pace.previousMinor, base)}</span>
             </p>
           )}
           <p className="mt-2 text-xs text-muted">

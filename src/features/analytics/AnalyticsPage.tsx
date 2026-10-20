@@ -1,17 +1,18 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { Segmented } from '@/components/Segmented';
+import { Skeleton } from '@/components/Skeleton';
 import { pluralRu } from '@/lib/plural';
 import { addMinor } from '@/domain/money';
-import { filtersFromParams } from '@/features/transactions/txFilters';
 import { useCategoryIndex } from '@/features/transactions/txData';
 import { MonthSwitcher } from '@/features/transactions/MonthSwitcher';
-import { monthKey, monthTitle, todayLocal } from '@/lib/dates';
+import { monthKey, monthTitle } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
+import { MIN_MONTH, MONTH_PARAM } from '@/features/transactions/txFilters';
 import { CashCalendarView } from './CashCalendarView';
 import { CategoryCompare } from './CategoryCompare';
 import { MonthlyBars } from './charts/MonthlyBars';
@@ -19,6 +20,7 @@ import { WeekdayBars } from './charts/WeekdayBars';
 import { NetWorthCard } from './NetWorthCard';
 import { hasPaceContent, PaceCard } from './PaceCard';
 import { TopExpensesList } from './TopExpensesList';
+import { isCompareReady, MIN_COMPARE_DAYS, previousPhrase } from './analytics';
 import { useAnalyticsData, type AnalyticsData } from './useAnalyticsData';
 import { useNetWorth } from './useNetWorth';
 
@@ -33,24 +35,32 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-/** «На 12% больше, чем в прошлом месяце» — расходы месяца против прошлого; null — сравнивать не с чем. */
-export function expenseTrend(current: number, previous: number): string | null {
-  if (previous <= 0) return current > 0 ? 'В прошлом месяце расходов не было' : null;
+/**
+ * «На 12% больше, чем в прошлом месяце» — расходы месяца против прошлого; null — сравнивать не с чем. throughDay — идущий месяц сравнивается
+ * с тем же отрезком прошлого («за те же 15 дней прошлого месяца»), а не с целым месяцем.
+ */
+export function expenseTrend(current: number, previous: number, throughDay: number | null = null): string | null {
+  const then = previousPhrase(throughDay);
+  if (previous <= 0) return current > 0 ? (throughDay === null ? 'В прошлом месяце расходов не было' : `${capitalize(then)} расходов не было`) : null;
   const pct = Math.round(((current - previous) / previous) * 100);
-  if (pct === 0) return 'Столько же, сколько в прошлом месяце';
-  return pct > 0 ? `На ${pct}% больше, чем в прошлом месяце` : `На ${-pct}% меньше, чем в прошлом месяце`;
+  if (pct === 0) return `Столько же, сколько ${then}`;
+  return pct > 0 ? `На ${pct}% больше, чем ${then}` : `На ${-pct}% меньше, чем ${then}`;
 }
 
+const capitalize = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+
 function Summary({ data }: { data: AnalyticsData }) {
-  const { current, previous, base } = data;
-  const trend = expenseTrend(current.expenseMinor, previous.expenseMinor);
+  const { current, through, compare, base } = data;
+  const ready = isCompareReady(data.compareDays);
+  const trend = ready ? expenseTrend(through.expenseMinor, compare.expenseMinor, data.compareDays) : null;
   let net: number | null = null;
   try {
     net = addMinor(current.incomeMinor, -current.expenseMinor);
   } catch {
     net = null;
   }
-  const up = current.expenseMinor > previous.expenseMinor;
+  const up = through.expenseMinor > compare.expenseMinor;
+  const planned = current.expenseMinor - through.expenseMinor;
   return (
     <Card aria-label="Итоги месяца" data-testid="analytics-summary" className="!py-4 md:!p-5">
       <p className="text-sm text-muted">Расходы за {monthTitle(data.month).toLowerCase()}</p>
@@ -58,8 +68,18 @@ function Summary({ data }: { data: AnalyticsData }) {
         <MoneyText minor={current.expenseMinor} currency={base} tone="none" />
       </p>
       {trend !== null && (
-        <p data-testid="analytics-trend" className={`mt-0.5 text-sm font-medium ${current.expenseMinor === previous.expenseMinor ? 'text-muted' : up ? 'text-expense' : 'text-income'}`}>
+        <p data-testid="analytics-trend" className={`mt-0.5 text-sm font-medium ${through.expenseMinor === compare.expenseMinor ? 'text-muted' : up ? 'text-expense' : 'text-income'}`}>
           {trend}
+        </p>
+      )}
+      {!ready && (
+        <p data-testid="analytics-trend-early" className="mt-0.5 text-sm text-muted">
+          Месяц только начался: сравнение с прошлым появится на {MIN_COMPARE_DAYS}-й день.
+        </p>
+      )}
+      {planned > 0 && (
+        <p data-testid="analytics-planned" className="mt-0.5 text-xs text-muted">
+          Из них <MoneyText minor={planned} currency={base} tone="none" /> — операции с датой позже сегодняшней: в сравнение они не входят.
         </p>
       )}
       <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -90,27 +110,50 @@ const TABS = [
   { value: 'calendar', label: 'Календарь' },
 ] as const;
 
+/** Заглушка на время чтения: сводка и два блока ниже; для скринридера — «Считаем…». */
+function Loading() {
+  return (
+    <div role="status" aria-busy="true">
+      <span className="sr-only">Считаем…</span>
+      <div aria-hidden="true" className="flex flex-col gap-4">
+        <Skeleton className="h-36 !rounded-card" />
+        <Skeleton className="h-44 !rounded-card" />
+        <Skeleton className="h-44 !rounded-card" />
+      </div>
+    </div>
+  );
+}
+
 /**
- * «Аналитика». Вкладка «Обзор»: расходы выбранного месяца против прошлого, доходы и расходы по месяцам, категории с изменением,
- * средний расход по дням недели и самые крупные траты. Цифры считаются из операций (analytics.ts), по тем же правилам, что «Итоги
- * месяца» на главной. Вкладка «Календарь»: что будет с деньгами в ближайшие 30 дней (CashCalendarView).
+ * «Аналитика». Вкладка «Обзор»: расходы выбранного месяца против прошлого (идущий месяц — против того же отрезка прошлого), категории
+ * с долями и изменением, самые крупные траты, доходы и расходы по месяцам, средний расход по дням недели, деньги в кошельках по месяцам.
+ * Цифры считаются из операций (analytics.ts), по тем же правилам, что «Итоги месяца» на главной. Вкладка «Календарь»: что будет с
+ * деньгами в ближайшие 30 дней (CashCalendarView). Вкладка и месяц лежат в адресе (?tab=calendar&month=2026-08): «Назад», обновление
+ * и ссылка их не сбрасывают.
  */
 export default function AnalyticsPage() {
   const today = useToday();
-  const [tab, setTab] = useState<Tab>('overview');
   const currentMonth = monthKey(today);
-  const [params] = useSearchParams();
-  const [month, setMonth] = useState(() => {
-    const asked = filtersFromParams(params, todayLocal()).month;
-    return asked !== undefined && asked <= monthKey(todayLocal()) ? asked : monthKey(todayLocal());
-  });
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = params.get('tab') === 'calendar' ? 'calendar' : 'overview';
+  const asked = params.get('month');
+  const month = asked !== null && MONTH_PARAM.test(asked) && asked >= MIN_MONTH && asked <= currentMonth ? asked : currentMonth;
+  // По умолчанию (обзор, идущий месяц) адрес чистый; запись истории заменяем: листание месяцев не засоряет «Назад».
+  const setView = (next: { tab?: Tab; month?: string }) => {
+    const t = next.tab ?? tab;
+    const m = next.month ?? month;
+    const q = new URLSearchParams();
+    if (t === 'calendar') q.set('tab', 'calendar');
+    if (m !== currentMonth) q.set('month', m);
+    setParams(q, { replace: true });
+  };
   const data = useAnalyticsData(month, today);
   const categories = useCategoryIndex();
   const netWorth = useNetWorth(today);
 
   const header = <PageHeader title="Аналитика" />;
-  const tabs = <Segmented ariaLabel="Раздел аналитики" options={TABS} value={tab} onChange={setTab} className="mb-3" />;
-  const switcher = <MonthSwitcher month={month} max={currentMonth} onChange={setMonth} className="mb-3" />;
+  const tabs = <Segmented ariaLabel="Раздел аналитики" options={TABS} value={tab} onChange={(t) => setView({ tab: t })} className="mb-3" />;
+  const switcher = <MonthSwitcher month={month} max={currentMonth} onChange={(m) => setView({ month: m })} className="mb-3" />;
 
   // Календарь не зависит от выбранного месяца и читает всё сам, поэтому не ждёт данных «Обзора»
   if (tab === 'calendar') {
@@ -129,9 +172,7 @@ export default function AnalyticsPage() {
         {header}
         {tabs}
         {switcher}
-        <p role="status" className="py-10 text-center text-muted">
-          Считаем…
-        </p>
+        <Loading />
       </>
     );
   }
@@ -169,19 +210,22 @@ export default function AnalyticsPage() {
         <div className="stagger flex flex-col gap-4">
           <Summary data={data} />
           {hasPaceContent(data) && <PaceCard data={data} />}
-          <Section id="analytics-months" title="Доходы и расходы по месяцам">
-            <MonthlyBars points={data.series} base={data.base} />
-          </Section>
-          {netWorth && !('overflow' in netWorth) && <NetWorthCard data={netWorth} />}
           <Section id="analytics-categories" title="Категории: сравнение с прошлым месяцем">
             {data.deltas.length === 0 ? (
-              <p className="text-muted">Расходов по категориям в этом и прошлом месяце нет.</p>
+              <p className="text-muted">
+                {data.compareDays === null ? 'Расходов по категориям в этом и прошлом месяце нет.' : 'В этом месяце расходов пока нет.'}
+              </p>
             ) : (
-              <CategoryCompare deltas={data.deltas} categories={categories} base={data.base} month={month} />
+              <CategoryCompare
+                key={month}
+                deltas={data.deltas}
+                categories={categories}
+                base={data.base}
+                month={month}
+                totalMinor={data.through.expenseMinor}
+                compareDays={data.compareDays}
+              />
             )}
-          </Section>
-          <Section id="analytics-weekdays" title="В какие дни недели вы тратите">
-            <WeekdayBars points={data.weekday} base={data.base} />
           </Section>
           <Section id="analytics-top" title="Самые крупные расходы">
             {data.top.length === 0 ? (
@@ -190,6 +234,14 @@ export default function AnalyticsPage() {
               <TopExpensesList items={data.top} categories={categories} base={data.base} today={today} />
             )}
           </Section>
+          <Section id="analytics-months" title="Доходы и расходы по месяцам">
+            <MonthlyBars points={data.series} base={data.base} onSelect={(m) => setView({ month: m })} />
+          </Section>
+          <Section id="analytics-weekdays" title="В какие дни недели вы тратите">
+            <WeekdayBars points={data.weekday} base={data.base} />
+          </Section>
+          {/* деньги в кошельках не зависят от выбранного месяца: отдельным блоком в конце, а не между помесячными */}
+          {netWorth && !('overflow' in netWorth) && <NetWorthCard data={netWorth} />}
         </div>
       )}
     </>
