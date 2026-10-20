@@ -252,7 +252,8 @@ test.describe('CSP в настоящем браузере', () => {
 
     // «Кошельки»: сверка
     await goSection(page, 'Кошельки');
-    await page.getByRole('button', { name: 'Сверка: Карта' }).click();
+    await page.getByRole('button', { name: 'Изменить: Карта' }).click();
+    await sheet(page, 'Правка кошелька').getByRole('button', { name: 'Сверка остатка' }).click();
     await expect(sheet(page, /Сверка/)).toBeVisible();
     await page.keyboard.press('Escape');
 

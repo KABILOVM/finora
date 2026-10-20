@@ -28,6 +28,8 @@ export interface WalletSheetProps {
   onClose: () => void;
   /** Только при правке: убрать кошелёк в архив (подтверждение показывает вызывающий экран). */
   onArchive?: () => void;
+  /** Только при правке: открыть «Сверку» (из чего сложился остаток). */
+  onReconcile?: () => void;
 }
 
 type FieldError = { field: 'name' | 'currency' | 'opening' | 'goal' | 'goalOn' | 'form'; message: string };
@@ -35,8 +37,17 @@ type FieldError = { field: 'name' | 'currency' | 'opening' | 'goal' | 'goalOn' |
 /** Срок цели по умолчанию, когда человек нажал «Указать срок»: через полгода. */
 const DEFAULT_GOAL_DAYS = 180;
 
+/** Что значит вид кошелька: одна строка под выбором. */
+const KIND_HINTS: Record<WalletKind, string> = {
+  cash: 'Деньги на руках.',
+  card: 'Банковская карта: можно выбрать банк.',
+  bank: 'Счёт или вклад в банке: можно выбрать банк.',
+  savings: 'Копите на цель. Накопления не входят в «Можно тратить в день».',
+  other: 'Всё остальное: электронный кошелёк, долги на руках и т. п.',
+};
+
 /** Создание и правка кошелька. */
-export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onArchive }: WalletSheetProps) {
+export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onArchive, onReconcile }: WalletSheetProps) {
   const store = useStore();
   const toast = useToast();
   const editing = wallet !== null;
@@ -64,16 +75,9 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
   const [baseline] = useState(snapshot);
   const dirty = snapshot !== baseline;
 
-  // По кошельку есть операции (даже удалённые): валюту менять нельзя, иначе суммы поменяют смысл.
-  const hasOperations = useLiveQuery(async () => {
-    if (!wallet) return false;
-    const { transactions } = store.db;
-    return (
-      (await transactions.where('walletId').equals(wallet.id).count()) > 0 ||
-      (await transactions.where('toWalletId').equals(wallet.id).count()) > 0
-    );
-  }, [store, wallet?.id]);
-  const currencyLocked = editing && hasOperations === true;
+  // Валюта закреплена (операции, даже удалённые, или регулярные платежи): то же правило, что у хранилища. Пока ответа нет — считаем закреплённой.
+  const locked = useLiveQuery(() => (wallet ? store.wallets.isCurrencyLocked(wallet.id) : false), [store, wallet?.id]);
+  const currencyLocked = editing && locked !== false;
 
   const currencyOptions = CURRENCIES.some((c) => c.code === currency)
     ? CURRENCIES
@@ -192,15 +196,33 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
     >
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold">Банк</span>
+          <span className="text-sm font-semibold">Вид</span>
           <ChipPicker
-            ariaLabel="Банк"
-            layout="scroll"
-            value={bankId ?? 'none'}
-            options={[...BANKS.map((b) => ({ value: b.id, label: b.name, icon: bankIcon(b.id) })), { value: 'none', label: 'Другой' }]}
-            onChange={(v) => pickBank(v === 'none' ? null : v)}
+            ariaLabel="Вид кошелька"
+            value={kind}
+            options={WALLET_KINDS.map((k) => ({ value: k, label: WALLET_KIND_LABELS[k] }))}
+            onChange={(v) => {
+              const next = v as WalletKind;
+              // значок подбираем сами, пока человек не выбрал свой
+              if (icon === DEFAULT_ICON_BY_KIND[kind]) setIcon(DEFAULT_ICON_BY_KIND[next]);
+              setKind(next);
+            }}
           />
+          <p className="text-sm text-muted">{KIND_HINTS[kind]}</p>
         </div>
+
+        {(kind === 'card' || kind === 'bank') && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-semibold">Банк</span>
+            <ChipPicker
+              ariaLabel="Банк"
+              layout="scroll"
+              value={bankId ?? 'none'}
+              options={[...BANKS.map((b) => ({ value: b.id, label: b.name, icon: bankIcon(b.id) })), { value: 'none', label: 'Другой' }]}
+              onChange={(v) => pickBank(v === 'none' ? null : v)}
+            />
+          </div>
+        )}
 
         <TextInput
           label="Название"
@@ -216,7 +238,7 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
         <Field
           id="wallet-currency"
           label="Валюта"
-          hint={currencyLocked ? 'Валюту нельзя менять: по этому кошельку уже есть операции. Заведите новый кошелёк.' : undefined}
+          hint={currencyLocked ? 'Валюту нельзя менять: по этому кошельку уже есть операции или регулярные платежи. Заведите новый кошелёк.' : undefined}
           error={err('currency')}
         >
           <select
@@ -236,21 +258,6 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
             ))}
           </select>
         </Field>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold">Вид</span>
-          <ChipPicker
-            ariaLabel="Вид кошелька"
-            value={kind}
-            options={WALLET_KINDS.map((k) => ({ value: k, label: WALLET_KIND_LABELS[k] }))}
-            onChange={(v) => {
-              const next = v as WalletKind;
-              // значок подбираем сами, пока человек не выбрал свой
-              if (icon === DEFAULT_ICON_BY_KIND[kind]) setIcon(DEFAULT_ICON_BY_KIND[next]);
-              setKind(next);
-            }}
-          />
-        </div>
 
         {kind === 'savings' && (
           <GoalFields
@@ -289,6 +296,16 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
           <p className="text-center text-sm text-muted">
             Сколько денег уже лежало в кошельке до начала учёта. Дальше остаток считается сам.
           </p>
+          {onReconcile && (
+            <div className="mt-2 flex flex-col items-center gap-1">
+              <Button variant="secondary" disabled={dirty || saving} onClick={onReconcile}>
+                Сверка остатка
+              </Button>
+              <p className="text-center text-sm text-muted">
+                {dirty ? 'Сначала сохраните изменения.' : 'Покажет, из чего сложился остаток: начальный остаток, доходы, расходы и переводы.'}
+              </p>
+            </div>
+          )}
           {wallet && wallet.openingBalanceMinor < 0 && !openingTouched && (
             <p className="text-center text-sm text-warning">
               Сейчас начальный остаток отрицательный: {endSentence(formatMinor(wallet.openingBalanceMinor, wallet.currency))} Он не изменится, пока вы

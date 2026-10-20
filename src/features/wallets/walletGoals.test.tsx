@@ -160,7 +160,7 @@ describe('кошельки: подсказка «пора отложить»', (
 
 describe('шит кошелька: поля цели', () => {
   const openSheet = async (name?: string) => {
-    if (name) await user.click(screen.getByText(name));
+    if (name) await user.click(screen.getByRole('button', { name: `Изменить: ${name}` }));
     else await user.click(screen.getByRole('button', { name: 'Добавить' }));
     return findByRole('dialog', { name: name ? 'Правка кошелька' : 'Новый кошелёк' });
   };

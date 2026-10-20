@@ -261,7 +261,7 @@ describe('экран «Кошельки»', () => {
     if (!cash) throw new Error('нет кошелька');
     await write(() => s.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 500, occurredOn: '2026-10-05' }));
 
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Валюта' })).toBeDisabled());
     expect(screen.getByText(/по этому кошельку уже есть операции/)).toBeInTheDocument();
@@ -273,7 +273,7 @@ describe('экран «Кошельки»', () => {
     vi.spyOn(s.wallets, 'update').mockRejectedValue(
       new ValidationError('Нельзя менять валюту кошелька «Наличные»: по нему уже есть операции. Заведите новый кошелёк.'),
     );
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     pick(screen.getByRole('combobox', { name: 'Валюта' }), 'USD');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
@@ -294,7 +294,7 @@ describe('экран «Кошельки»', () => {
       icon: '💳',
     }));
     await waitFor(() => expect(screen.getByText('Кредитка')).toBeInTheDocument());
-    await user.click(screen.getByText('Кредитка'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Кредитка' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     expect(screen.getByText(/начальный остаток отрицательный/)).toBeInTheDocument();
     await user.clear(screen.getByRole('textbox', { name: 'Название' }));
@@ -311,7 +311,7 @@ describe('экран «Кошельки»', () => {
     await write(() => s.wallets.create({ name: 'Старый', currency: 'TJS', kind: 'cash', openingBalanceMinor: 7_000, color: '#2563eb', icon: '💰' }));
     await waitFor(() => expect(screen.getByText('Старый')).toBeInTheDocument());
 
-    await user.click(screen.getByText('Старый'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Старый' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
     const confirm = await findByRole('alertdialog');
@@ -334,7 +334,7 @@ describe('экран «Кошельки»', () => {
     const s = store(td);
     const cash = (await s.db.wallets.toArray())[0];
     expect((await s.settings.get())?.defaultWalletId).toBe(cash?.id);
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
     await findByRole('alertdialog');
@@ -380,7 +380,9 @@ describe('экран «Кошельки»', () => {
     const gone = await write(() => s.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 99_999, occurredOn: '2026-10-07' }));
     await write(() => s.transactions.softDelete(gone.id));
 
-    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
     const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
     await waitFor(() => expect(dialog).toHaveTextContent('= Остаток'));
     const text = dialog.textContent ?? '';
@@ -400,7 +402,9 @@ describe('экран «Кошельки»', () => {
     // так бывает только с повреждёнными данными: все пути записи такую сумму не пропускают
     await write(() => s.db.transactions.update(bad.id, { amountMinor: 0 }));
 
-    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
     const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
     await waitFor(() => expect(dialog).toHaveTextContent('Пропущено операций с некорректной суммой: 1'));
     const text = (dialog.textContent ?? '').replace(/\s+/g, ' ');

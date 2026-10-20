@@ -27,7 +27,9 @@ describe('ATTACK: «Сверка» при правке кошелька с др�
   it('открыта «Сверка», а начальный остаток кошелька изменился (пришло с синхронизации): экран не должен кричать «не совпадает»', async () => {
     const td = await openWallets();
     const cash = (await st(td).db.wallets.toArray())[0]!;
-    await user.click(screen.getByRole('button', { name: 'Сверка: Наличные' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Сверка остатка' }));
     const dialog = await findByRole('dialog', { name: 'Сверка: Наличные' });
     await waitFor(() => expect(dialog).toHaveTextContent('Совпадает с остатком'));
 
@@ -43,7 +45,7 @@ describe('ATTACK: правка кошелька по устаревшему сн
   it('имя изменено «с другого телефона», пока открыт шит правки; человек меняет только цвет — чужое имя не откатывается', async () => {
     const td = await openWallets();
     const cash = (await st(td).db.wallets.toArray())[0]!;
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await write(() => st(td).wallets.update(cash.id, { name: 'Касса' }));
     await user.click(screen.getByRole('button', { name: 'Синий' }));
@@ -60,7 +62,7 @@ describe('ATTACK: архив кошелька по умолчанию', () => {
     const td = await openWallets();
     const cash = (await st(td).db.wallets.toArray())[0]!;
     expect((await st(td).settings.get())?.defaultWalletId).toBe(cash.id);
-    await user.click(screen.getByText('Наличные'));
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
     await user.click(await findByRole('button', { name: 'В архив' }));

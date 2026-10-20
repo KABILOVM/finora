@@ -178,7 +178,8 @@ test.describe('XSS и CSV-инъекция через пользовательс
     await assertInert(page, 'правка');
     await page.keyboard.press('Escape');
     await goSection(page, 'Кошельки');
-    await page.getByRole('button', { name: /^Сверка:/ }).first().click();
+    await page.getByRole('button', { name: /^Изменить:/ }).first().click();
+    await sheet(page, 'Правка кошелька').getByRole('button', { name: 'Сверка остатка' }).click();
     await assertInert(page, 'сверка');
     await page.keyboard.press('Escape');
 
