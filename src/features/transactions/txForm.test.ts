@@ -12,6 +12,7 @@ import {
   firstOtherWallet,
   formatRate,
   formFromTx,
+  futureDateNotice,
   fxSourceOf,
   isFormDirty,
   parseRateText,
@@ -416,5 +417,22 @@ describe('isFormDirty: есть ли что терять при закрытии
     expect(isFormDirty({ ...start, kind: 'income' }, start, true)).toBe(true);
     const dated = { ...start, date: { mode: 'date' as const, value: '2026-10-01' } };
     expect(isFormDirty({ ...dated }, dated, true)).toBe(false);
+  });
+});
+
+describe('futureDateNotice: дата позже сегодняшней — вопрос, а не ошибка', () => {
+  const today = '2026-10-15';
+  it('сегодня и прошлое — без вопроса', () => {
+    expect(futureDateNotice('2026-10-15', today)).toBeNull();
+    expect(futureDateNotice('2026-10-14', today)).toBeNull();
+    expect(futureDateNotice('2000-01-01', today)).toBeNull();
+  });
+  it('завтра и позже — текст с датой и последствием', () => {
+    expect(futureDateNotice('2026-10-16', today)).toBe('Дата в будущем: 16.10.2026. Остаток кошелька изменится сразу.');
+    expect(futureDateNotice('2062-10-23', today)).toContain('23.10.2062');
+  });
+  it('не дата — ничего (её отвергнет checkDate)', () => {
+    expect(futureDateNotice('', today)).toBeNull();
+    expect(futureDateNotice('2026-13-40', today)).toBeNull();
   });
 });

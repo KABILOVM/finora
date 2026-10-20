@@ -374,10 +374,29 @@ export async function fillTx(page: Page, tx: TxInput): Promise<Locator> {
   return dlg;
 }
 
+/** Напоминание «Новой операции», когда категория не выбрана. */
+export const CATEGORY_NUDGE = 'Выберите категорию или оставьте без неё';
+
+/**
+ * «Сохранить» (или «Сохранить и добавить ещё») в «Новой операции». Без категории первое нажатие только напоминает о ней и
+ * открывает список, второе — сохраняет: тесты, которым категория не важна, нажимают кнопку так, как сделал бы человек без неё.
+ */
+export async function saveNewTx(dlg: Locator, name = 'Сохранить'): Promise<void> {
+  const button = dlg.getByRole('button', { name, exact: true });
+  const nudge = dlg.getByText(CATEGORY_NUDGE);
+  await button.click();
+  // либо окно закрылось (сохранилось), либо появилось напоминание о категории
+  await expect.poll(async () => (await nudge.isVisible()) || !(await dlg.isVisible()), { timeout: 5000 }).toBe(true);
+  if (await nudge.isVisible()) {
+    await dlg.page().waitForTimeout(450); // второе нажатие раньше ~350 мс — дрожание пальца, а не решение
+    await button.click();
+  }
+}
+
 /** Внести операцию целиком: заполнить, «Сохранить», дождаться закрытия шита. */
 export async function addTx(page: Page, tx: TxInput): Promise<void> {
   const dlg = await fillTx(page, tx);
-  await dlg.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await saveNewTx(dlg);
   await expect(dlg).toBeHidden();
   await expect(page.getByRole('status').filter({ hasText: 'Сохранено' }).first()).toBeVisible();
 }
