@@ -34,7 +34,7 @@ test.describe('45. Кошельки: строка ведёт к операция
     await expect(rec).toContainText('Совпадает с остатком на экране «Кошельки»');
   });
 
-  test('/wallets?new=1 открывает «Новый кошелёк» сразу; обновление и «Назад» форму не открывают', async ({ page }) => {
+  test('/wallets?new=1 открывает «Новый кошелёк» сразу; обновление страницы форму не открывает', async ({ page }) => {
     await openApp(page, '/wallets?new=1');
     const dlg = sheet(page, 'Новый кошелёк');
     await expect(dlg).toBeVisible();

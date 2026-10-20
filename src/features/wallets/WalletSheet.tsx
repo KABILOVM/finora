@@ -37,6 +37,9 @@ type FieldError = { field: 'name' | 'currency' | 'opening' | 'goal' | 'goalOn' |
 /** Срок цели по умолчанию, когда человек нажал «Указать срок»: через полгода. */
 const DEFAULT_GOAL_DAYS = 180;
 
+/** Виды, у которых выбирают банк. */
+const BANK_KINDS: readonly WalletKind[] = ['card', 'bank'];
+
 /** Что значит вид кошелька: одна строка под выбором. */
 const KIND_HINTS: Record<WalletKind, string> = {
   cash: 'Деньги на руках.',
@@ -78,6 +81,8 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
   // Валюта закреплена (операции, даже удалённые, или регулярные платежи): то же правило, что у хранилища. Пока ответа нет — считаем закреплённой.
   const locked = useLiveQuery(() => (wallet ? store.wallets.isCurrencyLocked(wallet.id) : false), [store, wallet?.id]);
   const currencyLocked = editing && locked !== false;
+  // пояснение — только когда запрет подтверждён, иначе оно мигало бы на кадр при каждом открытии
+  const lockedHint = locked === true;
 
   const currencyOptions = CURRENCIES.some((c) => c.code === currency)
     ? CURRENCIES
@@ -161,7 +166,6 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
       setColor(bank.color);
       // название подставляем, только если его не писали сами
       if (name.trim() === '' || BANKS.some((b) => b.name === name)) setName(bank.name);
-      if (kind === 'cash') setKind('card');
     } else {
       setIcon(DEFAULT_ICON_BY_KIND[kind]);
     }
@@ -187,9 +191,12 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
             Сохранить
           </Button>
           {onArchive && (
-            <Button variant="ghost" fullWidth disabled={saving} onClick={onArchive}>
-              Убрать в архив
-            </Button>
+            <>
+              <Button variant="ghost" fullWidth disabled={saving || dirty} onClick={onArchive}>
+                Убрать в архив
+              </Button>
+              {dirty && <p className="text-center text-sm text-muted">Чтобы убрать в архив, сначала сохраните изменения.</p>}
+            </>
           )}
         </div>
       }
@@ -203,15 +210,21 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
             options={WALLET_KINDS.map((k) => ({ value: k, label: WALLET_KIND_LABELS[k] }))}
             onChange={(v) => {
               const next = v as WalletKind;
-              // значок подбираем сами, пока человек не выбрал свой
-              if (icon === DEFAULT_ICON_BY_KIND[kind]) setIcon(DEFAULT_ICON_BY_KIND[next]);
+              if (bankId !== null && !BANK_KINDS.includes(next)) {
+                // банк выбирают только у карты и счёта: уходя с них, возвращаем обычный значок
+                setBankId(null);
+                setIcon(DEFAULT_ICON_BY_KIND[next]);
+              } else if (icon === DEFAULT_ICON_BY_KIND[kind]) {
+                // значок подбираем сами, пока человек не выбрал свой
+                setIcon(DEFAULT_ICON_BY_KIND[next]);
+              }
               setKind(next);
             }}
           />
           <p className="text-sm text-muted">{KIND_HINTS[kind]}</p>
         </div>
 
-        {(kind === 'card' || kind === 'bank') && (
+        {BANK_KINDS.includes(kind) && (
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-semibold">Банк</span>
             <ChipPicker
@@ -238,7 +251,7 @@ export function WalletSheet({ wallet, defaultCurrency, otherNames, onClose, onAr
         <Field
           id="wallet-currency"
           label="Валюта"
-          hint={currencyLocked ? 'Валюту нельзя менять: по этому кошельку уже есть операции или регулярные платежи. Заведите новый кошелёк.' : undefined}
+          hint={lockedHint ? 'Валюту нельзя менять: по этому кошельку уже есть операции или регулярные платежи. Заведите новый кошелёк.' : undefined}
           error={err('currency')}
         >
           <select

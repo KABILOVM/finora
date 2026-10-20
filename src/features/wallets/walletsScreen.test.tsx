@@ -6,6 +6,7 @@ import { formatMinor } from '@/domain/money';
 import { chip } from '@/features/transactions/__fixtures__/opsKit';
 import { createRateService } from '@/rates/service';
 import { createMemoryRateStorage } from '@/rates/storage';
+import { BANKS } from './banks';
 import WalletsPage from './WalletsPage';
 
 vi.mock('virtual:pwa-register/react', () => ({
@@ -111,6 +112,33 @@ describe('форма кошелька: порядок и подсказки', ()
     expect(screen.queryByRole('group', { name: 'Банк' })).toBeNull();
     expect(screen.getByText(/Накопления не входят в «Можно тратить в день»/)).toBeInTheDocument();
   });
+
+  it('смена вида на «Наличные» после выбора банка сбрасывает банк: значок обычный, поле «Банк» скрыто', async () => {
+    const td = await openPage();
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await findByRole('dialog', { name: 'Новый кошелёк' });
+    await user.click(chip('Вид кошелька', 'Карта'));
+    await user.click(chip('Банк', BANKS[0]!.name));
+    await user.click(chip('Вид кошелька', 'Наличные'));
+    expect(screen.queryByRole('group', { name: 'Банк' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const saved = (await store(td).db.wallets.toArray()).find((w) => w.name === BANKS[0]!.name);
+    expect(saved?.kind).toBe('cash');
+    expect(saved?.icon.startsWith('b:')).toBe(false);
+  });
+
+  it('«Убрать в архив» недоступно, пока в форме есть несохранённые изменения (как «Сверка остатка»)', async () => {
+    await openPage();
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    expect(screen.getByRole('button', { name: 'Убрать в архив' })).not.toBeDisabled();
+    await user.type(screen.getByRole('textbox', { name: 'Название' }), '!');
+    expect(screen.getByRole('button', { name: 'Убрать в архив' })).toBeDisabled();
+    expect(screen.getByText('Чтобы убрать в архив, сначала сохраните изменения.')).toBeInTheDocument();
+    await user.keyboard('{Backspace}');
+    expect(screen.getByRole('button', { name: 'Убрать в архив' })).not.toBeDisabled();
+  });
 });
 
 describe('валюта закреплена так же, как в хранилище', () => {
@@ -126,7 +154,8 @@ describe('валюта закреплена так же, как в хранил�
     await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Валюта' })).toBeDisabled());
-    expect(screen.getByText(/по этому кошельку уже есть операции или регулярные платежи/)).toBeInTheDocument();
+    // пояснение появляется, только когда запрет подтверждён запросом (до ответа поле заблокировано молча — без мигания)
+    await waitFor(() => expect(screen.getByText(/по этому кошельку уже есть операции или регулярные платежи/)).toBeInTheDocument());
   });
 
   it('у чистого кошелька поле валюты доступно', async () => {
@@ -153,6 +182,39 @@ describe('архив кошелька с регулярными платежам
     expect(confirm).toHaveTextContent('перестанут проводиться');
   });
 
+  it('платёж без заметки назван так же, как в списке платежей — по категории, а не «без названия»', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const cash = await cashOf(td);
+    const category = (await s.db.categories.toArray()).find((c) => c.kind === 'expense' && c.deletedAt === null);
+    if (!category) throw new Error('нет категории расходов');
+    await write(() =>
+      s.recurring.create({ kind: 'expense', walletId: cash.id, categoryId: category.id, amountMinor: 5000, note: '', frequency: 'monthly', intervalN: 1, startOn: '2026-11-01' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
+    const confirm = await findByRole('alertdialog');
+    await waitFor(() => expect(confirm).toHaveTextContent(`К кошельку привязаны регулярные платежи: ${category.name}`));
+    expect(confirm).not.toHaveTextContent('без названия');
+  });
+
+  it('архивный платёж не мешает архивации (проводиться он и так не будет), но валюту кошелька закрепляет', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const cash = await cashOf(td);
+    const rule = await write(() =>
+      s.recurring.create({ kind: 'expense', walletId: cash.id, amountMinor: 5000, note: 'Интернет', frequency: 'monthly', intervalN: 1, startOn: '2026-11-01' }),
+    );
+    await write(() => s.recurring.archive(rule.id));
+    expect(await s.wallets.isCurrencyLocked(cash.id)).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
+    const confirm = await findByRole('alertdialog');
+    expect(confirm).not.toHaveTextContent('регулярные платежи');
+  });
+
   it('без регулярных платежей предупреждения нет', async () => {
     await openPage();
     await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
@@ -176,6 +238,25 @@ describe('карточка «Всего»', () => {
     const line = norm(document.querySelector('[data-testid="wallets-by-currency"]')?.textContent);
     expect(line).toContain(norm(formatMinor(0, 'TJS')));
     expect(line).toContain(norm(formatMinor(12_000, 'USD')));
+  });
+
+  it('все кошельки в одной небазовой валюте — исходная сумма всё равно видна', async () => {
+    const td = await openPage({ rates: true });
+    const s = store(td);
+    const cash = await cashOf(td);
+    await write(() => s.wallets.create({ name: 'Доллары', currency: 'USD', kind: 'cash', openingBalanceMinor: 12_000, color: '#2563eb', icon: '💲' }));
+    await write(() => s.wallets.archive(cash.id));
+    await waitFor(() => expect(document.querySelector('[data-testid="wallets-by-currency"]')).not.toBeNull());
+    expect(norm(document.querySelector('[data-testid="wallets-by-currency"]')?.textContent)).toBe(norm(formatMinor(12_000, 'USD')));
+  });
+
+  it('строка архивного кошелька тоже ведёт к его операциям', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const old = await write(() => s.wallets.create({ name: 'Старый', currency: 'TJS', kind: 'cash', openingBalanceMinor: 7000, color: '#2563eb', icon: '💰' }));
+    await write(() => s.wallets.archive(old.id));
+    await user.click(await findByRole('button', { name: /Архив · 1/ }));
+    expect(screen.getByRole('link', { name: /Старый/ }).getAttribute('href')).toBe(`/transactions?wallet=${old.id}&period=all`);
   });
 
   it('одна валюта — разбивки нет; фраза про архив — только когда в архиве есть деньги', async () => {
@@ -219,13 +300,48 @@ describe('слишком большие суммы', () => {
   });
 });
 
+describe('слишком большие суммы: архив', () => {
+  it('в архиве — прочерк вместо «0», а подтверждение архивации честно говорит, что остаток не посчитан', async () => {
+    const td = await openPage();
+    const s = store(td);
+    const cash = await cashOf(td);
+    const old = await write(() => s.wallets.create({ name: 'Старый', currency: 'TJS', kind: 'cash', openingBalanceMinor: 7000, color: '#2563eb', icon: '💰' }));
+    await write(() => s.wallets.archive(old.id));
+    const ids: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const row = await write(() => s.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 100, occurredOn: '2026-10-05' }));
+      ids.push(row.id);
+    }
+    await write(async () => {
+      for (const id of ids) await s.db.transactions.update(id, { amountMinor: Number.MAX_SAFE_INTEGER });
+    });
+    await waitFor(() => expect(screen.getByText(new RegExp(BALANCES_OVERFLOW_MESSAGE))).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Архив · 1/ }));
+    const row = screen.getByRole('link', { name: /Старый/ });
+    expect(row.textContent).toContain('—');
+    expect(norm(row.textContent)).not.toMatch(/(^|\D)0\s*с\./);
+    // подтверждение архивации: остаток не «нулевой», а не посчитан
+    await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
+    await findByRole('dialog', { name: 'Правка кошелька' });
+    await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
+    const confirm = await findByRole('alertdialog');
+    expect(confirm).toHaveTextContent('Остаток кошелька не удалось посчитать');
+  });
+});
+
 describe('загрузка', () => {
-  it('пока данные читаются — каркас, а слово «Загрузка…» только для скринридера', async () => {
+  it('пока данные читаются — каркас с aria-busy и слово «Загрузка…» только для скринридера; потом каркас уходит', async () => {
     const td = makeTestDeps();
     renderAppRoot(<WalletsPage />, { deps: td.deps, path: '/wallets' });
-    // до конца загрузки заголовок «Кошельки» уже есть
-    await findByRole('heading', { name: 'Кошельки', level: 1 });
+    // первый кадр после открытия базы: каркас или уже готовый список; если каркас есть — он честный
+    const busy = document.querySelector('[aria-busy="true"]');
+    if (busy) {
+      expect(busy.querySelector('.sr-only')?.textContent).toBe('Загрузка…');
+      expect(busy.querySelector('[aria-hidden="true"]')).not.toBeNull();
+      expect(busy.textContent).not.toMatch(/\d/); // в каркасе нет ни одной цифры (не «0»)
+    }
     await waitFor(() => expect(screen.getByText('Наличные')).toBeInTheDocument());
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
     expect(screen.queryByText('Загрузка…')).toBeNull();
   });
 });

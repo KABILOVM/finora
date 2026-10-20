@@ -264,7 +264,7 @@ describe('экран «Кошельки»', () => {
     await user.click(screen.getByRole('button', { name: 'Изменить: Наличные' }));
     await findByRole('dialog', { name: 'Правка кошелька' });
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Валюта' })).toBeDisabled());
-    expect(screen.getByText(/по этому кошельку уже есть операции/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/по этому кошельку уже есть операции/)).toBeInTheDocument());
   });
 
   it('если репозиторий всё же отверг смену валюты (ValidationError) — понятное объяснение у поля валюты, ничего не меняется', async () => {
