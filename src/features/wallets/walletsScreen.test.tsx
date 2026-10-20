@@ -53,11 +53,11 @@ const cashOf = async (td: TestDeps) => {
 };
 
 describe('строка кошелька', () => {
-  it('вся строка — ссылка на операции этого кошелька за всё время; правка — отдельная кнопка-карандаш', async () => {
+  it('вся строка — ссылка на экран кошелька; правка — отдельная кнопка-карандаш', async () => {
     const td = await openPage();
     const cash = await cashOf(td);
     const link = screen.getByRole('link', { name: /Наличные/ });
-    expect(link.getAttribute('href')).toBe(`/transactions?wallet=${cash.id}&period=all`);
+    expect(link.getAttribute('href')).toBe(`/wallets/${cash.id}`);
     expect(screen.getByRole('button', { name: 'Изменить: Наличные' })).toBeInTheDocument();
     // «Сверка» из строки ушла в форму правки: на узком экране строке нужна каждая клетка
     expect(screen.queryByRole('button', { name: /^Сверка:/ })).toBeNull();
@@ -256,7 +256,7 @@ describe('карточка «Всего»', () => {
     const old = await write(() => s.wallets.create({ name: 'Старый', currency: 'TJS', kind: 'cash', openingBalanceMinor: 7000, color: '#2563eb', icon: '💰' }));
     await write(() => s.wallets.archive(old.id));
     await user.click(await findByRole('button', { name: /Архив · 1/ }));
-    expect(screen.getByRole('link', { name: /Старый/ }).getAttribute('href')).toBe(`/transactions?wallet=${old.id}&period=all`);
+    expect(screen.getByRole('link', { name: /Старый/ }).getAttribute('href')).toBe(`/wallets/${old.id}`);
   });
 
   it('одна валюта — разбивки нет; фраза про архив — только когда в архиве есть деньги', async () => {
@@ -294,7 +294,7 @@ describe('слишком большие суммы', () => {
     expect(screen.queryByText('Загрузка…')).toBeNull();
     // кошелёк по-прежнему виден и ведёт к своим операциям: там можно найти огромную сумму
     const link = screen.getByRole('link', { name: /Наличные/ });
-    expect(link.getAttribute('href')).toContain('/transactions?wallet=');
+    expect(link.getAttribute('href')).toContain('/wallets/');
     expect(link.textContent).toContain('—');
     await eventually(() => expect(document.querySelector('[data-testid="wallets-total"]')).toBeNull());
   });

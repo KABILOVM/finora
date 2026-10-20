@@ -68,11 +68,11 @@ export const ADD_LABEL = 'Добавить операцию';
 export interface AddLinkProps {
   to: string;
   /** Страница, поверх которой откроется шит: после закрытия возвращаемся на неё. */
-  state: { background: Location; kind?: TxKind };
+  state: { background: Location; kind?: TxKind; walletId?: string };
 }
 
 /** Свойства для <Link {...useAddLink()}>: шит «Новая операция» открывается поверх текущей страницы. */
-export function useAddLink(kind?: TxKind): AddLinkProps {
+export function useAddLink(kind?: TxKind, walletId?: string): AddLinkProps {
   const location = useLocation();
-  return { to: ADD_PATH, state: kind ? { background: location, kind } : { background: location } };
+  return { to: ADD_PATH, state: { background: location, ...(kind ? { kind } : {}), ...(walletId ? { walletId } : {}) } };
 }

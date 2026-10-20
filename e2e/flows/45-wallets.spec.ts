@@ -13,8 +13,22 @@ test.describe('45. Кошельки: строка ведёт к операция
     await goSection(page, 'Кошельки');
     await shot(page, '45-wallets-list', testInfo);
 
-    // строка — ссылка к операциям кошелька (все даты), чужие операции не показаны
+    // строка — ссылка на экран кошелька: остаток, кнопки, последние операции только этого кошелька
     await page.getByRole('link', { name: /Карта/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Карта' })).toBeVisible();
+    await expect(page).toHaveURL(/#\/wallets\/[^/]+$/);
+    await expect(page.getByTestId('wallet-balance')).toContainText('480');
+    await expect(page.getByRole('link', { name: 'Расход' })).toBeVisible();
+    await expect(page.getByText('такси')).toBeVisible();
+    await expect(page.getByText('кофе')).toHaveCount(0);
+    await shot(page, '45-wallet-screen', testInfo);
+    // «Расход» открывает форму сразу с этим кошельком
+    await page.getByRole('link', { name: 'Расход' }).click();
+    await expect(page.getByRole('button', { name: 'Кошелёк: Карта' })).toBeVisible();
+    await page.getByRole('button', { name: 'Закрыть' }).first().click();
+
+    // «Все операции» — история кошелька (все даты), чужие операции не показаны
+    await page.getByRole('link', { name: 'Все операции' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Операции' })).toBeVisible();
     await expect(page).toHaveURL(/#\/transactions\?wallet=[^&]+&period=all$/);
     await expect(page.getByRole('button', { name: 'Всё время' })).toHaveAttribute('aria-pressed', 'true');

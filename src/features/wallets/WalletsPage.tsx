@@ -17,7 +17,6 @@ import { BALANCES_OVERFLOW_MESSAGE, useBalancesState, useRecurringRules, useSett
 import { addMinor, formatMinor } from '@/domain/money';
 import type { Category, CurrencyCode, LocalRow, Minor, RecurringRule, Wallet } from '@/domain/types';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
-import { walletOpsQuery } from '@/features/transactions/txFilters';
 import { formatDayInline } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { enteredNote } from '@/rates/enteredText';
@@ -248,10 +247,10 @@ export default function WalletsPage() {
               return (
                 <li key={w.id}>
                   <div className="flex items-center pr-2">
-                    {/* вся строка — ссылка на историю кошелька (период «Всё время»), правка — отдельная кнопка-карандаш */}
+                    {/* вся строка — ссылка на экран кошелька, правка — отдельная кнопка-карандаш */}
                     <ListRow
                       className="min-w-0 flex-1"
-                      to={`/transactions?${walletOpsQuery(w.id)}`}
+                      to={`/wallets/${w.id}`}
                       leading={<WalletIcon wallet={w} />}
                       title={w.name}
                       subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
@@ -296,7 +295,7 @@ export default function WalletsPage() {
                       leading={<WalletIcon wallet={w} />}
                       title={w.name}
                       subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
-                      to={`/transactions?${walletOpsQuery(w.id)}`}
+                      to={`/wallets/${w.id}`}
                       trailing={overflow ? <Unavailable /> : <MoneyText minor={balanceOf(w)} currency={w.currency} tone="none" />}
                     />
                     <Button variant="secondary" aria-label={`Вернуть: ${w.name}`} disabled={busy} onClick={() => void restore(w)}>
