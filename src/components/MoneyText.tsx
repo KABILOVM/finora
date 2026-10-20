@@ -2,6 +2,7 @@ import { currencyInfo } from '@/domain/currency';
 import { formatMinor, isMinor, type FormatOptions } from '@/domain/money';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { cn } from '@/lib/cn';
+import { Masked, useHideAmounts } from './hideAmounts';
 
 export interface MoneyTextProps extends Omit<FormatOptions, 'symbol'> {
   minor: Minor;
@@ -20,6 +21,9 @@ const TONE_CLASS = { income: 'text-income', expense: 'text-expense', zero: 'text
 
 /** Сумма с форматированием через formatMinor. Цифры одной ширины (tabular-nums), строка не переносится. */
 export function MoneyText({ minor, currency, tone = 'auto', symbol = true, fraction, sign, className }: MoneyTextProps) {
+  const { hidden } = useHideAmounts();
+  // «Скрыть суммы»: точки вместо цифр на любом экране, где сумму рисует этот компонент
+  if (hidden) return <Masked className={className} />;
   if (!isMinor(minor)) {
     // Одна битая сумма не должна ронять весь экран (как и в расчёте остатков, см. domain/balances.ts).
     console.error('MoneyText: некорректная сумма', minor);

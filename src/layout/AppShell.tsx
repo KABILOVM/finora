@@ -5,6 +5,7 @@ import { Logo } from '@/components/Logo';
 import { Wordmark } from '@/components/Wordmark';
 import { useOnline } from '@/components/OnlineBadge';
 import { cn } from '@/lib/cn';
+import { HideAmountsProvider } from '@/components/hideAmounts';
 import { BottomNav } from './BottomNav';
 import { SectionBoundary } from './SectionBoundary';
 import { SideNav } from './SideNav';
@@ -32,38 +33,40 @@ export function AppShell({ status }: AppShellProps) {
   const online = useOnline();
   const { pathname } = useLocation();
   return (
-    <div className="min-h-dvh">
-      <SideNav status={status} />
-      <div className="md:pl-64">
-        <div className="sticky top-0 z-20 bg-bg/55 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
-          {/* Знак и слово «Sumoima» — только на «Главной»; на остальных экранах шапка тоньше, слева место под «Назад» самой страницы.
-              Тема переключается в «Настройки → Оформление» (на ПК — кнопкой в боковой панели). */}
-          <div className={cn('flex items-center gap-2 px-4', pathname === '/' ? 'min-h-[52px] justify-between' : 'min-h-[40px] justify-end')}>
-            {pathname === '/' && (
-              <div className="flex shrink-0 items-center gap-2">
-                <Logo size={28} />
-                {/* Без сети на узком экране слово «Sumoima» уступает место индикаторам: они должны уместиться в одну строку. */}
-                <Wordmark className={cn('text-lg', !online && 'max-[419px]:sr-only')} />
-              </div>
-            )}
-            {status && <div className="header-status flex min-w-0 items-center gap-1">{status}</div>}
+    <HideAmountsProvider>
+      <div className="min-h-dvh">
+        <SideNav status={status} />
+        <div className="md:pl-64">
+          <div className="sticky top-0 z-20 bg-bg/55 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
+            {/* Знак и слово «Sumoima» — только на «Главной»; на остальных экранах шапка тоньше, слева место под «Назад» самой страницы.
+                Тема переключается в «Настройки → Оформление» (на ПК — кнопкой в боковой панели). */}
+            <div className={cn('flex items-center gap-2 px-4', pathname === '/' ? 'min-h-[52px] justify-between' : 'min-h-[40px] justify-end')}>
+              {pathname === '/' && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <Logo size={28} />
+                  {/* Без сети на узком экране слово «Sumoima» уступает место индикаторам: они должны уместиться в одну строку. */}
+                  <Wordmark className={cn('text-lg', !online && 'max-[419px]:sr-only')} />
+                </div>
+              )}
+              {status && <div className="header-status flex min-w-0 items-center gap-1">{status}</div>}
+            </div>
           </div>
+          <main
+            id="main"
+            className="mx-auto w-full max-w-3xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 md:px-8 md:pb-12 md:pt-8"
+          >
+            {/* key — по пути страницы: при переходе новая страница плавно «всплывает», а граница сбоя раздела начинает с чистого листа */}
+            <div key={pathname} className="animate-rise">
+              <SectionBoundary>
+                <Suspense fallback={<PageFallback />}>
+                  <Outlet />
+                </Suspense>
+              </SectionBoundary>
+            </div>
+          </main>
         </div>
-        <main
-          id="main"
-          className="mx-auto w-full max-w-3xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 md:px-8 md:pb-12 md:pt-8"
-        >
-          {/* key — по пути страницы: при переходе новая страница плавно «всплывает», а граница сбоя раздела начинает с чистого листа */}
-          <div key={pathname} className="animate-rise">
-            <SectionBoundary>
-              <Suspense fallback={<PageFallback />}>
-                <Outlet />
-              </Suspense>
-            </SectionBoundary>
-          </div>
-        </main>
+        <BottomNav />
       </div>
-      <BottomNav />
-    </div>
+    </HideAmountsProvider>
   );
 }
