@@ -42,6 +42,11 @@ export interface PlanInput {
   walletChoices?: Readonly<Record<string, WalletChoice>>;
   /** Курс «единиц базовой валюты за 1 единицу этой валюты», введённый человеком. */
   rates?: Readonly<Record<CurrencyCode, number | null | undefined>>;
+  /**
+   * id операций файла, найденных «по содержимому» (возможный дубль), которые человек всё равно решил добавить. На проверку «по номеру»
+   * это не влияет: операция с таким же id уже в базе не добавится никогда.
+   */
+  forceAdd?: ReadonlySet<string>;
 }
 
 /** Курс годится: конечное число в тех же пределах, что в курсовом сервисе. */
@@ -208,7 +213,7 @@ export function buildPlan(input: PlanInput): ImportPlan {
         note: txInput.note ?? '',
       }),
     );
-    if (hit !== null) {
+    if (hit !== null && !input.forceAdd?.has(id)) {
       counts.exists++;
       contentHits++;
       if (hit === 'deleted') counts.existsDeleted++;
@@ -277,7 +282,7 @@ export function buildPlan(input: PlanInput): ImportPlan {
   }
   if (contentHits > 0) {
     notes.push(
-      `У ${contentHits} ${pluralRu(contentHits, 'операции', 'операций', 'операций')} совпали дата, сумма, кошелёк и заметка с теми, что уже есть у вас: они считаются загруженными раньше и повторно не добавятся (так бывает после переноса данных в аккаунт).`,
+      `У ${contentHits} ${pluralRu(contentHits, 'операции', 'операций', 'операций')} совпали дата, сумма, кошелёк и заметка с теми, что уже есть у вас: они считаются загруженными раньше и повторно не добавятся (так бывает после переноса данных в аккаунт). Если это разные операции, в списке «Уже есть» нажмите «Добавить всё равно».`,
     );
   }
   if (overflow.size > 0) notes.push('По некоторым кошелькам сумма операций слишком велика, остаток по файлу посчитать нельзя.');

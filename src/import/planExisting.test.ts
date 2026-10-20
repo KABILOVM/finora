@@ -60,6 +60,24 @@ describe('«уже есть» по содержимому', () => {
     ]);
   });
 
+  it('возможный дубль, который человек решил добавить всё равно, добавляется; остальные совпадения по-прежнему пропускаются', async () => {
+    const first = await setup(csv(BREAD, BREAD), { existing: new Map([['x', stored()], ['y', stored()]]) });
+    expect(first.plan.ops.map((o) => o.status)).toEqual(['exists', 'exists']);
+    const forceId = first.ids.tx[1]!;
+    const { plan } = await setup(csv(BREAD, BREAD), { existing: new Map([['x', stored()], ['y', stored()]]), forceAdd: new Set([forceId]) });
+    expect(plan.ops.map((o) => o.status)).toEqual(['exists', 'add']);
+    expect(plan.counts).toMatchObject({ add: 1, exists: 1 });
+    expect(plan.ops[1]!.input).toMatchObject({ kind: 'expense', amountMinor: 1200, occurredOn: '2026-09-02' });
+  });
+
+  it('«добавить всё равно» не отменяет проверку по номеру: операция с тем же id в базе не добавится никогда', async () => {
+    const parsed = parseZenmoney(csv(BREAD));
+    const ids = await computeIds(USER, parsed);
+    const { plan } = await setup(csv(BREAD), { existing: new Map([[ids.tx[0]!, stored()]]), forceAdd: new Set([ids.tx[0]!]) });
+    expect(plan.ops[0]).toMatchObject({ status: 'exists' });
+    expect(plan.counts.add).toBe(0);
+  });
+
   it.each([
     ['другой кошелёк', { walletId: 'w2' }],
     ['другая дата', { occurredOn: '2026-09-03' }],
