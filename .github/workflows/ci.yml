@@ -1,0 +1,56 @@
+name: CI
+
+# Проверки на каждый PR и на main: типы (приложение и тесты) → тесты → сборка → бюджет размера → быстрые e2e.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Типы (приложение и тесты)
+        run: npm run check
+      - name: Тесты
+        run: npx vitest run
+        env:
+          CI: 'true'
+      - name: Сборка
+        run: npx vite build
+      - name: Бюджет размера
+        run: npm run check:bundle
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Быстрые e2e (безопасность, меню, зоны касания, импорт)
+        run: npx playwright test e2e/sec/audit.spec.ts e2e/sec/csp.spec.ts e2e/flows/15-more-menu.spec.ts e2e/flows/41-touch-targets.spec.ts e2e/flows/19-import.spec.ts -g "^(?!.*большой файл)(?!.*уход с экрана)" --reporter=line
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: test-results
+          retention-days: 7

@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "typecheck:app": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck:app": "tsc --noEmit -p tsconfig.app.json",
+    "check": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.json",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
