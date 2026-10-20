@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import { ActionMenu } from './ActionMenu';
 import { ListRow } from './ListRow';
 import { Notice } from './Notice';
 import { SectionHeader } from './SectionHeader';
 import { Skeleton } from './Skeleton';
 import { Switch, SwitchTrack } from './Switch';
-import { render, screen, user } from './testUtils';
+import { findByRole, render, screen, user, waitFor } from './testUtils';
 
 describe('Switch', () => {
   function Harness({ onChange }: { onChange?: (v: boolean) => void }) {
@@ -130,5 +131,47 @@ describe('ListRow со ссылкой', () => {
     render(<ListRow title="Категория" onClick={onClick} />);
     await user.click(screen.getByRole('button', { name: /Категория/ }));
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ActionMenu', () => {
+  const items = (onA = vi.fn(), onB = vi.fn()) => [
+    { key: 'a', label: 'Править', hint: 'Изменить данные', icon: 'edit' as const, onSelect: onA },
+    { key: 'b', label: 'Удалить', tone: 'danger' as const, onSelect: onB },
+  ];
+
+  it('кнопка «⋯» открывает окно с действиями; у действия имя — его название, пояснение — описание', async () => {
+    render(<ActionMenu items={items()} label="Ещё действия по долгу" title="Долг" />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Ещё действия по долгу' }));
+    const dlg = await findByRole('dialog', { name: 'Долг' });
+    const edit = screen.getByRole('button', { name: 'Править' });
+    expect(dlg.contains(edit)).toBe(true);
+    const describedBy = edit.getAttribute('aria-describedby') ?? '';
+    expect(document.getElementById(describedBy)?.textContent).toBe('Изменить данные');
+    expect(screen.getByRole('button', { name: 'Удалить' }).className).toContain('text-danger');
+  });
+
+  it('выбор действия запускает его один раз и закрывает окно', async () => {
+    const onA = vi.fn();
+    const onB = vi.fn();
+    render(<ActionMenu items={items(onA, onB)} />);
+    await user.click(screen.getByRole('button', { name: 'Ещё действия' }));
+    await user.click(await findByRole('button', { name: 'Править' }));
+    expect(onA).toHaveBeenCalledTimes(1);
+    expect(onB).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('Escape закрывает окно, ничего не запуская; без действий кнопки «⋯» нет', async () => {
+    const onA = vi.fn();
+    const { rerender } = render(<ActionMenu items={items(onA)} />);
+    await user.click(screen.getByRole('button', { name: 'Ещё действия' }));
+    await findByRole('dialog', { name: 'Действия' });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onA).not.toHaveBeenCalled();
+    rerender(<ActionMenu items={[]} />);
+    expect(screen.queryByRole('button', { name: 'Ещё действия' })).toBeNull();
   });
 });

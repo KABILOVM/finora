@@ -93,12 +93,13 @@ describe('«Всего» и кошельки', () => {
     expect(cards.find((c) => c.includes('Доллары'))).toContain(fmt(-1000, 'USD')); // в долларах, не в сомони
   });
 
-  it('кошельки — лента чипов под заголовком «Кошельки»; каждый чип ведёт в «Кошельки»', async () => {
+  it('кошельки — лента чипов под заголовком «Кошельки»; каждый чип ведёт в операции этого кошелька', async () => {
     await openHome();
     expect(screen.getByRole('heading', { name: 'Кошельки', level: 2 })).toBeInTheDocument();
     const links = Array.from(document.querySelectorAll('section[aria-labelledby="home-wallets"] li a'));
     expect(links).toHaveLength(3);
-    for (const a of links) expect(a).toHaveAttribute('href', '/wallets');
+    for (const a of links) expect(a.getAttribute('href')).toMatch(/^\/transactions\?wallet=[0-9A-Za-z_-]+&period=all$/);
+    expect(new Set(links.map((a) => a.getAttribute('href'))).size).toBe(3); // у каждого кошелька — свой
     expect(screen.queryByRole('link', { name: 'Все кошельки' })).toBeNull(); // прежней ссылки больше нет
   });
 
@@ -432,7 +433,7 @@ describe('пустые состояния', () => {
       },
     });
     expect(screen.getByText('Начните с кошелька')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Создать кошелёк' })).toHaveAttribute('href', '/wallets');
+    expect(screen.getByRole('link', { name: 'Создать кошелёк' })).toHaveAttribute('href', '/wallets?new=1');
     expect(total()).toBeNull();
   });
 

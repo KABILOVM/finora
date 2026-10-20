@@ -9,7 +9,7 @@ import { ALICE, eventually, fakeAuthClient, makeTestDeps, renderAppRoot, type Te
 import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import { openStore, type Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
-import { tapAmount } from '@/features/transactions/__fixtures__/opsKit';
+import { clickSave, tapAmount } from '@/features/transactions/__fixtures__/opsKit';
 import { createSyncEngine, type SyncEngine } from '@/sync/engine';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
 import type { SessionAwareTransport } from '@/sync/session';
@@ -124,7 +124,7 @@ describe('атака 1: два устройства, полный путь', () 
     await tapAmount('100');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'плов');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
 
     // второй расход, потом правка суммы первого, потом удаление второго
@@ -133,7 +133,7 @@ describe('атака 1: два устройства, полный путь', () 
     await tapAmount('7');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'лишнее');
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await clickSave();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая операция' })).toBeNull());
 
     const live = async () => (await storeA.db.transactions.toArray()).filter((t) => t.deletedAt === null);

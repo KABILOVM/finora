@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Minor } from '@/domain/types';
 import { AmountInput } from './AmountInput';
 import { Keypad, type KeypadKey } from './Keypad';
-import { render, screen, user } from './testUtils';
+import { fire, render, screen, user } from './testUtils';
 
 const NB = ' ';
 const nb = (s: string) => s.replace(/ /g, NB);
@@ -52,7 +52,7 @@ describe('Keypad', () => {
     const buttons = screen.getAllByRole('button');
     const names = buttons.map((b) => b.getAttribute('aria-label') ?? b.textContent);
     expect(names.slice(0, 5)).toEqual(['Разделить', 'Умножить', 'Минус', 'Плюс', 'Равно']);
-    expect(names.slice(5)).toEqual(['7', '8', '9', '4', '5', '6', '1', '2', '3', 'Запятая', '0', 'Стереть']);
+    expect(names.slice(5)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'Запятая', '0', 'Стереть']); // одна раскладка с обычной клавиатурой
     for (const n of ['Разделить', 'Умножить', 'Минус', 'Плюс', 'Равно']) {
       const b = key(n);
       expect(b.textContent, `${n}: значок, а не символ шрифта`).toBe('');
@@ -60,6 +60,15 @@ describe('Keypad', () => {
       expect(b.className, `${n}: область касания 44 px`).toContain('h-11');
     }
     expect(key('5').className).toContain('min-h-[56px]');
+  });
+
+  it('цифры идут 1-2-3 сверху и без калькулятора, и с ним — одна раскладка во всём приложении', () => {
+    const order = () => screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent ?? '').filter((n) => /^\d$/.test(n));
+    const { unmount } = render(<Keypad onKey={() => {}} />);
+    expect(order()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']);
+    unmount();
+    render(<Keypad ops canEqual onKey={() => {}} />);
+    expect(order()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']);
   });
 
   it('сообщает о нажатиях', async () => {
@@ -582,6 +591,54 @@ describe('Keypad: раскладка калькулятора', () => {
     for (const k of ['9', 'Минус', '4']) await user.click(key(k));
     expect((key('Равно') as HTMLButtonElement).disabled).toBe(false);
     await user.click(key('Равно'));
+    expect(input().value).toBe('5');
+  });
+});
+
+describe('Enter в поле суммы (ПК)', () => {
+  const Submit = ({ onSubmit, calculator = true }: { onSubmit: (more: boolean) => void; calculator?: boolean }) => {
+    const [v, setV] = useState<Minor | null>(null);
+    return <AmountInput currency="TJS" value={v} onChange={setV} calculator={calculator} onSubmit={onSubmit} />;
+  };
+
+  it('Enter — сохранить (more = false), Ctrl/⌘+Enter — сохранить и добавить ещё (more = true)', async () => {
+    const onSubmit = vi.fn();
+    render(<Submit onSubmit={onSubmit} />);
+    await user.type(input(), '25');
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenLastCalledWith(false);
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(onSubmit).toHaveBeenLastCalledWith(true);
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }));
+    expect(onSubmit).toHaveBeenLastCalledWith(true);
+    expect(onSubmit).toHaveBeenCalledTimes(3);
+  });
+
+  it('пока в поле выражение, Enter его считает, а не отправляет форму; следующий Enter — отправляет', async () => {
+    const onSubmit = vi.fn();
+    render(<Submit onSubmit={onSubmit} />);
+    await user.type(input(), '10/4');
+    await user.keyboard('{Enter}');
+    expect(input().value).toBe('2,5');
+    expect(onSubmit).not.toHaveBeenCalled();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('зажатый Enter (автоповтор) не отправляет форму снова и снова', async () => {
+    const onSubmit = vi.fn();
+    render(<Submit onSubmit={onSubmit} />);
+    await user.type(input(), '5');
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true }));
+    fire(input(), new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('без onSubmit Enter ничего не делает', async () => {
+    render(<Harness />);
+    await user.type(input(), '5');
+    await user.keyboard('{Enter}');
     expect(input().value).toBe('5');
   });
 });

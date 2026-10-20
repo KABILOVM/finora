@@ -263,7 +263,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
           {tx.kind === 'expense' && (
             <Receipt txId={tx.id} currency={wallets.find((w) => w.id === tx.walletId)?.currency ?? tx.baseCurrency} />
           )}
-          <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} />
+          <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} onSubmit={() => void save()} />
         </div>
       </Sheet>
       <ConfirmDialog

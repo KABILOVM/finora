@@ -4,6 +4,7 @@ import { screen, user, waitFor } from '@/components/testUtils';
 import { createRateService } from '@/rates/service';
 import { createMemoryRateStorage } from '@/rates/storage';
 import {
+  catBtn,
   clickSave,
   liveTxs,
   openAddSheet,
@@ -71,8 +72,9 @@ describe('шит «Новая операция»: двойное нажатие'
     const td = opsDeps([table()]);
     await openAddSheet(td);
     await tapAmount('7');
+    await user.click(catBtn('Еда')); // с категорией напоминания нет — все три нажатия идут в сохранение
     const a = screen.getByRole('button', { name: 'Сохранить' });
-    const b = screen.getByRole('button', { name: 'Сохранить и добавить ещё' });
+    const b = screen.getByRole('button', { name: 'Сохранить и добавить ещё одну' });
     await Promise.all([user.click(a), user.click(b), user.click(a)]);
     await eventually(async () => {
       expect((await storeOf(td).db.transactions.count())).toBeGreaterThan(0);

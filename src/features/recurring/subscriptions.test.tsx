@@ -42,11 +42,31 @@ async function openPage(setup?: (s: Store) => Promise<unknown>): Promise<OpsDeps
   return td;
 }
 
+/** Подсказки свёрнуты в одну строку «Похоже на подписки · N»: раскрываем, как это сделал бы человек. */
+async function expandCard(): Promise<void> {
+  const toggle = screen.getByRole('button', { name: /^Похоже на подписки · \d+$/ });
+  if (toggle.getAttribute('aria-expanded') !== 'true') await user.click(toggle);
+}
+
 describe('«Похоже на подписки» на экране «Регулярные платежи»', () => {
+  it('по умолчанию свёрнуто: одна строка «Похоже на подписки · N», подсказок не видно; нажатие раскрывает и сворачивает', async () => {
+    await openPage((s) => spend(s, MONTHLY));
+    await waitFor(() => expect(card()).not.toBeNull());
+    const toggle = screen.getByRole('button', { name: 'Похоже на подписки · 1' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(items()).toHaveLength(0);
+    await user.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(items()).toHaveLength(1);
+    await user.click(toggle);
+    expect(items()).toHaveLength(0);
+  });
+
   it('повторяющийся расход: название, сумма, как часто, сколько платежей и когда последний', async () => {
     await openPage((s) => spend(s, MONTHLY));
     await waitFor(() => expect(card()).not.toBeNull());
-    expect(screen.getByRole('heading', { name: 'Похоже на подписки', level: 2 })).toBeTruthy();
+    await expandCard();
+    expect(screen.getByRole('heading', { name: /^Похоже на подписки · 1$/, level: 2 })).toBeTruthy();
     expect(items()).toHaveLength(1);
     expect(items()[0]).toContain('Netflix');
     expect(items()[0]).toContain(`${fmt(4_900)} раз в месяц · 4 платежа, последний 3 октября`);
@@ -60,6 +80,7 @@ describe('«Похоже на подписки» на экране «Регул�
   it('«Создать платёж» открывает окно с заполненными полями; после сохранения подсказка пропадает (платёж заведён)', async () => {
     const td = await openPage((s) => spend(s, MONTHLY));
     await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
     await user.click(screen.getByRole('button', { name: 'Создать платёж: Netflix' }));
     const dlg = await findByRole('dialog', { name: 'Новый регулярный платёж' });
     expect((dlg.querySelector('input[inputmode="decimal"], input[aria-label^="Сумма"]') as HTMLInputElement | null)?.value ?? '').toContain('49');
@@ -75,6 +96,7 @@ describe('«Похоже на подписки» на экране «Регул�
   it('«Не показывать» убирает подсказку и запоминает отказ на этом устройстве', async () => {
     const td = await openPage((s) => spend(s, MONTHLY));
     await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
     await user.click(screen.getByRole('button', { name: 'Не показывать: Netflix' }));
     await waitFor(() => expect(card()).toBeNull());
     const stored = JSON.parse(window.localStorage.getItem(`finora:dismissed-subs:${storeOf(td).userId}`) ?? '[]') as string[];
@@ -91,6 +113,7 @@ describe('«Похоже на подписки» на экране «Регул�
   it('отказ действует и при следующем открытии приложения (те же данные, новый сеанс)', async () => {
     await openPage(withCard);
     await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
     await user.click(screen.getByRole('button', { name: 'Не показывать: Netflix' }));
     await waitFor(() => expect(card()).toBeNull());
     await openPage(withCard);
@@ -102,6 +125,7 @@ describe('«Похоже на подписки» на экране «Регул�
     const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((k) => (k.startsWith('finora:dismissed-subs:') ? '{{{' : null));
     await openPage((s) => spend(s, MONTHLY));
     await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
     spy.mockRestore();
   });
 
@@ -114,6 +138,7 @@ describe('«Похоже на подписки» на экране «Регул�
     });
     await openPage((s) => spend(s, MONTHLY));
     await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
     await user.click(screen.getByRole('button', { name: 'Не показывать: Netflix' }));
     await waitFor(() => expect(card()).toBeNull());
     get.mockRestore();
@@ -144,6 +169,7 @@ describe('«Похоже на подписки» на экране «Регул�
       await spend(s, MONTHLY, { note: 'Спортзал', amountMinor: 30_000 });
     });
     await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
     expect(items().map((t) => /^[^\d]+/.exec(t)?.[0])).toEqual(['Спортзал', 'Видео', 'Облако']);
     await user.click(screen.getByRole('button', { name: 'Показать ещё 1' }));
     expect(items()).toHaveLength(4);

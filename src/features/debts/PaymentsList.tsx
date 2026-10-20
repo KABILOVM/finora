@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { IconButton } from '@/components/IconButton';
@@ -7,7 +8,21 @@ import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, IsoDate, LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
 import { MISSING_WALLET } from '@/features/transactions/txDisplay';
 import { formatDayLabel } from '@/lib/dates';
+import { cn } from '@/lib/cn';
 import { ruDateShort } from './debtText';
+
+/** Строка списка: кнопка на всю ширину (открывает операцию), а если открывать нечем — просто блок. */
+function Row({ label, onOpen, className, children }: { label: string; onOpen?: () => void; className?: string; children: ReactNode }) {
+  const base = cn('flex min-h-[56px] min-w-0 flex-1 items-center gap-2 py-1 text-left', className);
+  if (!onOpen) return <div className={base}>{children}</div>;
+  // имя кнопки — видимое содержимое (дата, кошелёк, сумма) с пояснением «что будет» впереди, а не подмена его одной подписью
+  return (
+    <button type="button" onClick={onOpen} className={cn(base, 'transition-colors hover:bg-surface-2 active:bg-border/60')}>
+      <span className="sr-only">{label}: </span>
+      {children}
+    </button>
+  );
+}
 
 export interface PaymentsListProps {
   /** Платежи по порядку: старые первыми (как отдаёт computeDebtState); на экране новые сверху. */
@@ -19,10 +34,12 @@ export interface PaymentsListProps {
   /** Нельзя менять (долг в архиве): кнопок удаления нет. */
   readOnly?: boolean;
   onDelete: (payment: DebtPayment) => void;
+  /** Открыть операцию платежа (правка даты, суммы, заметки). */
+  onOpen?: (txId: UUID) => void;
 }
 
-/** Платежи по долгу: дата, кошелёк, заметка, сумма и кнопка «Удалить» (мягкое удаление, с подтверждением и «Отменить»). */
-export function PaymentsList({ payments, currency, txs, wallets, today, readOnly = false, onDelete }: PaymentsListProps) {
+/** Платежи по долгу: дата, кошелёк, заметка, сумма; строка открывает операцию, кнопка «Удалить» — мягкое удаление с подтверждением и «Отменить». */
+export function PaymentsList({ payments, currency, txs, wallets, today, readOnly = false, onDelete, onOpen }: PaymentsListProps) {
   const rows = [...payments].reverse();
   return (
     <section aria-labelledby="debt-payments-title">
@@ -43,12 +60,14 @@ export function PaymentsList({ payments, currency, txs, wallets, today, readOnly
               const sub = [wallet?.name ?? MISSING_WALLET, note].filter((x) => x !== '').join(' · ');
               const label = `${ruDateShort(p.occurredOn)} на ${formatMinor(p.amountMinor, currency)}`;
               return (
-                <li key={p.txId} className="flex items-center gap-2 py-1 pl-4 pr-2">
-                  <div className="min-w-0 flex-1 py-2">
-                    <p className="font-medium">{formatDayLabel(p.occurredOn, today)}</p>
-                    <p className="truncate text-sm text-muted">{sub}</p>
-                  </div>
-                  <MoneyText minor={p.amountMinor} currency={currency} tone="none" className="shrink-0 font-semibold" />
+                <li key={p.txId} className="flex items-center pr-2">
+                  <Row label="Открыть платёж" onOpen={onOpen ? () => onOpen(p.txId) : undefined} className="pl-4">
+                    <div className="min-w-0 flex-1 py-2">
+                      <p className="font-medium">{formatDayLabel(p.occurredOn, today)}</p>
+                      <p className="truncate text-sm text-muted">{sub}</p>
+                    </div>
+                    <MoneyText minor={p.amountMinor} currency={currency} tone="none" className="shrink-0 font-semibold" />
+                  </Row>
                   {!readOnly && <IconButton icon="trash" variant="danger" label={`Удалить платёж от ${label}`} onClick={() => onDelete(p)} />}
                 </li>
               );
@@ -67,13 +86,15 @@ export interface EntriesListProps {
   txs: ReadonlyMap<UUID, LocalRow<Transaction>>;
   wallets: ReadonlyMap<UUID, LocalRow<Wallet>>;
   today: IsoDate;
+  /** Открыть операцию (правка даты, суммы, заметки). */
+  onOpen?: (txId: UUID) => void;
 }
 
 /**
  * «Выдачи и пополнения»: исходная операция и каждое «добавить ещё». Показывается, только когда пополнения были (операций две и
  * больше): у обычного долга с одной выдачей отдельный список ничего не добавил бы. Удалить отсюда нельзя — операции открываются в журнале.
  */
-export function EntriesList({ entries, currency, txs, wallets, today }: EntriesListProps) {
+export function EntriesList({ entries, currency, txs, wallets, today, onOpen }: EntriesListProps) {
   if (entries.length < 2) return null;
   const rows = [...entries].reverse();
   return (
@@ -89,12 +110,14 @@ export function EntriesList({ entries, currency, txs, wallets, today }: EntriesL
             const note = tx?.note.trim() ?? '';
             const sub = [wallet?.name ?? MISSING_WALLET, note].filter((x) => x !== '').join(' · ');
             return (
-              <li key={e.txId} className="flex items-center gap-2 py-1 pl-4 pr-4">
-                <div className="min-w-0 flex-1 py-2">
-                  <p className="font-medium">{formatDayLabel(e.occurredOn, today)}</p>
-                  <p className="truncate text-sm text-muted">{sub}</p>
-                </div>
-                <MoneyText minor={e.amountMinor} currency={currency} tone="none" className="shrink-0 font-semibold" />
+              <li key={e.txId} className="flex items-center pr-4">
+                <Row label="Открыть операцию" onOpen={onOpen ? () => onOpen(e.txId) : undefined} className="pl-4">
+                  <div className="min-w-0 flex-1 py-2">
+                    <p className="font-medium">{formatDayLabel(e.occurredOn, today)}</p>
+                    <p className="truncate text-sm text-muted">{sub}</p>
+                  </div>
+                  <MoneyText minor={e.amountMinor} currency={currency} tone="none" className="shrink-0 font-semibold" />
+                </Row>
               </li>
             );
           })}

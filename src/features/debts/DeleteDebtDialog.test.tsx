@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually } from '@/app/testkit';
-import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { chooseMenuAction, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { DebtDeleteMode, Store } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
@@ -75,7 +75,7 @@ async function show(setup?: Setup, opts: { ops?: boolean } = {}) {
 }
 
 const openDelete = async () => {
-  await user.click(screen.getByRole('button', { name: 'Удалить долг' }));
+  await chooseMenuAction('Удалить долг');
   return findByRole('alertdialog', { name: TITLE });
 };
 const debtRow = (td: OpsDeps) => storeOf(td).db.debts.get(DEBT_ID);

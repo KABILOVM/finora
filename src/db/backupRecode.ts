@@ -1,3 +1,5 @@
+import { occurrencesBetween } from '@/domain/schedule';
+import { addDays } from '@/lib/dates';
 import type { BackupFile } from './backupSchema';
 import { defaultId, FINORA_NAMESPACE, isUuid, uuidV5 } from './ids';
 import { budgetSlug } from './budgetsRepo';
@@ -15,10 +17,27 @@ import { SEED_SLUGS } from './seed';
  *
  * Детерминированные id пересчитываются, а не просто перекодируются:
  *  - бюджет: id = defaultId(пользователь, 'budget:' + новая категория | 'total') — после перекодирования категорий;
- *  - операция по расписанию, чей id был v5(прежнее правило, дата): id = v5(новое правило, дата) — тогда она совпадёт с операцией,
- *    которую это же правило создаст на любом устройстве. Операция с изменённой датой (id уже не выводится из даты) перекодируется
- *    как обычная.
+ *  - операция по расписанию, чей id был v5(прежнее правило, дата по расписанию): id = v5(новое правило, та же дата) — тогда она
+ *    совпадёт с операцией, которую это же правило создаст на любом устройстве, и дата не вернётся в «Просроченные» (автопроведение
+ *    не проведёт её второй раз). Дата по расписанию — это либо дата операции, либо (платёж оплатили позже, правили дату) одна из дат
+ *    правила вокруг неё: её находим перебором. Операция, у которой дату по расписанию не найти, перекодируется как обычная.
  */
+
+/** Дата по расписанию, от которой выведен id операции, оплаченной другим днём: ищем среди дат правила вокруг даты операции. */
+async function scheduledDateOf(
+  rule: BackupFile['recurringRules'][number] | undefined,
+  tx: { id: string; occurredOn: string },
+): Promise<string | null> {
+  if (!rule) return null;
+  const dates = occurrencesBetween(
+    { frequency: rule.frequency, intervalN: rule.intervalN, startOn: rule.startOn, endOn: null },
+    addDays(tx.occurredOn, -400),
+    addDays(tx.occurredOn, 45),
+  );
+  for (const d of dates) if ((await uuidV5(rule.id, d)) === tx.id) return d;
+  return null;
+}
+
 export async function withAccountIds(file: BackupFile, userId: string, sourceUserId?: string): Promise<BackupFile> {
   // Стартовые записи (кошелёк «Наличные», категории) у каждого пользователя свои, но выводятся из его id по одним и тем же slug.
   // Если известно, чья это копия, её стартовые записи сопоставляются со стартовыми записями ЭТОГО пользователя, а не плодят дубли.
@@ -42,13 +61,19 @@ export async function withAccountIds(file: BackupFile, userId: string, sourceUse
 
   // операции: id по расписанию пересчитываются от нового правила, остальные — обычным производным
   const txIds = new Map<string, string>();
+  const rulesById = new Map(file.recurringRules.map((x) => [x.id, x]));
   for (const x of file.transactions) {
     const oldRule = x.recurringRuleId;
-    if (oldRule !== null && isUuid(oldRule) && (await uuidV5(oldRule, x.occurredOn)) === x.id) {
-      txIds.set(x.id, await uuidV5(pick(r, oldRule) as string, x.occurredOn));
-    } else {
-      txIds.set(x.id, await uuidV5(FINORA_NAMESPACE, `${userId}:import:transaction:${x.id}`));
+    let scheduledOn: string | null = null;
+    if (oldRule !== null && isUuid(oldRule)) {
+      scheduledOn = (await uuidV5(oldRule, x.occurredOn)) === x.id ? x.occurredOn : await scheduledDateOf(rulesById.get(oldRule), x);
     }
+    txIds.set(
+      x.id,
+      scheduledOn !== null && oldRule !== null
+        ? await uuidV5(pick(r, oldRule) as string, scheduledOn)
+        : await uuidV5(FINORA_NAMESPACE, `${userId}:import:transaction:${x.id}`),
+    );
   }
 
   const budgets = [];

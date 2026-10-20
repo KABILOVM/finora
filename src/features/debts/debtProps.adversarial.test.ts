@@ -106,7 +106,7 @@ describe('сводка по долгам', () => {
         const items = buildDebtItems(debts, txs, wallets);
         for (const dir of ['lent', 'borrowed'] as const) {
           const g = groupDebts(items, dir);
-          expect(g.active.length + g.closed.length + g.archived.length).toBe(items.filter((i) => i.debt.direction === dir).length);
+          expect(g.active.length + g.settled.length + g.closed.length + g.archived.length).toBe(items.filter((i) => i.debt.direction === dir).length);
           const totals = remainingByCurrency(g.active, 'TJS');
           if (!totals.ok) throw new Error('переполнения быть не может');
           const manual = new Map<string, number>();

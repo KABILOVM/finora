@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 import AddTransactionSheet from '@/layout/AddTransactionSheet';
 import { useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
+import { CATEGORY_NUDGE } from '../ContextRow';
 
 /** «Сегодня» для курсов в тестах. */
 export const RATES_NOW = new Date('2026-10-10T12:00:00.000Z');
@@ -131,13 +132,15 @@ export function LocationProbe() {
   const location = useLocation();
   const background = (location.state as { background?: { pathname?: string } } | null)?.background?.pathname ?? '';
   return (
-    <p data-testid="location" data-background={background}>
+    <p data-testid="location" data-background={background} data-search={location.search}>
       {location.pathname}
     </p>
   );
 }
 
 export const backgroundPath = (): string => document.querySelector('[data-testid="location"]')?.getAttribute('data-background') ?? '';
+
+export const currentSearch = (): string => document.querySelector('[data-testid="location"]')?.getAttribute('data-search') ?? '';
 
 export const currentPath = (): string => document.querySelector('[data-testid="location"]')?.textContent ?? '';
 
@@ -362,7 +365,21 @@ export async function openAddSheet(td: OpsDeps = opsDeps()) {
 }
 
 export const saveButton = (): HTMLElement => screen.getByRole('button', { name: 'Сохранить' });
-export const clickSave = () => user.click(saveButton());
+/** Напоминание «Новой операции», когда категория не выбрана (см. ContextRow, CategoryState). */
+export { CATEGORY_NUDGE };
+/**
+ * «Сохранить» (или «Сохранить и добавить ещё») в «Новой операции». Без категории первое нажатие только напоминает о ней и открывает
+ * список, второе — сохраняет: тесты, которым категория не важна, нажимают кнопку так, как это сделал бы человек, решивший обойтись без неё.
+ */
+export async function clickSave(name = 'Сохранить'): Promise<void> {
+  await user.click(screen.getByRole('button', { name }));
+  if (screen.queryByText(CATEGORY_NUDGE)) {
+    await new Promise((r) => setTimeout(r, NUDGE_READ_MS)); // второе нажатие раньше этого срока — дрожание пальца, а не решение
+    await user.click(screen.getByRole('button', { name }));
+  }
+}
+/** Дольше, чем AddTransactionSheet.NUDGE_GRACE_MS. */
+export const NUDGE_READ_MS = 400;
 export const amountField = (): HTMLInputElement => screen.getByRole('textbox', { name: /^Сумма/ }) as HTMLInputElement;
 
 /** Второй кошелёк в той же валюте (для переводов и проверки «последнего кошелька»). */

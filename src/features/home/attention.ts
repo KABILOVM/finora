@@ -6,7 +6,16 @@ import { isOwing, type DebtItem } from '@/features/debts/debtSummary';
 export type AttentionKind = 'debt' | 'payment' | 'cash' | 'budget' | 'saving';
 
 /** Адреса, куда ведёт строка «Требует внимания». */
-export type AttentionPath = '/debts' | '/recurring' | '/budgets' | '/wallets' | '/analytics?tab=calendar' | `/debts/${string}`;
+export type AttentionPath =
+  | '/debts'
+  | '/debts?dir=lent'
+  | '/debts?dir=borrowed'
+  | '/debts?dir=people'
+  | '/recurring'
+  | '/budgets'
+  | '/wallets'
+  | '/analytics?tab=calendar'
+  | `/debts/${string}`;
 
 export interface AttentionItem {
   /** Стабильный ключ для списка. */
@@ -39,6 +48,13 @@ function listed(one: (name: string) => string, many: (n: number) => string, name
   return names.length === 1 && first !== undefined ? one(first) : many(names.length);
 }
 
+/** Несколько просроченных долгов: список той вкладки, где они все; если и «мне должны», и «я должен» — вкладка «Люди». */
+function lateDebtsPath(late: readonly DebtItem[]): AttentionPath {
+  const dirs = new Set(late.map((it) => it.debt.direction));
+  if (dirs.size > 1) return '/debts?dir=people';
+  return dirs.has('borrowed') ? '/debts?dir=borrowed' : '/debts?dir=lent';
+}
+
 /**
  * Что требует внимания на «Главной», от важного к менее важному: просроченные долги и платежи, «денег не хватит с …» по календарю на 30 дней, превышенные лимиты (красным), «пора
  * отложить» (жёлтым). Пусто — всё спокойно, строки на экране нет. Чистая функция: данные читает хук useAttention.
@@ -54,7 +70,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       id: 'debts',
       kind: 'debt',
       text: listed((n) => `Долг просрочен: ${n}`, (n) => `Просрочено долгов: ${n}`, lateDebts.map((it) => it.debt.counterparty)),
-      to: lateDebts.length === 1 ? `/debts/${encodeURIComponent(lateDebts[0]!.debt.id)}` : '/debts',
+      to: lateDebts.length === 1 ? `/debts/${encodeURIComponent(lateDebts[0]!.debt.id)}` : lateDebtsPath(lateDebts),
       tone: 'danger',
     });
   }

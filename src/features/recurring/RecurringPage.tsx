@@ -3,13 +3,17 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
+import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
+import { SectionHeader } from '@/components/SectionHeader';
+import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { useRecurringRules, useStoppedDebtPlans, useStore, useUpcoming, ValidationError } from '@/db';
 import type { IsoDate, LocalRow, RecurringRule } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
 import { useAutoPostFailures } from '@/recurring/autoPostState';
+import { monthlyTotals } from '@/recurring/monthly';
 import type { RuleFormState } from '@/recurring/ruleForm';
 import { AUTO_POST_MAX_AGE_DAYS } from '@/recurring/plan';
 import { groupUpcoming, itemKey, SOON_DAYS } from '@/recurring/upcoming';
@@ -34,9 +38,9 @@ type PendingRef = { ruleId: string; date: IsoDate };
 function Section({ id, title, hint, tone, children }: { id: string; title: string; hint?: string; tone?: 'danger'; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="mb-6">
-      <h2 id={id} className={cn('mb-1 px-1 text-lg font-bold', tone === 'danger' && 'text-danger')}>
-        {title}
-      </h2>
+      <SectionHeader id={id}>
+        <span className={cn(tone === 'danger' && 'text-danger')}>{title}</span>
+      </SectionHeader>
       {hint && <p className="mb-2 px-1 text-sm text-muted">{hint}</p>}
       <Card padding="none">
         <ul className="divide-y divide-border">{children}</ul>
@@ -84,6 +88,7 @@ export default function RecurringPage() {
   const [skipping, setSkipping] = useState<PendingRef | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showSkipped, setShowSkipped] = useState(false);
+  const [showSubs, setShowSubs] = useState(false);
   const [overdueShown, setOverdueShown] = useState(OVERDUE_PAGE);
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
   const busyRef = useRef(new Set<string>());
@@ -105,9 +110,13 @@ export default function RecurringPage() {
     return (
       <>
         <PageHeader title="Регулярные платежи" />
-        <p role="status" className="py-10 text-center text-muted">
-          Загрузка…
-        </p>
+        <div role="status" aria-busy="true">
+          <span className="sr-only">Загрузка…</span>
+          <div aria-hidden="true" className="flex flex-col gap-4">
+            <Skeleton className="h-24 !rounded-card" />
+            <Skeleton className="h-40 !rounded-card" />
+          </div>
+        </div>
       </>
     );
   }
@@ -120,6 +129,17 @@ export default function RecurringPage() {
     );
   }
 
+  // пока не известно, какие планы по долгам остановлены, итог не показываем: иначе он «прыгнул» бы, когда это выяснится
+  const monthly =
+    stoppedPlans === undefined
+      ? undefined
+      : monthlyTotals(
+          rules,
+          (walletId) => lookups.wallets.get(walletId)?.currency,
+          today,
+          lookups.base,
+          (r) => stoppedPlans.has(r.id),
+        );
   const ruleById = new Map(rules.map((r) => [r.id, r]));
   const active = rules.filter((r) => r.archivedAt === null);
   const archived = rules.filter((r) => r.archivedAt !== null);
@@ -177,6 +197,35 @@ export default function RecurringPage() {
       onSkip={() => setSkipping({ ruleId: item.rule.id, date: item.date })}
     />
   );
+  // «Похоже на подписки» — под ближайшими платежами; если платежей ещё нет, подсказки стоят первыми (с них удобно начать)
+  const subsCard =
+    subs && subs.items.length > 0 ? (
+      <SubscriptionsCard
+        items={subs.items}
+        open={showSubs}
+        onToggle={() => setShowSubs((v) => !v)}
+        lookups={lookups}
+        onDismiss={subs.dismiss}
+        onCreate={(c) => {
+          const category = c.categoryId === null ? undefined : lookups.categories.get(c.categoryId);
+          setSheet({
+            kind: 'new',
+            prefill: {
+              kind: 'expense',
+              walletId: c.walletId,
+              amountMinor: c.amountMinor,
+              // категория могла уйти в архив: тогда без неё, а не с ошибкой при сохранении
+              categoryId: category && category.deletedAt === null && category.archivedAt === null ? c.categoryId : null,
+              note: candidateLabel(c, lookups),
+              frequency: c.frequency,
+              intervalText: String(c.intervalN),
+              startOn: c.nextOn,
+            },
+          });
+        }}
+      />
+    ) : null;
+
   const overdueRows = groups.overdue.slice(0, overdueShown);
   const overdueMore = groups.overdue.length - overdueRows.length;
 
@@ -194,40 +243,47 @@ export default function RecurringPage() {
         }
       />
 
-      {subs && subs.items.length > 0 && (
-        <SubscriptionsCard
-          items={subs.items}
-          lookups={lookups}
-          onDismiss={subs.dismiss}
-          onCreate={(c) => {
-            const category = c.categoryId === null ? undefined : lookups.categories.get(c.categoryId);
-            setSheet({
-              kind: 'new',
-              prefill: {
-                kind: 'expense',
-                walletId: c.walletId,
-                amountMinor: c.amountMinor,
-                // категория могла уйти в архив: тогда без неё, а не с ошибкой при сохранении
-                categoryId: category && category.deletedAt === null && category.archivedAt === null ? c.categoryId : null,
-                note: candidateLabel(c, lookups),
-                frequency: c.frequency,
-                intervalText: String(c.intervalN),
-                startOn: c.nextOn,
-              },
-            });
-          }}
-        />
-      )}
-
       {rules.length === 0 ? (
-        <EmptyState
-          icon="repeat"
-          title="Платежей по расписанию пока нет"
-          text="Добавьте аренду, подписку или зарплату: приложение напомнит о платеже и, если хотите, запишет его само."
-          action={<Button onClick={() => setSheet({ kind: 'new' })}>Добавить первый платёж</Button>}
-        />
+        <>
+          {subsCard}
+          <EmptyState
+            icon="repeat"
+            title="Платежей по расписанию пока нет"
+            text="Добавьте аренду, подписку или зарплату: приложение напомнит о платеже и, если хотите, запишет его само."
+            action={<Button onClick={() => setSheet({ kind: 'new' })}>Добавить первый платёж</Button>}
+          />
+        </>
       ) : (
         <>
+          {monthly === null ? (
+            <Card className="mb-6 text-muted" role="status">
+              Суммы платежей слишком велики, чтобы посчитать итог в месяц.
+            </Card>
+          ) : (
+            monthly !== undefined &&
+            monthly.length > 0 && (
+              <Card className="mb-6" data-testid="recurring-monthly" role="group" aria-label="Платежи по расписанию в месяц">
+                <p className="text-sm font-semibold text-muted">В месяц, примерно</p>
+                <ul className="mt-1 flex flex-col gap-2">
+                  {monthly.map((m) => (
+                    <li key={m.currency} className="flex flex-wrap items-baseline justify-between gap-x-4">
+                      {m.expenseMinor > 0 && (
+                        <span className="text-base">
+                          Платежи <MoneyText minor={m.expenseMinor} currency={m.currency} tone="expense" className="text-xl font-bold" />
+                        </span>
+                      )}
+                      {m.incomeMinor > 0 && (
+                        <span className="text-base">
+                          Поступления <MoneyText minor={m.incomeMinor} currency={m.currency} tone="income" sign="always" className="text-xl font-bold" />
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-muted">Платежи с разной периодичностью пересчитаны на месяц. Переводы и остановленные платежи не входят.</p>
+              </Card>
+            )
+          )}
           {groups.overdue.length > 0 && (
             <Section
               id="rec-overdue"
@@ -260,6 +316,8 @@ export default function RecurringPage() {
               На ближайшие {SOON_DAYS} дней платежей нет.
             </Card>
           )}
+
+          {subsCard}
 
           {skipped.length > 0 && (
             <Collapsible title={`Пропущенные · ${skipped.length}`} open={showSkipped} onToggle={() => setShowSkipped((v) => !v)}>

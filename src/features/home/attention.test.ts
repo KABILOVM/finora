@@ -5,9 +5,9 @@ import { buildAttention, type AttentionInput } from './attention';
 const TODAY = '2026-10-15';
 
 /** Долг с остатком (isOwing: не закрыт, не в архиве, остаток > 0). */
-const debt = (id: string, counterparty: string, dueOn: string | null, over: { closedAt?: string | null; archivedAt?: string | null; remaining?: number } = {}): DebtItem =>
+const debt = (id: string, counterparty: string, dueOn: string | null, over: { closedAt?: string | null; archivedAt?: string | null; remaining?: number; direction?: 'lent' | 'borrowed' } = {}): DebtItem =>
   ({
-    debt: { id, counterparty, dueOn, closedAt: over.closedAt ?? null, archivedAt: over.archivedAt ?? null },
+    debt: { id, counterparty, dueOn, direction: over.direction ?? 'lent', closedAt: over.closedAt ?? null, archivedAt: over.archivedAt ?? null },
     state: { remainingMinor: over.remaining ?? 10_000 },
   }) as unknown as DebtItem;
 
@@ -41,7 +41,14 @@ describe('buildAttention: что требует внимания на «Глав
 
   it('несколько просроченных долгов: счёт и ссылка на список долгов', () => {
     const r = buildAttention(input({ debts: [debt('d1', 'А', '2026-10-01'), debt('d2', 'Б', '2026-10-14'), debt('d3', 'В', '2026-09-01')] }));
-    expect(r[0]).toMatchObject({ text: 'Просрочено долгов: 3', to: '/debts', tone: 'danger' });
+    expect(r[0]).toMatchObject({ text: 'Просрочено долгов: 3', to: '/debts?dir=lent', tone: 'danger' });
+  });
+
+  it('несколько просроченных долгов: ссылка ведёт на вкладку, где они лежат; если и «мне должны», и «я должен» — на «Люди»', () => {
+    const late = (id: string, direction: 'lent' | 'borrowed') => debt(id, id, '2026-10-01', { direction });
+    expect(buildAttention(input({ debts: [late('a', 'borrowed'), late('b', 'borrowed')] }))[0]?.to).toBe('/debts?dir=borrowed');
+    expect(buildAttention(input({ debts: [late('a', 'lent'), late('b', 'lent')] }))[0]?.to).toBe('/debts?dir=lent');
+    expect(buildAttention(input({ debts: [late('a', 'lent'), late('b', 'borrowed')] }))[0]?.to).toBe('/debts?dir=people');
   });
 
   it('срок «сегодня» и будущий — не просрочка; без срока, закрытый, в архиве и без остатка — тоже', () => {
@@ -87,7 +94,7 @@ describe('buildAttention: что требует внимания на «Глав
 
   it('самый давний долг первым в счёте, а ссылка на единственный долг ведёт именно на него', () => {
     const r = buildAttention(input({ debts: [debt('late', 'Поздний', '2026-10-12'), debt('early', 'Ранний', '2026-09-20')] }));
-    expect(r[0]?.to).toBe('/debts'); // двое — на список
+    expect(r[0]?.to).toBe('/debts?dir=lent'); // двое — на список их вкладки
     const one = buildAttention(input({ debts: [debt('late', 'Поздний', '2026-10-12'), debt('ok', 'Ждёт', '2026-10-20')] }));
     expect(one[0]).toMatchObject({ to: '/debts/late', text: 'Долг просрочен: Поздний' });
   });

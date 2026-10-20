@@ -170,15 +170,16 @@ test.describe('XSS и CSV-инъекция через пользовательс
     await page.getByRole('button', { name: 'Всё время' }).click();
     for (const p of PAYLOADS.slice(0, 6)) await expect(page.getByText(p, { exact: false }).first()).toBeVisible();
     // правка и поиск по заметке
-    await page.getByRole('searchbox', { name: 'Поиск по заметке' }).fill('<script>');
+    await page.getByRole('searchbox', { name: 'Поиск по операциям' }).fill('<script>');
     await expect(page.getByText(PAYLOADS[1]!, { exact: false }).first()).toBeVisible();
-    await page.getByRole('searchbox', { name: 'Поиск по заметке' }).fill('');
+    await page.getByRole('searchbox', { name: 'Поиск по операциям' }).fill('');
     await page.getByRole('button', { name: /window\.__xss=1/ }).first().click();
     await expect(sheet(page, 'Правка операции')).toBeVisible();
     await assertInert(page, 'правка');
     await page.keyboard.press('Escape');
     await goSection(page, 'Кошельки');
-    await page.getByRole('button', { name: /^Сверка:/ }).first().click();
+    await page.getByRole('button', { name: /^Изменить:/ }).first().click();
+    await sheet(page, 'Правка кошелька').getByRole('button', { name: 'Сверка остатка' }).click();
     await assertInert(page, 'сверка');
     await page.keyboard.press('Escape');
 

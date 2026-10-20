@@ -17,18 +17,13 @@ export interface KeypadProps {
   className?: string;
 }
 
+/** Одна раскладка во всём приложении (и с калькулятором, и без): сверху 1-2-3, как в телефонном номеронабирателе. */
 const DIGIT_ROWS: AmountKey[][] = [
   ['1', '2', '3'],
   ['4', '5', '6'],
   ['7', '8', '9'],
 ];
 
-/** Как на калькуляторе: сверху 7-8-9. */
-const CALC_ROWS: AmountKey[][] = [
-  ['7', '8', '9'],
-  ['4', '5', '6'],
-  ['1', '2', '3'],
-];
 const OPS: OpKey[] = ['÷', '×', '−', '+'];
 
 const OP_LABEL: Record<OpKey, string> = { '+': 'Плюс', '−': 'Минус', '×': 'Умножить', '÷': 'Разделить' };
@@ -121,14 +116,14 @@ export function Keypad({ onKey, ops = false, canEqual = false, allowComma = true
       <Icon name="backspace" size={26} />
     </button>
   );
-  // Цифры, внизу «, 0 ⌫». Калькулятор: 7-8-9 сверху, как на нём; обычный ввод: 1-2-3 сверху, как на телефоне.
+  // Цифры, внизу «, 0 ⌫».
   const pad = (
     <div
       data-pad=""
       className={cn('grid grid-cols-3 gap-2', ops ? '' : className)}
       {...(ops ? {} : { role: 'group', 'aria-label': 'Цифровая клавиатура' })}
     >
-      {(ops ? CALC_ROWS : DIGIT_ROWS).flatMap((row) => row.map((d) => digit(d)))}
+      {DIGIT_ROWS.flatMap((row) => row.map((d) => digit(d)))}
       {comma}
       {digit('0')}
       {backspace}

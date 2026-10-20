@@ -23,6 +23,11 @@ test.describe('34. Подписки: «Похоже на подписки»', ()
     await goSection(page, 'Платежи');
     const card = page.getByTestId('subscriptions-card');
     await expect(card).toBeVisible();
+    // подсказки свёрнуты в одну строку «Похоже на подписки · N»: раскрываем
+    const toggle = card.getByRole('button', { name: 'Похоже на подписки · 2' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(card.getByTestId('subscription-item')).toHaveCount(0);
+    await toggle.click();
     const items = card.getByTestId('subscription-item');
     await expect(items).toHaveCount(2);
     // дороже — выше: Netflix 49 против 15

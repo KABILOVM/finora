@@ -1,6 +1,8 @@
 import { newId, ValidationError, type DebtInput, type Store } from '@/db';
 import { isLivePlanOf, issueKind, paymentKind } from '@/domain/debts';
-import type { Debt, DebtDirection, IsoDate, LocalRow, Minor, RecurringRule, Transaction, UUID } from '@/domain/types';
+import { formatMinor } from '@/domain/money';
+import type { CurrencyCode, Debt, DebtDirection, IsoDate, LocalRow, Minor, RecurringRule, Transaction, UUID } from '@/domain/types';
+import { ruDateShort } from './debtText';
 
 /** Движение денег, которое сопровождает новый долг: исходная операция (выдача/получение). */
 export interface IssueMovement {
@@ -106,6 +108,14 @@ export interface TopUpPlan {
   dueOn?: IsoDate | null;
   /** null — «на бумаге»: сумма долга растёт, деньги в кошельках не двигаются. */
   movement: IssueMovement | null;
+  /** Продлить действующий план «Платить частями» до этой даты: долг вырос, а план без этого закончился бы раньше, чем долг. */
+  extendPlan?: { ruleId: UUID; endOn: IsoDate };
+}
+
+/** Строка для заметки долга при пополнении «на бумаге»: у такого пополнения нет операции, и без неё в истории не осталось бы следа. */
+export function topUpJournalLine(currency: CurrencyCode, plan: Pick<TopUpPlan, 'amountMinor' | 'occurredOn' | 'note'>): string {
+  const note = plan.note.trim();
+  return `+${formatMinor(plan.amountMinor, currency)} · ${ruDateShort(plan.occurredOn)}${note === '' ? '' : ` · ${note}`}`;
 }
 
 export interface TopUpResult {
@@ -131,7 +141,14 @@ export async function saveTopUp(store: Store, plan: TopUpPlan): Promise<TopUpRes
         const debt = done ? await db.debts.get(plan.debtId) : undefined;
         if (done && debt) return { debt, tx: done };
       }
-      const debt = await store.debts.increase(plan.debtId, plan.amountMinor, plan.dueOn !== undefined ? { dueOn: plan.dueOn } : undefined);
+      // «на бумаге»: операции нет, поэтому сумма и заметка записываются в заметку самого долга
+      const before = plan.movement === null ? await db.debts.get(plan.debtId) : undefined;
+      const journal = before ? topUpJournalLine(before.currency, plan) : undefined;
+      const debt = await store.debts.increase(plan.debtId, plan.amountMinor, {
+        ...(plan.dueOn !== undefined ? { dueOn: plan.dueOn } : {}),
+        ...(journal !== undefined ? { journal } : {}),
+      });
+      if (plan.extendPlan) await store.recurring.update(plan.extendPlan.ruleId, { endOn: plan.extendPlan.endOn });
       if (plan.movement === null) return { debt, tx: null };
       const tx = await store.transactions.create(
         {

@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { render } from '@/components/testUtils';
 import { computeIds } from '@/import/ids';
@@ -33,7 +34,11 @@ describe('сопоставление счетов: заблокированны�
 
     // а экран всё равно предлагает такой пункт: человек выбирает его, список возвращается к «Выберите кошелёк», ничего не происходит
     const plan = await blockedPlan();
-    render(<AccountsBlock wallets={plan.wallets} onChoose={() => undefined} />);
+    render(
+      <MemoryRouter>
+        <AccountsBlock wallets={plan.wallets} onChoose={() => undefined} />
+      </MemoryRouter>,
+    );
     const options = [...document.querySelectorAll('option')].map((o) => o.textContent ?? '');
     expect(options.filter((t) => /Создать новый кошелёк/.test(t))).toEqual([]);
   });
@@ -45,13 +50,21 @@ describe('сопоставление счетов: заблокированны�
     const base = { parsed, ids, baseCurrency: 'TJS', categories: [], existing: new Map() };
 
     const fresh = buildPlan({ ...base, wallets: [] });
-    const first = render(<AccountsBlock wallets={fresh.wallets} onChoose={() => undefined} />);
+    const first = render(
+      <MemoryRouter>
+        <AccountsBlock wallets={fresh.wallets} onChoose={() => undefined} />
+      </MemoryRouter>,
+    );
     expect([...document.querySelectorAll('option')].map((o) => o.textContent)).toContain('Создать новый кошелёк «Карта Алиф»');
     first.unmount();
 
     const own = { id: ids.wallets.get(key)!, name: 'Карта Алиф', currency: 'TJS', archivedAt: null, deletedAt: null };
     const saved = buildPlan({ ...base, wallets: [own] });
-    render(<AccountsBlock wallets={saved.wallets} onChoose={() => undefined} />);
+    render(
+      <MemoryRouter>
+        <AccountsBlock wallets={saved.wallets} onChoose={() => undefined} />
+      </MemoryRouter>,
+    );
     expect([...document.querySelectorAll('option')].map((o) => o.textContent ?? '').filter((t) => /Создать новый кошелёк/.test(t))).toEqual([]);
   });
 });

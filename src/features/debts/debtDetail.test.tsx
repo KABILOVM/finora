@@ -1,7 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually, write } from '@/app/testkit';
-import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { chooseMenuAction, findByRole, menuActionsStable, screen, user, waitFor, waitForMenu } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
 import { formatMinor } from '@/domain/money';
@@ -292,20 +292,20 @@ describe('страница долга: платежи', () => {
 describe('страница долга: закрыть, открыть, архив', () => {
   it('закрыть долг (с пояснением, что остаток останется в истории) и открыть снова', async () => {
     const { td } = await show();
-    await user.click(button('Закрыть долг'));
+    await chooseMenuAction('Закрыть долг');
     expect(text(await findByRole('alertdialog', { name: 'Закрыть долг?' }))).toContain(`Остаток ${fmt(50_000)}`);
     await user.click(inAlert('Закрыть долг?', 'Закрыть долг'));
     await waitFor(() => expect(text(document.querySelector('[data-testid="debt-summary"]'))).toContain('Закрыт'));
     expect((await storeOf(td).db.debts.get(DEBT_ID))?.closedAt).not.toBeNull();
     expect(remaining()).toBe(fmt(50_000)); // остаток не обнулён: он считается из операций
-    await user.click(button('Открыть снова'));
+    await chooseMenuAction('Открыть снова');
     await eventually(async () => expect((await storeOf(td).db.debts.get(DEBT_ID))?.closedAt).toBeNull());
-    await findByRole('button', { name: 'Закрыть долг' });
+    await waitForMenu((names) => names.includes('Закрыть долг'));
   });
 
   it('в архив: долг скрыт из списка, возврат кнопкой «Вернуть» в уведомлении', async () => {
     const { td } = await show();
-    await user.click(button('В архив'));
+    await chooseMenuAction('В архив');
     await eventually(async () => expect((await storeOf(td).db.debts.get(DEBT_ID))?.archivedAt).not.toBeNull());
     await findByRole('status');
     expect(currentPath()).toBe('/debts');
@@ -317,7 +317,7 @@ describe('страница долга: закрыть, открыть, архи�
     const { td } = await show(async (s) => void (await s.debts.archive(DEBT_ID)));
     expect(screen.queryByRole('button', { name: 'Добавить платёж' })).toBeNull();
     expect(text(document.body)).toContain('Долг в архиве');
-    await user.click(button('Вернуть из архива'));
+    await chooseMenuAction('Вернуть из архива');
     await eventually(async () => expect((await storeOf(td).db.debts.get(DEBT_ID))?.archivedAt).toBeNull());
     await findByRole('button', { name: 'Добавить платёж' });
   });
@@ -419,3 +419,53 @@ function within(root: HTMLElement, name: string): HTMLElement {
   if (!hit) throw new Error(`В окне нет кнопки «${name}»`);
   return hit;
 }
+
+describe('страница долга: меню «⋯» и главные кнопки', () => {
+  it('на виду — «Добавить платёж», «Дал ещё в долг», «Напомнить о долге», «Править»; редкое — в меню «⋯»', async () => {
+    await show();
+    for (const name of ['Добавить платёж', 'Дал ещё в долг', 'Напомнить о долге', 'Править']) expect(button(name)).toBeTruthy();
+    for (const name of ['Закрыть долг', 'В архив', 'Удалить долг', 'Получать частями']) expect(screen.queryByRole('button', { name })).toBeNull();
+    expect(await menuActionsStable()).toEqual(['Получать частями', 'Закрыть долг', 'В архив', 'Удалить долг']);
+  });
+
+  it('погашенный долг: на виду плашка «Закрыть долг», в меню этого пункта нет', async () => {
+    await show(async (s, ids) => void (await pay(s, ids.cash, 50_000)));
+    expect(screen.getByText('Долг погашен полностью. Закройте его, чтобы он не висел среди открытых.')).toBeTruthy();
+    expect(await menuActionsStable()).toEqual(['В архив', 'Удалить долг']);
+    await user.click(button('Закрыть долг'));
+    await findByRole('alertdialog', { name: 'Закрыть долг?' });
+  });
+
+  it('закрытый долг: в меню «Открыть снова», а «Закрыть долг» нет; плашки о погашении нет', async () => {
+    await show(async (s, ids) => {
+      await pay(s, ids.cash, 50_000);
+      await s.debts.close(DEBT_ID);
+    });
+    expect(screen.queryByText(/Долг погашен полностью. Закройте его/)).toBeNull();
+    expect(await menuActionsStable()).toEqual(['Открыть снова', 'В архив', 'Удалить долг']);
+  });
+
+  it('долг в архиве: «Править» и главных кнопок нет; в меню — «Вернуть из архива» и «Удалить долг»', async () => {
+    await show(async (s) => void (await s.debts.archive(DEBT_ID)));
+    expect(screen.queryByRole('button', { name: 'Править' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Добавить платёж' })).toBeNull();
+    expect(await menuActionsStable()).toEqual(['Вернуть из архива', 'Удалить долг']);
+  });
+
+  it('«Удалить долг» из меню открывает подтверждение', async () => {
+    await show();
+    await chooseMenuAction('Удалить долг');
+    await findByRole('alertdialog', { name: /Удалить долг/ });
+  });
+});
+
+describe('страница долга: строки платежей открывают операцию', () => {
+  it('нажатие на платёж открывает его правку (/edit/<id>); корзина остаётся отдельной кнопкой', async () => {
+    const { td, ids } = await show(async (s, i) => void (await pay(s, i.cash, 10_000, '2026-10-05', { note: 'часть' })));
+    const row = await findByRole('button', { name: /^Открыть платёж: / });
+    expect(screen.getByRole('button', { name: /^Удалить платёж от/ })).toBeTruthy();
+    await user.click(row);
+    const tx = (await debtTxs(td)).find((t) => t.walletId === ids.cash && t.amountMinor === 10_000)!;
+    await waitFor(() => expect(currentPath()).toBe(`/edit/${tx.id}`));
+  });
+});

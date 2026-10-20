@@ -241,6 +241,46 @@ describe('TransactionsRepo.createFromRule', () => {
   });
 });
 
+describe('TransactionsRepo.createFromRule: фактическая дата оплаты (occurredOn)', () => {
+  it('операция записывается на дату оплаты, а id остаётся от даты по расписанию: тот же платёж не проведут дважды', async () => {
+    const store = await makeStore();
+    const { cash } = await basics(store);
+    const r = await store.recurring.create({ ...rule, walletId: cash.id }); // 15-го каждого месяца
+    const t = await store.transactions.createFromRule(r.id, '2026-11-15', { occurredOn: '2026-11-18' });
+    expect(t.occurredOn).toBe('2026-11-18');
+    expect(t.id).toBe(await uuidV5(r.id, '2026-11-15'));
+    expect(t.recurringRuleId).toBe(r.id);
+    // повтор — по любой из двух дат ничего не пишет и возвращает ту же строку
+    expect((await store.transactions.createFromRule(r.id, '2026-11-15')).id).toBe(t.id);
+    expect((await store.transactions.createFromRule(r.id, '2026-11-15', { occurredOn: '2026-11-20' })).occurredOn).toBe('2026-11-18');
+    expect(await store.db.transactions.count()).toBe(1);
+  });
+
+  it('дата оплаты может быть в другом месяце, чем дата по расписанию', async () => {
+    const store = await makeStore();
+    const { cash } = await basics(store);
+    const r = await store.recurring.create({ ...rule, walletId: cash.id });
+    const t = await store.transactions.createFromRule(r.id, '2026-10-15', { occurredOn: '2026-11-02' });
+    expect(t.occurredOn).toBe('2026-11-02');
+  });
+
+  it('дата по расписанию по-прежнему должна входить в расписание; мусорная дата оплаты — ошибка, ничего не пишется', async () => {
+    const store = await makeStore();
+    const { cash } = await basics(store);
+    const r = await store.recurring.create({ ...rule, walletId: cash.id });
+    await expect(store.transactions.createFromRule(r.id, '2026-11-16', { occurredOn: '2026-11-18' })).rejects.toThrow(/не входит в расписание/);
+    await expect(store.transactions.createFromRule(r.id, '2026-11-15', { occurredOn: '2026-13-45' })).rejects.toBeInstanceOf(ValidationError);
+    expect(await store.db.transactions.count()).toBe(0);
+  });
+
+  it('без occurredOn всё как раньше: операция на дату по расписанию', async () => {
+    const store = await makeStore();
+    const { cash } = await basics(store);
+    const r = await store.recurring.create({ ...rule, walletId: cash.id });
+    expect((await store.transactions.createFromRule(r.id, '2026-11-15')).occurredOn).toBe('2026-11-15');
+  });
+});
+
 describe('TransactionsRepo.skipOccurrence', () => {
   it('создаёт операцию с тем же id сразу удалённой; createFromRule потом возвращает её же и не воскрешает', async () => {
     const store = await makeStore();

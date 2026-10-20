@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually, renderAppRoot, write } from '@/app/testkit';
 import { act, render, screen, waitFor } from '@/components/testUtils';
 import { ToastProvider } from '@/components/Toast';
-import type { RecurringInput, Store } from '@/db';
+import { uuidV5, type RecurringInput, type Store } from '@/db';
 import { addDays } from '@/lib/dates';
 import { opsDeps, pinToday, table, unpinToday, type OpsDeps } from '@/features/transactions/__fixtures__/opsKit';
 import { currentFailures, requestAutoPostRun, resetAutoPostState } from '@/recurring/autoPostState';
@@ -457,6 +457,41 @@ describe('UpcomingWidget на «Главной»', () => {
     await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
     expect(await txs(td)).toHaveLength(1);
     await waitFor(() => expect(screen.getByText(/Платёж проведён: Интернет/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Ближайшие платежи')).toBeNull());
+  });
+
+  it('«Провести» просроченный платёж: операция записывается на сегодня (когда оплатили), id — от даты по расписанию; «Отменить» оставляет её в окне «Пропущенных»', async () => {
+    let ruleId = '';
+    const td = makeApp(async (s, ids) => {
+      const r = await s.recurring.create({ walletId: ids.cash, kind: 'expense', amountMinor: 700, frequency: 'monthly', startOn: addDays(TODAY, -20), note: 'Старая аренда' });
+      ruleId = r.id;
+    });
+    await show(td, <UpcomingWidget />);
+    const button = await waitFor(() => screen.getByRole('button', { name: /^Провести: Старая аренда/ }));
+    act(() => button.click());
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
+    const [tx] = await liveTxs(td);
+    expect(tx).toMatchObject({ occurredOn: TODAY, recurringRuleId: ruleId, id: await uuidV5(ruleId, addDays(TODAY, -20)) });
+    act(() => screen.getByRole('button', { name: 'Отменить' }).click());
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(0));
+    // удалённая строка осталась на сегодняшней дате: она попадёт в окно «Пропущенных» (оно смотрит 90 дней назад), а не потеряется
+    expect((await txs(td))[0]).toMatchObject({ occurredOn: TODAY });
+  });
+
+  it('«Провести» с отменой: в уведомлении «Отменить» — операция удаляется, а дата платежа остаётся среди пропущенных', async () => {
+    const td = makeApp(async (s, ids) => {
+      await s.recurring.create({ walletId: ids.cash, kind: 'expense', amountMinor: 700, frequency: 'monthly', startOn: TODAY, note: 'Интернет' });
+    });
+    await show(td, <UpcomingWidget />);
+    const button = await waitFor(() => screen.getByRole('button', { name: /^Провести: Интернет/ }));
+    act(() => button.click());
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
+    const undo = await waitFor(() => screen.getByRole('button', { name: 'Отменить' }));
+    act(() => undo.click());
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(0));
+    expect(await txs(td)).toHaveLength(1); // строка осталась (удалённая): дата считается пропущенной, её можно вернуть
+    await waitFor(() => expect(screen.getByText(/Платёж отменён. Вернуть его можно/)).toBeInTheDocument());
+    // платёж снова не появляется в виджете (он пропущен), а не «забыт»
     await waitFor(() => expect(screen.queryByText('Ближайшие платежи')).toBeNull());
   });
 

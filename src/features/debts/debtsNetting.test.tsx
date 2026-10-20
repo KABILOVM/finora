@@ -1,6 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { chooseMenuAction, findByRole, menuActions, menuActionsStable, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
 import { formatMinor } from '@/domain/money';
@@ -169,19 +169,19 @@ describe('«Платить частями» на странице долга', (
     return td;
   }
   const openSheet = async (title: string) => {
-    await user.click(screen.getByRole('button', { name: title }));
+    await chooseMenuAction(title);
     return findByRole('dialog', { name: title });
   };
   const rules = async (td: OpsDeps) => (await storeOf(td).db.recurring_rules.toArray()).filter((r) => r.deletedAt === null);
 
   it('«мне должны»: «Получать частями»; «я должен»: «Платить частями»', async () => {
     await show();
-    expect(screen.getByRole('button', { name: 'Получать частями' })).toBeTruthy();
+    expect(await menuActions()).toContain('Получать частями');
   });
 
   it('«я должен» — «Платить частями»', async () => {
     await show({ direction: 'borrowed' });
-    expect(screen.getByRole('button', { name: 'Платить частями' })).toBeTruthy();
+    expect(await menuActions()).toContain('Платить частями');
   });
 
   it('сумма в месяц → сколько платежей и когда долг закроется; последний платёж меньше — сказано', async () => {
@@ -207,7 +207,7 @@ describe('«Платить частями» на странице долга', (
     const td = await show();
     await openSheet('Получать частями');
     await tapAmount('150');
-    await user.click(screen.getByRole('checkbox', { name: /Проводить само/ }));
+    await user.click(screen.getByRole('switch', { name: 'Проводить само' }));
     await user.click(screen.getByRole('button', { name: 'Создать платежи' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Получать частями' })).toBeNull());
     const [rule] = await rules(td);
@@ -242,7 +242,9 @@ describe('«Платить частями» на странице долга', (
 
   it('кнопки нет у закрытого долга и у погашенного', async () => {
     await show({}, (s, id) => s.debts.close(id));
-    expect(screen.queryByRole('button', { name: 'Получать частями' })).toBeNull();
+    const names = await menuActionsStable();
+    expect(names).toContain('Открыть снова'); // страница закрытого долга загрузилась
+    expect(names).not.toContain('Получать частями');
   });
 
   it('новые платежи видны в «Платежах»: правило есть среди регулярных платежей по этому долгу', async () => {

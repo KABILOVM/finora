@@ -14,6 +14,10 @@ export function useDismiss(open: boolean, onClose: () => void, boundary: RefObje
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // Поверх окна с панелью открыт другой диалог (подтверждение): Esc закрывает его, а не панель под ним
+      const modals = document.querySelectorAll('[aria-modal="true"]');
+      const top = modals[modals.length - 1];
+      if (top && boundary.current && !top.contains(boundary.current)) return;
       e.stopPropagation();
       onClose();
     };

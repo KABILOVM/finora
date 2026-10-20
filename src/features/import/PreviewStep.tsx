@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
+import { Notice } from '@/components/Notice';
+import type { Minor, UUID } from '@/domain/types';
 import type { ImportPlan, WalletChoice } from '@/import/types';
 import { pluralRu } from '@/lib/plural';
 import { AccountsBlock } from './AccountsBlock';
 import { CategoriesBlock } from './CategoriesBlock';
 import { opsWord } from './importText';
-import { IssuesBlock } from './IssuesBlock';
+import { walletImpacts } from './impact';
+import { NotesBlock, ReviewBlock, SkippedBlock } from './IssuesBlock';
 import { OpsPreview } from './OpsPreview';
 import { RatesBlock } from './RatesBlock';
 import { SummaryTiles } from './SummaryTiles';
@@ -23,6 +27,8 @@ export interface PreviewStepProps {
   onStart: () => void;
   /** Текст ошибки предыдущей попытки записи. */
   error: string | null;
+  /** Текущие остатки кошельков: по ним показано, как импорт изменит остаток кошелька, найденного по названию. */
+  balances?: ReadonlyMap<UUID, Minor>;
 }
 
 function confirmMessage(plan: ImportPlan) {
@@ -42,22 +48,26 @@ function confirmMessage(plan: ImportPlan) {
       )}
       <p>Уже добавленное повторно не добавится: загрузить тот же файл ещё раз безопасно.</p>
       <p>
-        Отменить импорт одной кнопкой нельзя: добавленные операции придётся удалять по одной. Если сомневаетесь, сначала сделайте резервную копию
-        (Настройки → Резервная копия).
+        Передумаете — сразу после импорта на экране итога будет кнопка «Отменить импорт». Резервная копия импорт не откатит: загрузка
+        копии добавляет данные и ничего не удаляет.
       </p>
     </div>
   );
 }
 
-/** Шаги 2–3. Предпросмотр: счётчики, курсы, сопоставление счетов и категорий, первые операции, спорные строки. Затем подтверждение. */
-export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBack, onStart, error }: PreviewStepProps) {
+/**
+ * Шаги 2–3. Предпросмотр. Сначала то, что требует решения (курсы, счета, спорные строки), потом справочное (категории, операции,
+ * пропущенное). Кнопка «Импортировать» закреплена над нижней панелью: нажать её можно, не промотав весь список. Затем подтверждение.
+ */
+export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBack, onStart, error, balances }: PreviewStepProps) {
   const [confirming, setConfirming] = useState(false);
   const n = plan.counts.add;
   const nothing = plan.ops.length === 0;
+  const impacts = useMemo(() => walletImpacts(plan.ops), [plan.ops]);
 
   return (
     <div className="flex flex-col gap-5">
-      <SummaryTiles plan={plan} fileName={fileName} />
+      <SummaryTiles plan={plan} fileName={fileName} onBack={onBack} />
       {nothing && (
         <Card>
           <EmptyState
@@ -68,25 +78,31 @@ export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBac
         </Card>
       )}
       <RatesBlock needs={plan.rates} base={plan.baseCurrency} texts={rateTexts} onChange={onRate} />
-      <AccountsBlock wallets={plan.wallets} onChoose={onChoose} />
+      <AccountsBlock wallets={plan.wallets} onChoose={onChoose} balances={balances} impacts={impacts} />
+      <NotesBlock notes={plan.notes} />
+      <ReviewBlock review={plan.review} />
       <CategoriesBlock categories={plan.categories} />
-      <OpsPreview ops={plan.ops} />
-      <IssuesBlock plan={plan} />
+      <OpsPreview plan={plan} />
+      <SkippedBlock skipped={plan.skipped} />
 
-      <Card className="flex flex-col gap-3">
-        {error && (
-          <p role="alert" className="rounded-xl bg-danger/10 p-3 font-medium text-danger">
-            {error}
-          </p>
-        )}
-        <Button size="lg" icon="download" disabled={n === 0} onClick={() => setConfirming(true)}>
+      <p className="px-1 text-sm text-muted">
+        Резервная копия сохранит данные на случай сбоя, но импорт не откатит.{' '}
+        <Link to="/settings?section=data" className="font-semibold text-brand underline">
+          Настройки → Резервная копия
+        </Link>
+        .
+      </p>
+
+      {error && <Notice tone="danger">{error}</Notice>}
+      {/* Закреплена над нижней панелью телефона (её высота с отступом ≈ 5,5 rem); на ПК — у нижнего края окна */}
+      <div
+        data-testid="import-actions"
+        className="sticky bottom-[calc(6rem+env(safe-area-inset-bottom))] z-20 rounded-card border border-border/70 bg-surface p-3 shadow-float md:bottom-4"
+      >
+        <Button size="lg" fullWidth icon="download" disabled={n === 0} onClick={() => setConfirming(true)}>
           {n === 0 ? 'Нечего импортировать' : `Импортировать ${n} ${opsWord(n)}`}
         </Button>
-        <Button variant="secondary" onClick={onBack}>
-          Выбрать другой файл
-        </Button>
-        <p className="text-sm text-muted">Резервную копию лучше сделать до импорта: Настройки → Резервная копия.</p>
-      </Card>
+      </div>
 
       <ConfirmDialog
         open={confirming}

@@ -46,3 +46,21 @@ export function Fold({ title, count, children }: { title: string; count: number;
     </section>
   );
 }
+
+/** «Погашены»: выплачены полностью, но не закрыты. Показываем отдельно от открытых и предлагаем закрыть разом. */
+export function SettledSection({ items, today, busy, onCloseAll }: { items: readonly DebtItem[]; today: string; busy: boolean; onCloseAll: () => void }) {
+  return (
+    <section className="mt-6" aria-labelledby="debts-settled-title" data-testid="debts-settled">
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="debts-settled-title" className="font-semibold text-muted">
+          Погашены · {items.length}
+        </h2>
+        <Button variant="secondary" disabled={busy} aria-label={items.length > 1 ? `Закрыть все погашенные долги: ${items.length}` : 'Закрыть погашенный долг'} onClick={onCloseAll}>
+          {items.length > 1 ? 'Закрыть все' : 'Закрыть'}
+        </Button>
+      </div>
+      <p className="mb-2 mt-1 text-sm text-muted">Выплачены полностью. Закройте их, чтобы не висели среди открытых.</p>
+      <DebtList items={items} today={today} label="Погашенные долги" />
+    </section>
+  );
+}

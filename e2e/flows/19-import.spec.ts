@@ -100,8 +100,16 @@ test.describe('19. Импорт из Дзен-мани (CSV)', () => {
     // Категории: «Кафе» новая
     await expect(page.getByTestId('categories-summary')).toHaveText(/Найдено у вас: 6\. Будет создано: 1\./);
 
-    // Первые операции и спорные строки с причинами
-    await expect(page.getByRole('list', { name: 'Первые операции файла' }).getByRole('listitem')).toHaveCount(10);
+    // Остаток существующего кошелька «Наличные» изменится: об этом сказано до импорта
+    await expect(page.getByText(/Остаток изменится: .* → .* \(3 операции\)/)).toBeVisible();
+
+    // Операции файла: по умолчанию те, что добавятся (свежие выше); «Уже есть» не показаны, пока их нет
+    const opsList = page.getByRole('list', { name: 'Операции из файла' });
+    await expect(opsList.getByRole('listitem')).toHaveCount(10);
+    await expect(opsList.getByRole('listitem').first()).toContainText('09.09.2026');
+    await expect(page.getByRole('group', { name: 'Какие операции показать' })).toHaveCount(0); // все 10 — «Добавятся»: переключать нечего
+
+    // Спорные строки с причинами
     const review = page.getByRole('list', { name: 'Строки, которые нужно проверить' });
     await expect(review.getByRole('listitem')).toHaveCount(4);
     await expect(review).toContainText('Строка 15');
@@ -111,6 +119,10 @@ test.describe('19. Импорт из Дзен-мани (CSV)', () => {
     await expect(page.getByText('Нет даты: 1 строка')).toBeVisible();
     await shot(page, '19-import-preview', testInfo);
     expect(await noHorizontalScroll(page), 'предпросмотр не должен прокручиваться вбок').toBe(true);
+    // тёмная тема: плашки, чипы и закреплённая кнопка читаются
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await shot(page, '19-import-preview-dark', testInfo);
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
 
     // Шаг 3: подтверждение
     await confirmImport(page, 10);
@@ -161,6 +173,23 @@ test.describe('19. Импорт из Дзен-мани (CSV)', () => {
     await goSection(page, 'Кошельки');
     await expect(page.getByRole('listitem').filter({ has: page.getByText('Карта Алиф', { exact: true }) })).toHaveCount(1);
     await expect(page.getByRole('listitem').filter({ has: page.getByText('Доллары', { exact: true }) })).toHaveCount(1);
+  });
+
+  test('«Отменить импорт» на итоге убирает добавленное; операции и новые кошельки уходят', async ({ page }) => {
+    await openApp(page);
+    await openImport(page);
+    await pick(page, fixture('basic.csv'));
+    await rateField(page, 'USD').fill('10,9');
+    await expect(count(page, 'add')).toHaveText('10');
+    await confirmImport(page, 10);
+    await expect(page.getByRole('heading', { level: 2, name: 'Импорт завершён' })).toBeVisible();
+    await page.getByRole('button', { name: 'Отменить импорт' }).click();
+    const dlg = page.getByRole('alertdialog');
+    await expect(dlg).toContainText('Будет убрано операций: 10');
+    await dlg.getByRole('button', { name: 'Отменить импорт', exact: true }).click();
+    await expect(page.getByText(/Импорт отменён: убрано 10 операций/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Отменить импорт' })).toHaveCount(0);
+    expect(await countTx(page)).toEqual({ live: 0, total: 10 });
   });
 
   test('чужой файл: понятный отказ словами; файл с BOM, точкой с запятой и запятой в числах читается', async ({ page }, testInfo) => {
@@ -255,6 +284,16 @@ test.describe('19. Импорт из Дзен-мани (CSV)', () => {
     expect(await noHorizontalScroll(page)).toBe(true);
     // Кнопка внизу достижима и не перекрыта нижней панелью
     const button = page.getByRole('button', { name: /^Импортировать \d+ операци/ });
+    // Кнопка закреплена: видна сразу, без прокрутки вниз, и не уходит под нижнюю панель телефона
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const pinned = await button.boundingBox();
+    expect(pinned, 'кнопка «Импортировать» видна вверху страницы').not.toBeNull();
+    expect(pinned!.y).toBeGreaterThanOrEqual(0);
+    expect(pinned!.y + pinned!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    if (isPhone(page)) {
+      const navTop = await page.getByRole('navigation', { name: 'Основная навигация' }).first().boundingBox();
+      if (navTop) expect(pinned!.y + pinned!.height, 'закреплённая кнопка не под нижней панелью').toBeLessThanOrEqual(navTop.y + 1);
+    }
     await button.scrollIntoViewIfNeeded();
     const box = await button.boundingBox();
     expect(box).not.toBeNull();

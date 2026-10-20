@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
+import { Notice } from '@/components/Notice';
 
 export interface PickStepProps {
   onFile: (file: File) => void;
@@ -35,7 +36,8 @@ export function PickStep({ onFile, error, disabled = false }: PickStepProps) {
         <h2 className="text-lg font-bold">Как выгрузить из Дзен-мани</h2>
         <p>Выгрузите операции в CSV на сайте или в приложении Дзен-мани, затем выберите файл ниже.</p>
         <p className="text-sm text-muted">
-          Формат мы проверяли на образце. Если не получилось — напишите нам и пришлите файл, в котором суммы заменены вымышленными.
+          Формат мы проверяли на образце. Если файл не читается, причина появится здесь; если не подошла часть строк — на следующем шаге, с
+          номерами строк: их можно поправить в файле и загрузить его ещё раз, добавленное не повторится.
         </p>
       </Card>
 
@@ -67,19 +69,15 @@ export function PickStep({ onFile, error, disabled = false }: PickStepProps) {
         />
       </Card>
 
-      {error && (
-        <p role="alert" className="rounded-xl bg-danger/10 p-3 font-medium text-danger">
-          {error}
-        </p>
-      )}
+      {error && <Notice tone="danger">{error}</Notice>}
 
       <p className="flex items-start gap-2 px-1 text-sm text-muted">
         <Icon name="lock" size={18} className="mt-0.5 shrink-0" />
         <span>Файл читается прямо на этом устройстве и никуда не отправляется, интернет для разбора не нужен.</span>
       </p>
       <p className="px-1 text-sm text-muted">
-        Перед импортом можно сделать резервную копию:{' '}
-        <Link to="/settings" className="font-semibold text-brand underline">
+        Резервная копия сохранит ваши данные на случай сбоя, но импорт не откатит: загрузка копии добавляет данные и ничего не удаляет.{' '}
+        <Link to="/settings?section=data" className="font-semibold text-brand underline">
           Настройки → Резервная копия
         </Link>
         .

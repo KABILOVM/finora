@@ -64,7 +64,7 @@ test.describe('37. Цели накопления', () => {
     await expect(page.getByTestId('goal-nudge')).toHaveCount(0);
 
     // правка: пустая сумма цели убирает цель целиком (и срок), виджет пропадает
-    await page.getByText('Отпуск', { exact: true }).first().click();
+    await page.getByRole('button', { name: 'Изменить: Отпуск' }).click();
     const dlg = sheet(page, 'Правка кошелька');
     await expect(dlg).toBeVisible();
     await expect(dlg.getByLabel('Накопить к дате: календарь')).toHaveValue('2027-01-15');

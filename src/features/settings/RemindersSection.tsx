@@ -4,7 +4,7 @@ import { Notice } from '@/components/Notice';
 import { cn } from '@/lib/cn';
 import { DENIED_HELP, explainSupport } from '@/push/subscription';
 import { useReminders, type RemindersModel } from '@/push/useReminders';
-import { ToggleRow } from '../recurring/ToggleRow';
+import { ToggleRow } from '@/components/ToggleRow';
 import { SettingsSection } from './SettingsSection';
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
