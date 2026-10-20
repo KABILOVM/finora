@@ -53,7 +53,7 @@ describe('Импорт из Дзен-мани: экран', () => {
     expect(screen.getByText(/Выгрузите операции в CSV на сайте или в приложении Дзен-мани/)).toBeTruthy();
     expect(screen.getByText(/Формат мы проверяли на образце/)).toBeTruthy();
     expect(screen.getByText(/никуда не отправляется/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Настройки → Резервная копия' }).getAttribute('href')).toBe('/settings');
+    expect(screen.getByRole('link', { name: 'Настройки → Резервная копия' }).getAttribute('href')).toBe('/settings?section=data');
     expect(fileInput().getAttribute('aria-label')).toBe('Файл Дзен-мани');
     expect(fileInput().getAttribute('accept')).toContain('.csv');
   });
@@ -119,6 +119,62 @@ describe('Импорт из Дзен-мани: экран', () => {
     await waitFor(() => expect(text('count-add')).toBe('3'));
     expect(text('count-review')).toBe('1');
     expect(screen.getByText(/сопоставлены с одним кошельком/)).toBeTruthy();
+  });
+});
+
+describe('Импорт из Дзен-мани: предпросмотр', () => {
+  const norm = (t: string | null | undefined) => (t ?? '').replace(/\s+/g, ' ').trim();
+
+  it('шаги названы под заголовком; кнопка «Импортировать» лежит в закреплённой панели', async () => {
+    await openImport();
+    expect(screen.getByText('Шаг 1 из 3 · Выберите файл')).toBeTruthy();
+    chooseFile(fixtureText('basic.csv'), 'basic.csv');
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    expect(screen.getByText('Шаг 2 из 3 · Проверьте, что будет добавлено')).toBeTruthy();
+    const bar = document.querySelector('[data-testid="import-actions"]');
+    expect(bar?.querySelector('button')?.textContent).toBe('Импортировать 8 операций');
+  });
+
+  it('«Другой файл» возвращает к выбору файла', async () => {
+    await openImport();
+    chooseFile(fixtureText('basic.csv'), 'basic.csv');
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    await user.click(screen.getByRole('button', { name: 'Другой файл' }));
+    await findByRole('button', { name: 'Выбрать файл' });
+    expect(screen.queryByRole('region', { name: 'Итоги разбора файла' })).toBeNull();
+  });
+
+  it('счёт найден у вас по названию («Наличные»): сказано, как изменится остаток кошелька', async () => {
+    await openImport();
+    chooseFile(fixtureText('basic.csv'), 'basic.csv');
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    // Наличные: +1000 (снятие с карты) −500 (перевод с комиссией) +300 (подарок) = +800 по трём операциям
+    const line = Array.from(document.querySelectorAll('[data-testid^="impact-"]')).map((el) => norm(el.textContent));
+    expect(line).toHaveLength(1);
+    expect(line[0]).toMatch(/^Остаток изменится: 0 с\. → 800 с\. \(3 операции\)\.$/);
+  });
+
+  it('порядок блоков: сначала решения (курсы, счета, спорные строки), потом справочное (категории, операции, пропущенное)', async () => {
+    await openImport();
+    chooseFile(fixtureText('basic.csv'), 'basic.csv');
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    const ids = ['rates-h', 'accounts-h', 'review-h', 'cats-h', 'ops-h', 'skipped-h'];
+    const els = ids.map((id) => document.getElementById(id));
+    expect(els.every((el) => el !== null)).toBe(true);
+    for (let i = 0; i < els.length - 1; i++) {
+      expect(Boolean(els[i]!.compareDocumentPosition(els[i + 1]!) & Node.DOCUMENT_POSITION_FOLLOWING), `${ids[i]} раньше ${ids[i + 1]}`).toBe(true);
+    }
+  });
+
+  it('подтверждение честно говорит, что копия импорт не откатит', async () => {
+    await openImport();
+    chooseFile(fixtureText('basic.csv'), 'basic.csv');
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    await user.click(screen.getByRole('button', { name: 'Импортировать 8 операций' }));
+    const dlg = await findByRole('alertdialog');
+    expect(norm(dlg.textContent)).toContain('Отменить импорт одной кнопкой пока нельзя');
+    expect(norm(dlg.textContent)).toContain('Резервная копия импорт не откатит');
+    expect(norm(dlg.textContent)).not.toContain('сначала сделайте резервную копию');
   });
 });
 

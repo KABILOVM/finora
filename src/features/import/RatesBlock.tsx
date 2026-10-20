@@ -1,5 +1,6 @@
 import { Card } from '@/components/Card';
 import { TextInput } from '@/components/Field';
+import { SectionHeader } from '@/components/SectionHeader';
 import type { RateNeed } from '@/import/types';
 import { opsWord, symbolOf } from './importText';
 import { parseRateInput } from './rateInput';
@@ -19,9 +20,9 @@ export function RatesBlock({ needs, base, texts, onChange }: RatesBlockProps) {
   if (needs.length === 0) return null;
   return (
     <section aria-labelledby="rates-h" className="flex flex-col gap-2">
-      <h2 id="rates-h" className="px-1 text-sm font-bold uppercase tracking-wide text-muted">
+      <SectionHeader id="rates-h" className="mb-0">
         Курсы
-      </h2>
+      </SectionHeader>
       <Card className="flex flex-col gap-4">
         <p className="text-sm text-muted">
           Курс на дату операции неизвестен — все операции этой валюты будут пересчитаны по этому курсу (на отчёты в основной валюте влияет,
