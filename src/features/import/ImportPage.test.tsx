@@ -1,6 +1,6 @@
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventually, makeTestDeps, renderAppRoot, type TestDeps } from '@/app/testkit';
+import { eventually, makeTestDeps, renderAppRoot, write, type TestDeps } from '@/app/testkit';
 import { fire, findByRole, render, screen, user, waitFor } from '@/components/testUtils';
 import { fixtureText } from '@/import/__fixtures__/load';
 import type { ImportReport } from '@/import/runImport';
@@ -198,6 +198,30 @@ describe('Импорт из Дзен-мани: отмена', () => {
     await waitFor(() => expect(screen.getByText(/Импорт отменён: убрано 10 операций/)).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'Отменить импорт' })).toBeNull();
     expect(await store(td).db.transactions.filter((t) => t.deletedAt === null).count()).toBe(0);
+  });
+});
+
+describe('Импорт из Дзен-мани: счёт заблокирован архивным кошельком', () => {
+  it('«Вернуть кошелёк из архива» снимает блокировку: счёт снова идёт в кошелёк прошлого импорта', async () => {
+    const td = await openImport();
+    chooseFile(fixtureText('semicolon-ru.csv'));
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    await user.click(screen.getByRole('button', { name: 'Импортировать 4 операции' }));
+    await findByRole('alertdialog');
+    await user.click(screen.getByRole('button', { name: 'Импортировать' }));
+    await findByRole('heading', { name: 'Импорт завершён', level: 2 });
+    await user.click(screen.getByRole('button', { name: 'Загрузить ещё файл' }));
+    // человек убрал созданный кошелёк в архив
+    const wallet = (await store(td).db.wallets.toArray()).find((w) => w.name === 'Карта Алиф')!;
+    await write(() => store(td).wallets.archive(wallet.id));
+    await findByRole('button', { name: 'Выбрать файл' });
+    chooseFile(fixtureText('semicolon-ru.csv'));
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    expect(screen.getByText(/лежит в архиве/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Вернуть кошелёк из архива' }));
+    await waitFor(() => expect(screen.queryByText(/лежит в архиве/)).toBeNull());
+    expect(screen.getByText('Кошелёк, созданный прошлым импортом.')).toBeTruthy();
+    expect((await store(td).db.wallets.get(wallet.id))?.archivedAt).toBeNull();
   });
 });
 

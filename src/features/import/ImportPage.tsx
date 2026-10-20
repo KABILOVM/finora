@@ -201,6 +201,7 @@ export default function ImportPage() {
               onStart={() => void start()}
               error={error}
               balances={balances}
+              onRestore={async (id) => void (await store.wallets.restore(id))}
             />
           )}
           {stage.name === 'running' && <RunStep progress={stage.progress} stopping={stage.stopping} onStop={stop} />}

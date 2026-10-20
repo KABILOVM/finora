@@ -130,7 +130,8 @@ export type WalletTarget =
    */
   | { kind: 'existing'; id: UUID; name: string; how: 'saved' | 'history' | 'name' | 'chosen' }
   | { kind: 'create'; id: UUID; name: string }
-  | { kind: 'blocked'; reason: string };
+  /** restoreId — кошелёк прошлого импорта лежит в архиве: его можно вернуть одной кнопкой (у удалённого такого нет). */
+  | { kind: 'blocked'; reason: string; restoreId?: UUID };
 
 export interface PlanWallet {
   key: string;

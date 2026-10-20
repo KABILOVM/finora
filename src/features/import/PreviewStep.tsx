@@ -29,6 +29,8 @@ export interface PreviewStepProps {
   error: string | null;
   /** Текущие остатки кошельков: по ним показано, как импорт изменит остаток кошелька, найденного по названию. */
   balances?: ReadonlyMap<UUID, Minor>;
+  /** Вернуть кошелёк из архива (счёт заблокирован архивным кошельком прошлого импорта). */
+  onRestore?: (walletId: UUID) => Promise<void> | void;
 }
 
 function confirmMessage(plan: ImportPlan) {
@@ -59,7 +61,7 @@ function confirmMessage(plan: ImportPlan) {
  * Шаги 2–3. Предпросмотр. Сначала то, что требует решения (курсы, счета, спорные строки), потом справочное (категории, операции,
  * пропущенное). Кнопка «Импортировать» закреплена над нижней панелью: нажать её можно, не промотав весь список. Затем подтверждение.
  */
-export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBack, onStart, error, balances }: PreviewStepProps) {
+export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBack, onStart, error, balances, onRestore }: PreviewStepProps) {
   const [confirming, setConfirming] = useState(false);
   const n = plan.counts.add;
   const nothing = plan.ops.length === 0;
@@ -78,7 +80,7 @@ export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBac
         </Card>
       )}
       <RatesBlock needs={plan.rates} base={plan.baseCurrency} texts={rateTexts} onChange={onRate} />
-      <AccountsBlock wallets={plan.wallets} onChoose={onChoose} balances={balances} impacts={impacts} />
+      <AccountsBlock wallets={plan.wallets} onChoose={onChoose} balances={balances} impacts={impacts} onRestore={onRestore} />
       <NotesBlock notes={plan.notes} />
       <ReviewBlock review={plan.review} />
       <CategoriesBlock categories={plan.categories} />

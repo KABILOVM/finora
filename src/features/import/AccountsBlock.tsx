@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { inputClasses } from '@/components/Field';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -39,6 +40,8 @@ export interface AccountsBlockProps {
   /** Текущие остатки кошельков и сдвиг от импорта — чтобы показать, как изменится остаток кошелька, найденного у вас по названию. */
   balances?: ReadonlyMap<UUID, Minor>;
   impacts?: ReadonlyMap<UUID, WalletImpact>;
+  /** «Вернуть из архива» для счёта, чей кошелёк прошлого импорта лежит в архиве. Нет — кнопки нет. */
+  onRestore?: (walletId: UUID) => Promise<void> | void;
 }
 
 function AccountRow({
@@ -46,7 +49,8 @@ function AccountRow({
   onChoose,
   balances,
   impacts,
-}: { w: PlanWallet; onChoose: (key: string, choice: WalletChoice) => void } & Pick<AccountsBlockProps, 'balances' | 'impacts'>) {
+  onRestore,
+}: { w: PlanWallet; onChoose: (key: string, choice: WalletChoice) => void } & Pick<AccountsBlockProps, 'balances' | 'impacts' | 'onRestore'>) {
   const id = useId();
   const t = w.target;
   const label = `Кошелёк для счёта «${w.name}»`;
@@ -86,7 +90,12 @@ function AccountRow({
         ))}
       </select>
       <p className={t.kind === 'blocked' ? 'text-sm font-medium text-danger' : 'text-sm text-muted'}>{walletNote(t)}</p>
-      {t.kind === 'blocked' && w.candidates.length === 0 && !offerNew && (
+      {t.kind === 'blocked' && t.restoreId !== undefined && onRestore && (
+        <Button variant="secondary" onClick={() => void onRestore(t.restoreId!)}>
+          Вернуть кошелёк из архива
+        </Button>
+      )}
+      {t.kind === 'blocked' && w.candidates.length === 0 && !offerNew && t.restoreId === undefined && (
         <p className="text-sm text-muted">
           Подходящих кошельков в {w.currency} нет. Заведите кошелёк в этой валюте в разделе{' '}
           <Link to="/wallets?new=1" className="font-semibold text-brand underline">
@@ -110,8 +119,10 @@ function ExistingBalance({ w, id, balances, impacts }: { w: PlanWallet; id: UUID
 }
 
 /** Сопоставление счетов Дзен-мани с кошельками: автоподбор по названию и валюте, можно выбрать свой или создать новый. */
-export function AccountsBlock({ wallets, onChoose, balances, impacts }: AccountsBlockProps) {
+export function AccountsBlock({ wallets, onChoose, balances, impacts, onRestore }: AccountsBlockProps) {
   if (wallets.length === 0) return null;
+  // счета, которым некуда писать, — первыми: без решения по ним операции не добавятся
+  const ordered = [...wallets].sort((a, b) => Number(b.target.kind === 'blocked') - Number(a.target.kind === 'blocked'));
   return (
     <section aria-labelledby="accounts-h" className="flex flex-col gap-2">
       <SectionHeader id="accounts-h" className="mb-0">
@@ -119,8 +130,8 @@ export function AccountsBlock({ wallets, onChoose, balances, impacts }: Accounts
       </SectionHeader>
       <Card padding="none">
         <ul className="divide-y divide-border">
-          {wallets.map((w) => (
-            <AccountRow key={w.key} w={w} onChoose={onChoose} balances={balances} impacts={impacts} />
+          {ordered.map((w) => (
+            <AccountRow key={w.key} w={w} onChoose={onChoose} balances={balances} impacts={impacts} onRestore={onRestore} />
           ))}
         </ul>
       </Card>
