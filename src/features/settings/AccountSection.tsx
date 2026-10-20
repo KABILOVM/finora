@@ -9,6 +9,7 @@ import { useStore } from '@/db';
 import { pluralRu } from '@/lib/plural';
 import { useSyncStatus } from '@/sync/syncContext';
 import { ChangePasswordSheet } from './ChangePasswordSheet';
+import { ACCOUNT_DELETION_ENABLED } from '@/auth/deleteAccount';
 import { DeleteAccountSheet } from './DeleteAccountSheet';
 import { SettingsSection } from './SettingsSection';
 
@@ -126,10 +127,14 @@ export function AccountSection() {
       </Button>
       {hasUnsent && <p className="-mt-1 text-sm text-muted">Недоступно: не всё ещё отправлено в облако.</p>}
 
-      <Button variant="ghost" className="!text-danger" disabled={offlineKnown} onClick={() => setDeleteOpen(true)}>
-        Удалить аккаунт…
-      </Button>
-      {offlineKnown && <p className="-mt-1 text-sm text-muted">Удалить аккаунт можно, когда есть связь с сервером.</p>}
+      {ACCOUNT_DELETION_ENABLED && (
+        <>
+          <Button variant="ghost" className="!text-danger" disabled={offlineKnown} onClick={() => setDeleteOpen(true)}>
+            Удалить аккаунт…
+          </Button>
+          {offlineKnown && <p className="-mt-1 text-sm text-muted">Удалить аккаунт можно, когда есть связь с сервером.</p>}
+        </>
+      )}
 
       {passwordOpen && <ChangePasswordSheet onClose={() => setPasswordOpen(false)} />}
       {deleteOpen && <DeleteAccountSheet onClose={() => setDeleteOpen(false)} />}

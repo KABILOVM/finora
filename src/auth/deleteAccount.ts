@@ -3,6 +3,12 @@ import { getDefaultClient } from './supabaseClient';
 
 export const DELETE_ACCOUNT_FUNCTION = 'delete-account';
 
+/**
+ * Показывать ли «Удалить аккаунт…» в настройках. ВЫКЛЮЧЕНО: проект Supabase общий с другим приложением (ERP), а функция удаляет
+ * пользователя из общей таблицы входа — вместе с каскадом его профилей в ERP. Включать только после переезда Sumoima в отдельный проект.
+ */
+export const ACCOUNT_DELETION_ENABLED = false;
+
 type Invoker = Pick<SupabaseClient, 'functions'>;
 
 const statusOf = (e: unknown): number | undefined => {

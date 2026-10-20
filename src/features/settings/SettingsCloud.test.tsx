@@ -8,7 +8,7 @@ import { SYNC_TABLES } from '@/sync/tables';
 import { deleteAccountOnServer, DeleteAccountError } from '@/auth/deleteAccount';
 import SettingsPage from './SettingsPage';
 
-vi.mock('@/auth/deleteAccount', async (orig) => ({ ...(await orig<typeof import('@/auth/deleteAccount')>()), deleteAccountOnServer: vi.fn() }));
+vi.mock('@/auth/deleteAccount', async (orig) => ({ ...(await orig<typeof import('@/auth/deleteAccount')>()), deleteAccountOnServer: vi.fn(), ACCOUNT_DELETION_ENABLED: true }));
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({ needRefresh: [false, vi.fn()], offlineReady: [false, vi.fn()], updateServiceWorker: vi.fn() }),
