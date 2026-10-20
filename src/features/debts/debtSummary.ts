@@ -48,8 +48,10 @@ export function compareDebts(a: Debt, b: Debt): number {
 }
 
 export interface DebtGroups {
-  /** Не закрыты и не в архиве. */
+  /** Не закрыты, не в архиве, остаток больше нуля (или не посчитан). */
   active: DebtItem[];
+  /** Выплачены полностью (остаток ноль), но ещё не закрыты: их остаётся закрыть. */
+  settled: DebtItem[];
   /** Закрыты, не в архиве. */
   closed: DebtItem[];
   /** В архиве (закрытые или нет). */
@@ -57,11 +59,12 @@ export interface DebtGroups {
 }
 
 export function groupDebts(items: readonly DebtItem[], direction: DebtDirection): DebtGroups {
-  const out: DebtGroups = { active: [], closed: [], archived: [] };
+  const out: DebtGroups = { active: [], settled: [], closed: [], archived: [] };
   for (const it of items) {
     if (it.debt.direction !== direction) continue;
     if (it.debt.archivedAt !== null) out.archived.push(it);
     else if (it.debt.closedAt !== null) out.closed.push(it);
+    else if (it.state !== null && it.state.settled) out.settled.push(it);
     else out.active.push(it);
   }
   return out;
@@ -114,4 +117,17 @@ export function nearestDue(items: readonly DebtItem[]): DebtItem | null {
     if (best === null || best.debt.dueOn === null || it.debt.dueOn < best.debt.dueOn) best = it;
   }
   return best;
+}
+
+/**
+ * Какая вкладка «Долгов» открывается, когда адрес её не называет: там, где есть открытые долги. Есть и там и там — где просрочка
+ * (если только в одной); иначе «Мне должны». Человек, у которого только «Я должен», не упирается в пустой экран.
+ */
+export function defaultDirection(items: readonly DebtItem[], today: IsoDate): DebtDirection {
+  const open = (d: DebtDirection) => items.filter((it) => it.debt.direction === d && isOwing(it));
+  const lent = open('lent');
+  const borrowed = open('borrowed');
+  if (lent.length === 0 && borrowed.length > 0) return 'borrowed';
+  if (lent.length > 0 && borrowed.length > 0 && overdueCount(lent, today) === 0 && overdueCount(borrowed, today) > 0) return 'borrowed';
+  return 'lent';
 }

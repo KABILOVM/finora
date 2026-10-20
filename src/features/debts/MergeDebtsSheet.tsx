@@ -3,8 +3,10 @@ import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
-import { useStore } from '@/db';
-import { formatMinor } from '@/domain/money';
+import { useRecurringRules, useStore } from '@/db';
+import { isLivePlanOf } from '@/domain/debts';
+import { addMinor, formatMinor } from '@/domain/money';
+import type { Minor } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
@@ -18,6 +20,17 @@ export interface MergeDebtsSheetProps {
   /** Все долги: из них выбираются подходящие. */
   items: readonly DebtItem[];
   onClose: () => void;
+}
+
+/** Общая переплата по долгам; null — сумма не помещается (предпросмотр сам скажет, что суммы слишком большие). */
+function overpaidTotal(items: readonly DebtItem[]): Minor | null {
+  let sum: Minor = 0;
+  try {
+    for (const it of items) if (it.state && it.state.overpaidMinor > 0) sum = addMinor(sum, it.state.overpaidMinor);
+  } catch {
+    return null;
+  }
+  return sum;
 }
 
 /**
@@ -46,6 +59,14 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
   const many = lostDebts.length > 1;
   const preview = chosen.length > 0 ? mergePreview([target, ...chosen]) : null;
   const cur = target.debt.currency;
+
+  // Переплата: сколько её (в предпросмотре «остаток меньше суммы остатков» без числа непонятно)
+  const overpaid = chosen.length > 0 ? overpaidTotal([target, ...chosen]) : null;
+
+  // Планы «Платить частями» выбранных долгов переходят к этому долгу и идут все вместе
+  const rules = useRecurringRules();
+  const plansFromOthers = chosen.length > 0 ? (rules ?? []).filter((r) => chosen.some((c) => isLivePlanOf(r, c.debt))).length : 0;
+  const plansTotal = plansFromOthers > 0 ? (rules ?? []).filter((r) => [target, ...chosen].some((c) => isLivePlanOf(r, c.debt))).length : 0;
 
   const toggle = (id: string) => {
     setError(null);
@@ -166,7 +187,15 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
         )}
         {preview?.netted && (
           <p role="status" className="text-sm font-medium text-warning" data-testid="merge-netted">
-            У одного из долгов есть переплата: она засчитается в остаток других, поэтому общий остаток меньше суммы остатков.
+            У одного из долгов есть переплата{overpaid !== null && overpaid > 0 ? ` ${formatMinor(overpaid, cur)}` : ''}: она засчитается в остаток других, поэтому общий
+            остаток меньше суммы остатков.
+          </p>
+        )}
+        {plansTotal > 0 && (
+          <p role="status" className="text-sm font-medium text-warning" data-testid="merge-plans">
+            {plansTotal === 1
+              ? `План платежей перейдёт к долгу «${target.debt.counterparty}».`
+              : `Планов платежей будет ${plansTotal}: все они пойдут по этому долгу, и платежи сложатся. Лишние можно остановить на странице долга.`}
           </p>
         )}
         {lostNames.length > 0 && (

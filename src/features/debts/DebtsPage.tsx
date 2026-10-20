@@ -11,12 +11,12 @@ import { Segmented } from '@/components/Segmented';
 import { useToast } from '@/components/Toast';
 import { DEBT_OVERFLOW_MESSAGE, useStore } from '@/db';
 import type { DebtDirection } from '@/domain/types';
-import { humanError } from '@/features/transactions/txActions';
+import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
-import { groupDebts, overdueCount, remainingByCurrency, type DebtItem } from './debtSummary';
+import { defaultDirection, groupDebts, overdueCount, remainingByCurrency, type DebtItem } from './debtSummary';
 import { DIRECTION_LABEL } from './debtText';
-import { DebtList, Fold } from './DebtLists';
+import { DebtList, Fold, SettledSection } from './DebtLists';
 import { DebtSheet } from './DebtSheet';
 import { PeopleList } from './PeopleList';
 import { groupByPerson, peopleWithOpenDebts } from './people';
@@ -80,14 +80,17 @@ export default function DebtsPage() {
   const data = useDebtsData();
   const [params, setParams] = useSearchParams();
   const dir = params.get('dir');
-  const view: View = dir === 'borrowed' ? 'borrowed' : dir === 'people' ? 'people' : 'lent';
-  // вкладка «Люди» не про одно направление: новый долг по умолчанию — «Я дал в долг»
-  const direction: DebtDirection = view === 'borrowed' ? 'borrowed' : 'lent';
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const today = useToday();
+  // Адрес называет вкладку — берём её. Не называет («Ещё → Долги») — ту, где есть открытые долги: у кого только «Я должен», не видит пустоту.
+  const view: View =
+    dir === 'lent' || dir === 'borrowed' || dir === 'people' ? dir : defaultDirection(data?.items ?? [], today);
+  // вкладка «Люди» не про одно направление: новый долг по умолчанию — «Я дал в долг»
+  const direction: DebtDirection = view === 'borrowed' ? 'borrowed' : 'lent';
 
-  const setView = (v: View) => setParams(v === 'lent' ? {} : { dir: v }, { replace: true });
+  // вкладку пишем в адрес всегда, и «Мне должны» тоже: иначе пустая вкладка «Мне должны» тут же переключалась бы сама
+  const setView = (v: View) => setParams({ dir: v }, { replace: true });
   const groups = useMemo(() => groupDebts(data?.items ?? [], direction), [data, direction]);
   const people = useMemo(() => peopleWithOpenDebts(groupByPerson(data?.items ?? [], data?.base ?? undefined)), [data]);
 
@@ -100,6 +103,48 @@ export default function DebtsPage() {
     } catch (e) {
       console.error('Не удалось вернуть долг из архива:', e);
       toast.error(humanError(e, 'Не удалось вернуть долг из архива'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const closeSettled = async () => {
+    if (busy || groups.settled.length === 0) return;
+    const ids = groups.settled.map((it) => it.debt.id);
+    setBusy(true);
+    const done: string[] = [];
+    try {
+      // один сбой не должен оставлять остальные незакрытыми: идём до конца и говорим, сколько получилось
+      for (const id of ids) {
+        try {
+          await store.debts.close(id);
+          done.push(id);
+        } catch (e) {
+          console.error('Не удалось закрыть погашенный долг:', e);
+        }
+      }
+      if (done.length === 0) {
+        toast.error('Не удалось закрыть погашенные долги. Ничего не изменилось — попробуйте ещё раз.');
+        return;
+      }
+      const partial = done.length < ids.length;
+      toastWithUndo(
+        toast,
+        partial ? `Закрыто долгов: ${done.length} из ${ids.length}. Остальные закрыть не удалось.` : `Закрыто долгов: ${done.length}`,
+        async () => {
+          let failed = 0;
+          for (const id of done) {
+            try {
+              await store.debts.reopen(id);
+            } catch (e) {
+              failed++;
+              console.error('Не удалось открыть долг снова:', e);
+            }
+          }
+          if (failed > 0) throw new Error(`Не открыто снова: ${failed} из ${done.length}`);
+        },
+        'Долги открыты снова',
+      );
     } finally {
       setBusy(false);
     }
@@ -129,7 +174,7 @@ export default function DebtsPage() {
     );
   }
 
-  const noOpen = groups.active.length === 0;
+  const noOpen = groups.active.length === 0 && groups.settled.length === 0;
   const empty = noOpen && groups.closed.length === 0;
   return (
     <>
@@ -161,8 +206,9 @@ export default function DebtsPage() {
           ) : noOpen ? (
             <p className="px-1 text-muted">Открытых долгов нет.</p>
           ) : (
-            <DebtList items={groups.active} today={today} label={DIRECTION_LABEL[direction]} />
+            groups.active.length > 0 && <DebtList items={groups.active} today={today} label={DIRECTION_LABEL[direction]} />
           )}
+          {groups.settled.length > 0 && <SettledSection items={groups.settled} today={today} busy={busy} onCloseAll={() => void closeSettled()} />}
           {groups.closed.length > 0 && (
             <Fold title="Закрытые" count={groups.closed.length}>
               <DebtList items={groups.closed} today={today} label="Закрытые долги" />

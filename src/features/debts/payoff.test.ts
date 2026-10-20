@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { MAX_PAYOFF_PAYMENTS, payoffPlan } from './payoff';
+import { MAX_PAYOFF_PAYMENTS, payoffPlan, planEndFor } from './payoff';
 
 describe('payoffPlan: когда закроется долг при платеже раз в месяц', () => {
   it('делится нацело: 1 000 по 250 → 4 платежа, последний 15 января', () => {
@@ -73,5 +73,33 @@ describe('payoffPlan: когда закроется долг при платеж
         expect(lastOn >= '2026-10-15').toBe(true);
       }),
     );
+  });
+});
+
+describe('planEndFor: когда закончится план, если долг вырос', () => {
+  const rule = { frequency: 'monthly', intervalN: 1, startOn: '2026-11-15', amountMinor: 10_000 } as const;
+
+  it('последний платёж — по датам самого правила: остаток 25 000 при 10 000 в месяц — три платежа', () => {
+    expect(planEndFor(rule, 25_000, '2026-11-01')).toBe('2027-01-15');
+    expect(planEndFor(rule, 30_000, '2026-11-01')).toBe('2027-01-15'); // ровно делится
+    expect(planEndFor(rule, 30_001, '2026-11-01')).toBe('2027-02-15');
+  });
+  it('считает с даты from: прошедшие платежи не входят', () => {
+    expect(planEndFor(rule, 20_000, '2026-12-16')).toBe('2027-02-15'); // 15 декабря уже было, дальше 15 янв и 15 фев
+  });
+  it('день 31: в коротком месяце — последний день месяца, дальше снова 31-е', () => {
+    expect(planEndFor({ ...rule, startOn: '2026-10-31' }, 30_000, '2026-10-01')).toBe('2026-12-31');
+  });
+  it('платёж на сегодня уже проведён и считаем со следующего дня: остаток 300 при 100 в месяц — три платежа (15.11, 15.12, 15.01)', () => {
+    expect(planEndFor({ ...rule, startOn: '2026-10-15', amountMinor: 10_000 }, 30_000, '2026-10-16')).toBe('2027-01-15');
+  });
+  it('ежедневный и еженедельный план: горизонт ограничен числом платежей, дата верная', () => {
+    expect(planEndFor({ frequency: 'daily', intervalN: 1, startOn: '2026-10-01', amountMinor: 100 }, 1_000, '2026-10-16')).toBe('2026-10-25');
+    expect(planEndFor({ frequency: 'weekly', intervalN: 2, startOn: '2026-10-01', amountMinor: 100 }, 300, '2026-10-16')).toBe('2026-11-26'); // 29 окт, 12 ноя, 26 ноя
+  });
+  it('нет остатка, нулевой платёж, платежей больше предела — null', () => {
+    expect(planEndFor(rule, 0, '2026-11-01')).toBeNull();
+    expect(planEndFor({ ...rule, amountMinor: 0 }, 1_000, '2026-11-01')).toBeNull();
+    expect(planEndFor({ ...rule, amountMinor: 1 }, 10_000_000, '2026-11-01')).toBeNull();
   });
 });

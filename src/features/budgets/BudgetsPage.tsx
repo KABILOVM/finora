@@ -20,7 +20,7 @@ import { humanError } from '@/features/transactions/txActions';
 import { monthKey } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
-import { ToggleRow } from '@/features/recurring/ToggleRow';
+import { ToggleRow } from '@/components/ToggleRow';
 import { setBudgetAlertsEnabled, useBudgetAlertsEnabled } from './budgetAlertsPref';
 import { BudgetRow } from './BudgetRow';
 import { BudgetSheet } from './BudgetSheet';

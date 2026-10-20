@@ -1,6 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { chooseMenuAction, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { LocationProbe, opsDeps, pinToday, showApp, storeOf, table, unpinToday, type OpsDeps } from '@/features/transactions/__fixtures__/opsKit';
 import DebtDetailPage from './DebtDetailPage';
@@ -60,7 +60,7 @@ async function show(setup?: Setup) {
 }
 
 const openMerge = async () => {
-  await user.click(await waitFor(() => button('Объединить…')));
+  await chooseMenuAction('Объединить…');
   return findByRole('dialog', { name: 'Объединить долги' });
 };
 const gone = (role: string, name: string) => waitFor(() => expect(screen.queryByRole(role, { name })).toBeNull());

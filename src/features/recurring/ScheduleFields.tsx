@@ -11,7 +11,7 @@ import { describeSchedule, shortMonthHint } from '@/recurring/describe';
 import { historyNote, parseInterval, previewDates, type RuleFormErrors, type RuleFormState } from '@/recurring/ruleForm';
 import { whenText } from '@/recurring/upcoming';
 import { RulePill } from './RulePill';
-import { ToggleRow } from './ToggleRow';
+import { ToggleRow } from '@/components/ToggleRow';
 
 const FREQUENCIES: readonly { value: Frequency; label: string }[] = [
   { value: 'daily', label: 'День' },

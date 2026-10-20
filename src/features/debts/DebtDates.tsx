@@ -5,6 +5,7 @@ import type { IsoDate } from '@/domain/types';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { MAX_DATE, MIN_DATE } from '@/features/transactions/txForm';
 import { addDays, formatDayLabel, isValidIsoDate, todayLocal } from '@/lib/dates';
+import { ruDateShort } from './debtText';
 
 export interface DayFieldProps {
   /** Что за дата: «Дата долга», «Дата платежа». Подпись группы и поля-календаря. */
@@ -70,20 +71,30 @@ export interface DueFieldProps {
   dueOn: IsoDate;
   /** Дата долга: раньше неё срок поставить нельзя. */
   openedOn: IsoDate;
+  /** Раньше этой даты срок поставить нельзя (при пополнении — дата пополнения); по умолчанию — openedOn. */
+  minDate?: IsoDate;
+  /** Только при правке срока у существующего долга: какой срок сейчас (null — срока нет). Меняет подпись и подсказку. */
+  current?: IsoDate | null;
   onChange: (patch: { hasDue?: boolean; dueOn?: IsoDate }) => void;
   error?: string | null;
 }
 
-/** Срок возврата: необязательный. «Без срока» или «Указать срок» с календарём. */
-export function DueField({ hasDue, dueOn, openedOn, onChange, error }: DueFieldProps) {
+/** Срок возврата: необязательный. «Без срока» («Снять срок», если он есть) или «Указать срок» с календарём. */
+export function DueField({ hasDue, dueOn, openedOn, minDate, current, onChange, error }: DueFieldProps) {
+  const floor = minDate ?? openedOn;
+  const known = current !== undefined;
   return (
-    <FieldGroup label="Срок возврата" hint="можно не указывать" error={error}>
+    <FieldGroup
+      label="Срок возврата"
+      hint={known ? (current === null ? 'сейчас срока нет' : `сейчас: до ${ruDateShort(current)}`) : 'можно не указывать'}
+      error={error}
+    >
       <ChipPicker
         ariaLabel="Срок возврата"
         value={hasDue ? 'date' : 'none'}
         onChange={(v) => onChange({ hasDue: v === 'date' })}
         options={[
-          { value: 'none', label: 'Без срока' },
+          { value: 'none', label: known && current !== null ? 'Снять срок' : 'Без срока' },
           { value: 'date', label: 'Указать срок', icon: '📅' },
         ]}
       />
@@ -92,7 +103,7 @@ export function DueField({ hasDue, dueOn, openedOn, onChange, error }: DueFieldP
           type="date"
           aria-label="Срок возврата: календарь"
           aria-invalid={error ? true : undefined}
-          min={isValidIsoDate(openedOn) ? openedOn : MIN_DATE}
+          min={isValidIsoDate(floor) ? floor : MIN_DATE}
           max={MAX_DATE}
           value={dueOn}
           onChange={(e) => onChange({ dueOn: e.target.value })}

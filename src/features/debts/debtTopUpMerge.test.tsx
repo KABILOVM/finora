@@ -1,6 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { chooseMenuAction, findByRole, menuActions, menuActionsStable, screen, user, waitFor, waitForMenu } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
 import { formatMinor } from '@/domain/money';
@@ -31,7 +31,12 @@ const fmt = (minor: number, currency = 'TJS') => norm(formatMinor(minor, currenc
 const text = (el: Element | null) => norm(el?.textContent);
 const button = (name: string | RegExp) => screen.getByRole('button', { name });
 const tid = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-const findTid = (id: string) => waitFor(() => tid(id)!);
+const findTid = (id: string) =>
+  waitFor(() => {
+    const el = tid(id);
+    if (!el) throw new Error(`нет элемента ${id}`);
+    return el;
+  });
 /** Строка предпросмотра объединения по подписи: «Остаток» → «750 с.». */
 const previewRow = (label: string): string => {
   const dt = Array.from(document.querySelectorAll('[data-testid="merge-preview"] dt')).find((x) => text(x) === label);
@@ -136,13 +141,13 @@ describe('«Добавить ещё в долг» на странице долг
 
   it('закрытый долг после пополнения открыт снова', async () => {
     await showDetail(async (s) => void (await s.debts.close(DEBT_ID)));
-    expect(screen.getByRole('button', { name: 'Открыть снова' })).toBeTruthy();
+    expect(await menuActions()).toContain('Открыть снова');
     const dlg = await openTopUp();
     expect(text(dlg)).toContain('Долг закрыт — после пополнения он откроется снова');
     await tapAmount('100');
     await user.click(button('Добавить к долгу'));
     await gone('Дал ещё в долг');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Закрыть долг' })).toBeTruthy());
+    await waitForMenu((names) => names.includes('Закрыть долг'));
   });
 
   it('«я должен»: свои слова, деньги поступают на кошелёк доходом', async () => {
@@ -212,13 +217,15 @@ describe('«Объединить» на странице долга', () => {
   };
   const openMerge = async () => {
     // кнопка появляется, когда прочитаны все долги (для списка кандидатов): сразу после показа страницы её ещё может не быть
-    await user.click(await waitFor(() => button('Объединить…')));
+    await chooseMenuAction('Объединить…');
     return findByRole('dialog', { name: 'Объединить долги' });
   };
 
   it('других подходящих долгов нет — кнопки нет', async () => {
     await showDetail();
-    expect(screen.queryByRole('button', { name: 'Объединить…' })).toBeNull();
+    const names = await menuActionsStable();
+    expect(names).toContain('В архив');
+    expect(names).not.toContain('Объединить…');
   });
 
   it('долг другого направления или валюты в кандидаты не попадает', async () => {
@@ -226,7 +233,9 @@ describe('«Объединить» на странице долга', () => {
       await s.debts.create({ direction: 'borrowed', counterparty: 'Алишер', principalMinor: 100, currency: 'TJS', openedOn: '2026-10-01' });
       await s.debts.create({ direction: 'lent', counterparty: 'Алишер', principalMinor: 100, currency: 'USD', openedOn: '2026-10-01' });
     });
-    expect(screen.queryByRole('button', { name: 'Объединить…' })).toBeNull();
+    const names = await menuActionsStable();
+    expect(names).toContain('В архив');
+    expect(names).not.toContain('Объединить…');
   });
 
   it('одноимённый долг отмечен заранее, чужой — нет; предпросмотр: сумма, оплачено, остаток, ближайший срок', async () => {
@@ -274,7 +283,38 @@ describe('«Объединить» на странице долга', () => {
     });
     await openMerge();
     expect(tid('merge-netted')).not.toBeNull();
+    expect(text(tid('merge-netted'))).toContain(`есть переплата ${fmt(5_000)}:`); // сумма названа
     expect(previewRow('Остаток')).toBe(fmt(45_000));
+  });
+
+  describe('планы платежей переходят к объединённому долгу', () => {
+    const withPlans = async (s: Store, cash: string, onTarget: boolean, onOther: boolean) => {
+      const d2 = await s.debts.create({ direction: 'lent', counterparty: 'Алишер', principalMinor: 10_000, currency: 'TJS', openedOn: '2026-10-03' });
+      const mk = (debtId: string) =>
+        s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 5_000, debtId, frequency: 'monthly', intervalN: 1, startOn: '2026-11-01', endOn: '2027-06-01' });
+      if (onTarget) await mk(DEBT_ID);
+      if (onOther) await mk(d2.id);
+    };
+
+    it('план есть только у присоединяемого долга — сказано, что он перейдёт', async () => {
+      await showDetail(async (s, { cash }) => withPlans(s, cash, false, true));
+      await openMerge();
+      expect(text(await findTid('merge-plans'))).toBe('План платежей перейдёт к долгу «Алишер».');
+    });
+
+    it('планы у обоих долгов — сказано, сколько их будет и что платежи сложатся', async () => {
+      await showDetail(async (s, { cash }) => withPlans(s, cash, true, true));
+      await openMerge();
+      expect(text(await findTid('merge-plans'))).toContain('Планов платежей будет 2');
+    });
+
+    it('план только у текущего долга или планов нет — предупреждения нет', async () => {
+      await showDetail(async (s, { cash }) => withPlans(s, cash, true, false));
+      await openMerge();
+      await waitFor(() => expect(previewRow('Остаток')).not.toBe(''));
+      await new Promise((r) => setTimeout(r, 100)); // планы читаются отдельным запросом
+      expect(tid('merge-plans')).toBeNull();
+    });
   });
 
   it('снять все галочки — объединить нельзя', async () => {
@@ -414,3 +454,118 @@ function within(root: HTMLElement, name: string | RegExp): HTMLElement {
   if (!hit) throw new Error(`В блоке нет кнопки «${String(name)}»`);
   return hit;
 }
+
+describe('«Добавить ещё в долг»: остаток, срок, заметка, план', () => {
+  const pay = (s: Store, walletId: string, amountMinor: number) =>
+    s.transactions.create({ kind: 'income', walletId, amountMinor, occurredOn: '2026-10-05', debtId: DEBT_ID });
+  const topUpDialog = () => screen.getByRole('dialog', { name: 'Дал ещё в долг' });
+
+  it('под суммой — «Остаток станет …» (с учётом уже выплаченного)', async () => {
+    await showDetail(async (s, { cash }) => void (await pay(s, cash, 20_000)));
+    await openTopUp();
+    await tapAmount('300');
+    expect(text(tid('topup-remaining'))).toBe(`Остаток станет ${fmt(60_000)}`); // 500 + 300 − 200
+  });
+
+  it('переплата покрывает часть пополнения — об этом сказано, остаток считается без неё', async () => {
+    await showDetail(async (s, { cash }) => void (await pay(s, cash, 60_000)));
+    await openTopUp();
+    await tapAmount('300');
+    expect(text(tid('topup-remaining'))).toBe(`Остаток станет ${fmt(20_000)}`); // 800 − 600
+    expect(text(topUpDialog())).toContain(`Из пополнения ${fmt(10_000)} покроет переплата`);
+  });
+
+  it('закрытый долг с прошедшим сроком: предложен новый срок через 30 дней, прежний назван; сохранение переносит срок', async () => {
+    const { td } = await showDetail(async (s, { cash }) => {
+      await s.debts.update(DEBT_ID, { dueOn: '2026-10-05' });
+      await pay(s, cash, 50_000);
+      await s.debts.close(DEBT_ID);
+    });
+    await openTopUp();
+    expect(text(topUpDialog())).toContain('Прежний срок (05.10.2026) уже прошёл, поэтому предложен новый');
+    expect((dateInput('Срок возврата: календарь') as HTMLInputElement).value).toBe('2026-11-14');
+    await tapAmount('100');
+    await user.click(button('Добавить к долгу'));
+    await gone('Дал ещё в долг');
+    expect((await debtOf(td))?.dueOn).toBe('2026-11-14');
+    expect((await debtOf(td))?.closedAt).toBeNull();
+  });
+
+  it('открытый долг с прошедшим сроком: срок остаётся прежним (пополнять просроченный долг — не повод менять срок)', async () => {
+    const { td } = await showDetail(async (s) => void (await s.debts.update(DEBT_ID, { dueOn: '2026-10-05' })));
+    await openTopUp();
+    expect(text(topUpDialog())).not.toContain('Прежний срок');
+    expect((dateInput('Срок возврата: календарь') as HTMLInputElement).value).toBe('2026-10-05');
+    await tapAmount('100');
+    await user.click(button('Добавить к долгу'));
+    await gone('Дал ещё в долг');
+    expect((await debtOf(td))?.dueOn).toBe('2026-10-05');
+  });
+
+  it('поле срока говорит, какой срок сейчас: со сроком — «Снять срок» и «сейчас: до …», без срока — «Без срока»', async () => {
+    await showDetail(async (s) => void (await s.debts.update(DEBT_ID, { dueOn: '2026-10-20' })));
+    await openTopUp();
+    expect(text(topUpDialog())).toContain('сейчас: до 20.10.2026');
+    expect(screen.getByRole('button', { name: 'Снять срок' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Без срока' })).toBeNull();
+  });
+
+  it('у долга без срока — «Без срока» и «сейчас срока нет»', async () => {
+    await showDetail();
+    await openTopUp();
+    expect(text(topUpDialog())).toContain('сейчас срока нет');
+    expect(screen.getByRole('button', { name: 'Без срока' })).toBeTruthy();
+  });
+
+  it('«на бумаге»: заметка не пропадает — она и сумма с датой попадают в заметку долга', async () => {
+    const { td } = await showDetail();
+    await openTopUp();
+    await user.click(screen.getByRole('checkbox', { name: 'Записать движение денег' }));
+    await tapAmount('200');
+    await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'ещё на запчасти');
+    await user.click(button('Добавить к долгу'));
+    await gone('Дал ещё в долг');
+    expect((await debtOf(td))?.note).toMatch(/^\+.*200.* · 15\.10\.2026 · ещё на запчасти$/);
+  });
+
+  describe('действующий план «Получать частями»', () => {
+    const plan = (s: Store, cash: string, endOn: string | null) =>
+      s.recurring.create({ kind: 'income', walletId: cash, amountMinor: 10_000, debtId: DEBT_ID, frequency: 'monthly', intervalN: 1, startOn: '2026-11-01', endOn });
+    const ruleOf = async (td: OpsDeps) => (await storeOf(td).db.recurring_rules.toArray()).find((r) => r.debtId === DEBT_ID)!;
+
+    it('долг вырос, а план закончился бы раньше: предложено продлить (включено), сохранение продлевает план', async () => {
+      const { td } = await showDetail(async (s, { cash }) => void (await plan(s, cash, '2027-03-01'))); // 5 платежей по 100 = 500
+      await openTopUp();
+      expect(screen.queryByRole('switch', { name: /^Продлить план платежей/ })).toBeNull(); // пока сумма не введена
+      await tapAmount('300'); // остаток 800 = 8 платежей: до 1 июня 2027
+      const sw = await findByRole('switch', { name: 'Продлить план платежей до 01.06.2027' });
+      expect(sw.getAttribute('aria-checked')).toBe('true');
+      expect(text(topUpDialog())).toContain('Сейчас план заканчивается 01.03.2027');
+      await user.click(button('Добавить к долгу'));
+      await gone('Дал ещё в долг');
+      expect((await ruleOf(td)).endOn).toBe('2027-06-01');
+    });
+
+    it('переключатель выключили — план остаётся как был', async () => {
+      const { td } = await showDetail(async (s, { cash }) => void (await plan(s, cash, '2027-03-01')));
+      await openTopUp();
+      await tapAmount('300');
+      await user.click(await findByRole('switch', { name: /^Продлить план платежей/ }));
+      await user.click(button('Добавить к долгу'));
+      await gone('Дал ещё в долг');
+      expect((await ruleOf(td)).endOn).toBe('2027-03-01');
+    });
+
+    it('плана с запасом или без даты окончания продлевать не нужно — предложения нет', async () => {
+      await showDetail(async (s, { cash }) => void (await plan(s, cash, '2027-09-01')));
+      await findTid('debt-plan'); // планы страницы прочитаны
+      await openTopUp();
+      await tapAmount('100'); // остаток 600 = 6 платежей: до апреля 2027, план идёт до сентября
+      await new Promise((r) => setTimeout(r, 200)); // планы окна читаются отдельным запросом
+      expect(screen.queryByRole('switch', { name: /^Продлить план платежей/ })).toBeNull();
+      // контроль: тот же экран при большой сумме предложение показывает — значит, отсутствие выше настоящее, а не «планы не успели прочитаться»
+      await tapAmount('00'); // 1 000 с.: остаток 1 500 = 15 платежей, до января 2028
+      await findByRole('switch', { name: /^Продлить план платежей/ });
+    });
+  });
+});

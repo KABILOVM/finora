@@ -1,7 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually, write } from '@/app/testkit';
-import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { act, chooseMenuAction, findByRole, menuActions, screen, user, waitFor, waitForMenu } from '@/components/testUtils';
 import { uuidV5, type RecurringInput, type Store } from '@/db';
 import { formatMinor } from '@/domain/money';
 import {
@@ -121,7 +121,7 @@ describe('страница долга: карточка плана платеж�
     expect(text(card)).toContain('Ждёт подтверждения');
     expect(text(card)).not.toContain('Проводится само');
     expect(text(card)).not.toContain('план остановлен');
-    expect(screen.queryByRole('button', { name: 'Получать частями' })).toBeNull();
+    expect(await menuActions()).not.toContain('Получать частями');
     expect(planSection()!.querySelector('[role="status"]')).toBeNull(); // одного плана — без предупреждения
   });
 
@@ -136,7 +136,7 @@ describe('страница долга: карточка плана платеж�
 
   it('плана нет — нет и карточки; есть «Получать частями»', async () => {
     await show();
-    await findByRole('button', { name: 'Получать частями' });
+    await waitForMenu((names) => names.includes('Получать частями'));
     expect(planSection()).toBeNull();
     expect(planCards()).toHaveLength(0);
   });
@@ -146,13 +146,13 @@ describe('страница долга: карточка плана платеж�
       await addPlan(s, ctx);
       await s.recurring.archive(PLAN_ID);
     });
-    await findByRole('button', { name: 'Получать частями' });
+    await waitForMenu((names) => names.includes('Получать частями'));
     expect(planCards()).toHaveLength(0);
   });
 
   it('регулярная выдача по долгу (расход с debtId) — не план: карточки нет, «Получать частями» есть', async () => {
     await show((s, ctx) => addPlan(s, ctx, { kind: 'expense', note: 'ещё в долг' }));
-    await findByRole('button', { name: 'Получать частями' });
+    await waitForMenu((names) => names.includes('Получать частями'));
     expect(planCards()).toHaveLength(0);
   });
 
@@ -162,7 +162,7 @@ describe('страница долга: карточка плана платеж�
     await user.click(button('Остановить'));
     await eventually(async () => expect((await ruleRow(td))?.archivedAt).not.toBeNull());
     await waitFor(() => expect(planCards()).toHaveLength(0));
-    await findByRole('button', { name: 'Получать частями' });
+    await waitForMenu((names) => names.includes('Получать частями'));
     const toast = screen.getAllByRole('status').find((el) => text(el).includes('План платежей остановлен'));
     expect(toast).toBeTruthy();
     const undo = Array.from(toast!.querySelectorAll('button')).find((b) => text(b) === 'Отменить');
@@ -172,7 +172,7 @@ describe('страница долга: карточка плана платеж�
     await user.click(undo!);
     await eventually(async () => expect((await ruleRow(td))?.archivedAt).toBeNull());
     await planShown();
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Получать частями' })).toBeNull());
+    await waitForMenu((names) => !names.includes('Получать частями'));
     await waitFor(() => expect(screen.getAllByRole('status').some((el) => text(el).includes('План возвращён'))).toBe(true));
   });
 
@@ -227,7 +227,7 @@ describe('страница долга: карточка плана платеж�
     const lines = planCards().map((c) => text(c.querySelector('p')));
     expect(lines).toContain(`${fmt(20_000)} — каждый месяц, 1-го, до 01.01.2027`);
     expect(lines).toContain(`${fmt(15_000)} — каждый месяц, 10-го, до 10.02.2027`);
-    expect(screen.queryByRole('button', { name: 'Получать частями' })).toBeNull();
+    expect(await menuActions()).not.toContain('Получать частями');
   });
 
   it('долг закрыт: карточка говорит «Долг закрыт — план остановлен» вместо значка', async () => {
@@ -239,7 +239,7 @@ describe('страница долга: карточка плана платеж�
     const [card] = planCards();
     expect(text(card)).toContain('Долг закрыт — план остановлен');
     expect(text(card)).not.toContain('Ждёт подтверждения');
-    expect(screen.queryByRole('button', { name: 'Получать частями' })).toBeNull();
+    expect(await menuActions()).not.toContain('Получать частями');
   });
 
   it('долг в архиве: «Долг в архиве — план остановлен»', async () => {
@@ -266,7 +266,7 @@ describe('страница долга: карточка плана платеж�
 
 describe('страница долга: «Закрыть долг?» и план', () => {
   const closeDialogText = async () => {
-    await user.click(button('Закрыть долг'));
+    await chooseMenuAction('Закрыть долг');
     return text(await findByRole('alertdialog', { name: 'Закрыть долг?' }));
   };
 
@@ -296,7 +296,7 @@ describe('страница долга: «Закрыть долг?» и план'
 
   it('плана нет — фразы о плане нет', async () => {
     await show();
-    await findByRole('button', { name: 'Получать частями' });
+    await waitForMenu((names) => names.includes('Получать частями'));
     const msg = await closeDialogText();
     expect(msg).toContain(`Остаток ${fmt(50_000)}`);
     expect(msg).not.toContain('План платежей');
@@ -308,7 +308,7 @@ describe('страница долга: «Закрыть долг?» и план'
       await addPlan(s, ctx);
       await s.recurring.archive(PLAN_ID);
     });
-    await findByRole('button', { name: 'Получать частями' });
+    await waitForMenu((names) => names.includes('Получать частями'));
     expect(await closeDialogText()).not.toContain('План платежей');
   });
 
@@ -336,7 +336,7 @@ describe('страница долга: «Закрыть долг?» и план'
 describe('«Получать частями»: второй план не создаётся', () => {
   it('план появился, пока окно открыто (другое устройство): сохранение — понятная ошибка, правило одно', async () => {
     const { td, ctx } = await show();
-    await user.click(button('Получать частями'));
+    await chooseMenuAction('Получать частями');
     const dlg = await findByRole('dialog', { name: 'Получать частями' });
     await tapAmount('150');
     await write(() => addPlan(storeOf(td), ctx));
@@ -349,7 +349,7 @@ describe('«Получать частями»: второй план не соз
 
   it('сумма в месяц больше остатка — ошибка у поля, правило не создано', async () => {
     const { td } = await show();
-    await user.click(button('Получать частями'));
+    await chooseMenuAction('Получать частями');
     const dlg = await findByRole('dialog', { name: 'Получать частями' });
     await tapAmount('600');
     await user.click(button('Создать платежи'));
@@ -359,13 +359,13 @@ describe('«Получать частями»: второй план не соз
 
   it('создали план — кнопка «Получать частями» пропала, появилась карточка плана', async () => {
     const { td } = await show();
-    await user.click(button('Получать частями'));
+    await chooseMenuAction('Получать частями');
     await findByRole('dialog', { name: 'Получать частями' });
     await tapAmount('250');
     await user.click(button('Создать платежи'));
     await closed('Получать частями');
     await planShown();
-    expect(screen.queryByRole('button', { name: 'Получать частями' })).toBeNull();
+    expect(await menuActions()).not.toContain('Получать частями');
     expect(text(planCards()[0]!.querySelector('p'))).toBe(`${fmt(25_000)} — каждый месяц, 15-го, до 15.11.2026`);
     expect(await storeOf(td).db.recurring_rules.count()).toBe(1);
   });

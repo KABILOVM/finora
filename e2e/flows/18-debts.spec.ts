@@ -1,8 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import {
-  activateServiceWorker, addTx, createWallet, dismissToasts, expect, goSection, homeTotalText, isPhone, money, monthRow, moneyExact, norm,
-  openApp, shot, sheet, tapAmount, test, waitReady, walletRowText,
-} from '../helpers';
+import { activateServiceWorker, addTx, createWallet, dismissToasts, expect, goSection, homeTotalText, isPhone, money, monthRow, moneyExact, norm, openApp, shot, sheet, tapAmount, test, waitReady, walletRowText, debtAction, openActionMenu, closeActionMenu } from '../helpers';
 
 /**
  * «Сегодня» на странице закреплено: 15 октября 2026 (14:00 в Душанбе). Даты долгов и сроки отсюда считаются точно.
@@ -213,7 +210,7 @@ test.describe('18. Долги и кредиты', () => {
     await dismissToasts(page);
 
     // закрыть долг: остаток не обнуляется, но долг уходит из итогов и с «Главной»
-    await page.getByRole('button', { name: 'Закрыть долг', exact: true }).click();
+    await debtAction(page, 'Закрыть долг');
     const closeDlg = page.getByRole('alertdialog', { name: 'Закрыть долг?' });
     await expect(closeDlg).toContainText(money('Остаток 200 с.'));
     await closeDlg.getByRole('button', { name: 'Закрыть долг', exact: true }).click();
@@ -236,8 +233,11 @@ test.describe('18. Долги и кредиты', () => {
     await goSection(page, 'Долги');
     await page.getByRole('button', { name: 'Закрытые · 1' }).click();
     await debtLink(page, 'Бобур').click();
-    await page.getByRole('button', { name: 'Открыть снова', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Закрыть долг', exact: true })).toBeVisible();
+    await debtAction(page, 'Открыть снова');
+    await expect(page.getByTestId('debt-summary')).not.toContainText('Закрыт');
+    const menu18 = await openActionMenu(page);
+    await expect(menu18.getByRole('button', { name: 'Закрыть долг', exact: true })).toBeVisible();
+    await closeActionMenu(page);
     await dismissToasts(page);
     await page.getByRole('main').getByRole('link', { name: 'Долги', exact: true }).click();
     await expect(debtLink(page, 'Бобур')).toContainText('Просрочен на 3 дня');

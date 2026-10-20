@@ -1,7 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import {
-  addTx, dismissToasts, expect, goSection, money, moneyExact, monthRow, openApp, shot, sheet, tapAmount, test, waitReady, walletRowText,
-} from '../helpers';
+import { addTx, dismissToasts, expect, goSection, money, moneyExact, monthRow, openApp, shot, sheet, tapAmount, test, waitReady, walletRowText, debtAction, openActionMenu, closeActionMenu } from '../helpers';
 
 /** «Сегодня» закреплено: 15 октября 2026. */
 const NOW = new Date('2026-10-15T09:00:00Z');
@@ -84,7 +82,11 @@ test.describe('29. Добавить ещё в долг и объединение
     await noHorizontalScroll(page, 'страница долга');
 
     // подходящих для объединения долгов пока нет — кнопки нет
-    await expect(page.getByRole('button', { name: 'Объединить…' })).toHaveCount(0);
+    const menu29 = await openActionMenu(page);
+    await expect(menu29.getByRole('button', { name: 'В архив', exact: true })).toBeVisible(); // меню открылось и заполнено
+    await page.waitForTimeout(400); // другие долги читаются отдельным запросом: ждём, чтобы «нет» не прошло вхолостую
+    await expect(menu29.getByRole('button', { name: 'Объединить…' })).toHaveCount(0);
+    await closeActionMenu(page);
 
     // 4. отдельный долг тому же человеку («Создать отдельный долг»)
     await goSection(page, 'Долги');
@@ -102,7 +104,7 @@ test.describe('29. Добавить ещё в долг и объединение
     // 5. объединяем: открываем долг на 800, выбран одноимённый на 200, предпросмотр 1 000
     await debtLinks(page).filter({ hasText: money('800 с.') }).first().click();
     await expect(remaining(page)).toContainText(money('800 с.'));
-    await page.getByRole('button', { name: 'Объединить…' }).click();
+    await debtAction(page, 'Объединить…');
     const merge = sheet(page, 'Объединить долги');
     await expect(merge).toBeVisible();
     await expect(merge.getByRole('checkbox').first()).toBeChecked();
@@ -165,7 +167,7 @@ test.describe('29. Добавить ещё в долг и объединение
     await expect(debtLinks(page)).toHaveCount(2);
 
     await debtLinks(page).first().click();
-    await page.getByRole('button', { name: 'Объединить…' }).click();
+    await debtAction(page, 'Объединить…');
     const merge = sheet(page, 'Объединить долги');
     await merge.getByRole('button', { name: /^Объединить: 2 долга$/ }).click();
     await expect(merge).toBeHidden();

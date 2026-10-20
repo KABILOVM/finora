@@ -286,6 +286,31 @@ export function addLink(page: Page): Locator {
 
 export const sheet = (page: Page, name: string | RegExp): Locator => page.getByRole('dialog', { name });
 
+/** Окно меню «⋯» на странице (заголовок «Долг: Имя»). Открывает его, если оно ещё не открыто. */
+export async function openActionMenu(page: Page): Promise<Locator> {
+  const menu = sheet(page, /^Долг: /);
+  if (!(await menu.isVisible())) await page.getByRole('button', { name: /^Ещё действия/ }).click();
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Закрыть меню «⋯» ничего не выбрав. */
+export async function closeActionMenu(page: Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await expect(sheet(page, /^Долг: /)).toBeHidden();
+}
+
+/** Действие из меню «⋯» страницы долга; если кнопка с таким именем уже на виду (например, «Закрыть долг» у погашенного долга) — она. */
+export async function debtAction(page: Page, name: string): Promise<void> {
+  const direct = page.getByRole('button', { name, exact: true });
+  if ((await direct.count()) > 0 && (await direct.first().isVisible())) {
+    await direct.first().click();
+    return;
+  }
+  const menu = await openActionMenu(page);
+  await menu.getByRole('button', { name, exact: true }).click();
+}
+
 /* ------------------------------ внесение операции ------------------------------ */
 
 /** Набрать сумму на экранной клавиатуре: '12,5' → 1, 2, «Запятая», 5. */
