@@ -1,3 +1,4 @@
+import { ADJUSTMENT_NOTE, ADJUSTMENT_SOURCE, isAdjustment } from '@/domain/adjustment';
 import { computeDebtState, paymentKind } from '@/domain/debts';
 import { fxSnapshot } from '@/domain/money';
 import { isOccurrence } from '@/domain/schedule';
@@ -95,6 +96,12 @@ export interface FromRuleOptions {
 
 export interface TransactionsRepo {
   create(input: TransactionInput, opts?: TransactionCreateOptions): Promise<LocalRow<Transaction>>;
+  /**
+   * «Корректировка остатка» (domain/adjustment.ts): операция дохода (deltaMinor > 0) или расхода (< 0) на разницу между
+   * приложением и банком, поставленная датой сверки. Меняет остаток кошелька, но не доход/расход, категории и бюджеты.
+   * Для кошелька в небазовой валюте нужен курс (fx), как для обычной операции.
+   */
+  createAdjustment(input: { walletId: UUID; deltaMinor: Minor; occurredOn: IsoDate; fx?: { rate: number; source: string } }): Promise<LocalRow<Transaction>>;
   /**
    * Операция по регулярному платежу за дату `date` ('ГГГГ-ММ-ДД'). id = v5(rule.id, date): повторный вызов (и вызов с другого
    * устройства) возвращает уже имеющуюся строку, а не дубль — живую или удалённую («пропущенную»). Дата обязана входить в расписание
@@ -305,6 +312,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     givenId: UUID | undefined,
     deleted: boolean,
     scheduledOn?: IsoDate,
+    adjustment = false,
   ): Promise<LocalRow<Transaction>> {
     const settings = await requireSettings(ctx);
     const { wallet, toWallet } = await loadWallets(ctx, fields);
@@ -313,7 +321,8 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     await checkRule(fields, scheduledOn);
     const f: TxFields = { ...fields, toAmountMinor: resolveToAmount(fields, wallet, toWallet, true) };
     checkTransferAmounts(f, wallet, toWallet);
-    const row = assemble(null, f, buildSnapshot(f, wallet, toWallet, settings.baseCurrency, fx), givenId, deleted);
+    const snap = buildSnapshot(f, wallet, toWallet, settings.baseCurrency, fx);
+    const row = assemble(null, f, adjustment ? { ...snap, fxSource: ADJUSTMENT_SOURCE } : snap, givenId, deleted);
     await db.transactions.add(row);
     return row;
   }
@@ -394,6 +403,28 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
       });
     },
 
+    async createAdjustment(input) {
+      const clean = cleanPatch(input, ['walletId', 'deltaMinor', 'occurredOn', 'fx'] as const, 'Корректировка остатка');
+      const delta = clean.deltaMinor;
+      if (typeof delta !== 'number' || !Number.isSafeInteger(delta) || delta === 0) {
+        throw new ValidationError('Корректировка остатка: разница должна быть целым числом, не равным нулю');
+      }
+      const fx = clean.fx === undefined ? undefined : parseFx(clean.fx);
+      const fields = parseTxFields({
+        kind: delta > 0 ? 'income' : 'expense',
+        walletId: clean.walletId,
+        toWalletId: null,
+        amountMinor: Math.abs(delta),
+        toAmountMinor: null,
+        categoryId: null,
+        debtId: null,
+        recurringRuleId: null,
+        note: ADJUSTMENT_NOTE,
+        occurredOn: clean.occurredOn,
+      });
+      return writeTx(ctx, scope(), async () => insertNew(fields, fx ?? null, undefined, false, undefined, true));
+    },
+
     async createFromRule(rule, date, opts = {}) {
       const ruleId = ruleIdOf(rule);
       const day = reqDate(date, 'Дата платежа');
@@ -437,6 +468,13 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
       return writeTx(ctx, scope(), async () => {
         const cur = await mustGet(id);
         if (cur.deletedAt !== null) throw new ValidationError('Операция удалена: сначала восстановите её');
+        if (isAdjustment(cur)) {
+          // деньги «Корректировки остатка» не правятся: её удаляют и делают новую (иначе разница с банком потеряла бы смысл)
+          const moneyKeys = (['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId', 'fx'] as const).filter((k) => clean[k] !== undefined);
+          if (moneyKeys.some((k) => k === 'fx' || !Object.is(clean[k], cur[k]))) {
+            throw new ValidationError('Корректировку остатка править нельзя: удалите её и сделайте новую');
+          }
+        }
 
         const merged: Record<string, unknown> = { ...fieldsOf(cur) };
         for (const [k, v] of Object.entries(clean)) if (k !== 'fx') merged[k] = v;

@@ -30,7 +30,7 @@ export function balanceSeries(
   for (let i = 0; i <= days; i++) {
     out.unshift(balance);
     const day = summarizeDay(byDay.get(addDays(today, -i)) ?? [], base);
-    balance = addMinor(balance, -addMinor(day.netMinor, day.debtFlowMinor));
+    balance = addMinor(balance, -addMinor(addMinor(day.netMinor, day.debtFlowMinor), day.adjustmentFlowMinor));
   }
   return out;
 }

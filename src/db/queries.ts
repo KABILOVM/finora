@@ -1,3 +1,4 @@
+import { isAdjustment } from '@/domain/adjustment';
 import { addMinor } from '@/domain/money';
 import type { CurrencyCode, IsoDate, Minor, Transaction, TxKind, UUID } from '@/domain/types';
 
@@ -19,6 +20,8 @@ export type TxLike = Pick<
 > & {
   /** Нет поля (старые данные и тестовые заготовки) = нет долга. */
   debtId?: Transaction['debtId'] | undefined;
+  /** Нет поля = не «Корректировка остатка» (см. domain/adjustment.ts). */
+  fxSource?: Transaction['fxSource'] | undefined;
 };
 
 export interface TxFilter {
@@ -110,6 +113,8 @@ export interface MonthSummary {
   debtOutMinor: Minor;
   /** debtInMinor − debtOutMinor: как долги изменили деньги на руках. Не доход и не расход. */
   debtFlowMinor: Minor;
+  /** «Корректировки остатка» (domain/adjustment.ts): доход минус расход. Меняют деньги на руках, но не доход и не расход. */
+  adjustmentFlowMinor: Minor;
   /** Сколько операций месяца не вошло в итоги: их снимок сделан в другой (прежней) базовой валюте. */
   excludedCount: number;
 }
@@ -125,6 +130,7 @@ function summarize(txs: readonly SummaryTx[], baseCurrency: CurrencyCode): Month
   let feeMinor = 0;
   let debtInMinor = 0;
   let debtOutMinor = 0;
+  let adjustmentFlowMinor = 0;
   let excludedCount = 0;
   const byCat = new Map<UUID | null, Minor>();
 
@@ -143,6 +149,10 @@ function summarize(txs: readonly SummaryTx[], baseCurrency: CurrencyCode): Month
     }
     if (t.baseCurrency !== baseCurrency) {
       excludedCount++;
+      continue;
+    }
+    if (isAdjustment(t)) {
+      adjustmentFlowMinor = addMinor(adjustmentFlowMinor, t.kind === 'income' ? t.baseAmountMinor : -t.baseAmountMinor);
       continue;
     }
     if (t.debtId != null) {
@@ -176,6 +186,7 @@ function summarize(txs: readonly SummaryTx[], baseCurrency: CurrencyCode): Month
     debtInMinor,
     debtOutMinor,
     debtFlowMinor: debtInMinor - debtOutMinor,
+    adjustmentFlowMinor,
     excludedCount,
   };
 }

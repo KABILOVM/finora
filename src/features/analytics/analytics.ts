@@ -1,4 +1,5 @@
 import { summarizeDay, summarizeMonth, type CategoryTotal, type MonthSummary } from '@/db/queries';
+import { isAdjustment } from '@/domain/adjustment';
 import { endOfMonth, floorDiv } from '@/domain/forecast';
 import { MIN_PACE_DAYS } from '@/domain/pace';
 import type { CurrencyCode, IsoDate, Minor, Transaction, UUID } from '@/domain/types';
@@ -194,7 +195,7 @@ export function topExpenses(
 ): TopExpense[] {
   const prefix = `${month}-`;
   return txs
-    .filter((t) => t.deletedAt === null && t.kind === 'expense' && t.debtId == null && t.baseCurrency === base && t.occurredOn.startsWith(prefix))
+    .filter((t) => t.deletedAt === null && t.kind === 'expense' && t.debtId == null && !isAdjustment(t) && t.baseCurrency === base && t.occurredOn.startsWith(prefix))
     .map((t) => ({ id: t.id, occurredOn: t.occurredOn, categoryId: t.categoryId, note: t.note, amountMinor: t.baseAmountMinor }))
     .sort((a, b) => b.amountMinor - a.amountMinor || (a.occurredOn < b.occurredOn ? 1 : a.occurredOn > b.occurredOn ? -1 : 0) || (a.id < b.id ? -1 : 1))
     .slice(0, limit);
