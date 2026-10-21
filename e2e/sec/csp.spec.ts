@@ -402,7 +402,7 @@ test.describe('CSP в настоящем браузере', () => {
   });
 
   test('clickjacking: чужая страница не может встроить приложение во фрейм', async ({ page, errors }) => {
-    errors.allow(/Refused to frame/);
+    errors.allow(/Refused to frame|Framing .* violates the following Content Security Policy/);
     const { startHostPage } = await import('./helpers');
     const host = await startHostPage(`<!doctype html><iframe id="f" src="${srv.origin}/#/" width="400" height="600"></iframe>`);
     try {
