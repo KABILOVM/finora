@@ -23,6 +23,8 @@ jobs:
       - run: npm ci
       - name: Типы (приложение и тесты)
         run: npm run check
+      - name: Линтер (ESLint, мягкие правила)
+        run: npm run lint
       - name: Тесты
         run: npx vitest run
         env:
