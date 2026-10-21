@@ -46,13 +46,25 @@ function makeSink(): ErrorSink {
  * test с автоматической проверкой «нет ошибок»: каждый сценарий на каждом проекте
  * в конце проверяет, что не было ни pageerror, ни console.error (кроме сетевых сбоев).
  */
-export const test = base.extend<{ errors: ErrorSink; showOnboarding: boolean; skipOnboarding: void }>({
+export const test = base.extend<{ errors: ErrorSink; showOnboarding: boolean; skipOnboarding: void; offlineExternal: void }>({
   /** Сценарий про сам мастер настройки (26-onboarding) ставит true через test.use: тогда мастер заранее не отключается. */
   showOnboarding: [false, { option: true }],
   /** Мастер закрывает «Главную» у человека с чистой базой, а почти все сценарии открывают приложение именно так (и не только через openApp). */
   skipOnboarding: [
     async ({ page, showOnboarding }, use) => {
       if (!showOnboarding) await skipOnboardingInAdvance(page);
+      await use();
+    },
+    { auto: true },
+  ],
+  /**
+   * Сценарии не ходят во внешний интернет: запросы к чужим хостам (курсы nbt.tj и т. п.) обрываются, как в закрытой среде.
+   * Иначе на машине с интернетом браузер пишет в консоль ошибку CORS, и результат зависит от того, где идёт прогон (CI и песочница).
+   * Свои подмены сценария (page.route) главнее этой.
+   */
+  offlineExternal: [
+    async ({ context }, use) => {
+      await blockExternalNetwork(context);
       await use();
     },
     { auto: true },
@@ -82,10 +94,18 @@ export async function shot(page: Page, name: string, testInfo: TestInfo): Promis
   return path;
 }
 
+/** Запросы к чужим хостам (не localhost) обрываются: прогон не зависит от того, есть ли в среде интернет. */
+export async function blockExternalNetwork(context: BrowserContext): Promise<void> {
+  await context.route(
+    (url) => !/^(127\.0\.0\.1|localhost|\[::1\])$/.test(url.hostname) && /^https?:$/.test(url.protocol),
+    (route) => route.abort('internetdisconnected'),
+  );
+}
+
 /** Чистый контекст с теми же параметрами устройства, что у проекта (для «восстановления на новом устройстве»). */
 export async function freshContext(browser: Browser, testInfo: TestInfo): Promise<BrowserContext> {
   const u = testInfo.project.use;
-  return browser.newContext({
+  const context = await browser.newContext({
     baseURL: u.baseURL,
     viewport: u.viewport ?? undefined,
     userAgent: u.userAgent,
@@ -96,6 +116,8 @@ export async function freshContext(browser: Browser, testInfo: TestInfo): Promis
     timezoneId: u.timezoneId,
     acceptDownloads: true,
   });
+  await blockExternalNetwork(context);
+  return context;
 }
 
 /* ------------------------------ текст и деньги ------------------------------ */
