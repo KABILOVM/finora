@@ -23,6 +23,9 @@ export interface PreviewStepProps {
   rateTexts: Readonly<Record<string, string>>;
   onRate: (currency: string, text: string) => void;
   onChoose: (key: string, choice: WalletChoice) => void;
+  /** Возможные дубли (найдены по содержимому), которые добавятся всё равно, и переключатель. */
+  forced?: ReadonlySet<string>;
+  onForce?: (id: string, on: boolean) => void;
   onBack: () => void;
   onStart: () => void;
   /** Текст ошибки предыдущей попытки записи. */
@@ -61,7 +64,7 @@ function confirmMessage(plan: ImportPlan) {
  * Шаги 2–3. Предпросмотр. Сначала то, что требует решения (курсы, счета, спорные строки), потом справочное (категории, операции,
  * пропущенное). Кнопка «Импортировать» закреплена над нижней панелью: нажать её можно, не промотав весь список. Затем подтверждение.
  */
-export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBack, onStart, error, balances, onRestore }: PreviewStepProps) {
+export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, forced, onForce, onBack, onStart, error, balances, onRestore }: PreviewStepProps) {
   const [confirming, setConfirming] = useState(false);
   const n = plan.counts.add;
   const nothing = plan.ops.length === 0;
@@ -84,7 +87,7 @@ export function PreviewStep({ plan, fileName, rateTexts, onRate, onChoose, onBac
       <NotesBlock notes={plan.notes} />
       <ReviewBlock review={plan.review} />
       <CategoriesBlock categories={plan.categories} />
-      <OpsPreview plan={plan} />
+      <OpsPreview plan={plan} {...(forced && onForce ? { forced, onForce } : {})} />
       <SkippedBlock skipped={plan.skipped} />
 
       <p className="px-1 text-sm text-muted">

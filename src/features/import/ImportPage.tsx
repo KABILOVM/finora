@@ -68,6 +68,8 @@ export default function ImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, WalletChoice>>({});
   const [rateTexts, setRateTexts] = useState<Record<string, string>>({});
+  // Возможные дубли (найдены по содержимому), которые человек решил добавить всё равно
+  const [forced, setForced] = useState<ReadonlySet<string>>(() => new Set());
 
   // Живые кошельки и категории ВМЕСТЕ с удалёнными и архивными: нужны, чтобы заметить конфликт с id прошлого импорта.
   const dbRows = useLiveQuery(async () => ({ wallets: await store.db.wallets.toArray(), categories: await store.db.categories.toArray() }), [store]);
@@ -88,7 +90,7 @@ export default function ImportPage() {
   const deferredTexts = useDeferredValue(rateTexts);
 
   const makePlan = useCallback(
-    (walletChoices: Record<string, WalletChoice>, texts: Record<string, string>): ImportPlan | null => {
+    (walletChoices: Record<string, WalletChoice>, texts: Record<string, string>, forceAdd: ReadonlySet<string>): ImportPlan | null => {
       if (!session || !base || !dbRows) return null;
       return buildPlan({
         parsed: session.parsed,
@@ -99,12 +101,13 @@ export default function ImportPage() {
         existing: session.existing,
         walletChoices,
         rates: ratesOf(texts),
+        forceAdd,
       });
     },
     [session, base, dbRows],
   );
   // Для экрана план строится «с запозданием» (набор текста в поле курса не тормозит на больших файлах)
-  const plan = useMemo(() => makePlan(deferredChoices, deferredTexts), [makePlan, deferredChoices, deferredTexts]);
+  const plan = useMemo(() => makePlan(deferredChoices, deferredTexts, forced), [makePlan, deferredChoices, deferredTexts, forced]);
 
   const onFile = useCallback(
     async (file: File) => {
@@ -124,6 +127,7 @@ export default function ImportPage() {
           texts[cur] = found ? rateToText(found.rate) : '';
         }
         setChoices({});
+        setForced(new Set());
         setRateTexts(texts);
         setStage({ name: 'preview', session: s });
       } catch (e) {
@@ -144,7 +148,7 @@ export default function ImportPage() {
   const start = useCallback(async () => {
     if (!session || run.current) return; // повторное нажатие во время записи игнорируется
     // Пишем ровно то, что человек выбрал и набрал к этому моменту (экранный план мог отстать на кадр)
-    const plan = makePlan(choices, rateTexts);
+    const plan = makePlan(choices, rateTexts, forced);
     if (!plan) return;
     const ctl = new AbortController();
     run.current = ctl;
@@ -167,7 +171,7 @@ export default function ImportPage() {
     } finally {
       run.current = null;
     }
-  }, [makePlan, session, store, choices, rateTexts]);
+  }, [makePlan, session, store, choices, rateTexts, forced]);
 
   const stop = useCallback(() => {
     run.current?.abort();
@@ -177,6 +181,7 @@ export default function ImportPage() {
   const again = useCallback(() => {
     setError(null);
     setChoices({});
+    setForced(new Set());
     setRateTexts({});
     setStage({ name: 'pick' });
   }, []);
@@ -197,6 +202,15 @@ export default function ImportPage() {
               rateTexts={rateTexts}
               onRate={(cur, text) => setRateTexts((t) => ({ ...t, [cur]: text }))}
               onChoose={(key, choice) => setChoices((c) => ({ ...c, [key]: choice }))}
+              forced={forced}
+              onForce={(id, on) =>
+                setForced((prev) => {
+                  const next = new Set(prev);
+                  if (on) next.add(id);
+                  else next.delete(id);
+                  return next;
+                })
+              }
               onBack={again}
               onStart={() => void start()}
               error={error}

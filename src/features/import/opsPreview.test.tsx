@@ -104,3 +104,44 @@ describe('операции из файла в предпросмотре', () =>
     expect(container.textContent).toBe('');
   });
 });
+
+describe('возможные дубли в предпросмотре', () => {
+  const wallet: WalletLite = { id: 'w-main', name: 'Основной', currency: 'TJS', archivedAt: null, deletedAt: null };
+  const stored = { deleted: false, kind: 'expense' as const, walletId: 'w-main', toWalletId: null, amountMinor: 1000, toAmountMinor: null, occurredOn: '2026-09-01', note: 'кофе' };
+
+  async function dupPlan(forceAdd?: ReadonlySet<string>) {
+    const parsed = parseZenmoney(csv(line('2026-09-01', 'Еда', '10.00', 'Карта Алиф', 'кофе')));
+    const ids = await computeIds('u', parsed);
+    const key = [...ids.wallets.keys()][0]!;
+    const input = { parsed, ids, baseCurrency: 'TJS', wallets: [wallet], categories: [], existing: new Map([['чужой', stored]]), walletChoices: { [key]: 'w-main' } };
+    return { plan: buildPlan(forceAdd ? { ...input, forceAdd } : input), id: ids.tx[0]! };
+  }
+
+  it('совпавшая по содержимому операция — «Возможный дубль» с кнопкой «Добавить всё равно»', async () => {
+    const { plan, id } = await dupPlan();
+    const calls: [string, boolean][] = [];
+    render(<OpsPreview plan={plan} forced={new Set()} onForce={(i, on) => calls.push([i, on])} />);
+    expect(titles()[0]).toContain('Возможный дубль');
+    await user.click(screen.getByRole('button', { name: /^Добавить всё равно/ }));
+    expect(calls).toEqual([[id, true]]);
+  });
+
+  it('добавляемая всё равно помечена «Как дубль» и отменяется кнопкой «Не добавлять»', async () => {
+    const first = await dupPlan();
+    const { plan, id } = await dupPlan(new Set([first.id]));
+    const calls: [string, boolean][] = [];
+    render(<OpsPreview plan={plan} forced={new Set([first.id])} onForce={(i, on) => calls.push([i, on])} />);
+    expect(plan.counts.add).toBe(1);
+    expect(titles()[0]).toContain('Как дубль');
+    await user.click(screen.getByRole('button', { name: /^Не добавлять/ }));
+    expect(calls).toEqual([[id, false]]);
+  });
+
+  it('без обработчика (старый вызов) кнопок нет, подпись «Возможный дубль» остаётся', async () => {
+    const { plan } = await dupPlan();
+    render(<OpsPreview plan={plan} />);
+    expect(titles()[0]).toContain('Возможный дубль');
+    expect(screen.queryByRole('button', { name: /Добавить всё равно/ })).toBeNull();
+  });
+});
+

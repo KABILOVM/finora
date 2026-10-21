@@ -29,7 +29,7 @@ const newestFirst = (a: PlanOp, b: PlanOp): number => (a.row.date < b.row.date ?
  * Операции файла как они будут выглядеть: по умолчанию — те, что добавятся, самые свежие сверху. Чипами переключается статус
  * («Уже есть», «Ждут курса»…), показ — по 20 и «Показать ещё 50». Кошелёк в строке — тот, что выбран выше, а не счёт из Дзен-мани.
  */
-export function OpsPreview({ plan }: { plan: ImportPlan }) {
+export function OpsPreview({ plan, forced, onForce }: { plan: ImportPlan; forced?: ReadonlySet<string>; onForce?: (id: string, on: boolean) => void }) {
   const { ops } = plan;
   const [picked, setPicked] = useState<OpStatus | null>(null);
   const [limit, setLimit] = useState(OPS_FIRST);
@@ -81,9 +81,25 @@ export function OpsPreview({ plan }: { plan: ImportPlan }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
                   <span>{ruDate(op.row.date)}</span>
-                  <Badge tone={st.tone}>{st.text}</Badge>
+                  {op.status === 'exists' && op.byContent ? <Badge tone="warning">Возможный дубль</Badge> : <Badge tone={st.tone}>{st.text}</Badge>}
+                  {op.status === 'add' && forced?.has(op.id) && <Badge tone="warning">Как дубль</Badge>}
                   {op.row.note && <span className="min-w-0 truncate">{op.row.note}</span>}
                 </div>
+                {/* Совпала по дате, сумме, кошельку и заметке с уже имеющейся: по умолчанию не добавляется, но человек решает сам */}
+                {onForce && op.status === 'exists' && op.byContent && (
+                  <div>
+                    <Button variant="ghost" onClick={() => onForce(op.id, true)} aria-label={`Добавить всё равно: ${title(op)}`}>
+                      Добавить всё равно
+                    </Button>
+                  </div>
+                )}
+                {onForce && op.status === 'add' && forced?.has(op.id) && (
+                  <div>
+                    <Button variant="ghost" onClick={() => onForce(op.id, false)} aria-label={`Не добавлять: ${title(op)}`}>
+                      Не добавлять
+                    </Button>
+                  </div>
+                )}
               </li>
             );
           })}
