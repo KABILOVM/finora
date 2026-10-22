@@ -23,11 +23,25 @@ export const TEMPLATES_LABEL = 'Шаблоны и частые операции'
  * Лежит внутри панели категорий, а не в верхней строке формы: там на узком телефоне нет места (подписи «Расход / Доход / Перевод»
  * наезжали друг на друга), а панель всё равно открывают, когда выбирают категорию.
  */
-export function FrequentStrip({ items, onPick }: { items: readonly FrequentChoice[]; onPick: (key: string) => void }) {
+export function FrequentStrip({ items, onPick, onSaveTemplate }: { items: readonly FrequentChoice[]; onPick: (key: string) => void; onSaveTemplate?: () => void }) {
   const withTemplates = items.some((it) => it.template);
+  const label = withTemplates || (items.length === 0 && onSaveTemplate) ? 'Шаблоны и частые' : 'Часто вносите';
   return (
     <div className="flex flex-col gap-1">
-      <p className="px-1 text-sm font-semibold text-muted">{withTemplates ? 'Шаблоны и частые' : 'Часто вносите'}</p>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <p className="min-w-0 text-sm font-semibold text-muted">{label}</p>
+        {onSaveTemplate && (
+          <button
+            type="button"
+            onClick={onSaveTemplate}
+            className="-mr-1 inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold text-brand hover:bg-brand/10 active:bg-brand/15"
+          >
+            <Icon name="star" size={16} />
+            Сохранить как шаблон
+          </button>
+        )}
+      </div>
+      {items.length > 0 && (
       <div role="group" aria-label={withTemplates ? TEMPLATES_LABEL : FREQUENT_LABEL} className="flex gap-2 overflow-x-auto overscroll-x-contain px-0.5 pb-1 [scrollbar-width:thin]">
         {items.map((it) => (
           <button
@@ -44,6 +58,7 @@ export function FrequentStrip({ items, onPick }: { items: readonly FrequentChoic
           </button>
         ))}
       </div>
+      )}
     </div>
   );
 }

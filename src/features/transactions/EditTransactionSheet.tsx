@@ -18,7 +18,7 @@ import { useDebtTxRole } from '@/features/debts/useDebtTxRole';
 import { Receipt } from '@/features/shopping/Receipt';
 import { ADD_PATH } from '@/layout/nav';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
-import { SaveTemplateButton } from '@/features/templates/SaveTemplateButton';
+import { useSaveTemplate } from '@/features/templates/useSaveTemplate';
 import { prefillOfForm } from './prefill';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
@@ -228,6 +228,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
   };
 
   const busy = saving || deleting;
+  const saveTemplate = useSaveTemplate();
 
   // «Повторить»: открывает «Новую операцию» с этими же полями и сегодняшней датой. Запись истории заменяется, а не добавляется:
   // «Назад» из новой операции приводит туда же, откуда открыли правку (на список), а не обратно в правку.
@@ -298,12 +299,18 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
           )}
           <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} onSubmit={() => void save()} />
           {/* как и «Повторить»: операция по долгу шаблоном не бывает */}
-          {canRepeat && (
-            <SaveTemplateButton
-              prefill={c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId ? prefillOfForm(c.form, c.fee.minor) : null}
-              categoryName={categories.find((x) => x.id === c.form.categoryId)?.name ?? null}
-            />
+          {canRepeat && c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId && (
+            <Button
+              variant="ghost"
+              icon="star"
+              fullWidth
+              className="mt-2"
+              onClick={() => saveTemplate.ask(prefillOfForm(c.form, c.fee.minor), categories.find((x) => x.id === c.form.categoryId)?.name ?? null)}
+            >
+              Сохранить как шаблон
+            </Button>
           )}
+          {saveTemplate.dialog}
         </div>
       </Sheet>
       <ConfirmDialog

@@ -22,6 +22,8 @@ export interface CategoryGridProps {
   /** Частые операции этого вида: полоса чипов над сеткой. Пусто или нет — полосы нет. */
   frequent?: readonly FrequentChoice[];
   onPickFrequent?: (key: string) => void;
+  /** «Сохранить как шаблон» в строке частых (только «Новая операция», когда набрана сумма). */
+  onSaveTemplate?: () => void;
 }
 
 const cellClass = (selected: boolean) =>
@@ -34,13 +36,14 @@ const cellClass = (selected: boolean) =>
  * Категории сеткой (3 в ряд на узком телефоне, 4 — от 420 px): значок крупно, название под ним, чтобы слова не рвались. Видно сразу много, выбор — одно касание. «Новая» создаёт категорию
  * прямо здесь, «Без категории» — кнопка над сеткой (не прячется при прокрутке длинного списка).
  */
-export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequent = [], onPickFrequent }: CategoryGridProps) {
+export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequent = [], onPickFrequent, onSaveTemplate }: CategoryGridProps) {
   const [adding, setAdding] = useState(false);
   const hasFrequent = frequent.length > 0 && onPickFrequent !== undefined;
+  const hasStrip = hasFrequent || onSaveTemplate !== undefined;
 
   return (
     <div className="flex flex-col gap-2">
-      {hasFrequent && <FrequentStrip items={frequent} onPick={onPickFrequent} />}
+      {hasStrip && <FrequentStrip items={hasFrequent ? frequent : []} onPick={onPickFrequent ?? (() => undefined)} {...(onSaveTemplate ? { onSaveTemplate } : {})} />}
       {/* «Без категории» — наверху, а не под сеткой: при длинном списке до неё не пришлось бы листать */}
       <div className="flex items-center justify-between gap-2 px-1">
         {hint ? (
@@ -64,7 +67,7 @@ export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequ
         className={cn(
           'grid grid-cols-3 gap-1.5 min-[420px]:grid-cols-4 overflow-y-auto overscroll-contain p-0.5 [scrollbar-width:thin]',
           // полоса «Частые» занимает место сверху: сетке остаётся чуть меньше, чтобы панель не вылезала за экран
-          hasFrequent ? 'max-h-[min(30vh,240px)]' : 'max-h-[min(40vh,300px)]',
+          hasStrip ? 'max-h-[min(30vh,240px)]' : 'max-h-[min(40vh,300px)]',
         )}
       >
         <button

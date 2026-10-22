@@ -85,13 +85,15 @@ export interface ContextRowProps {
   frequent?: readonly FrequentChoice[];
   /** Нажали частую операцию: key из FrequentChoice. Панель после этого закрывается. */
   onPickFrequent?: (key: string) => void;
+  /** «Сохранить как шаблон» в панели категорий (только «Новая операция», когда набрана сумма). Панель после этого закрывается. */
+  onSaveTemplate?: () => void;
 }
 
 /**
  * Две плитки «куда пойдут деньги»: категория и счёт (у перевода — «Откуда» и «Куда»). Подставляются сами, видны над клавиатурой;
  * нажатие открывает список поверх формы. Дата — в шапке окна (DateChip).
  */
-export function ContextRow({ c, wallets, categories, categoryState, onCategorySkip, onPicked, frequent, onPickFrequent }: ContextRowProps) {
+export function ContextRow({ c, wallets, categories, categoryState, onCategorySkip, onPicked, frequent, onPickFrequent, onSaveTemplate }: ContextRowProps) {
   const { form, errors } = c;
   const [panel, setPanel] = useState<Panel>(null);
   const isTransfer = form.kind === 'transfer';
@@ -235,6 +237,13 @@ export function ContextRow({ c, wallets, categories, categoryState, onCategorySk
                   onPickFrequent(key);
                   setPanel(null);
                   onPicked?.();
+                })
+              }
+              onSaveTemplate={
+                onSaveTemplate &&
+                (() => {
+                  setPanel(null);
+                  onSaveTemplate();
                 })
               }
             />

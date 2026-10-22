@@ -53,6 +53,8 @@ export interface TxFormFieldsProps {
   /** Новая операция: частые операции текущего вида (полоса чипов в панели категорий) и что делать при нажатии. */
   frequent?: readonly FrequentChoice[];
   onPickFrequent?: (key: string) => void;
+  /** Новая операция: «Сохранить как шаблон» в панели категорий; нет — кнопки нет. */
+  onSaveTemplate?: () => void;
   /** Новая операция: похожие записи для набираемой заметки (под полем заметки) и что делать при нажатии. */
   noteSuggestions?: readonly NoteChoice[];
   onPickNote?: (key: string) => void;
@@ -92,7 +94,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, noteSuggestions, onPickNote }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -179,6 +181,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           onPicked={focusAmount}
           frequent={frequent}
           onPickFrequent={onPickFrequent}
+          onSaveTemplate={onSaveTemplate}
         />
         <FxNotice
           fx={c.fx}

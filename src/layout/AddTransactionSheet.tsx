@@ -10,7 +10,7 @@ import { saveReceipt, undoReceipt } from '@/features/receipt/saveReceipt';
 import { checkReceipt } from '@/features/receipt/receiptAi';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
-import { SaveTemplateButton } from '@/features/templates/SaveTemplateButton';
+import { useSaveTemplate } from '@/features/templates/useSaveTemplate';
 import { useTemplates } from '@/features/templates/templateStore';
 import { resolveTemplate, type Template } from '@/features/templates/templates';
 import { useActiveTrip } from '@/features/trips/activeTrip';
@@ -135,6 +135,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   // «Режим поездки»: пока он включён, новые операции получают метку поездки в заметке
   const trip = useActiveTrip(store.userId);
   const { templates } = useTemplates(store.userId);
+  const saveTemplate = useSaveTemplate();
   const formRef = useRef<HTMLDivElement>(null);
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
@@ -514,6 +515,13 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           onSubmit={(more) => void save(more)}
           frequent={frequentForKind}
           onPickFrequent={pickFrequent}
+          // «Сохранить как шаблон» живёт в панели категорий (под полями форме места нет): появляется, когда набрана сумма
+          {...(c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId
+            ? {
+                onSaveTemplate: () =>
+                  saveTemplate.ask(prefillOfForm(c.form, c.fee.minor), categories.find((x) => x.id === c.form.categoryId)?.name ?? null),
+              }
+            : {})}
           noteSuggestions={quickChoice ? [quickChoice, ...noteMatches.map((m) => m.choice)] : noteMatches.map((m) => m.choice)}
           onPickNote={pickNote}
           kindAction={
@@ -526,12 +534,8 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
             </span>
           }
         />
-        {/* Шаблон из этой формы: кнопка появляется, когда набрана сумма; под полями, чтобы ничего над суммой не двигать */}
-        <SaveTemplateButton
-          prefill={c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId ? prefillOfForm(c.form, c.fee.minor) : null}
-          categoryName={categories.find((x) => x.id === c.form.categoryId)?.name ?? null}
-        />
       </div>
+      {saveTemplate.dialog}
       <ConfirmDialog
         open={futureAsk !== null}
         title="Дата в будущем"

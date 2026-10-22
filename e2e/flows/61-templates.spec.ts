@@ -18,8 +18,10 @@ test.describe('61. Шаблоны операций', () => {
     await addTx(page, { kind: 'income', amount: '5000', category: 'Зарплата', date: '2026-10-01' });
     await dismissToasts(page);
 
-    // форма: сумма, категория, заметка → «Сохранить как шаблон» (Enter подтверждает название) → форма остаётся открытой
+    // форма: сумма, категория, заметка → в панели категорий «Сохранить как шаблон» (Enter подтверждает название) → форма остаётся открытой
     const dlg = await fillTx(page, { amount: '45', category: 'Еда', note: 'обед в столовой' });
+    await dlg.getByRole('button', { name: 'Готово', exact: true }).click(); // панель заметки закрывает плитки
+    await dlg.getByRole('button', { name: /^Категория:/ }).click();
     await dlg.getByRole('button', { name: 'Сохранить как шаблон' }).click();
     const ask = page.getByRole('alertdialog', { name: 'Название шаблона' });
     await expect(ask.getByRole('textbox', { name: 'Название' })).toHaveValue('обед в столовой');

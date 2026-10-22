@@ -71,13 +71,16 @@ describe('шаблоны в «Новой операции»', () => {
     expect(Array.from(strip()!.querySelectorAll('button')).map((b) => b.textContent)).toEqual([expect.stringContaining('Зарплата')]);
   });
 
-  it('«Сохранить как шаблон»: кнопки нет, пока не набрана сумма; название предлагается из заметки; шаблон сохраняется, форма остаётся', async () => {
+  it('«Сохранить как шаблон» — в панели категорий: пока не набрана сумма, кнопки нет; название предлагается из заметки; шаблон сохраняется, форма остаётся', async () => {
     const td = opsDeps();
     const { onClose } = await openAddSheet(td);
+    await openCategories();
     expect(screen.queryByRole('button', { name: 'Сохранить как шаблон' })).toBeNull();
+    await openCategories(); // закрыли панель
     await tapAmount('45');
     await user.click(screen.getByRole('button', { name: 'Заметка' }));
     await user.type(screen.getByRole('textbox', { name: /^Заметка/ }), 'обед в столовой');
+    await openCategories();
     await user.click(await findByRole('button', { name: 'Сохранить как шаблон' }));
     const name = (await findByRole('textbox', { name: 'Название' })) as HTMLInputElement;
     expect(name.value).toBe('обед в столовой');
@@ -97,8 +100,9 @@ describe('шаблоны в «Новой операции»', () => {
     const td = opsDeps();
     await openAddSheet(td);
     await tapAmount('45');
-    await user.click(screen.getByRole('button', { name: /^Категория:/ }));
+    await openCategories();
     await user.click(screen.getByRole('button', { name: 'Еда' }));
+    await openCategories();
     await user.click(await findByRole('button', { name: 'Сохранить как шаблон' }));
     expect(((await findByRole('textbox', { name: 'Название' })) as HTMLInputElement).value).toBe('Еда');
   });
