@@ -15,6 +15,8 @@ import type { Frequency, IsoDate, Minor, RecurringRule, Transaction, UUID } from
  */
 
 export const MIN_REPEATS = 3;
+/** Выше этого роста цены (в разах) прежний платёж подорожанием не считаем: пробный период, другой тариф. */
+const MAX_RISE_FACTOR = 2;
 /** Сколько последних платежей серии смотрим. */
 const MAX_SERIES = 12;
 /** Расходы старше стольких дней не смотрим. */
@@ -56,6 +58,14 @@ export interface SubscriptionCandidate {
   lastOn: IsoDate;
   /** Когда ждать следующий (не раньше сегодня). */
   nextOn: IsoDate;
+  /** Во сколько обходится за год: типичная сумма × число платежей в год (52, 26 или 12). */
+  yearlyMinor: Minor;
+  /**
+   * Прежняя сумма, если подписка подорожала: перед нынешней серией (не меньше MIN_REPEATS платежей по новой цене) был платёж или
+   * несколько на том же шаге и заметно дешевле. null — цена не менялась, или упала, или выросла больше чем вдвое (это скорее
+   * другой тариф или пробный период, а не «подорожало»).
+   */
+  previousAmountMinor: Minor | null;
 }
 
 export const normNote = (s: string): string => s.replace(/\s+/g, ' ').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
@@ -69,13 +79,38 @@ function median(values: readonly Minor[]): Minor {
 /** |a − m| ≤ 5% от m — целыми числами. */
 const near = (a: Minor, m: Minor): boolean => Math.abs(a - m) * 100 <= m * AMOUNT_TOLERANCE_PERCENT;
 
+/** Укладывается ли промежуток между двумя датами в шаг. */
+const gapFits = (a: IsoDate, b: IsoDate, step: Step): boolean => {
+  const gap = daysBetween(a, b);
+  return gap >= step.min && gap <= step.max;
+};
+
+/**
+ * Прежняя сумма подписки, если она подорожала. `all` — платежи по возрастанию дат, `from` — индекс первого платежа нынешней серии.
+ * Смотрим назад от него: платёж, который стоит на том же шаге и заметно дешевле, и все ему подобные перед ним (та же сумма в
+ * пределах допуска, тот же шаг); прежняя сумма — медиана этой «старой» серии. Один случайный дешёвый платёж тоже считается
+ * (старой цены могло быть всего одно), но слишком большой скачок (больше чем вдвое) и удешевление не считаются.
+ */
+function priorPrice(all: readonly SubTx[], from: number, step: Step, amount: Minor): Minor | null {
+  if (from <= 0) return null;
+  const first = all[from - 1]!;
+  if (!gapFits(first.occurredOn, all[from]!.occurredOn, step) || near(first.amountMinor, amount)) return null;
+  const run: SubTx[] = [first];
+  for (let i = from - 2; i >= 0; i--) {
+    const t = all[i]!;
+    if (!gapFits(t.occurredOn, run[run.length - 1]!.occurredOn, step) || !near(t.amountMinor, first.amountMinor)) break;
+    run.push(t);
+  }
+  const prev = median(run.map((t) => t.amountMinor));
+  return prev < amount && amount <= prev * MAX_RISE_FACTOR ? prev : null;
+}
+
 /** Подходит ли серия под шаг: суммы близки к медиане, все промежутки в пределах шага. */
 function fits(series: readonly SubTx[], step: Step): Minor | null {
   const m = median(series.map((t) => t.amountMinor));
   if (!series.every((t) => near(t.amountMinor, m))) return null;
   for (let i = 1; i < series.length; i++) {
-    const gap = daysBetween(series[i - 1]!.occurredOn, series[i]!.occurredOn);
-    if (gap < step.min || gap > step.max) return null;
+    if (!gapFits(series[i - 1]!.occurredOn, series[i]!.occurredOn, step)) return null;
   }
   return m;
 }
@@ -104,7 +139,7 @@ export function detectRecurring(txs: readonly SubTx[], rules: readonly SubRule[]
     else groups.set(key, [t]);
   }
 
-  const out: (SubscriptionCandidate & { yearly: number })[] = [];
+  const out: SubscriptionCandidate[] = [];
   for (const [key, list] of groups) {
     // один платёж на дату (два чека в один день — не подписка); порядок — по возрастанию дат
     const byDate = new Map<IsoDate, SubTx>();
@@ -135,6 +170,7 @@ export function detectRecurring(txs: readonly SubTx[], rules: readonly SubRule[]
     const after = last.occurredOn > addDays(today, -1) ? last.occurredOn : addDays(today, -1);
     const nextOn = nextOccurrence({ frequency: found.step.frequency, intervalN: found.step.intervalN, startOn: last.occurredOn, endOn: null }, after);
     if (nextOn === null) continue;
+    const perYear = Math.round(365 / found.step.nominal);
     out.push({
       key,
       walletId: last.walletId,
@@ -146,9 +182,10 @@ export function detectRecurring(txs: readonly SubTx[], rules: readonly SubRule[]
       count: found.series.length,
       lastOn: last.occurredOn,
       nextOn,
-      yearly: found.amount * Math.round(365 / found.step.nominal),
+      yearlyMinor: found.amount * perYear,
+      previousAmountMinor: priorPrice(all, all.length - found.series.length, found.step, found.amount),
     });
   }
-  out.sort((a, b) => b.yearly - a.yearly || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  return out.map(({ yearly: _yearly, ...c }) => c);
+  out.sort((a, b) => b.yearlyMinor - a.yearlyMinor || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return out;
 }

@@ -62,4 +62,26 @@ test.describe('34. Подписки: «Похоже на подписки»', ()
     await expect(page.getByRole('heading', { level: 1, name: 'Регулярные платежи' })).toBeVisible();
     await expect(page.getByTestId('subscriptions-card')).toHaveCount(0);
   });
+  test('подорожало: «было 49, стало 59 (+20%)», годовая сумма у подписки и общая; на 320 px без прокрутки вбок', async ({ page }, testInfo) => {
+    if (testInfo.project.name === 'iphone') await page.setViewportSize({ width: 320, height: 568 });
+    await page.clock.install({ time: NOW });
+    await openApp(page);
+    for (const date of ['2026-05-03', '2026-06-03']) await addTx(page, { amount: '49', note: 'Netflix', date });
+    for (const date of ['2026-07-03', '2026-08-03', '2026-09-03']) await addTx(page, { amount: '59', note: 'Netflix', date });
+    await dismissToasts(page);
+
+    await goSection(page, 'Платежи');
+    const card = page.getByTestId('subscriptions-card');
+    await expect(card).toBeVisible();
+    // свёрнутая строка уже говорит про сумму за год и про подорожание
+    await expect(card).toContainText('В сумме ≈');
+    await expect(card).toContainText('Подорожало: 1.');
+    await card.getByRole('button', { name: 'Похоже на подписки · 1' }).click();
+    await expect(card.getByTestId('subscription-rise')).toHaveText('Подорожало: было 49 с., стало 59 с. (+20%)');
+    await expect(card.getByTestId('subscriptions-total')).toContainText('Всего в год: ≈');
+    await expect(card.getByTestId('subscription-item').first()).toContainText('В год ≈');
+    await expect(card.getByTestId('subscription-rise')).toBeInViewport();
+    await noHorizontalScroll(page, 'Платежи (подорожало)');
+    await shot(page, '34-subscriptions-rise', testInfo);
+  });
 });
