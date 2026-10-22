@@ -7,7 +7,7 @@ import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet'
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
 import { useRates } from '@/rates/hooks';
-import { addDays, todayLocal } from '@/lib/dates';
+import { addDays, isValidIsoDate, todayLocal } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
 import type { DictCategory } from '@/domain/expensesAi';
@@ -24,7 +24,7 @@ import { suggestNotes, useNoteIndex } from '@/features/transactions/noteSuggest'
 import { parseQuickLine } from '@/features/transactions/quickLine';
 import type { NoteChoice } from '@/features/transactions/NoteSuggestions';
 import { formFromPrefill } from '@/features/transactions/prefill';
-import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet, resolveDate, ruDate } from '@/features/transactions/txForm';
+import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, MIN_DATE, pickDefaultWallet, resolveDate, ruDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
@@ -126,7 +126,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const formRef = useRef<HTMLDivElement>(null);
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
-  const preset = useLocation().state as { kind?: string; walletId?: string; prefill?: unknown } | null;
+  const preset = useLocation().state as { kind?: string; walletId?: string; prefill?: unknown; date?: unknown } | null;
   const presetKind = preset?.kind;
   // Кнопки на экране кошелька открывают шит сразу с этим кошельком (если он ещё есть)
   const presetWallet = preset?.walletId && wallets.some((w) => w.id === preset.walletId) ? preset.walletId : null;
@@ -135,8 +135,11 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       presetWallet ?? pickDefaultWallet(wallets, stats.lastWalletId, settings.defaultWalletId),
       presetKind === 'income' || presetKind === 'transfer' ? presetKind : 'expense',
     );
+    // «Внести траты» с «Главной» открывает форму сразу на пропущенном дне (вчера); дата проверяется: не в будущем и в допустимых границах
+    const presetDate = typeof preset?.date === 'string' && isValidIsoDate(preset.date) && preset.date >= MIN_DATE && preset.date <= todayLocal() ? preset.date : null;
+    const dated = presetDate === null ? blank : { ...blank, date: { mode: 'date' as const, value: presetDate } };
     // «Повторить» из правки операции: форма приходит заполненной (дата — сегодня), всё проверено против живых кошельков и категорий
-    return preset?.prefill === undefined ? blank : formFromPrefill(preset.prefill, blank, wallets, categories);
+    return preset?.prefill === undefined ? dated : formFromPrefill(preset.prefill, dated, wallets, categories);
   });
   const { getRate } = useRates();
   const [dictating, setDictating] = useState(false);

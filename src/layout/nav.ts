@@ -1,7 +1,7 @@
 import { useLocation, type Location } from 'react-router-dom';
 import { MORE_PATH, MORE_TITLE, SECTIONS, type Section, type SectionGroup } from '@/app/sections';
 import type { IconName } from '@/components/Icon';
-import type { TxKind } from '@/domain/types';
+import type { IsoDate, TxKind } from '@/domain/types';
 import type { TxPrefill } from '@/features/transactions/prefill';
 
 export interface NavItem {
@@ -69,11 +69,11 @@ export const ADD_LABEL = 'Добавить операцию';
 export interface AddLinkProps {
   to: string;
   /** Страница, поверх которой откроется шит: после закрытия возвращаемся на неё. */
-  state: { background: Location; kind?: TxKind; walletId?: string; prefill?: TxPrefill };
+  state: { background: Location; kind?: TxKind; walletId?: string; prefill?: TxPrefill; date?: IsoDate };
 }
 
 /** Свойства для <Link {...useAddLink()}>: шит «Новая операция» открывается поверх текущей страницы. */
-export function useAddLink(kind?: TxKind, walletId?: string): AddLinkProps {
+export function useAddLink(kind?: TxKind, walletId?: string, date?: IsoDate): AddLinkProps {
   const location = useLocation();
-  return { to: ADD_PATH, state: { background: location, ...(kind ? { kind } : {}), ...(walletId ? { walletId } : {}) } };
+  return { to: ADD_PATH, state: { background: location, ...(kind ? { kind } : {}), ...(walletId ? { walletId } : {}), ...(date ? { date } : {}) } };
 }

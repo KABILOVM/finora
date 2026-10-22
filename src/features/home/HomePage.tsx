@@ -11,6 +11,7 @@ import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData
 import { useRates } from '@/rates/hooks';
 import { computeWalletsTotal } from '@/rates/walletsTotal';
 import AttentionRow from './AttentionRow';
+import MissedDaysCard from './MissedDaysCard';
 import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
@@ -88,6 +89,7 @@ export default function HomePage() {
       <div className="stagger flex flex-col gap-3 md:gap-4">
         <HomeHero total={total ?? null} base={base} />
         <AttentionRow />
+        <MissedDaysCard />
         <GlanceStrip base={base} />
         <WalletChips wallets={wallets} balances={balances} />
         <BudgetsWidget />
