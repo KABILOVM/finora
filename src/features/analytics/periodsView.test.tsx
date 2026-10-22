@@ -248,4 +248,28 @@ describe('вкладка «Периоды»', () => {
     await user.click(screen.getByRole('button', { name: 'Свернуть' }));
     expect(list().querySelectorAll('li')).toHaveLength(8);
   });
+
+  it('«Итоги года карточками»: кнопка только у года; карточки листаются кнопками «Далее» и «Назад», «Готово» закрывает', async () => {
+    await openPeriods();
+    await user.click(document.querySelector('[data-testid="open-wrapped"]') as HTMLElement);
+    const dialog = await findByRole('dialog', { name: 'Итоги 2026 года' });
+    expect(text(document.querySelector('[data-testid="wrapped-intro"]'))).toContain('2026 год: итоги на сегодня');
+    const total = Number(/из (\d+)/.exec(text(document.querySelector('[data-testid="wrapped-position"]')))?.[1]);
+    expect(total).toBeGreaterThanOrEqual(5);
+    expect(text(document.querySelector('[data-testid="wrapped-position"]'))).toBe(`1 из ${total}`);
+    await user.click(screen.getByRole('button', { name: 'Следующая карточка' }));
+    expect(text(document.querySelector('[data-testid="wrapped-position"]'))).toBe(`2 из ${total}`);
+    expect(text(document.querySelector('[data-testid="wrapped-totals"]'))).toContain(fmt(20_000));
+    await user.click(screen.getByRole('button', { name: 'Предыдущая карточка' }));
+    expect(text(document.querySelector('[data-testid="wrapped-position"]'))).toBe(`1 из ${total}`);
+    // до последней карточки и «Готово»
+    for (let i = 1; i < total; i++) await user.click(screen.getByRole('button', { name: 'Следующая карточка' }));
+    await user.click(screen.getByRole('button', { name: 'Закрыть итоги' }));
+    await waitFor(() => expect(dialog.isConnected).toBe(false));
+  });
+
+  it('у квартала и своих дат кнопки «Итоги года» нет', async () => {
+    await openPeriods('&kind=quarter&year=2026&q=3');
+    expect(document.querySelector('[data-testid="open-wrapped"]')).toBeNull();
+  });
 });

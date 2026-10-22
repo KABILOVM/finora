@@ -18,6 +18,7 @@ import { defaultDirection, groupDebts, overdueCount, remainingByCurrency, type D
 import { DIRECTION_LABEL } from './debtText';
 import { DebtList, Fold, SettledSection } from './DebtLists';
 import { DebtSheet } from './DebtSheet';
+import { SplitBillSheet } from './SplitBillSheet';
 import { PeopleList } from './PeopleList';
 import { groupByPerson, peopleWithOpenDebts } from './people';
 import { useDebtsData } from './useDebtsData';
@@ -81,6 +82,7 @@ export default function DebtsPage() {
   const [params, setParams] = useSearchParams();
   const dir = params.get('dir');
   const [sheet, setSheet] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const [busy, setBusy] = useState(false);
   const today = useToday();
   // Адрес называет вкладку — берём её. Не называет («Ещё → Долги») — ту, где есть открытые долги: у кого только «Я должен», не видит пустоту.
@@ -179,7 +181,10 @@ export default function DebtsPage() {
   return (
     <>
       {header}
-      <Segmented ariaLabel="Чьи долги" options={OPTIONS} value={view} onChange={setView} compact className="mb-4" />
+      <Segmented ariaLabel="Чьи долги" options={OPTIONS} value={view} onChange={setView} compact className="mb-2" />
+      <Button variant="ghost" icon="transfer" disabled={base === null} onClick={() => setSplitting(true)} className="mb-3">
+        Разделить счёт
+      </Button>
       {view === 'people' ? (
         people.length === 0 ? (
           <EmptyState icon="banknote" title="Открытых долгов нет" text="Здесь появятся люди, с которыми у вас есть долги: сколько они должны вам и сколько вы им." />
@@ -221,6 +226,8 @@ export default function DebtsPage() {
           )}
         </>
       )}
+
+      {splitting && base !== null && <SplitBillSheet base={base} onClose={() => setSplitting(false)} />}
 
       {sheet && base !== null && (
         <DebtSheet

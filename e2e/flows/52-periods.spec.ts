@@ -62,6 +62,24 @@ test.describe('52. Аналитика → «Периоды»', () => {
     await shot(page, '52-periods-flow-dark', testInfo);
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
 
+    // «Итоги года» карточками: листаются кнопками, на 320 px ничего не вылезает
+    await page.getByTestId('open-wrapped').click();
+    const wrapped = page.getByRole('dialog', { name: 'Итоги 2026 года' });
+    await expect(wrapped).toBeVisible();
+    await expect(wrapped.getByTestId('wrapped-intro')).toContainText('2026 год: итоги на сегодня');
+    await expect(wrapped.getByTestId('wrapped-position')).toContainText('1 из');
+    await shot(page, '52-wrapped-intro', testInfo);
+    await wrapped.getByRole('button', { name: 'Следующая карточка' }).click();
+    await expect(wrapped.getByTestId('wrapped-position')).toContainText('2 из');
+    await expect(wrapped.getByTestId('wrapped-totals')).toContainText(money('200 с.'));
+    await shot(page, '52-wrapped-totals', testInfo);
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await shot(page, '52-wrapped-totals-dark', testInfo);
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+    await noHorizontalScroll(page, 'Итоги года карточками');
+    await page.keyboard.press('Escape');
+    await expect(wrapped).toBeHidden();
+
     // квартал: стрелка к прошлому кварталу (июль–сентябрь: только транспорт 30)
     await page.getByRole('radio', { name: 'Квартал' }).click();
     await expect(summary(page)).toContainText('Расходы за 4-й квартал 2026');

@@ -83,14 +83,10 @@ export function wrappedFacts(txs: readonly Tx[], period: Pick<Period, 'from' | '
         if (run >= MIN_STREAK_DAYS && (streak === null || run > streak.days)) streak = { days: run, from: runFrom, to: d };
       }
     }
-    let best = -1;
     for (let w = 0; w < 7; w++) {
       if (counts[w]! < MIN_WEEKDAY_DAYS) continue;
       const avg = floorDiv(totals[w]!, counts[w]!);
-      if (avg > 0 && (best < 0 || avg > (weekday?.avgMinor ?? 0))) {
-        best = w;
-        weekday = { day: w, avgMinor: avg };
-      }
+      if (avg > 0 && (weekday === null || avg > weekday.avgMinor)) weekday = { day: w, avgMinor: avg };
     }
   }
   return { operations: human.length, biggest, weekday, streak };
@@ -206,7 +202,7 @@ export function wrappedCards(report: PeriodReport, facts: WrappedFacts, category
     if (pct !== null) {
       cards.push({
         id: 'compare',
-        heading: period.partial ? 'Против прошлого года' : 'Против прошлого года',
+        heading: 'Против прошлого года',
         big: [pct === 0 ? 'столько же' : pct > 0 ? `+${pct}%` : `−${-pct}%`],
         lines: [
           [pct === 0 ? 'расходов, сколько было' : pct > 0 ? 'больше расходов, чем' : 'меньше расходов, чем'],

@@ -1,12 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { useStore } from '@/db';
-import type { CurrencyCode } from '@/domain/types';
+import type { CurrencyCode, Transaction } from '@/domain/types';
 import { buildReport, comparePeriod, type CompareMode, type Period, type PeriodReport } from './periods';
 
 export interface PeriodReportData {
   base: CurrencyCode;
   report: PeriodReport;
+  /** Операции, по которым посчитан отчёт (период и сравниваемый): для того, чего в отчёте нет (самая крупная трата, серии дней). */
+  rows: readonly Transaction[];
 }
 
 /** undefined — читается или период не выбран; null — настроек ещё нет; { overflow } — суммы не помещаются в безопасное целое. */
@@ -33,7 +35,7 @@ export function usePeriodReport(period: Period | null, mode: CompareMode): Perio
     if (!period || loaded === undefined) return undefined;
     if (loaded === null) return null;
     try {
-      return { base: loaded.base, report: buildReport(loaded.rows, period, mode, loaded.base) };
+      return { base: loaded.base, report: buildReport(loaded.rows, period, mode, loaded.base), rows: loaded.rows };
     } catch (e) {
       if (e instanceof RangeError) return { overflow: true };
       throw e;
