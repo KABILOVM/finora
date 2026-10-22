@@ -13,7 +13,7 @@ beforeEach(async () => {
 });
 
 const draft = (over: Partial<DraftExpense>): DraftExpense => ({
-  rid: 1, title: 'Такси', amountText: '25', feeText: '', walletId: '', categoryId: '', newCategory: '', date: '2026-10-11', note: '', walletGuessed: false, ...over,
+  rid: 1, kind: 'expense', toWalletId: '', title: 'Такси', amountText: '25', feeText: '', walletId: '', categoryId: '', newCategory: '', date: '2026-10-11', note: '', walletGuessed: false, ...over,
 });
 
 async function setup(rate: number | null = 10.9): Promise<SaveContext> {
@@ -59,6 +59,64 @@ describe('saveExpenses', () => {
     await saveExpenses([d], ctx);
     await saveExpenses([d], ctx);
     expect((await store.db.transactions.toArray()).filter((t) => t.kind === 'expense')).toHaveLength(1);
+  });
+});
+
+describe('saveExpenses: доходы и переводы', () => {
+  it('доход: категория доходов создаётся один раз, сумма зачисляется на счёт; комиссия не прибавляется', async () => {
+    const ctx = await setup();
+    // известные приложению категории доходов (из базы): «Зарплата» уже есть, «Фриланс» — новая
+    ctx.incomeCategories = (await store.db.categories.toArray()).filter((c) => c.kind === 'income' && c.deletedAt === null).map((c) => ({ id: c.id, name: c.name }));
+    const tjs = ctx.wallets[0]!;
+    const r = await saveExpenses(
+      [
+        draft({ rid: 1, kind: 'income', title: 'Проект', amountText: '5000', feeText: '9', walletId: tjs.id, newCategory: 'Фриланс' }),
+        draft({ rid: 2, kind: 'income', title: 'Ещё проект', amountText: '1000', walletId: tjs.id, newCategory: 'Фриланс' }),
+        draft({ rid: 3, kind: 'income', title: 'Аванс', amountText: '700', walletId: tjs.id, newCategory: 'Зарплата' }),
+      ],
+      ctx,
+    );
+    expect(r.saved).toEqual([1, 2, 3]);
+    const rows = (await store.db.transactions.toArray()).filter((t) => t.kind === 'income').sort((a, b) => b.amountMinor - a.amountMinor);
+    expect(rows.map((t) => [t.amountMinor, t.note])).toEqual([[500_000, 'Проект'], [100_000, 'Ещё проект'], [70_000, 'Аванс']]);
+    const income = (await store.db.categories.toArray()).filter((c) => c.kind === 'income' && c.deletedAt === null);
+    expect(income.filter((c) => c.name === 'Фриланс')).toHaveLength(1); // создана один раз
+    expect(income.filter((c) => c.name === 'Зарплата')).toHaveLength(1); // существующая выбрана, не продублирована
+    expect(rows[0]!.categoryId).toBe(rows[1]!.categoryId);
+    expect(rows[2]!.categoryId).toBe(income.find((c) => c.name === 'Зарплата')!.id);
+  });
+
+  it('перевод между своими счетами одной валюты: списано сумма + комиссия, получено сумма', async () => {
+    const ctx = await setup();
+    const [tjs] = ctx.wallets;
+    const card = await store.wallets.create({ name: 'Карта', kind: 'card', currency: 'TJS', openingBalanceMinor: 0, color: '#2563eb', icon: 'wallet' });
+    ctx.wallets = [tjs!, card];
+    const r = await saveExpenses([draft({ rid: 1, kind: 'transfer', title: 'Снял наличные', amountText: '1000', feeText: '5', walletId: card.id, toWalletId: tjs!.id })], ctx);
+    expect(r.saved).toEqual([1]);
+    const t = (await store.db.transactions.toArray()).find((x) => x.kind === 'transfer')!;
+    expect(t).toMatchObject({ walletId: card.id, toWalletId: tjs!.id, amountMinor: 100_500, toAmountMinor: 100_000, baseAmountMinor: 500, categoryId: null });
+  });
+
+  it('перевод в валютном кошельке без комиссии записывается без курса; с комиссией курс нужен', async () => {
+    const ctx = await setup(null); // курса USD нет
+    const usd = ctx.wallets[1]!;
+    const usd2 = await store.wallets.create({ name: 'Доллары 2', kind: 'cash', currency: 'USD', openingBalanceMinor: 0, color: '#16a34a', icon: 'wallet' });
+    ctx.wallets = [...ctx.wallets, usd2];
+    const free = draft({ rid: 1, kind: 'transfer', amountText: '10', walletId: usd.id, toWalletId: usd2.id });
+    const withFee = draft({ rid: 2, kind: 'transfer', amountText: '10', feeText: '1', walletId: usd.id, toWalletId: usd2.id });
+    expect([...validateAll([free, withFee], ctx).keys()]).toEqual([2]);
+    expect((await saveExpenses([free], ctx)).saved).toEqual([1]);
+  });
+
+  it('перевод без счёта назначения или между валютами не проходит проверку', async () => {
+    const ctx = await setup();
+    const [tjs, usd] = ctx.wallets;
+    const errs = validateAll(
+      [draft({ rid: 1, kind: 'transfer', walletId: tjs!.id, toWalletId: '' }), draft({ rid: 2, kind: 'transfer', walletId: tjs!.id, toWalletId: usd!.id })],
+      ctx,
+    );
+    expect(errs.get(1)).toMatch(/Выберите счёт, куда/);
+    expect(errs.get(2)).toMatch(/разных валютах/);
   });
 });
 

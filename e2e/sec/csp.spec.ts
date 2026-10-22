@@ -38,7 +38,7 @@ test.describe('Статика: vercel.json и index.html', () => {
     expect(h['cross-origin-opener-policy']).toBe('same-origin');
     const pp = h['permissions-policy'] ?? '';
     expect(pp, 'camera').toContain('camera=()');
-    // микрофон — только само приложение («Продиктовать» в покупках и «Продиктовать расходы»); чужим источникам и «*» нельзя
+    // микрофон — только само приложение («Продиктовать» в покупках и «Продиктовать операции»); чужим источникам и «*» нельзя
     expect(pp, 'microphone').toMatch(/(^|,\s*)microphone=\(self\)\s*(,|$)/);
     // местоположение — только само приложение и только по нажатию «Определить место» (погода); чужим фреймам нельзя
     expect(pp, 'geolocation').toContain('geolocation=(self)');

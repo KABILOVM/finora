@@ -14,11 +14,13 @@ import type { SaveResult } from './saveExpenses';
 export interface DictateExpensesSheetProps {
   wallets: readonly LocalRow<Wallet>[];
   categories: readonly DictCategory[];
+  /** Категории доходов. */
+  incomeCategories?: readonly DictCategory[];
   defaultWalletId: string;
   today: string;
   /** Разобрать набранный текст (облачная функция с ИИ). Бросает Error с понятным текстом. */
   parse: (text: string, ctx: DictContext, firstRid: number) => Promise<AiExpensesResult>;
-  /** Отправить запись голоса: сервер слушает её и возвращает расшифровку и расходы. */
+  /** Отправить запись голоса: сервер слушает её и возвращает расшифровку и операции. */
   listen: (rec: Recording, ctx: DictContext, firstRid: number) => Promise<AiExpensesResult>;
   /** Проверить строки без записи: rid → ошибка. */
   validate: (drafts: readonly DraftExpense[]) => Map<number, string>;
@@ -26,20 +28,23 @@ export interface DictateExpensesSheetProps {
   save: (drafts: readonly DraftExpense[]) => Promise<SaveResult>;
   startRecording?: StartRecorder;
   canRecord?: boolean;
-  /** Закрыть окно. saved — сколько расходов сохранено. */
+  /** Перейти к «Чеку по позициям» (фото чека или ввод позиций): кнопка есть, только если передан обработчик. */
+  onReceipt?: () => void;
+  /** Закрыть окно. saved — сколько операций сохранено. */
   onClose: (saved: number) => void;
 }
 
-/** Дольше запись не нужна: рассказ о расходах за день укладывается в несколько минут. */
+/** Дольше запись не нужна: рассказ об операциях за день укладывается в несколько минут. */
 const MAX_SECONDS = 240;
 
 /**
- * «Продиктовать расходы»: человек рассказывает о расходах (или набирает текст), ИИ делает список расходов со счётом, категорией,
- * датой, заметкой и комиссией. Список можно поправить; «Сохранить» записывает каждую строку отдельным расходом.
+ * «Продиктовать операции»: человек рассказывает о расходах, доходах и переводах (или набирает текст), ИИ делает список операций со
+ * счётом, категорией, датой, заметкой и комиссией. Список можно поправить; «Сохранить» записывает каждую строку отдельной операцией.
  */
 export function DictateExpensesSheet({
   wallets,
   categories,
+  incomeCategories = [],
   defaultWalletId,
   today,
   parse,
@@ -48,6 +53,7 @@ export function DictateExpensesSheet({
   save,
   startRecording = startRecorder,
   canRecord = recordingSupported(),
+  onReceipt,
   onClose,
 }: DictateExpensesSheetProps) {
   const [text, setText] = useState('');
@@ -68,10 +74,11 @@ export function DictateExpensesSheet({
     () => ({
       wallets: wallets.map((w) => ({ id: w.id, name: w.name, currency: w.currency })),
       categories,
+      incomeCategories,
       defaultWalletId,
       today: today as DictContext['today'],
     }),
-    [wallets, categories, defaultWalletId, today],
+    [wallets, categories, incomeCategories, defaultWalletId, today],
   );
 
   const accept = (r: AiExpensesResult) => {
@@ -89,7 +96,7 @@ export function DictateExpensesSheet({
     try {
       accept(await parse(text, ctx, nextRid.current));
     } catch (e) {
-      fail(e, 'Не удалось разобрать расходы. Попробуйте ещё раз.');
+      fail(e, 'Не удалось разобрать операции. Попробуйте ещё раз.');
     } finally {
       busy.current = false;
       setParsing(false);
@@ -168,7 +175,7 @@ export function DictateExpensesSheet({
         setError(`Сохранено ${savedCount.current}, остальные не удалось: ${r.failed.message}`);
       }
     } catch (e) {
-      fail(e, 'Не удалось сохранить расходы. Попробуйте ещё раз.');
+      fail(e, 'Не удалось сохранить операции. Попробуйте ещё раз.');
     } finally {
       busy.current = false;
       setSaving(false);
@@ -182,7 +189,7 @@ export function DictateExpensesSheet({
       open
       onClose={() => onClose(savedCount.current)}
       dismissible={!saving && !parsing && phase !== 'listening'}
-      title="Продиктовать расходы"
+      title="Продиктовать операции"
       footer={
         <div className="flex flex-col gap-2">
           {error && (
@@ -196,7 +203,7 @@ export function DictateExpensesSheet({
             </Button>
           ) : ready ? (
             <Button size="lg" fullWidth loading={saving} onClick={() => void saveAll()}>
-              {`Сохранить ${drafts.length} ${pluralRu(drafts.length, 'расход', 'расхода', 'расходов')}`}
+              {`Сохранить ${drafts.length} ${pluralRu(drafts.length, 'операцию', 'операции', 'операций')}`}
             </Button>
           ) : (
             <Button size="lg" fullWidth loading={parsing} disabled={text.trim() === '' || tooLong} onClick={() => void run()}>
@@ -217,8 +224,8 @@ export function DictateExpensesSheet({
         )}
         <div className={phase === 'recording' ? 'hidden' : undefined}>
           <TextArea
-            label="Что потратили"
-            hint="Нажмите «Продиктовать» и расскажите как удобно: «такси двадцать пять сомони, продукты в Корзинке триста картой Алиф, комиссия пять». Или наберите текст"
+            label="Что произошло"
+            hint="Нажмите «Продиктовать» и расскажите как удобно: «такси двадцать пять сомони, продукты в Корзинке триста картой Алиф, комиссия пять, получил зарплату пять тысяч, перевёл с карты на наличные тысячу». Или наберите текст"
             value={text}
             onChange={(e) => {
               setText(e.target.value);
@@ -238,19 +245,25 @@ export function DictateExpensesSheet({
             Продиктовать
           </Button>
         )}
+        {onReceipt && phase !== 'recording' && !ready && (
+          <Button variant="ghost" icon="list" disabled={phase === 'listening' || parsing || saving} onClick={onReceipt}>
+            Чек по позициям (фото или вручную)
+          </Button>
+        )}
         {drafts !== null && drafts.length === 0 && (
           <p role="status" className="text-sm text-muted">
-            Не нашёл расходов. Назовите, на что и сколько потратили: «такси двадцать пять».
+            Не нашёл операций. Назовите, что произошло и на какую сумму: «такси двадцать пять», «получил зарплату пять тысяч».
           </p>
         )}
         {ready && (
           <section aria-label="Что будет сохранено" data-testid="parsed-expenses">
-            <h3 className="mb-1 text-sm font-semibold text-muted">Будет сохранено · нажмите расход, чтобы поправить</h3>
+            <h3 className="mb-1 text-sm font-semibold text-muted">Будет сохранено · нажмите операцию, чтобы поправить</h3>
             <DraftExpensesEditor
               drafts={drafts}
               onChange={(next) => setDrafts(next.length > 0 ? next : null)}
               wallets={wallets}
               categories={categories}
+              incomeCategories={incomeCategories}
               today={today}
               errors={errors}
             />

@@ -43,7 +43,7 @@ export interface TxFormFieldsProps {
   wallets: readonly LocalRow<Wallet>[];
   /** Категории нужного вида, уже упорядоченные: самые частые первыми. */
   categories: readonly ChipOption[];
-  /** Кнопка справа от переключателя вида (например, «Продиктовать расходы»): не удлиняет форму. */
+  /** Кнопка справа от переключателя вида (например, «Продиктовать операции»): не удлиняет форму. */
   kindAction?: ReactNode;
   /** Новая операция: что сказано про категорию (см. ContextRow). */
   categoryState?: CategoryState;

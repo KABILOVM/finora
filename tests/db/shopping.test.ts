@@ -249,3 +249,95 @@ describe('резервная копия: список покупок', () => {
     expect(await b.db.shopping_items.count()).toBe(0);
   });
 });
+
+describe('ShoppingRepo.recordReceipt: чек по фото или вручную', () => {
+  const lines = [
+    { name: 'Молоко', qtyMilli: 2000, unit: 'l', priceMinor: 2600 },
+    { name: 'Яблоки', qtyMilli: 1400, unit: 'kg', priceMinor: 1820 },
+    { name: 'Хлеб', qtyMilli: 3000, unit: 'pcs', priceMinor: 1050 },
+  ] as const;
+
+  async function setup() {
+    const store = await makeStore();
+    const b = await basics(store);
+    return { store, ...b };
+  }
+
+  it('ОДИН расход на сумму позиций; позиции — купленные, в чеке этого расхода; память цен их видит', async () => {
+    const { store, cash, food } = await setup();
+    const res = await store.shopping.recordReceipt({ walletId: cash.id, categoryId: food.id, occurredOn: '2026-10-10', note: 'Корзинка', lines });
+    expect(res.transaction).toMatchObject({ kind: 'expense', walletId: cash.id, categoryId: food.id, amountMinor: 5470, baseAmountMinor: 5470, occurredOn: '2026-10-10', note: 'Корзинка' });
+    expect(res.items).toHaveLength(3);
+    const rows = await store.db.shopping_items.where('transactionId').equals(res.transaction.id).toArray();
+    expect(rows.map((i) => [i.name, i.qtyMilli, i.unit, i.priceMinor]).sort()).toEqual([
+      ['Молоко', 2000, 'l', 2600],
+      ['Хлеб', 3000, 'pcs', 1050],
+      ['Яблоки', 1400, 'kg', 1820],
+    ]);
+    for (const i of rows) expect(i).toMatchObject({ checkedAt: expect.any(String), purchasedAt: expect.any(String), deletedAt: null, dirty: 1, serverSeq: null });
+    // цена за единицу запомнена: 26,00 за 2 л → 13,00 за л
+    expect(priceMemory(rows).get(priceKey('Молоко', 'l'))).toBe(1300);
+    // кошелёк уменьшился на сумму чека
+    const { computeBalances } = await import('@/domain/balances');
+    const wallets = (await store.db.wallets.toArray()).filter((w) => w.deletedAt === null);
+    expect(computeBalances(wallets, await store.db.transactions.toArray()).get(cash.id)).toBe(100_000 - 5470);
+  });
+
+  it('позиции без отметки в списке покупок не трогаются: чек не берёт их из списка', async () => {
+    const { store, cash } = await setup();
+    const open = await store.shopping.add(milk);
+    await store.shopping.recordReceipt({ walletId: cash.id, categoryId: null, occurredOn: '2026-10-10', lines });
+    expect((await store.db.shopping_items.get(open.id))?.purchasedAt).toBeNull();
+  });
+
+  it('повтор с тем же txId (двойное нажатие) возвращает созданное и ничего не задваивает', async () => {
+    const { store, cash } = await setup();
+    const txId = '55555555-5555-4555-8555-555555555555';
+    const a = await store.shopping.recordReceipt({ walletId: cash.id, categoryId: null, occurredOn: '2026-10-10', txId, lines });
+    const b = await store.shopping.recordReceipt({ walletId: cash.id, categoryId: null, occurredOn: '2026-10-10', txId, lines });
+    expect(b.transaction.id).toBe(a.transaction.id);
+    expect(b.items).toHaveLength(3);
+    expect(await store.db.shopping_items.count()).toBe(3);
+    expect(await store.db.transactions.count()).toBe(1);
+  });
+
+  it.each([
+    ['пустой чек', [], /нет позиций/],
+    ['пустое название', [{ name: ' ', qtyMilli: 1000, unit: 'pcs', priceMinor: 100 }], /Название/],
+    ['неизвестная единица', [{ name: 'а', qtyMilli: 1000, unit: 'box', priceMinor: 100 }], /Единица/],
+    ['дробная цена', [{ name: 'а', qtyMilli: 1000, unit: 'pcs', priceMinor: 1.5 }], /Цена/],
+    ['отрицательная цена', [{ name: 'а', qtyMilli: 1000, unit: 'pcs', priceMinor: -1 }], /Цена/],
+    ['нулевая сумма чека', [{ name: 'а', qtyMilli: 1000, unit: 'pcs', priceMinor: 0 }], /Сумма чека/],
+  ])('отвергает: %s — расход и позиции не создаются', async (_n, bad, msg) => {
+    const { store, cash } = await setup();
+    await expect(store.shopping.recordReceipt({ walletId: cash.id, categoryId: null, occurredOn: '2026-10-10', lines: bad as never })).rejects.toThrow(msg);
+    expect(await store.db.transactions.count()).toBe(0);
+    expect(await store.db.shopping_items.count()).toBe(0);
+  });
+
+  it('кошелёк в другой валюте, категория доходов и служебные поля позиции — отказ', async () => {
+    const { store, cash, usd, salary } = await setup();
+    await expect(store.shopping.recordReceipt({ walletId: usd.id, categoryId: null, occurredOn: '2026-10-10', lines })).rejects.toThrow(/основной валюте/);
+    await expect(store.shopping.recordReceipt({ walletId: cash.id, categoryId: salary.id, occurredOn: '2026-10-10', lines })).rejects.toThrow(/категория расходов/);
+    await expect(store.shopping.recordReceipt({ walletId: cash.id, categoryId: null, occurredOn: '2026-10-10', lines: [{ ...lines[0], purchasedAt: 'x' } as never] })).rejects.toThrow(/менять нельзя/);
+    expect(await store.db.transactions.count()).toBe(0);
+  });
+
+  it('не вышло создать расход (кошелёк в архиве) — позиции не остаются', async () => {
+    const { store, cash } = await setup();
+    await store.wallets.archive(cash.id);
+    await expect(store.shopping.recordReceipt({ walletId: cash.id, categoryId: null, occurredOn: '2026-10-10', lines })).rejects.toBeInstanceOf(ValidationError);
+    expect(await store.db.shopping_items.count()).toBe(0);
+  });
+
+  it('позиции чека проходят через резервную копию: после импорта чек на месте', async () => {
+    const { store, cash } = await setup();
+    const res = await store.shopping.recordReceipt({ walletId: cash.id, categoryId: null, occurredOn: '2026-10-10', lines });
+    const file = await exportBackup(store);
+    expect(file.shoppingItems).toHaveLength(3);
+    const other = await makeStore({ userId: '11111111-1111-4111-8111-111111111111' });
+    await importBackup(other, JSON.parse(JSON.stringify(file)));
+    const rows = await other.db.shopping_items.where('transactionId').equals(res.transaction.id).toArray();
+    expect(rows).toHaveLength(3);
+  });
+});

@@ -6,7 +6,8 @@ import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { IconSelect } from '@/components/IconSelect';
 import { MoneyText } from '@/components/MoneyText';
-import { CATEGORY_NAME_MAX, checkDraft, type DictCategory, type DraftExpense } from '@/domain/expensesAi';
+import { Segmented } from '@/components/Segmented';
+import { CATEGORY_NAME_MAX, checkDraft, type DictCategory, type DictKind, type DraftExpense } from '@/domain/expensesAi';
 import { currencyInfo } from '@/domain/currency';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { suggestGlyph } from '@/features/categories/suggestGlyph';
@@ -18,11 +19,20 @@ export interface DraftExpensesEditorProps {
   drafts: readonly DraftExpense[];
   onChange: (drafts: DraftExpense[]) => void;
   wallets: readonly LocalRow<Wallet>[];
+  /** Категории расходов. */
   categories: readonly DictCategory[];
+  /** Категории доходов. */
+  incomeCategories?: readonly DictCategory[];
   today: string;
   /** Ошибки сохранения по номеру строки (поверх проверки полей). */
   errors?: ReadonlyMap<number, string>;
 }
+
+const KINDS: readonly { value: DictKind; label: string; tone: 'expense' | 'income' | 'brand' }[] = [
+  { value: 'expense', label: 'Расход', tone: 'expense' },
+  { value: 'income', label: 'Доход', tone: 'income' },
+  { value: 'transfer', label: 'Перевод', tone: 'brand' },
+];
 
 const NEW_PREFIX = '__new__';
 const NO_CATEGORY = '__none__';
@@ -50,7 +60,7 @@ function Pill({ children, dashed, tone }: { children: React.ReactNode; dashed?: 
  * «+ Новая категория» внутри списка категорий: пишете название — значок подберётся сам. Такая уже есть — выбирается она.
  * Категория создаётся при сохранении расходов, поэтому здесь запоминается только название.
  */
-function NewCategory({
+export function NewCategory({
   existing,
   onPick,
   onCreate,
@@ -130,29 +140,42 @@ function NewCategory({
 }
 
 /**
- * Список расходов из диктовки: у каждого расхода крупный значок категории, под названием — счёт (со значком), категория и дата,
+ * Список операций из диктовки (расходы, доходы, переводы): у каждой крупный значок категории, под названием — счёт (со значком), категория и дата,
  * справа сумма. Строку можно открыть и поправить (название, сумма, комиссия, счёт, категория значками, дата, заметка) или убрать.
  * Сумма и комиссия — в валюте выбранного счёта; в расход сохраняется сумма вместе с комиссией.
  */
-export function DraftExpensesEditor({ drafts, onChange, wallets, categories, today, errors }: DraftExpensesEditorProps) {
+export function DraftExpensesEditor({ drafts, onChange, wallets, categories, incomeCategories = [], today, errors }: DraftExpensesEditorProps) {
   const [open, setOpen] = useState<number | null>(null);
   const patch = (rid: number, p: Partial<DraftExpense>) => onChange(drafts.map((d) => (d.rid === rid ? { ...d, ...p } : d)));
   const remove = (rid: number) => onChange(drafts.filter((d) => d.rid !== rid));
   const walletChoices = walletOptions(wallets);
-  const categoryChoices: ChipOption[] = [
+  const choicesOf = (list: readonly DictCategory[]): ChipOption[] => [
     { value: NO_CATEGORY, label: 'Без категории', icon: TAG },
-    ...categories.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color })),
+    ...list.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color })),
   ];
+  const expenseChoices = choicesOf(categories);
+  const incomeChoices = choicesOf(incomeCategories);
+  // смена вида: категория прежнего вида не подходит, перевод без счёта назначения ждёт выбора
+  const setKind = (d: DraftExpense, kind: DictKind) =>
+    patch(d.rid, {
+      kind,
+      categoryId: '',
+      newCategory: '',
+      toWalletId: kind === 'transfer' ? (wallets.find((w) => w.id !== d.walletId && w.currency === wallets.find((x) => x.id === d.walletId)?.currency)?.id ?? '') : '',
+    });
 
   return (
     <ul className="flex flex-col gap-2">
       {drafts.map((d) => {
         const wallet = wallets.find((w) => w.id === d.walletId);
-        const check = checkDraft(d, wallet?.currency);
+        const toWallet = d.kind === 'transfer' ? wallets.find((w) => w.id === d.toWalletId) : undefined;
+        const check = checkDraft(d, wallet?.currency, toWallet?.currency);
         const error = errors?.get(d.rid) ?? check.error;
-        const category = d.categoryId ? categories.find((c) => c.id === d.categoryId) : undefined;
+        const list = d.kind === 'income' ? incomeCategories : categories;
+        const choices = d.kind === 'income' ? incomeChoices : expenseChoices;
+        const category = d.categoryId ? list.find((c) => c.id === d.categoryId) : undefined;
         const fresh = !category && d.newCategory ? d.newCategory : null;
-        const catName = category?.name ?? (fresh ? `${fresh} · новая` : 'Без категории');
+        const catName = d.kind === 'transfer' ? 'Перевод' : (category?.name ?? (fresh ? `${fresh} · новая` : 'Без категории'));
         const catIcon = category?.icon ?? (fresh ? suggestGlyph(fresh) : TAG);
         const isOpen = open === d.rid;
         const label = d.title || 'Без названия';
@@ -173,7 +196,13 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                 onClick={() => setOpen(isOpen ? null : d.rid)}
                 className="flex min-h-[64px] min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 text-left active:bg-surface-2"
               >
-                <Glyph value={catIcon} color={category?.color} size={44} className={fresh ? 'opacity-80' : undefined} />
+                {d.kind === 'transfer' ? (
+                  <span aria-hidden="true" className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-brand/10 text-brand">
+                    <Icon name="transfer" size={22} />
+                  </span>
+                ) : (
+                  <Glyph value={catIcon} color={category?.color} size={44} className={fresh ? 'opacity-80' : undefined} />
+                )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-base font-bold">{label}</span>
                   <span className="mt-1 flex flex-wrap items-center gap-1">
@@ -184,14 +213,27 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                       {wallet ? <Glyph value={wallet.icon ?? '👛'} color={wallet.color} size={16} /> : null}
                       <span className="truncate">{wallet ? wallet.name : 'Счёт не выбран'}</span>
                     </Pill>
+                    {d.kind === 'transfer' && (
+                      <Pill dashed={!toWallet}>
+                        <span aria-hidden="true">→</span>
+                        {toWallet ? <Glyph value={toWallet.icon ?? '👛'} color={toWallet.color} size={16} /> : null}
+                        <span className="truncate">{toWallet ? toWallet.name : 'Куда?'}</span>
+                      </Pill>
+                    )}
                   </span>
                   {error && <span className="mt-1 block text-xs font-semibold text-danger">{error}</span>}
                 </span>
                 <span className="shrink-0 text-right">
                   {wallet && check.totalMinor !== null ? (
                     <>
-                      <MoneyText minor={-check.totalMinor} currency={wallet.currency} tone="expense" className="text-lg font-bold" />
-                      {check.feeMinor > 0 && <span className="block text-xs text-muted">с комиссией</span>}
+                      <MoneyText
+                        minor={d.kind === 'expense' ? -check.totalMinor : (check.receivedMinor ?? check.totalMinor)}
+                        currency={wallet.currency}
+                        tone={d.kind === 'expense' ? 'expense' : d.kind === 'income' ? 'income' : 'none'}
+                        sign={d.kind === 'income' ? 'always' : undefined}
+                        className="text-lg font-bold"
+                      />
+                      {check.feeMinor > 0 && <span className="block text-xs text-muted">{d.kind === 'transfer' ? 'и комиссия' : 'с комиссией'}</span>}
                     </>
                   ) : (
                     <span className="block text-lg text-muted">—</span>
@@ -204,6 +246,13 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
             </div>
             {isOpen && (
               <div className="flex flex-col gap-2 border-t border-border/60 px-3 pb-3 pt-2">
+                <Segmented
+                  ariaLabel={`Вид: ${label}`}
+                  options={KINDS}
+                  value={d.kind}
+                  onChange={(kind) => setKind(d, kind)}
+                  compact
+                />
                 <TextInput label="Название" value={d.title} maxLength={80} onChange={(e) => patch(d.rid, { title: e.target.value })} />
                 <div className="grid grid-cols-2 gap-2">
                   <TextInput
@@ -212,25 +261,40 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                     value={d.amountText}
                     onChange={(e) => patch(d.rid, { amountText: e.target.value.replace('.', ',') })}
                   />
-                  <TextInput
-                    label="Комиссия"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={d.feeText}
-                    onChange={(e) => patch(d.rid, { feeText: e.target.value.replace('.', ',') })}
-                  />
+                  {d.kind !== 'income' && (
+                    <TextInput
+                      label="Комиссия"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={d.feeText}
+                      onChange={(e) => patch(d.rid, { feeText: e.target.value.replace('.', ',') })}
+                    />
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-semibold">Счёт</span>
+                    <span className="text-sm font-semibold">{d.kind === 'transfer' ? 'Откуда' : 'Счёт'}</span>
                     <IconSelect
                       size="sm"
-                      label="Счёт"
+                      label={d.kind === 'transfer' ? 'Откуда' : 'Счёт'}
                       options={walletChoices}
                       value={d.walletId}
-                      onChange={(id) => patch(d.rid, { walletId: id, walletGuessed: false })}
+                      onChange={(id) => patch(d.rid, { walletId: id, walletGuessed: false, ...(id === d.toWalletId ? { toWalletId: '' } : {}) })}
                     />
                   </div>
+                  {d.kind === 'transfer' ? (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-sm font-semibold">Куда</span>
+                      <IconSelect
+                        size="sm"
+                        align="right"
+                        label="Куда"
+                        options={walletChoices.filter((o) => o.value !== d.walletId)}
+                        value={d.toWalletId}
+                        onChange={(id) => patch(d.rid, { toWalletId: id })}
+                      />
+                    </div>
+                  ) : (
                   <div className="flex flex-col gap-1.5">
                     <span className="text-sm font-semibold">Категория</span>
                     <IconSelect
@@ -241,7 +305,7 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                         ...(d.newCategory
                           ? [{ value: NEW_PREFIX, label: `Новая: ${d.newCategory}`, icon: suggestGlyph(d.newCategory) }]
                           : []),
-                        ...categoryChoices,
+                        ...choices,
                       ]}
                       value={d.categoryId || (d.newCategory ? NEW_PREFIX : NO_CATEGORY)}
                       onChange={(v) => {
@@ -250,7 +314,7 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                       }}
                       footer={(close) => (
                         <NewCategory
-                          existing={categories}
+                          existing={list}
                           onPick={(id) => {
                             patch(d.rid, { categoryId: id, newCategory: '' });
                             close();
@@ -263,6 +327,7 @@ export function DraftExpensesEditor({ drafts, onChange, wallets, categories, tod
                       )}
                     />
                   </div>
+                  )}
                 </div>
                 {/* у поля-календаря на iPhone своя минимальная ширина: без ограничений оно вылезает за край окна */}
                 <div className="grid grid-cols-2 gap-2">

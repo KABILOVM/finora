@@ -4,6 +4,10 @@ import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { IconButton } from '@/components/IconButton';
 import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
+import { parseReceiptWithAi, prepareReceiptImage } from '@/features/receipt/aiReceipt';
+import { ReceiptSheet } from '@/features/receipt/ReceiptSheet';
+import { saveReceipt, undoReceipt } from '@/features/receipt/saveReceipt';
+import { checkReceipt } from '@/features/receipt/receiptAi';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
 import { useRates } from '@/rates/hooks';
@@ -143,10 +147,17 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   });
   const { getRate } = useRates();
   const [dictating, setDictating] = useState(false);
+  const [receipting, setReceipting] = useState(false);
+  // номера расходов «Чека по позициям» по ключу категории: повтор после сбоя не создаёт дублей
+  const receiptIds = useRef(new Map<string, string>());
   // Номера операций и новые категории из диктовки живут, пока открыт шит: повтор после сбоя не создаёт дублей.
-  const dictation = useRef({ txIds: new Map<number, string>(), categories: [] as DictCategory[] });
+  const dictation = useRef({ txIds: new Map<number, string>(), categories: [] as DictCategory[], incomeCategories: [] as DictCategory[] });
   const expenseCategories = useMemo(
     () => categories.filter((x) => x.kind === 'expense').map((x) => ({ id: x.id, name: x.name, icon: x.icon, color: x.color })),
+    [categories],
+  );
+  const incomeCategoriesList = useMemo(
+    () => categories.filter((x) => x.kind === 'income').map((x) => ({ id: x.id, name: x.name, icon: x.icon, color: x.color })),
     [categories],
   );
   const c = useTxFormController({ mode: 'add', initial, wallets, allWallets: wallets, base: settings.baseCurrency });
@@ -347,31 +358,60 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     }
   };
 
-  if (dictating) {
+  if (dictating || receipting) {
     // один общий список: категории, созданные при сохранении, попадают в него и не дублируются при повторе
     const known = dictation.current.categories;
     for (const x of expenseCategories) if (!known.some((k) => k.id === x.id)) known.push(x);
+    const knownIncome = dictation.current.incomeCategories;
+    for (const x of incomeCategoriesList) if (!knownIncome.some((k) => k.id === x.id)) knownIncome.push(x);
     const ctx = () => ({
       store,
       wallets,
       categories: known,
+      incomeCategories: knownIncome,
       base: settings.baseCurrency,
       getRate,
       txIds: dictation.current.txIds,
     });
+    if (receipting) {
+      return (
+        <ReceiptSheet
+          wallets={wallets}
+          base={settings.baseCurrency}
+          categories={[...known]}
+          defaultWalletId={c.form.walletId ?? ''}
+          today={todayLocal()}
+          analyze={async (file, rctx, rid) => parseReceiptWithAi(await prepareReceiptImage(file), rctx, rid)}
+          save={(draft, walletId) => saveReceipt(draft, checkReceipt(draft, settings.baseCurrency), { store, walletId, categories: known, txIds: receiptIds.current })}
+          undo={(created) => undoReceipt(store, created)}
+          onClose={(saved) => {
+            if (saved > 0) {
+              onSaved();
+              setFinished(true);
+              onClose();
+            } else setReceipting(false);
+          }}
+        />
+      );
+    }
     return (
       <DictateExpensesSheet
         wallets={wallets}
         categories={[...known]}
+        incomeCategories={[...knownIncome]}
         defaultWalletId={c.form.walletId ?? ''}
         today={todayLocal()}
         parse={(text, dctx, rid) => parseExpensesWithAi(text, dctx, rid)}
         listen={(rec, dctx, rid) => listenToExpensesWithAi(rec, dctx, rid)}
         validate={(drafts) => validateAll(drafts, ctx())}
         save={(drafts) => saveExpenses(drafts, ctx())}
+        onReceipt={() => {
+          setDictating(false);
+          setReceipting(true);
+        }}
         onClose={(saved) => {
           if (saved > 0) {
-            toast.success(`Сохранено расходов: ${saved}`);
+            toast.success(`Сохранено операций: ${saved}`);
             onSaved();
             setFinished(true);
             onClose();
@@ -433,10 +473,10 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
             <span className="h-11 w-11 shrink-0">
-              {kind === 'expense' && <IconButton icon="mic" variant="secondary" label="Продиктовать расходы" onClick={() => {
-                    setCategoryState((st) => (st === 'nudged' ? 'untouched' : st)); // напоминание не возвращается вместе с формой
-                    setDictating(true);
-                  }} />}
+              <IconButton icon="mic" variant="secondary" label="Продиктовать операции" onClick={() => {
+                setCategoryState((st) => (st === 'nudged' ? 'untouched' : st)); // напоминание не возвращается вместе с формой
+                setDictating(true);
+              }} />
             </span>
           }
         />

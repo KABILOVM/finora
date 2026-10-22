@@ -11,6 +11,10 @@ const ctx: DictContext = {
     { id: 'c1', name: 'Продукты' },
     { id: 'c2', name: 'Транспорт' },
   ],
+  incomeCategories: [
+    { id: 'i1', name: 'Зарплата' },
+    { id: 'i2', name: 'Подарки' },
+  ],
   defaultWalletId: 'w1',
   today: '2026-10-12',
 };
@@ -48,8 +52,77 @@ describe('normalizeAiExpenses', () => {
   });
 });
 
+describe('normalizeAiExpenses: доходы и переводы', () => {
+  it('доход: категория берётся из категорий доходов, счёт — тот, на который пришли деньги', () => {
+    const [a, b] = normalizeAiExpenses(
+      [
+        { kind: 'income', title: 'зарплата', amount: 5000, wallet: 'карта алиф', toWallet: '', category: 'Зарплата', fee: 0, date: '', note: '' },
+        { kind: 'income', title: 'бонус', amount: 300, wallet: '', toWallet: '', category: 'Премии', fee: 0, date: '', note: '' },
+      ],
+      ctx,
+    );
+    expect(a).toMatchObject({ kind: 'income', title: 'Зарплата', amountText: '5000', walletId: 'w2', categoryId: 'i1', newCategory: '', toWalletId: '' });
+    expect(b).toMatchObject({ kind: 'income', categoryId: '', newCategory: 'Премии' });
+  });
+
+  it('доход не берёт категорию расходов с тем же названием', () => {
+    const [a] = normalizeAiExpenses([{ kind: 'income', title: 'возврат', amount: 100, wallet: '', category: 'Продукты', fee: 0, date: '', note: '' }], ctx);
+    expect(a).toMatchObject({ categoryId: '', newCategory: 'Продукты' });
+  });
+
+  it('перевод: откуда и куда — свои счета, категории нет, комиссия на месте', () => {
+    const [a] = normalizeAiExpenses(
+      [{ kind: 'transfer', title: 'снял наличные', amount: 1000, wallet: 'карта алиф', toWallet: 'наличные', category: 'Транспорт', fee: 5, date: '2026-10-11', note: '' }],
+      ctx,
+    );
+    expect(a).toMatchObject({ kind: 'transfer', walletId: 'w2', toWalletId: 'w1', categoryId: '', newCategory: '', feeText: '5', date: '2026-10-11', title: 'Снял наличные' });
+  });
+
+  it('перевод: «куда» совпало с «откуда» или не названо — оставляем пустым, а без названия строка зовётся «Перевод»', () => {
+    const [a, b] = normalizeAiExpenses(
+      [
+        { kind: 'transfer', title: '', amount: 100, wallet: 'наличные', toWallet: 'наличные', category: '', fee: 0, date: '', note: '' },
+        { kind: 'transfer', title: 'на карту', amount: 100, wallet: 'доллары', toWallet: 'такого нет', category: '', fee: 0, date: '', note: '' },
+      ],
+      ctx,
+    );
+    expect(a).toMatchObject({ kind: 'transfer', title: 'Перевод', walletId: 'w1', toWalletId: '' });
+    expect(b).toMatchObject({ walletId: 'w3', toWalletId: '' });
+  });
+
+  it('вид, которого нет в списке, — расход; старый ответ без kind тоже расход', () => {
+    const rows = normalizeAiExpenses(
+      [
+        { kind: 'долг', title: 'а', amount: 1, wallet: '', category: '', fee: 0, date: '', note: '' },
+        { title: 'б', amount: 2, wallet: '', category: '', fee: 0, date: '', note: '' },
+      ],
+      ctx,
+    );
+    expect(rows.map((r) => [r.kind, r.toWalletId])).toEqual([['expense', ''], ['expense', '']]);
+  });
+});
+
+describe('checkDraft: доход и перевод', () => {
+  const base: DraftExpense = { rid: 1, kind: 'expense', toWalletId: '', title: 'x', amountText: '100', feeText: '2', walletId: 'w1', categoryId: '', newCategory: '', date: '2026-10-12', note: '', walletGuessed: false };
+
+  it('доход: комиссия не учитывается, даже если осталась от прежнего вида строки', () => {
+    expect(checkDraft({ ...base, kind: 'income' }, 'TJS')).toEqual({ totalMinor: 10_000, feeMinor: 0, error: null });
+  });
+
+  it('перевод: списано сумма + комиссия, получено сумма', () => {
+    expect(checkDraft({ ...base, kind: 'transfer', toWalletId: 'w2' }, 'TJS', 'TJS')).toEqual({ totalMinor: 10_200, feeMinor: 200, receivedMinor: 10_000, error: null });
+  });
+
+  it('перевод: нужен другой счёт назначения, и валюты должны совпадать', () => {
+    const t = { ...base, kind: 'transfer' as const };
+    expect(checkDraft({ ...t, toWalletId: '' }, 'TJS').error).toMatch(/Выберите счёт, куда/);
+    expect(checkDraft({ ...t, toWalletId: 'w1' }, 'TJS', 'TJS').error).toMatch(/должен отличаться/);
+    expect(checkDraft({ ...t, toWalletId: 'w3' }, 'TJS', 'USD').error).toMatch(/разных валютах/);
+  });
+});
+
 describe('checkDraft', () => {
-  const d: DraftExpense = { rid: 1, title: 'x', amountText: '12,5', feeText: '1,5', walletId: 'w1', categoryId: '', newCategory: '', date: '2026-10-12', note: '', walletGuessed: false };
+  const d: DraftExpense = { rid: 1, kind: 'expense', toWalletId: '', title: 'x', amountText: '12,5', feeText: '1,5', walletId: 'w1', categoryId: '', newCategory: '', date: '2026-10-12', note: '', walletGuessed: false };
   it('сумма списания = расход + комиссия', () => {
     expect(checkDraft(d, 'TJS')).toEqual({ totalMinor: 1400, feeMinor: 150, error: null });
   });
