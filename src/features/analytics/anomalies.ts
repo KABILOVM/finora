@@ -74,7 +74,7 @@ export interface Anomalies {
 }
 
 /** Расход, который считается тратой: не удалён, в основной валюте, не долг, не корректировка. */
-const isSpend = (t: AnomalyTx, base: CurrencyCode): boolean =>
+export const isSpend = (t: AnomalyTx, base: CurrencyCode): boolean =>
   t.deletedAt === null && t.kind === 'expense' && t.baseCurrency === base && (t.debtId ?? null) === null && !isAdjustment(t);
 
 /** Трата, которую человек внёс сам (не по расписанию). */

@@ -73,7 +73,10 @@ export interface AddLinkProps {
 }
 
 /** Свойства для <Link {...useAddLink()}>: шит «Новая операция» открывается поверх текущей страницы. */
-export function useAddLink(kind?: TxKind, walletId?: string, date?: IsoDate): AddLinkProps {
+export function useAddLink(kind?: TxKind, walletId?: string, date?: IsoDate, prefill?: TxPrefill): AddLinkProps {
   const location = useLocation();
-  return { to: ADD_PATH, state: { background: location, ...(kind ? { kind } : {}), ...(walletId ? { walletId } : {}), ...(date ? { date } : {}) } };
+  return {
+    to: ADD_PATH,
+    state: { background: location, ...(kind ? { kind } : {}), ...(walletId ? { walletId } : {}), ...(date ? { date } : {}), ...(prefill ? { prefill } : {}) },
+  };
 }
