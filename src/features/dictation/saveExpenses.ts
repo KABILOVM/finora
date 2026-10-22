@@ -7,6 +7,7 @@ import { newId } from '@/db';
 import type { RateLookup } from '@/rates/types';
 import { matchByName } from '@/domain/expensesAi';
 import { humanError } from '@/features/transactions/txActions';
+import { withTag } from '@/features/trips/trips';
 
 export interface SaveContext {
   store: Pick<Store, 'transactions' | 'categories'>;
@@ -19,6 +20,8 @@ export interface SaveContext {
   getRate: (from: CurrencyCode, to: CurrencyCode) => RateLookup | null;
   /** Номера операций по номеру строки: повтор после сбоя не создаст дубль. */
   txIds: Map<number, string>;
+  /** Метка начатой поездки: дописывается в заметку каждой операции (trips.ts). */
+  tripTag?: string | null;
 }
 
 /** Текст заметки операции: название, заметка, комиссия (сумма расхода или списания по переводу уже включает комиссию). */
@@ -71,7 +74,7 @@ export async function saveExpenses(drafts: readonly DraftExpense[], ctx: SaveCon
             amountMinor: check.totalMinor!,
             toAmountMinor: check.receivedMinor!,
             occurredOn: d.date,
-            note: noteOf(d, d.feeText.trim()),
+            note: withTag(noteOf(d, d.feeText.trim()), ctx.tripTag ?? null),
             ...(lookup && check.feeMinor > 0 ? { fx: { rate: lookup.rate, source: fxSourceOf(lookup) } } : {}),
           },
           { id },
@@ -103,7 +106,7 @@ export async function saveExpenses(drafts: readonly DraftExpense[], ctx: SaveCon
           amountMinor: check.totalMinor!,
           categoryId,
           occurredOn: d.date,
-          note: noteOf(d, kind === 'income' ? '' : d.feeText.trim()),
+          note: withTag(noteOf(d, kind === 'income' ? '' : d.feeText.trim()), ctx.tripTag ?? null),
           ...(lookup ? { fx: { rate: lookup.rate, source: fxSourceOf(lookup) } } : {}),
         },
         { id },

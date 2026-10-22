@@ -18,6 +18,7 @@ import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
 import { RecentOps } from './RecentOps';
 import SaveRemainderCard from './SaveRemainderCard';
+import TripCard from './TripCard';
 import { WalletChips } from './WalletChips';
 import WeeklyCard from './WeeklyCard';
 
@@ -96,6 +97,7 @@ export default function HomePage() {
         <MissedDaysCard />
         <WeeklyCard today={today} categories={categoryIndex} />
         <SaveRemainderCard today={today} />
+        <TripCard />
         <GlanceStrip base={base} />
         <WalletChips wallets={wallets} balances={balances} />
         <BudgetsWidget />

@@ -53,6 +53,14 @@ describe('saveReceipt', () => {
     expect(computeBalances(wallets, await store.db.transactions.toArray()).get(ctx.walletId)).toBe(before - 4900);
   });
 
+  it('режим поездки: метка поездки дописывается в заметку каждого расхода чека', async () => {
+    const ctx = await setup();
+    const d = draft([line({ rid: 1, categoryId: ctx.food }), line({ rid: 2, name: 'Порошок', categoryId: ctx.home })]);
+    const created = await saveReceipt(d, checkReceipt(d, 'TJS'), { ...ctx, tripTag: 'Самарканд' });
+    expect(created).toHaveLength(2);
+    for (const t of created) expect(t.note).toMatch(/^Корзинка · .+ #Самарканд$/);
+  });
+
   it('одна категория — один расход с заметкой «Магазин» (без названия категории)', async () => {
     const ctx = await setup();
     const d = draft([line({ rid: 1, categoryId: ctx.food }), line({ rid: 2, name: 'Сыр', categoryId: ctx.food })]);

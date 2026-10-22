@@ -10,6 +10,8 @@ import { saveReceipt, undoReceipt } from '@/features/receipt/saveReceipt';
 import { checkReceipt } from '@/features/receipt/receiptAi';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
+import { useActiveTrip } from '@/features/trips/activeTrip';
+import { withTag } from '@/features/trips/trips';
 import { useRates } from '@/rates/hooks';
 import { addDays, isValidIsoDate, todayLocal } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
@@ -127,6 +129,8 @@ interface AddFormProps {
 function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }: AddFormProps) {
   const store = useStore();
   const toast = useToast();
+  // «Режим поездки»: пока он включён, новые операции получают метку поездки в заметке
+  const trip = useActiveTrip(store.userId);
   const formRef = useRef<HTMLDivElement>(null);
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
@@ -336,9 +340,10 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     savingRef.current = true;
     setSaving(again ? 'more' : 'close');
     try {
-      const row = await store.transactions.create(prepared.input, { id: idRef.current });
+      const input = trip.tag === null ? prepared.input : { ...prepared.input, note: withTag(prepared.input.note ?? '', trip.tag) };
+      const row = await store.transactions.create(input, { id: idRef.current });
       prepared.rememberRate(); // курс, набранный руками, запоминаем только после успешного сохранения
-      toastWithUndo(toast, 'Сохранено', () => store.transactions.softDelete(row.id), 'Операция отменена');
+      toastWithUndo(toast, trip.tag === null ? 'Сохранено' : `Сохранено · #${trip.tag}`, () => store.transactions.softDelete(row.id), 'Операция отменена');
       onSaved();
       if (again) {
         idRef.current = newId();
@@ -372,6 +377,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       base: settings.baseCurrency,
       getRate,
       txIds: dictation.current.txIds,
+      tripTag: trip.tag,
     });
     if (receipting) {
       return (
@@ -382,7 +388,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           defaultWalletId={c.form.walletId ?? ''}
           today={todayLocal()}
           analyze={async (file, rctx, rid) => parseReceiptWithAi(await prepareReceiptImage(file), rctx, rid)}
-          save={(draft, walletId) => saveReceipt(draft, checkReceipt(draft, settings.baseCurrency), { store, walletId, categories: known, txIds: receiptIds.current })}
+          save={(draft, walletId) => saveReceipt(draft, checkReceipt(draft, settings.baseCurrency), { store, walletId, categories: known, txIds: receiptIds.current, tripTag: trip.tag })}
           undo={(created) => undoReceipt(store, created)}
           onClose={(saved) => {
             if (saved > 0) {

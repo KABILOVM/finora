@@ -62,6 +62,24 @@ describe('saveExpenses', () => {
   });
 });
 
+describe('saveExpenses: режим поездки', () => {
+  it('метка поездки дописывается в заметку расхода, дохода и перевода; без неё заметки прежние', async () => {
+    const ctx = await setup();
+    const [cash] = ctx.wallets;
+    const card = await store.wallets.create({ name: 'Карта', kind: 'card', currency: 'TJS', openingBalanceMinor: 0, color: '#2563eb', icon: 'card' });
+    const drafts = [
+      draft({ rid: 1, walletId: cash!.id }),
+      draft({ rid: 2, kind: 'income', title: 'Возврат', walletId: cash!.id }),
+      draft({ rid: 3, kind: 'transfer', title: 'Снял', walletId: cash!.id, toWalletId: card.id }),
+    ];
+    await saveExpenses(drafts, { ...ctx, wallets: [cash!, card], tripTag: 'Самарканд' });
+    const notes = (await store.db.transactions.toArray()).map((t) => t.note).sort();
+    expect(notes).toEqual(['Возврат #Самарканд', 'Снял #Самарканд', 'Такси #Самарканд']);
+    await saveExpenses([draft({ rid: 9, walletId: cash!.id, title: 'Кофе' })], { ...ctx, wallets: [cash!, card], tripTag: null });
+    expect((await store.db.transactions.toArray()).find((t) => t.note.startsWith('Кофе'))!.note).toBe('Кофе');
+  });
+});
+
 describe('saveExpenses: доходы и переводы', () => {
   it('доход: категория доходов создаётся один раз, сумма зачисляется на счёт; комиссия не прибавляется', async () => {
     const ctx = await setup();

@@ -4,6 +4,7 @@ import { matchByName } from '@/domain/expensesAi';
 import type { LocalRow, Transaction } from '@/domain/types';
 import { suggestColor, suggestGlyph } from '@/features/categories/suggestGlyph';
 import { NOTE_MAX } from '@/features/transactions/txForm';
+import { withTag } from '@/features/trips/trips';
 
 export interface SaveReceiptContext {
   store: Pick<Store, 'db' | 'shopping' | 'transactions' | 'categories'>;
@@ -12,6 +13,8 @@ export interface SaveReceiptContext {
   categories: { id: string; name: string }[];
   /** Номера расходов по ключу группы: повтор после сбоя не создаст дубль. */
   txIds: Map<string, string>;
+  /** Метка начатой поездки: дописывается в заметку каждого расхода (trips.ts). */
+  tripTag?: string | null;
 }
 
 /** Заметка расхода: магазин (или «Чек»); при нескольких группах — с названием категории, чтобы расходы одного чека различались. */
@@ -58,7 +61,7 @@ export async function saveReceipt(draft: ReceiptDraft, check: ReceiptCheck, ctx:
         walletId: ctx.walletId,
         categoryId: r.categoryId,
         occurredOn: draft.date,
-        note: receiptNote(draft.merchant, several ? (r.name !== '' ? r.name : 'Без категории') : null),
+        note: withTag(receiptNote(draft.merchant, several ? (r.name !== '' ? r.name : 'Без категории') : null), ctx.tripTag ?? null),
         txId,
         lines: g.lines.map((l) => ({ name: l.name, qtyMilli: l.qtyMilli, unit: l.unit, priceMinor: l.priceMinor })),
       });

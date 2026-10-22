@@ -35,6 +35,7 @@ const WalletPage = lazy(() => import('@/features/wallets/WalletPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
 const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage'));
 const DataCheckPage = lazy(() => import('@/features/datacheck/DataCheckPage'));
+const TripsPage = lazy(() => import('@/features/trips/TripsPage'));
 const MorePage = lazy(() => import('@/features/more/MorePage'));
 // Пока заглушки «Скоро»: настоящие экраны заменят содержимое этих файлов (имена и default export остаются).
 const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'));
@@ -142,6 +143,7 @@ export function AppRoutes() {
             <Route path="/debts/people/:key" element={<PersonDebtsPage />} />
             <Route path="/debts/:id" element={<DebtDetailPage />} />
             <Route path="/rates" element={<ConverterPage />} />
+            <Route path="/trips" element={<TripsPage />} />
             <Route path="/weather" element={<WeatherPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
