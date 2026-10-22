@@ -369,6 +369,7 @@ describe('incomeFlow: «Куда ушёл доход»', () => {
     expect(f.segments.find((s) => s.key === 'rest')).toMatchObject({ minor: 2_000, kind: 'rest' });
     expect(f.segments[0]!.share).toBe(30);
     expect(f.savedMinor).toBe(30_000);
+    expect(f.savedShare).toBe(30);
     expect(f.deficitMinor).toBe(0);
     // сегменты вместе дают все расходы
     expect(f.segments.reduce((a, s) => a + s.minor, 0)).toBe(70_000);

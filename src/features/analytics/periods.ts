@@ -261,6 +261,8 @@ export interface IncomeFlow {
   segments: FlowSegment[];
   /** Осталось (доход больше расходов), иначе 0. */
   savedMinor: Minor;
+  /** Доля остатка от всей полосы, 0–100 (не целым: для ширины сегмента). */
+  savedShare: number;
   /** Потрачено сверх дохода, иначе 0. */
   deficitMinor: Minor;
 }
@@ -291,7 +293,8 @@ export function incomeFlow(s: Pick<PeriodSummary, 'incomeMinor' | 'expenseMinor'
     const rest = tail.reduce((sum, c) => addMinor(sum, c.totalMinor), 0);
     segments.push({ key: 'rest', categoryId: null, kind: 'rest', minor: rest, share: share(rest) });
   }
-  return { totalMinor, segments, savedMinor: Math.max(s.netMinor, 0), deficitMinor: Math.max(-s.netMinor, 0) };
+  const savedMinor = Math.max(s.netMinor, 0);
+  return { totalMinor, segments, savedMinor, savedShare: share(savedMinor), deficitMinor: Math.max(-s.netMinor, 0) };
 }
 
 // ───────────────────────── главное за период ─────────────────────────
