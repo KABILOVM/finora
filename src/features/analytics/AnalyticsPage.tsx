@@ -12,6 +12,7 @@ import { MonthSwitcher } from '@/features/transactions/MonthSwitcher';
 import { monthKey, monthTitle } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
 import { MIN_MONTH, MONTH_PARAM } from '@/features/transactions/txFilters';
+import { AnomaliesCard } from './AnomaliesCard';
 import { CashCalendarView } from './CashCalendarView';
 import { CategoryCompare } from './CategoryCompare';
 import { MonthlyBars } from './charts/MonthlyBars';
@@ -222,6 +223,7 @@ export default function AnalyticsPage() {
         <div className="stagger flex flex-col gap-4">
           <Summary data={data} />
           {hasPaceContent(data) && <PaceCard data={data} />}
+          <AnomaliesCard anomalies={data.anomalies} categories={data.categories} base={data.base} month={month} today={today} />
           <Section id="analytics-categories" title="Категории: сравнение с прошлым месяцем">
             {data.deltas.length === 0 ? (
               <p className="text-muted">

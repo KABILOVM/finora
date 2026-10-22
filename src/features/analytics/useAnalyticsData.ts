@@ -13,6 +13,7 @@ import {
 } from '@/domain/pace';
 import type { CurrencyCode, IsoDate, Minor, UUID } from '@/domain/types';
 import { shiftMonth } from '@/features/transactions/txFilters';
+import { findAnomalies, type Anomalies } from './anomalies';
 import {
   categoryDeltas,
   compareThroughDay,
@@ -75,6 +76,8 @@ export interface AnalyticsData {
   budgetPaces: BudgetPaceItem[];
   /** Только для идущего месяца: категории, где уже потрачено заметно больше обычного. */
   unusual: UnusualCategory[];
+  /** Что бросается в глаза в расходах месяца: крупные траты, новые статьи, возможные дубли. */
+  anomalies: Anomalies;
   /** Категории (все, включая архивные): названия в списках. */
   categories: ReadonlyMap<UUID, { name: string; icon: string; color: string }>;
 }
@@ -158,6 +161,7 @@ export function useAnalyticsData(month: string, today: IsoDate): AnalyticsState 
         pace,
         budgetPaces,
         unusual,
+        anomalies: findAnomalies(rows, month, today, base),
         categories: new Map(categoryRows.map((c) => [c.id, { name: c.name, icon: c.icon, color: c.color }] as const)),
       };
     } catch (e) {
