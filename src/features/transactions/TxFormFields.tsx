@@ -11,6 +11,7 @@ import { TextInput } from '@/components/Field';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import type { LocalRow, TxKind, Wallet } from '@/domain/types';
 import { ContextRow, type CategoryState } from './ContextRow';
+import type { FrequentChoice } from './FrequentPanel';
 import { FeeField, applyPctKey } from './FeeField';
 import { FxNotice } from './FxNotice';
 import { ReceivedField } from './ReceivedField';
@@ -48,6 +49,9 @@ export interface TxFormFieldsProps {
   onCategorySkip?: () => void;
   /** Enter в поле суммы сохраняет операцию; Ctrl/⌘+Enter — сохраняет и открывает новую (more). */
   onSubmit?: (more: boolean) => void;
+  /** Новая операция: частые операции текущего вида (полоса чипов в панели категорий) и что делать при нажатии. */
+  frequent?: readonly FrequentChoice[];
+  onPickFrequent?: (key: string) => void;
 }
 
 /** Круглая кнопка у края суммы (комиссия слева, заметка справа). */
@@ -84,7 +88,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -169,6 +173,8 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           categoryState={categoryState}
           onCategorySkip={onCategorySkip}
           onPicked={focusAmount}
+          frequent={frequent}
+          onPickFrequent={onPickFrequent}
         />
         <FxNotice
           fx={c.fx}

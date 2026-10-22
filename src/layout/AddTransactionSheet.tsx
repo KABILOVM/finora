@@ -14,9 +14,13 @@ import type { DictCategory } from '@/domain/expensesAi';
 import { DateChip } from '@/features/transactions/DateChip';
 import { useToast } from '@/components/Toast';
 import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
+import { formatMinor } from '@/domain/money';
+import { pluralRu } from '@/lib/plural';
 import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
+import type { FrequentChoice } from '@/features/transactions/FrequentPanel';
+import { formFromPrefill } from '@/features/transactions/prefill';
 import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet, resolveDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
@@ -119,16 +123,18 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const formRef = useRef<HTMLDivElement>(null);
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
-  const preset = useLocation().state as { kind?: string; walletId?: string } | null;
+  const preset = useLocation().state as { kind?: string; walletId?: string; prefill?: unknown } | null;
   const presetKind = preset?.kind;
   // Кнопки на экране кошелька открывают шит сразу с этим кошельком (если он ещё есть)
   const presetWallet = preset?.walletId && wallets.some((w) => w.id === preset.walletId) ? preset.walletId : null;
-  const [initial] = useState(() =>
-    emptyForm(
+  const [initial] = useState(() => {
+    const blank = emptyForm(
       presetWallet ?? pickDefaultWallet(wallets, stats.lastWalletId, settings.defaultWalletId),
       presetKind === 'income' || presetKind === 'transfer' ? presetKind : 'expense',
-    ),
-  );
+    );
+    // «Повторить» из правки операции: форма приходит заполненной (дата — сегодня), всё проверено против живых кошельков и категорий
+    return preset?.prefill === undefined ? blank : formFromPrefill(preset.prefill, blank, wallets, categories);
+  });
   const { getRate } = useRates();
   const [dictating, setDictating] = useState(false);
   // Номера операций и новые категории из диктовки живут, пока открыт шит: повтор после сбоя не создаёт дублей.
@@ -160,6 +166,43 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     return rankCategories(categories, kind, pop).map((x) => ({ value: x.id, label: x.name, icon: x.icon, color: x.color }));
   }, [categories, kind, pop]);
   const walletsRanked = useMemo(() => rankWallets(wallets, pop), [wallets, pop]);
+
+  // «Частые операции»: только те, что можно внести сейчас (кошелёк и категория на месте, не в архиве)
+  const frequent = useMemo(() => {
+    const walletById = new Map(wallets.map((w) => [w.id, w]));
+    const categoryById = new Map(categories.map((x) => [x.id, x]));
+    const mixed = new Set(wallets.map((w) => w.currency)).size > 1;
+    const out: { choice: FrequentChoice; op: RecentStats['frequent'][number] }[] = [];
+    stats.frequent.forEach((op, i) => {
+      const w = walletById.get(op.walletId);
+      if (!w) return;
+      const cat = op.categoryId === null ? undefined : categoryById.get(op.categoryId);
+      if (op.categoryId !== null && (!cat || cat.archivedAt !== null || cat.kind !== op.kind)) return;
+      const catName = cat?.name ?? 'Без категории';
+      const times = `${op.count} ${pluralRu(op.count, 'раз', 'раза', 'раз')}`;
+      out.push({
+        op,
+        choice: {
+          key: String(i),
+          title: op.note !== '' ? op.note : catName,
+          subtitle: [op.note !== '' ? catName : null, mixed ? `${w.name} · ${w.currency}` : w.name, times].filter(Boolean).join(' · '),
+          amount: formatMinor(op.amountMinor, w.currency),
+          icon: cat?.icon ?? '🏷️',
+          ...(cat ? { color: cat.color } : {}),
+        },
+      });
+    });
+    return out;
+  }, [stats.frequent, wallets, categories]);
+  const frequentForKind = useMemo(() => frequent.filter((f) => f.op.kind === kind).map((f) => f.choice), [frequent, kind]);
+  const pickFrequent = (key: string) => {
+    const f = frequent.find((x) => x.choice.key === key)?.op;
+    if (!f) return;
+    c.setWallet(f.walletId);
+    c.set({ categoryId: f.categoryId, amountMinor: f.amountMinor, note: f.note });
+    // у такой операции категории может не быть по выбору человека: второй раз напоминать о ней при «Сохранить» не нужно
+    setCategoryState(f.categoryId === null ? 'skipped' : 'untouched');
+  };
 
   useScrollToError(formRef, c.errors);
   // Другой вид операции — другие категории: прежнее решение про категорию не в счёт
@@ -295,6 +338,8 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           categoryState={categoryState}
           onCategorySkip={() => setCategoryState('skipped')}
           onSubmit={(more) => void save(more)}
+          frequent={frequentForKind}
+          onPickFrequent={pickFrequent}
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
             <span className="h-11 w-11 shrink-0">

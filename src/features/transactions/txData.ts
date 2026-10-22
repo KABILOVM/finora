@@ -3,16 +3,19 @@ import { useEffect, useState } from 'react';
 import { useStore, type Store } from '@/db';
 import type { Category, IsoDate, LocalRow, Transaction, Wallet } from '@/domain/types';
 import { addDays, todayLocal } from '@/lib/dates';
+import { frequentOps, type FrequentOp } from './frequent';
 import { FREQUENT_DAYS } from './txForm';
 
-/** Что шит «Новая операция» узнаёт о недавних операциях: «частые» категории и последний использованный кошелёк. */
+/** Что шит «Новая операция» узнаёт о недавних операциях: «частые» категории, последний использованный кошелёк и частые операции. */
 export interface RecentStats {
   lastWalletId: string | null;
   /** Сколько раз за последние FREQUENT_DAYS дней использовалась каждая категория, отдельно для расходов и доходов. */
   counts: { expense: Map<string, number>; income: Map<string, number> };
+  /** Операции, которые вносились снова и снова (кнопка «Частые операции» в форме). */
+  frequent: FrequentOp[];
 }
 
-const emptyStats = (): RecentStats => ({ lastWalletId: null, counts: { expense: new Map(), income: new Map() } });
+const emptyStats = (): RecentStats => ({ lastWalletId: null, counts: { expense: new Map(), income: new Map() }, frequent: [] });
 
 /**
  * Читается по индексу даты. Последний использованный кошелёк — у операции, внесённой позже всех, среди 200 самых
@@ -29,6 +32,7 @@ export async function loadRecentStats(store: Store, today: IsoDate): Promise<Rec
       map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + 1);
     }
   }
+  stats.frequent = frequentOps(recent, today);
   const newest = await store.db.transactions.orderBy('occurredOn').reverse().limit(200).toArray();
   let last: LocalRow<Transaction> | null = null;
   for (const t of newest) {

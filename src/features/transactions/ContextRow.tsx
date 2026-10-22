@@ -6,6 +6,7 @@ import { Icon } from '@/components/Icon';
 import type { LocalRow, Wallet } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { CategoryGrid } from './CategoryGrid';
+import type { FrequentChoice } from './FrequentPanel';
 import { FieldGroup } from './FieldGroup';
 import type { TxFormController } from './useTxFormController';
 
@@ -80,13 +81,17 @@ export interface ContextRowProps {
   onCategorySkip?: () => void;
   /** Выбрали кошелёк или категорию и список закрылся: вернуть фокус в поле суммы (иначе он пропадает вместе с нажатой кнопкой). */
   onPicked?: () => void;
+  /** Частые операции этого вида (только «Новая операция»): полоса чипов над категориями. */
+  frequent?: readonly FrequentChoice[];
+  /** Нажали частую операцию: key из FrequentChoice. Панель после этого закрывается. */
+  onPickFrequent?: (key: string) => void;
 }
 
 /**
  * Две плитки «куда пойдут деньги»: категория и счёт (у перевода — «Откуда» и «Куда»). Подставляются сами, видны над клавиатурой;
  * нажатие открывает список поверх формы. Дата — в шапке окна (DateChip).
  */
-export function ContextRow({ c, wallets, categories, categoryState, onCategorySkip, onPicked }: ContextRowProps) {
+export function ContextRow({ c, wallets, categories, categoryState, onCategorySkip, onPicked, frequent, onPickFrequent }: ContextRowProps) {
   const { form, errors } = c;
   const [panel, setPanel] = useState<Panel>(null);
   const isTransfer = form.kind === 'transfer';
@@ -223,6 +228,15 @@ export function ContextRow({ c, wallets, categories, categoryState, onCategorySk
                 onPicked?.();
               }}
               hint={errors.category ?? (categoryState === 'nudged' && form.categoryId === null ? CATEGORY_NUDGE : null)}
+              frequent={frequent}
+              onPickFrequent={
+                onPickFrequent &&
+                ((key) => {
+                  onPickFrequent(key);
+                  setPanel(null);
+                  onPicked?.();
+                })
+              }
             />
           )}
         </Floating>

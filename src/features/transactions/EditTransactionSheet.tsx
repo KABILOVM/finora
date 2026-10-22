@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
@@ -15,7 +16,9 @@ import { overpayAfterEdit, type EditOverpay } from '@/features/debts/editOverpay
 import { TxLinkNotice } from '@/features/debts/TxLinkNotice';
 import { useDebtTxRole } from '@/features/debts/useDebtTxRole';
 import { Receipt } from '@/features/shopping/Receipt';
+import { ADD_PATH } from '@/layout/nav';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
+import { prefillOfForm } from './prefill';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
 import { changedFields, formFromTx, GENERIC_SAVE_ERROR, isFormDirty } from './txForm';
@@ -116,6 +119,8 @@ interface EditFormProps {
 function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: EditFormProps) {
   const store = useStore();
   const toast = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const formRef = useRef<HTMLDivElement>(null);
   // Исходная операция запоминается при открытии: если её тем временем обновит синхронизация, форма не «поплывёт».
   const [orig] = useState(tx);
@@ -222,6 +227,16 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
   };
 
   const busy = saving || deleting;
+
+  // «Повторить»: открывает «Новую операцию» с этими же полями и сегодняшней датой. Запись истории заменяется, а не добавляется:
+  // «Назад» из новой операции приводит туда же, откуда открыли правку (на список), а не обратно в правку.
+  const repeat = () => {
+    if (busyRef.current) return;
+    const background = (location.state as { background?: unknown } | null)?.background;
+    navigate(ADD_PATH, { replace: true, state: { ...(background ? { background } : {}), prefill: prefillOfForm(c.form, c.fee.minor) } });
+  };
+  // Операция по долгу — не обычный расход: копия без связи с долгом сбила бы остаток, поэтому повторять её нельзя
+  const canRepeat = !orig.debtId;
   const summary = (() => {
     const currency = wallets.find((w) => w.id === tx.walletId)?.currency ?? tx.baseCurrency;
     const what = tx.kind === 'expense' ? 'Расход' : tx.kind === 'income' ? 'Доход' : 'Перевод';
@@ -245,7 +260,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
                 {c.errors.form}
               </p>
             )}
-            <div className="grid grid-cols-[auto_1fr] gap-2">
+            <div className={canRepeat ? 'grid grid-cols-[auto_auto_1fr] gap-2' : 'grid grid-cols-[auto_1fr] gap-2'}>
               <Button
                 variant="ghost"
                 size="lg"
@@ -257,6 +272,17 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
               >
                 Удалить
               </Button>
+              {canRepeat && (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  icon="repeat"
+                  aria-label="Повторить операцию"
+                  title="Повторить: новая операция с теми же полями и сегодняшней датой"
+                  disabled={busy}
+                  onClick={repeat}
+                />
+              )}
               <Button size="lg" loading={saving} disabled={busy} onClick={() => void save()}>
                 Сохранить
               </Button>
