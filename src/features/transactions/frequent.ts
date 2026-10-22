@@ -1,6 +1,7 @@
 import { isAdjustment } from '@/domain/adjustment';
 import type { IsoDate, Minor, Transaction } from '@/domain/types';
 import { addDays } from '@/lib/dates';
+import { normNote } from './noteSuggest';
 
 /** За сколько последних дней ищем повторяющиеся операции. */
 export const FREQUENT_OPS_DAYS = 90;
@@ -29,9 +30,6 @@ type Row = Pick<
   Transaction,
   'kind' | 'walletId' | 'categoryId' | 'amountMinor' | 'note' | 'occurredOn' | 'debtId' | 'recurringRuleId' | 'fxSource'
 > & { deletedAt: unknown };
-
-/** «Кофе », «кофе» и «Кофе  с  собой» — разные записи только по смыслу, а не по регистру и пробелам. */
-const normNote = (s: string): string => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
  * Самые частые операции за FREQUENT_OPS_DAYS дней до `today` включительно. В счёт не идут: удалённые, переводы, движение по долгам,

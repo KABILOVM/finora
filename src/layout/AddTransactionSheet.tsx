@@ -20,6 +20,8 @@ import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
 import type { FrequentChoice } from '@/features/transactions/FrequentPanel';
+import { suggestNotes, useNoteIndex } from '@/features/transactions/noteSuggest';
+import type { NoteChoice } from '@/features/transactions/NoteSuggestions';
 import { formFromPrefill } from '@/features/transactions/prefill';
 import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet, resolveDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
@@ -194,6 +196,42 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     });
     return out;
   }, [stats.frequent, wallets, categories]);
+  // «Похожие записи» под полем заметки: по набранным буквам ищем, что вносилось с такой заметкой
+  const noteIndex = useNoteIndex();
+  const noteMatches = useMemo(() => {
+    const walletById = new Map(wallets.map((w) => [w.id, w]));
+    const categoryById = new Map(categories.map((x) => [x.id, x]));
+    const mixed = new Set(wallets.map((w) => w.currency)).size > 1;
+    const out: { choice: NoteChoice; e: ReturnType<typeof suggestNotes>[number] }[] = [];
+    // берём с запасом: часть совпадений может не пройти (кошелёк или категория в архиве), а показать надо до трёх
+    for (const e of suggestNotes(noteIndex, kind, c.form.note, 12)) {
+      const w = walletById.get(e.walletId);
+      if (!w) continue;
+      const cat = e.categoryId === null ? undefined : categoryById.get(e.categoryId);
+      if (e.categoryId !== null && (!cat || cat.archivedAt !== null || cat.kind !== e.kind)) continue;
+      out.push({
+        e,
+        choice: {
+          key: String(out.length),
+          note: e.note,
+          detail: [cat?.name ?? 'Без категории', mixed ? `${w.name} · ${w.currency}` : w.name].join(' · '),
+          amount: formatMinor(e.amountMinor, w.currency),
+          icon: cat?.icon ?? '🏷️',
+          ...(cat ? { color: cat.color } : {}),
+        },
+      });
+      if (out.length === 3) break;
+    }
+    return out;
+  }, [noteIndex, kind, c.form.note, wallets, categories]);
+  const pickNote = (key: string) => {
+    const m = noteMatches.find((x) => x.choice.key === key)?.e;
+    if (!m) return;
+    c.setWallet(m.walletId);
+    // сумму подставляем, только если она ещё не набрана: набранное человеком главнее подсказки
+    c.set({ note: m.note, categoryId: m.categoryId, ...(c.form.amountMinor === null ? { amountMinor: m.amountMinor } : {}) });
+    setCategoryState(m.categoryId === null ? 'skipped' : 'untouched');
+  };
   const frequentForKind = useMemo(() => frequent.filter((f) => f.op.kind === kind).map((f) => f.choice), [frequent, kind]);
   const pickFrequent = (key: string) => {
     const f = frequent.find((x) => x.choice.key === key)?.op;
@@ -340,6 +378,8 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           onSubmit={(more) => void save(more)}
           frequent={frequentForKind}
           onPickFrequent={pickFrequent}
+          noteSuggestions={noteMatches.map((m) => m.choice)}
+          onPickNote={pickNote}
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
             <span className="h-11 w-11 shrink-0">
