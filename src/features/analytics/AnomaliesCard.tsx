@@ -37,9 +37,8 @@ interface Row {
   icon: ReactNode;
   title: ReactNode;
   text: string;
-  to: string;
-  /** Окно правки операции поверх этого экрана (иначе обычный переход). */
-  overlay: boolean;
+  /** Куда ведёт «Открыть»: правка операции поверх этого экрана или список операций месяца. */
+  target: { kind: 'edit'; id: string } | { kind: 'list'; query: string };
   label: string;
 }
 
@@ -67,8 +66,7 @@ export function AnomaliesCard({ anomalies, categories, base, month, today }: Ano
         </>
       ),
       text: `${formatDayLabel(b.occurredOn, today)} · в «${cat.name}» обычно около ${formatMinor(b.usualMinor, base)}, крупнее не было за последние месяцы.`,
-      to: `/edit/${b.txId}`,
-      overlay: true,
+      target: { kind: 'edit', id: b.txId },
       label: 'Открыть трату',
     });
   }
@@ -85,8 +83,7 @@ export function AnomaliesCard({ anomalies, categories, base, month, today }: Ano
         </>
       ),
       text: `${n.sharePercent}% расходов месяца. За последние три месяца в этой категории трат не было.`,
-      to: `/transactions?${transactionsQuery({ month, categoryId: n.categoryId, kind: 'expense' })}`,
-      overlay: false,
+      target: { kind: 'list', query: transactionsQuery({ month, categoryId: n.categoryId, kind: 'expense' }) },
       label: 'К операциям',
     });
   }
@@ -108,8 +105,7 @@ export function AnomaliesCard({ anomalies, categories, base, month, today }: Ano
         </>
       ),
       text: `${formatDayLabel(d.occurredOn, today)} · ${count} ${pluralRu(count, 'одинаковая трата', 'одинаковые траты', 'одинаковых трат')} за день. Если это не повтор, скройте.`,
-      to: `/edit/${d.txIds[0]}`,
-      overlay: true,
+      target: { kind: 'edit', id: d.txIds[0] ?? '' },
       label: 'Открыть трату',
     });
   }
@@ -132,9 +128,16 @@ export function AnomaliesCard({ anomalies, categories, base, month, today }: Ano
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link to={r.to} state={r.overlay ? { background: location } : undefined} className={buttonClasses('secondary', 'md')}>
-                {r.label}
-              </Link>
+              {/* два Link с фиксированным началом адреса: из данных подставляется только хвост (так требует статический аудит e2e/sec) */}
+              {r.target.kind === 'edit' ? (
+                <Link to={`/edit/${r.target.id}`} state={{ background: location }} className={buttonClasses('secondary', 'md')}>
+                  {r.label}
+                </Link>
+              ) : (
+                <Link to={`/transactions?${r.target.query}`} className={buttonClasses('secondary', 'md')}>
+                  {r.label}
+                </Link>
+              )}
               <Button variant="ghost" aria-label={`Скрыть: ${r.name}`} onClick={() => dismiss(r.key)}>
                 Скрыть
               </Button>
