@@ -1,5 +1,5 @@
 import { exponentOf, factorOf } from '@/domain/currency';
-import type { CurrencyCode, Minor, Transaction, TxKind } from '@/domain/types';
+import type { Category, CurrencyCode, Minor, Transaction, TxKind, Wallet } from '@/domain/types';
 import type { Store } from './store';
 
 const BOM = '﻿';
@@ -47,11 +47,21 @@ function cell(value: string, isText = true): string {
  * в таблице её нужно исключать вручную.
  *
  * Формат: UTF-8 с BOM, разделитель «;», суммы в основных единицах с запятой, названия вместо id. */
-export async function exportTransactionsCsv(store: Store): Promise<string> {
+export async function exportTransactionsCsv(store: Store, only?: readonly Transaction[]): Promise<string> {
   const { db } = store;
-  const [wallets, categories, txs] = await db.transaction('r', [db.wallets, db.categories, db.transactions], () =>
-    Promise.all([db.wallets.toArray(), db.categories.toArray(), db.transactions.toArray()]),
+  const [wallets, categories, all] = await db.transaction('r', [db.wallets, db.categories, db.transactions], () =>
+    Promise.all([db.wallets.toArray(), db.categories.toArray(), only ? Promise.resolve([]) : db.transactions.toArray()]),
   );
+  // only — список, который человек видит на экране «Операции» (с фильтрами и поиском): выгружаем ровно его
+  return buildTransactionsCsv(only ?? all, wallets, categories);
+}
+
+/** Сам файл: чистая функция от операций и справочников (названия кошельков и категорий, в том числе архивных, берутся оттуда). */
+export function buildTransactionsCsv(
+  txs: readonly Transaction[],
+  wallets: readonly Pick<Wallet, 'id' | 'name' | 'currency'>[],
+  categories: readonly Pick<Category, 'id' | 'name'>[],
+): string {
   const walletById = new Map(wallets.map((w) => [w.id, w]));
   const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 

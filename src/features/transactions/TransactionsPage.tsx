@@ -3,10 +3,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { IconButton } from '@/components/IconButton';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
-import { useCategories, useHasTransactions, useSettings, useTransactions, useWallets } from '@/db';
+import { exportTransactionsCsv, useCategories, useHasTransactions, useSettings, useStore, useTransactions, useWallets } from '@/db';
 import type { LocalRow, Transaction } from '@/domain/types';
+import { useToast } from '@/components/Toast';
+import { downloadTextFile } from '@/features/settings/download';
 import { useAddLink } from '@/layout/nav';
 import { formatMinor } from '@/domain/money';
 import { formatDayLabel, monthKey, todayLocal } from '@/lib/dates';
@@ -23,6 +26,8 @@ export const PAGE_SIZE = 200;
 
 /** Список операций: по дням, с итогом дня, фильтрами и поиском. Нажатие на строку открывает правку. */
 export default function TransactionsPage() {
+  const store = useStore();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const addLink = useAddLink();
@@ -77,11 +82,36 @@ export default function TransactionsPage() {
 
   const open = (id: string) => navigate(`/edit/${id}`, { state: { background: location } });
 
+  // «Выгрузить список»: в файл идёт ровно то, что под текущими фильтрами и поиском (все найденные операции, а не только показанные страницей)
+  const [exporting, setExporting] = useState(false);
+  const exportList = async () => {
+    if (!rows || rows.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      const csv = await exportTransactionsCsv(store, rows);
+      downloadTextFile(`sumoima-operations-${todayLocal()}.csv`, 'text/csv', csv);
+      toast.success(`Выгружено ${rows.length} ${pluralRu(rows.length, 'операция', 'операции', 'операций')}`);
+    } catch (e) {
+      console.error('Не удалось выгрузить список операций:', e);
+      toast.error('Не удалось выгрузить список. Ничего не изменилось — попробуйте ещё раз.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const loading = !rows || anyRow === undefined || !settings || !walletIndex || !categoryIndex || !wallets || !categories;
 
   return (
     <>
-      <PageHeader title="Операции" className="!pb-2 !pt-1 md:!pb-4 md:!pt-0" />
+      <PageHeader
+        title="Операции"
+        className="!pb-2 !pt-1 md:!pb-4 md:!pt-0"
+        actions={
+          rows && rows.length > 0 ? (
+            <IconButton icon="download" label="Выгрузить список в CSV" disabled={exporting} onClick={() => void exportList()} />
+          ) : undefined
+        }
+      />
       {loading ? (
         <p role="status" className="py-10 text-center text-muted">
           Загрузка…
