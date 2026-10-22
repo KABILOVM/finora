@@ -168,11 +168,16 @@ describe('AutoPostRunner: возвращение на вкладку и смен
   });
 
   it('скрытая вкладка проход не запускает', async () => {
-    const td = makeApp();
+    // Первый платёж проводится проходом при открытии. Когда он проведён, этот проход уже прочитал правила и второй не заберёт:
+    // без этого на медленной машине проход при открытии мог начаться уже после записи второго платежа и провести его сам.
+    const td = makeApp(async (s, ids) => {
+      await auto(s, { walletId: ids.cash, note: 'Первый' });
+    });
     await show(td);
+    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
     await write(async () => {
       const cash = (await lastStore(td).db.wallets.toArray()).find((w) => w.name === 'Наличные');
-      await auto(lastStore(td), { walletId: cash?.id ?? '' });
+      await auto(lastStore(td), { walletId: cash?.id ?? '', note: 'Второй' });
     });
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     act(() => {
@@ -181,7 +186,7 @@ describe('AutoPostRunner: возвращение на вкладку и смен
     await act(async () => {
       await new Promise((r) => setTimeout(r, 150));
     });
-    expect(await txs(td)).toHaveLength(0);
+    expect(await liveTxs(td)).toHaveLength(1);
   });
 
   it('наступил новый день: проверка раз в минуту замечает смену даты и проводит платёж на новый день', async () => {

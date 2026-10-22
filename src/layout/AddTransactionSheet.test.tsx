@@ -248,22 +248,25 @@ describe('доход', () => {
 });
 
 describe('компактная форма', () => {
-  it('«Продиктовать расходы» — круглая кнопка в строке «Расход / Доход / Перевод», а не отдельная строка под формой', async () => {
+  it('«Продиктовать операции» — круглая кнопка в строке «Расход / Доход / Перевод», а не отдельная строка под формой', async () => {
     await openAddSheet();
-    const mic = screen.getByRole('button', { name: 'Продиктовать расходы' });
+    const mic = screen.getByRole('button', { name: 'Продиктовать операции' });
     const kinds = screen.getByRole('radiogroup', { name: 'Вид операции' });
     const row = kinds.parentElement!;
     expect(row.contains(mic)).toBe(true);
     expect(mic.textContent).toBe(''); // только значок, подпись — для скринридера
     const slot = row.lastElementChild!;
-    await user.click(screen.getByRole('radio', { name: 'Доход' }));
-    expect(screen.queryByRole('button', { name: 'Продиктовать расходы' })).toBeNull();
-    // место под кнопку остаётся: переключатель не меняет ширину и «Доход»/«Перевод» не прыгают
-    expect(row.lastElementChild).toBe(slot);
+    // диктовка понимает расходы, доходы и переводы, поэтому кнопка есть при любом виде; место под неё одно и то же:
+    // переключатель не меняет ширину и «Доход»/«Перевод» не прыгают
     expect(slot.className).toContain('w-11');
+    await user.click(screen.getByRole('radio', { name: 'Доход' }));
+    expect(screen.getByRole('button', { name: 'Продиктовать операции' })).toBeInTheDocument();
+    expect(row.lastElementChild).toBe(slot);
+    await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+    expect(screen.getByRole('button', { name: 'Продиктовать операции' })).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Расход' }));
-    await user.click(screen.getByRole('button', { name: 'Продиктовать расходы' }));
-    expect(await findByRole('dialog', { name: 'Продиктовать расходы' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Продиктовать операции' }));
+    expect(await findByRole('dialog', { name: 'Продиктовать операции' })).toBeInTheDocument();
   });
 
   it('правила невысокого экрана не задевают всплывающую комиссию: шрифт и отступы её поля прежние', async () => {
@@ -507,5 +510,39 @@ describe('«Сохранить и добавить ещё»', () => {
     const rows = await liveTxs(td);
     expect(rows.map((r) => r.amountMinor).sort()).toEqual([500, 700]);
     expect(new Set(rows.map((r) => r.id)).size).toBe(2);
+  });
+});
+
+describe('«Чек по позициям» из диктовки', () => {
+  it('«Продиктовать операции» → «Чек по позициям» → вручную: позиции по двум категориям — два расхода, позиции в чеке', async () => {
+    const { td, onClose } = await openAddSheet();
+    await user.click(screen.getByRole('button', { name: 'Продиктовать операции' }));
+    await user.click(await findByRole('button', { name: /^Чек по позициям/ }));
+    expect(await findByRole('dialog', { name: 'Чек по позициям' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ввести вручную' }));
+
+    // первая позиция раскрыта сразу
+    await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Хлеб');
+    await user.type(screen.getByRole('textbox', { name: 'Цена за всю позицию' }), '10');
+    await user.click(screen.getByRole('button', { name: /^Категория:/ }));
+    await user.click(screen.getByRole('option', { name: /Еда/ }));
+
+    await user.click(screen.getByRole('button', { name: 'Добавить позицию' }));
+    await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Мыло');
+    await user.type(screen.getByRole('textbox', { name: 'Цена за всю позицию' }), '5,5');
+    await user.click(screen.getByRole('button', { name: /^Категория:/ }));
+    await user.click(screen.getByRole('option', { name: /Транспорт/ }));
+
+    await user.click(await findByRole('button', { name: 'Сохранить 2 расхода' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    const txs = await liveTxs(td);
+    const food = await categoryByName(td, 'Еда');
+    const transport = await categoryByName(td, 'Транспорт');
+    expect(txs.map((t) => [t.categoryId, t.amountMinor]).sort()).toEqual([[food.id, 1000], [transport.id, 550]].sort());
+    const items = await storeOf(td).db.shopping_items.toArray();
+    expect(items.map((i) => [i.name, i.priceMinor]).sort()).toEqual([['Мыло', 550], ['Хлеб', 1000]]);
+    for (const i of items) expect(txs.some((t) => t.id === i.transactionId)).toBe(true);
+    expect(await balancesOf(td).then((b) => b.get(txs[0]!.walletId))).toBe(-1550);
   });
 });

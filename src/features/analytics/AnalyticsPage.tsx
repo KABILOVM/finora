@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
@@ -13,27 +12,20 @@ import { MonthSwitcher } from '@/features/transactions/MonthSwitcher';
 import { monthKey, monthTitle } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
 import { MIN_MONTH, MONTH_PARAM } from '@/features/transactions/txFilters';
+import { AnomaliesCard } from './AnomaliesCard';
 import { CashCalendarView } from './CashCalendarView';
 import { CategoryCompare } from './CategoryCompare';
 import { MonthlyBars } from './charts/MonthlyBars';
 import { WeekdayBars } from './charts/WeekdayBars';
 import { NetWorthCard } from './NetWorthCard';
 import { hasPaceContent, PaceCard } from './PaceCard';
+import { PeriodsView } from './PeriodsView';
+import { selectionToParams } from './periodParams';
+import { Section } from './Section';
 import { TopExpensesList } from './TopExpensesList';
 import { isCompareReady, MIN_COMPARE_DAYS, previousPhrase } from './analytics';
 import { useAnalyticsData, type AnalyticsData } from './useAnalyticsData';
 import { useNetWorth } from './useNetWorth';
-
-function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return (
-    <Card aria-labelledby={id} className="!py-4 md:!p-5">
-      <h2 id={id} className="mb-3 text-base font-semibold">
-        {title}
-      </h2>
-      {children}
-    </Card>
-  );
-}
 
 /**
  * «На 12% больше, чем в прошлом месяце» — расходы месяца против прошлого; null — сравнивать не с чем. throughDay — идущий месяц сравнивается
@@ -104,10 +96,11 @@ function Summary({ data }: { data: AnalyticsData }) {
   );
 }
 
-type Tab = 'overview' | 'calendar';
+type Tab = 'overview' | 'calendar' | 'periods';
 const TABS = [
   { value: 'overview', label: 'Обзор' },
   { value: 'calendar', label: 'Календарь' },
+  { value: 'periods', label: 'Периоды' },
 ] as const;
 
 /** Заглушка на время чтения: сводка и два блока ниже; для скринридера — «Считаем…». */
@@ -129,13 +122,14 @@ function Loading() {
  * с долями и изменением, самые крупные траты, доходы и расходы по месяцам, средний расход по дням недели, деньги в кошельках по месяцам.
  * Цифры считаются из операций (analytics.ts), по тем же правилам, что «Итоги месяца» на главной. Вкладка «Календарь»: что будет с
  * деньгами в ближайшие 30 дней (CashCalendarView). Вкладка и месяц лежат в адресе (?tab=calendar&month=2026-08): «Назад», обновление
- * и ссылка их не сбрасывают.
+ * и ссылка их не сбрасывают. Вкладка «Периоды»: год, квартал или любые даты, норма сбережений, куда ушли деньги, сравнение (PeriodsView).
  */
 export default function AnalyticsPage() {
   const today = useToday();
   const currentMonth = monthKey(today);
   const [params, setParams] = useSearchParams();
-  const tab: Tab = params.get('tab') === 'calendar' ? 'calendar' : 'overview';
+  const tabParam = params.get('tab');
+  const tab: Tab = tabParam === 'calendar' || tabParam === 'periods' ? tabParam : 'overview';
   const asked = params.get('month');
   const month = asked !== null && MONTH_PARAM.test(asked) && asked >= MIN_MONTH && asked <= currentMonth ? asked : currentMonth;
   // По умолчанию (обзор, идущий месяц) адрес чистый; запись истории заменяем: листание месяцев не засоряет «Назад».
@@ -143,7 +137,7 @@ export default function AnalyticsPage() {
     const t = next.tab ?? tab;
     const m = next.month ?? month;
     const q = new URLSearchParams();
-    if (t === 'calendar') q.set('tab', 'calendar');
+    if (t !== 'overview') q.set('tab', t);
     if (m !== currentMonth) q.set('month', m);
     setParams(q, { replace: true });
   };
@@ -152,8 +146,27 @@ export default function AnalyticsPage() {
   const netWorth = useNetWorth(today);
 
   const header = <PageHeader title="Аналитика" />;
-  const tabs = <Segmented ariaLabel="Раздел аналитики" options={TABS} value={tab} onChange={(t) => setView({ tab: t })} className="mb-3" />;
+  const tabs = <Segmented ariaLabel="Раздел аналитики" options={TABS} value={tab} onChange={(t) => setView({ tab: t })} compact className="mb-3" />;
   const switcher = <MonthSwitcher month={month} max={currentMonth} onChange={(m) => setView({ month: m })} className="mb-3" />;
+
+  // «Периоды» тоже не зависят от месяца «Обзора»; их выбор (вид, год, даты) лежит в адресе рядом с tab=periods
+  if (tab === 'periods') {
+    return (
+      <>
+        {header}
+        {tabs}
+        <PeriodsView
+          params={params}
+          today={today}
+          onChange={(sel) => {
+            const q = new URLSearchParams({ tab: 'periods' });
+            selectionToParams(sel, today).forEach((v, k) => q.set(k, v));
+            setParams(q, { replace: true });
+          }}
+        />
+      </>
+    );
+  }
 
   // Календарь не зависит от выбранного месяца и читает всё сам, поэтому не ждёт данных «Обзора»
   if (tab === 'calendar') {
@@ -210,6 +223,7 @@ export default function AnalyticsPage() {
         <div className="stagger flex flex-col gap-4">
           <Summary data={data} />
           {hasPaceContent(data) && <PaceCard data={data} />}
+          <AnomaliesCard anomalies={data.anomalies} categories={data.categories} base={data.base} month={month} today={today} />
           <Section id="analytics-categories" title="Категории: сравнение с прошлым месяцем">
             {data.deltas.length === 0 ? (
               <p className="text-muted">

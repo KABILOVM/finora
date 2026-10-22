@@ -9,13 +9,19 @@ import BudgetsWidget from '@/features/budgets/BudgetsWidget';
 import UpcomingWidget from '@/features/recurring/UpcomingWidget';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
 import { useRates } from '@/rates/hooks';
+import { useToday } from '@/recurring/useToday';
 import { computeWalletsTotal } from '@/rates/walletsTotal';
 import AttentionRow from './AttentionRow';
+import MissedDaysCard from './MissedDaysCard';
 import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
 import { RecentOps } from './RecentOps';
+import SaveRemainderCard from './SaveRemainderCard';
+import TemplatesRow from './TemplatesRow';
+import TripCard from './TripCard';
 import { WalletChips } from './WalletChips';
+import WeeklyCard from './WeeklyCard';
 
 /**
  * На телефоне заголовок «Главная» скрыт визуально (остаётся для скринридера): название и так видно внизу в меню,
@@ -35,6 +41,7 @@ export default function HomePage() {
   const walletIndex = useWalletIndex();
   const categoryIndex = useCategoryIndex();
   const { getRate } = useRates();
+  const today = useToday();
 
   const base = settings?.baseCurrency;
   const total = useMemo(
@@ -87,7 +94,12 @@ export default function HomePage() {
       <PageHeader title="Главная" className={HEADER_CLASS} />
       <div className="stagger flex flex-col gap-3 md:gap-4">
         <HomeHero total={total ?? null} base={base} />
+        <TemplatesRow />
         <AttentionRow />
+        <MissedDaysCard />
+        <WeeklyCard today={today} categories={categoryIndex} />
+        <SaveRemainderCard today={today} />
+        <TripCard />
         <GlanceStrip base={base} />
         <WalletChips wallets={wallets} balances={balances} />
         <BudgetsWidget />

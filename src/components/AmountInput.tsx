@@ -57,6 +57,8 @@ export interface AmountInputProps {
   onSubmit?: (more: boolean) => void;
   /** Невысокий экран (до 700 px): потолок шрифта суммы ниже (text-4xl вместо text-5xl), ступени по длине остаются. */
   compact?: boolean;
+  /** Строка в списке полей (сверка всех кошельков): шрифт суммы не крупнее text-2xl, отступы меньше. */
+  dense?: boolean;
 }
 
 const TONE = { neutral: 'text-text', income: 'text-income', expense: 'text-expense' } as const;
@@ -92,6 +94,7 @@ export function AmountInput({
   keyRef,
   onSubmit,
   compact = false,
+  dense = false,
 }: AmountInputProps) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -254,8 +257,8 @@ export function AmountInput({
             : 'text-2xl';
   // Невысокий экран: крупный шаг на ступень мельче (text-4xl), остальные ступени по длине — как есть.
   const big = size === 'text-5xl';
-  const font = compact && big ? 'text-5xl [@media(max-height:700px)]:text-4xl' : size;
-  const symbolFont = big ? (compact ? 'text-2xl [@media(max-height:700px)]:text-xl' : 'text-2xl') : 'text-xl';
+  const font = dense ? (size === 'text-xl' ? size : 'text-2xl') : compact && big ? 'text-5xl [@media(max-height:700px)]:text-4xl' : size;
+  const symbolFont = dense ? 'text-lg' : big ? (compact ? 'text-2xl [@media(max-height:700px)]:text-xl' : 'text-2xl') : 'text-xl';
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
@@ -266,7 +269,7 @@ export function AmountInput({
         </label>
         {(() => {
           const amountRow = (
-            <div className={cn('flex items-baseline justify-center gap-2 py-2', TONE[tone])} onClick={() => inputRef.current?.focus()}>
+            <div className={cn('flex items-baseline justify-center gap-2', dense ? 'py-1' : 'py-2', TONE[tone])} onClick={() => inputRef.current?.focus()}>
               {/* Невидимая копия текста задаёт ширину поля: символ валюты стоит вплотную к цифрам. */}
               <span className="inline-grid min-w-0 grid-cols-[minmax(0,auto)]">
                 <span aria-hidden="true" className={cn('money invisible col-start-1 row-start-1 whitespace-pre px-0.5 font-bold', font)}>

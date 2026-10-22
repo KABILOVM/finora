@@ -1,6 +1,7 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it, vi } from 'vitest';
 import { exportBackup, exportTransactionsCsv, importBackup, ValidationError, type BackupFile, type Store } from '@/db';
+import { buildTransactionsCsv } from '@/db/backupCsv';
 import { stringifyWeather } from '@/domain/weatherPlaces';
 import { basics, expense, makeStore, USER_A, USER_B } from './helpers';
 
@@ -435,6 +436,41 @@ describe('exportTransactionsCsv', () => {
     const store = await fresh();
     const csv = await exportTransactionsCsv(store);
     expect(csv.slice(1).split('\r\n').filter(Boolean)).toHaveLength(1);
+  });
+
+  it('список, переданный вторым аргументом (то, что на экране «Операции»), выгружается как есть: только он, по возрастанию даты, без удалённых', async () => {
+    const store = await fresh();
+    await populated(store);
+    const all = await store.db.transactions.toArray();
+    const lunch = all.find((t) => t.note === 'Обед')!;
+    const salary = all.find((t) => t.kind === 'income')!;
+    const deleted = all.find((t) => t.deletedAt !== null)!;
+    // порядок на входе произвольный (на экране «новые сверху»), удалённая затесалась в список — в файл не идёт
+    const csv = await exportTransactionsCsv(store, [lunch, deleted, salary]);
+    const lines = csv.slice(1).split('\r\n').filter(Boolean);
+    expect(lines).toHaveLength(3); // заголовок + 2
+    expect(lines[1]).toBe('2026-10-01;Доход;Нал;Зарплата;5000,00;TJS;;;;');
+    expect(lines[2]).toBe('2026-10-05;Расход;Нал;Еда;120,50;TJS;;;;Обед');
+    // пустой список — только заголовок
+    expect((await exportTransactionsCsv(store, [])).slice(1).split('\r\n').filter(Boolean)).toHaveLength(1);
+  });
+
+  it('buildTransactionsCsv: названия берутся из справочников; нет кошелька — сумма без валюты, а формулы по-прежнему обезврежены', () => {
+    const tx = {
+      id: 'a',
+      kind: 'expense',
+      walletId: 'нет-такого',
+      toWalletId: null,
+      amountMinor: 12345,
+      toAmountMinor: null,
+      categoryId: 'c1',
+      occurredOn: '2026-10-05',
+      note: '=1+1',
+      deletedAt: null,
+      createdAt: '2026-10-05T10:00:00.000Z',
+    } as unknown as Parameters<typeof buildTransactionsCsv>[0][number];
+    const csv = buildTransactionsCsv([tx], [], [{ id: 'c1', name: 'Еда' }]);
+    expect(csv.slice(1).split('\r\n')[1]).toBe("2026-10-05;Расход;;Еда;12345;;;;;'=1+1");
   });
 });
 

@@ -23,6 +23,7 @@ import { enteredNote } from '@/rates/enteredText';
 import { viewRule } from '@/recurring/ruleView';
 import { useRates } from '@/rates/hooks';
 import { GoalLine } from './GoalLine';
+import { ReconcileAllSheet } from './ReconcileAllSheet';
 import { ReconcileSheet } from './ReconcileSheet';
 import { computeWalletsTotal } from '@/rates/walletsTotal';
 import { WALLET_KIND_LABELS } from './walletUi';
@@ -76,6 +77,7 @@ export default function WalletsPage() {
 
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [reconciling, setReconciling] = useState<LocalRow<Wallet> | null>(null);
+  const [reconcilingAll, setReconcilingAll] = useState(false);
   const [archiving, setArchiving] = useState<LocalRow<Wallet> | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -272,6 +274,12 @@ export default function WalletsPage() {
         </Card>
       )}
 
+      {active.length > 1 && !overflow && (
+        <Button variant="secondary" icon="check" fullWidth className="mt-3" onClick={() => setReconcilingAll(true)}>
+          Сверить все кошельки
+        </Button>
+      )}
+
       {archived.length > 0 && (
         <section className="mt-6">
           <button
@@ -345,6 +353,8 @@ export default function WalletsPage() {
       {reconciling && (
         <ReconcileSheet wallet={wallets.find((w) => w.id === reconciling.id) ?? reconciling} onClose={() => setReconciling(null)} />
       )}
+
+      {reconcilingAll && <ReconcileAllSheet wallets={active} onClose={() => setReconcilingAll(false)} />}
 
       <ConfirmDialog
         open={archiving !== null}

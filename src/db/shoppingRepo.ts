@@ -26,6 +26,25 @@ export interface PurchaseInput {
   txId?: UUID;
 }
 
+/** Позиция чека, внесённого по фото или вручную (уже куплена, цена — за всю позицию). */
+export interface ReceiptLineInput {
+  name: string;
+  qtyMilli: number;
+  unit: ShoppingUnit;
+  /** Цена позиции целиком (после скидки), ≥ 0. */
+  priceMinor: Minor;
+}
+
+export interface ReceiptInput {
+  walletId: UUID;
+  categoryId: UUID | null;
+  occurredOn: IsoDate;
+  note?: string;
+  /** Заранее выданный id расхода: повтор (двойное нажатие, повтор после сбоя) не создаст второй расход. */
+  txId?: UUID;
+  lines: readonly ReceiptLineInput[];
+}
+
 export interface PurchaseResult {
   transaction: LocalRow<Transaction>;
   items: LocalRow<ShoppingItem>[];
@@ -48,10 +67,18 @@ export interface ShoppingRepo {
    * помечаются купленными и входят в «чек» этого расхода. Всё одной транзакцией базы: либо всё, либо ничего.
    */
   purchase(input: PurchaseInput): Promise<PurchaseResult>;
+  /**
+   * Внести чек целиком: ОДИН расход на сумму позиций и сами позиции как купленные (они видны в «Чеке» расхода и пополняют память цен).
+   * В отличие от purchase позиции берутся не из списка покупок, а из входа. Кошелёк в основной валюте. Одной транзакцией базы:
+   * либо расход и все позиции, либо ничего. Повтор с тем же txId возвращает уже созданное.
+   */
+  recordReceipt(input: ReceiptInput): Promise<PurchaseResult>;
 }
 
 const INPUT_KEYS = ['name', 'qtyMilli', 'unit'] as const;
 const PURCHASE_KEYS = ['walletId', 'categoryId', 'occurredOn', 'note', 'txId'] as const;
+const RECEIPT_KEYS = ['walletId', 'categoryId', 'occurredOn', 'note', 'txId', 'lines'] as const;
+const LINE_KEYS = ['name', 'qtyMilli', 'unit', 'priceMinor'] as const;
 const DATA_KEYS: readonly (keyof ShoppingData)[] = ['name', 'qtyMilli', 'unit', 'priceMinor', 'checkedAt', 'purchasedAt', 'transactionId'];
 
 const dataOf = (i: ShoppingItem): ShoppingData => ({
@@ -196,6 +223,65 @@ export function createShoppingRepo(ctx: RepoContext, transactions: TransactionsR
           items.push(row);
         }
         await db.shopping_items.bulkPut(items);
+        return { transaction, items };
+      });
+    },
+
+    async recordReceipt(input) {
+      const clean = cleanPatch(input, RECEIPT_KEYS, 'Чек') as Partial<ReceiptInput>;
+      const walletId = reqId(clean.walletId, 'Кошелёк');
+      const categoryId = clean.categoryId === null || clean.categoryId === undefined ? null : reqId(clean.categoryId, 'Категория');
+      const occurredOn = reqDate(clean.occurredOn, 'Дата чека');
+      const note = clean.note === undefined ? 'Чек' : reqText(clean.note, 'Заметка', LIMITS.note, 0);
+      const txId = clean.txId === undefined ? newId() : reqId(clean.txId, 'Расход');
+      const rawLines = Array.isArray(clean.lines) ? (clean.lines as readonly unknown[]) : null;
+      if (rawLines === null || rawLines.length === 0) throw new ValidationError('В чеке нет позиций');
+      if (rawLines.length > MAX_RECEIPT_ITEMS) throw new ValidationError(`В одном чеке не больше ${MAX_RECEIPT_ITEMS} позиций`);
+      const lines = rawLines.map((l) => {
+        const c = cleanPatch((l ?? {}) as Record<string, unknown>, LINE_KEYS, 'Позиция чека');
+        // проверки названия, количества, единицы и цены — те же, что у любой позиции
+        return parseShoppingData({ ...c, checkedAt: '2000-01-01T00:00:00.000Z', purchasedAt: '2000-01-01T00:00:00.000Z', transactionId: txId });
+      });
+      return writeTx(ctx, scope(), async () => {
+        const settings = await requireSettings(ctx);
+        const wallet = await getLiveWallet(ctx, walletId);
+        if (wallet.currency !== settings.baseCurrency) {
+          throw new ValidationError(`Чек вносится в основной валюте: выберите кошелёк в ${settings.baseCurrency}`);
+        }
+        if (categoryId !== null) {
+          const cat = await getLiveCategory(ctx, categoryId);
+          if (cat.kind !== 'expense') throw new ValidationError('Для чека нужна категория расходов');
+        }
+        const prior = await db.transactions.get(txId);
+        if (prior) {
+          const done = await db.shopping_items.where('transactionId').equals(txId).toArray();
+          return { transaction: prior, items: done };
+        }
+        let total: Minor;
+        try {
+          total = sumMinor(lines.map((l) => l.priceMinor as Minor));
+        } catch {
+          throw new ValidationError('Сумма чека слишком велика');
+        }
+        reqPositiveMinor(total, 'Сумма чека');
+        const transaction = await transactions.create({ kind: 'expense', walletId, categoryId, amountMinor: total, occurredOn, note }, { id: txId });
+        const stamp = ctx.clock.tick();
+        const items: LocalRow<ShoppingItem>[] = lines.map((data) => {
+          const { fields } = touch(ctx);
+          return {
+            id: newId(),
+            createdAt: stamp,
+            deletedAt: null,
+            ...data,
+            checkedAt: stamp,
+            purchasedAt: stamp,
+            transactionId: transaction.id,
+            ...fields,
+            serverSeq: null,
+            dirtyGroups: [],
+          };
+        });
+        await db.shopping_items.bulkAdd(items);
         return { transaction, items };
       });
     },

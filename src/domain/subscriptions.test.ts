@@ -223,3 +223,80 @@ describe('detectRecurring: порядок и свойства', () => {
     );
   });
 });
+
+describe('detectRecurring: годовая сумма и подорожание', () => {
+  const amounts = (list: [string, number][], over: Partial<SubTx> = {}) => list.map(([occurredOn, amountMinor]) => tx({ occurredOn, amountMinor, ...over }));
+
+  it('годовая сумма: месяц ×12, неделя ×52, две недели ×26', () => {
+    expect(detectRecurring(series(monthly), [], TODAY)[0]!.yearlyMinor).toBe(4_900 * 12);
+    expect(detectRecurring(series(['2026-09-24', '2026-10-01', '2026-10-08', '2026-10-15'], { note: 'Спортзал', amountMinor: 3_000 }), [], TODAY)[0]!.yearlyMinor).toBe(3_000 * 52);
+    expect(detectRecurring(series(['2026-09-03', '2026-09-17', '2026-10-01', '2026-10-15'], { note: 'Уборка', amountMinor: 2_000 }), [], TODAY)[0]!.yearlyMinor).toBe(2_000 * 26);
+  });
+
+  it('цена не менялась — previousAmountMinor пуст', () => {
+    expect(detectRecurring(series(monthly), [], TODAY)[0]!.previousAmountMinor).toBeNull();
+  });
+
+  it('подорожало: два платежа по 49, затем три по 59 — прежняя цена 49, нынешняя 59', () => {
+    const txs = amounts([['2026-05-03', 4_900], ['2026-06-03', 4_900], ['2026-07-03', 5_900], ['2026-08-03', 5_900], ['2026-09-03', 5_900]]);
+    const c = detectRecurring(txs, [], TODAY)[0]!;
+    expect(c).toMatchObject({ amountMinor: 5_900, count: 3, previousAmountMinor: 4_900, yearlyMinor: 5_900 * 12 });
+  });
+
+  it('прежняя цена может быть и одним платежом', () => {
+    const txs = amounts([['2026-06-03', 4_900], ['2026-07-03', 5_900], ['2026-08-03', 5_900], ['2026-09-03', 5_900]]);
+    expect(detectRecurring(txs, [], TODAY)[0]).toMatchObject({ amountMinor: 5_900, previousAmountMinor: 4_900 });
+  });
+
+  it('только что подорожавшая (меньше трёх платежей по новой цене): пока не подписка вовсе — ни одна свежая серия из трёх не складывается', () => {
+    // это прежнее поведение: подтверждённой считается серия не короче MIN_REPEATS по текущей цене
+    const txs = amounts([['2026-06-03', 4_900], ['2026-07-03', 4_900], ['2026-08-03', 4_900], ['2026-09-03', 5_900], ['2026-10-03', 5_900]]);
+    expect(detectRecurring(txs, [], TODAY)).toEqual([]);
+  });
+
+  it('подешевело — не подорожание', () => {
+    const txs = amounts([['2026-06-03', 5_900], ['2026-07-03', 4_900], ['2026-08-03', 4_900], ['2026-09-03', 4_900]]);
+    expect(detectRecurring(txs, [], TODAY)[0]).toMatchObject({ amountMinor: 4_900, previousAmountMinor: null });
+  });
+
+  it('скачок больше чем вдвое (пробный период, другой тариф) — не подорожание', () => {
+    const txs = amounts([['2026-06-03', 100], ['2026-07-03', 5_900], ['2026-08-03', 5_900], ['2026-09-03', 5_900]]);
+    expect(detectRecurring(txs, [], TODAY)[0]).toMatchObject({ amountMinor: 5_900, previousAmountMinor: null });
+    // ровно вдвое ещё считается
+    const double = amounts([['2026-06-03', 2_950], ['2026-07-03', 5_900], ['2026-08-03', 5_900], ['2026-09-03', 5_900]]);
+    expect(detectRecurring(double, [], TODAY)[0]).toMatchObject({ previousAmountMinor: 2_950 });
+  });
+
+  it('прежний платёж не на шаге (пропуск в несколько месяцев) — не считается прежней ценой', () => {
+    const txs = amounts([['2026-03-03', 4_900], ['2026-07-03', 5_900], ['2026-08-03', 5_900], ['2026-09-03', 5_900]]);
+    expect(detectRecurring(txs, [], TODAY)[0]).toMatchObject({ amountMinor: 5_900, previousAmountMinor: null });
+  });
+
+  it('разные суммы в «старой» серии: берётся медиана подряд идущих близких', () => {
+    const txs = amounts([['2026-04-03', 4_000], ['2026-05-03', 4_900], ['2026-06-03', 4_950], ['2026-07-03', 5_900], ['2026-08-03', 5_900], ['2026-09-03', 5_900]]);
+    // 4 950 и 4 900 близки (≤ 5%), 4 000 — нет: прежняя цена по двум ближайшим к новой серии
+    expect(detectRecurring(txs, [], TODAY)[0]).toMatchObject({ amountMinor: 5_900, previousAmountMinor: 4_925 });
+  });
+
+  it('порядок входа не меняет результат', () => {
+    const txs = amounts([['2026-05-03', 4_900], ['2026-06-03', 4_900], ['2026-07-03', 5_900], ['2026-08-03', 5_900], ['2026-09-03', 5_900]]);
+    expect(detectRecurring([...txs].reverse(), [], TODAY)).toEqual(detectRecurring(txs, [], TODAY));
+  });
+
+  it('свойство: прежняя цена всегда ниже нынешней, но не меньше её половины; годовая сумма = сумма × число платежей в год', () => {
+    const arb = fc.array(fc.record({ amount: fc.integer({ min: 100, max: 20_000 }), ago: fc.integer({ min: 0, max: 380 }) }), { minLength: 3, maxLength: 20 });
+    fc.assert(
+      fc.property(arb, (rows) => {
+        const txs = rows.map((r, i) => tx({ id: `q${i}`, note: 'Подписка', amountMinor: r.amount, occurredOn: addDays(TODAY, -r.ago) }));
+        for (const c of detectRecurring(txs, [], TODAY)) {
+          const perYear = c.frequency === 'monthly' ? 12 : c.intervalN === 2 ? 26 : 52;
+          expect(c.yearlyMinor).toBe(c.amountMinor * perYear);
+          if (c.previousAmountMinor !== null) {
+            expect(c.previousAmountMinor).toBeLessThan(c.amountMinor);
+            expect(c.previousAmountMinor * 2).toBeGreaterThanOrEqual(c.amountMinor);
+          }
+        }
+      }),
+    );
+  });
+});

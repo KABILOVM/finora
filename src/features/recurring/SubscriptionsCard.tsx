@@ -20,6 +20,19 @@ export function candidateLabel(c: SubscriptionCandidate, lookups: Pick<Recurring
   return c.note !== '' ? c.note : ((c.categoryId !== null ? lookups.categories.get(c.categoryId)?.name : undefined) ?? 'Расход');
 }
 
+/** На сколько процентов подорожало: (стало − было) / было, целым. */
+export const risePercent = (now: number, was: number): number => Math.round(((now - was) * 100) / was);
+
+/** Сколько всего в год по подсказкам: по валюте кошелька, «≈ 14 400 с. + ≈ 120 $». Пусто, если подсказок нет. */
+export function yearlyTotals(items: readonly SubscriptionCandidate[], lookups: Pick<RecurringLookups, 'wallets' | 'base'>): string {
+  const byCurrency = new Map<string, number>();
+  for (const c of items) {
+    const currency = lookups.wallets.get(c.walletId)?.currency ?? lookups.base;
+    byCurrency.set(currency, (byCurrency.get(currency) ?? 0) + c.yearlyMinor);
+  }
+  return [...byCurrency.entries()].map(([currency, minor]) => `≈ ${formatMinor(minor, currency)}`).join(' + ');
+}
+
 export interface SubscriptionsCardProps {
   items: readonly SubscriptionCandidate[];
   /** Раскрыта ли карточка. Состояние держит страница: карточка переезжает с места на место (нет платежей → есть платежи) и иначе сворачивалась бы. */
@@ -40,6 +53,8 @@ export function SubscriptionsCard({ items, open, onToggle, lookups, onCreate, on
   if (items.length === 0) return null;
   const shown = all ? items : items.slice(0, SHOWN);
   const more = items.length - shown.length;
+  const total = yearlyTotals(items, lookups);
+  const risen = items.filter((c) => c.previousAmountMinor !== null).length;
   return (
     <section aria-labelledby="rec-subs" data-testid="subscriptions-card" className="mb-6">
       <h2 id="rec-subs">
@@ -53,10 +68,18 @@ export function SubscriptionsCard({ items, open, onToggle, lookups, onCreate, on
           <Icon name="chevron" size={18} className={open ? 'rotate-90' : ''} />
         </button>
       </h2>
-      {!open && <p className="px-1 text-sm text-muted">Расходы, которые повторяются, но не заведены как регулярный платёж.</p>}
+      {!open && (
+        <p className="px-1 text-sm text-muted">
+          Расходы, которые повторяются, но не заведены как регулярный платёж. В сумме {total} в год.
+          {risen > 0 && ` Подорожало: ${risen}.`}
+        </p>
+      )}
       {open && (
         <>
           <p className="mb-2 px-1 text-sm text-muted">Эти расходы повторяются, но не заведены как регулярный платёж. Если это подписка — заведите её, и приложение напомнит о платеже.</p>
+          <p data-testid="subscriptions-total" className="mb-2 px-1 text-base font-semibold">
+            Всего в год: <span className="money">{total}</span>
+          </p>
           <Card padding="none">
             <ul className="divide-y divide-border">
               {shown.map((c) => {
@@ -71,6 +94,15 @@ export function SubscriptionsCard({ items, open, onToggle, lookups, onCreate, on
                         <span className="money">{formatMinor(c.amountMinor, currency)}</span> {stepWords(c.frequency, c.intervalN)} · {c.count}{' '}
                         {pluralRu(c.count, 'платёж', 'платежа', 'платежей')}, последний {longDate(c.lastOn)}
                       </p>
+                      <p className="text-sm text-muted">
+                        В год ≈ <span className="money">{formatMinor(c.yearlyMinor, currency)}</span>
+                      </p>
+                      {c.previousAmountMinor !== null && (
+                        <p data-testid="subscription-rise" className="text-sm font-medium text-warning">
+                          Подорожало: было <span className="money">{formatMinor(c.previousAmountMinor, currency)}</span>, стало{' '}
+                          <span className="money">{formatMinor(c.amountMinor, currency)}</span> (+{risePercent(c.amountMinor, c.previousAmountMinor)}%)
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="secondary" aria-label={`Создать платёж: ${label}`} onClick={() => onCreate(c)}>

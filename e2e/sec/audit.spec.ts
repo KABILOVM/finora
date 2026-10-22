@@ -79,10 +79,13 @@ test.describe('Статический аудит (один раз)', () => {
         if (/^\s*\{?\s*\.\.\.addLink/.test(arg) || /item\.to|^to=/.test(arg) || arg === 'to') continue;
         // Адрес из реестра разделов (src/app/sections.ts): статические пути приложения, пользовательских данных в них нет.
         if (/^section\.path$/.test(arg)) continue;
-        // Адрес целиком внутренний: начало ФИКСИРОВАННОЕ (/debts/, /debts/people/, /debts?dir=, /edit/, /transactions?, /analytics?month=),
-        // из данных подставляется только хвост (номер долга/операции, закодированный ключ человека, 'borrowed', закодированные фильтры
-        // или месяц). Уйти на чужой сайт такой адрес не может: «//evil» и «https:» тут не начало.
-        if (/^(?:dir \? )?`\/(?:debts\/|debts\/people\/|debts\?dir=|edit\/|transactions\?|analytics\?month=)\$\{/.test(arg)) continue;
+        // Константа ADD_PATH из src/layout/nav.ts ('/add'): фиксированный путь шита «Новая операция» («Повторить» в правке операции).
+        // Из данных в адрес ничего не подставляется: предзаполнение формы едет в state перехода, а не в адрес.
+        if (/^ADD_PATH,\s*\{/.test(arg)) continue;
+        // Адрес целиком внутренний: начало ФИКСИРОВАННОЕ (/debts/, /debts/people/, /debts?dir=, /edit/, /transactions?, /analytics?, /wallets/),
+        // из данных подставляется только хвост (номер долга/операции/кошелька, закодированный ключ человека, 'borrowed', закодированные
+        // фильтры, месяц или период). Уйти на чужой сайт такой адрес не может: «//evil» и «https:» тут не начало.
+        if (/^(?:dir \? )?`\/(?:debts\/|debts\/people\/|debts\?dir=|edit\/|transactions\?|analytics\?|wallets\/)\$\{/.test(arg)) continue;
         dynamic.push(`${f}: ${arg.slice(0, 60)}`);
       }
     }

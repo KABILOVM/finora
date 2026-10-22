@@ -15,17 +15,18 @@ export interface AiExpensesResult {
 }
 
 async function call(client: Invoker | null, body: Record<string, unknown>, ctx: DictContext, firstRid: number): Promise<AiExpensesResult> {
-  const data = await invokeAi(client, PARSE_EXPENSES_FUNCTION, { ...body, ...lite(ctx) }, 'расходов');
+  const data = await invokeAi(client, PARSE_EXPENSES_FUNCTION, { ...body, ...lite(ctx) }, 'операций');
   return {
     drafts: normalizeAiExpenses(data.expenses, ctx, firstRid),
     transcript: typeof data.transcript === 'string' ? data.transcript.trim() : '',
   };
 }
 
-/** Что уходит на сервер: только названия счетов и категорий и сегодняшняя дата. */
+/** Что уходит на сервер: только названия счетов и категорий (расходов и доходов) и сегодняшняя дата. */
 const lite = (ctx: DictContext) => ({
   wallets: ctx.wallets.map((w) => w.name),
   categories: ctx.categories.map((c) => c.name),
+  incomeCategories: (ctx.incomeCategories ?? []).map((c) => c.name),
   today: ctx.today,
 });
 

@@ -80,6 +80,7 @@ export default function SettingsPage() {
         <RatesSection />
         <Card padding="none" className="mb-6">
           <NavRow to="/settings/categories" icon="i:tag" color="#4f46e5" title="Категории" />
+          <NavRow to="/settings/templates" icon="i:star" color="#d97706" title="Шаблоны операций" />
         </Card>
       </Block>
 
@@ -87,6 +88,7 @@ export default function SettingsPage() {
         <BackupSection />
         <Card padding="none" className="mb-6">
           <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Дзен-мани" />
+          <NavRow to="/settings/data-check" icon="i:target" color="#d97706" title="Проверка данных" />
         </Card>
       </Block>
 

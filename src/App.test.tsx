@@ -76,7 +76,7 @@ describe('навигация', () => {
     const side = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.closest('aside'));
     expect(side).toBeDefined();
     const labels = Array.from((side as HTMLElement).querySelectorAll('a')).map((a) => a.textContent);
-    expect(labels).toEqual(['Главная', 'Операции', 'Аналитика', 'Кошельки', 'Долги', 'Бюджеты', 'Регулярные платежи', 'Покупки', 'Курсы валют', 'Погода', 'Настройки']);
+    expect(labels).toEqual(['Главная', 'Операции', 'Аналитика', 'Кошельки', 'Долги', 'Бюджеты', 'Регулярные платежи', 'Поездки', 'Покупки', 'Курсы валют', 'Погода', 'Настройки']);
     const aside = (side as HTMLElement).closest('aside') as HTMLElement;
     expect(aside.querySelector('a[href="#/add"], a[href="/add"]')?.textContent).toContain('Добавить операцию');
   });

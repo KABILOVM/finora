@@ -181,3 +181,53 @@ describe('«Похоже на подписки» на экране «Регул�
     expect(screen.getByText('Платежей по расписанию пока нет')).toBeTruthy();
   });
 });
+
+describe('«Похоже на подписки»: годовая сумма и подорожание', () => {
+  const rise = async (s: Store) => {
+    await spend(s, ['2026-05-03', '2026-06-03'], { amountMinor: 4_900 });
+    await spend(s, ['2026-07-03', '2026-08-03', '2026-09-03'], { amountMinor: 5_900 });
+  };
+
+  it('свёрнутая строка называет общую сумму за год', async () => {
+    await openPage((s) => spend(s, MONTHLY));
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(norm(card()!.textContent)).toContain(`В сумме ≈ ${fmt(4_900 * 12)} в год.`);
+    expect(norm(card()!.textContent)).not.toContain('Подорожало');
+  });
+
+  it('раскрытая: «Всего в год» и «В год ≈» у каждой; без подорожания строки «Подорожало» нет', async () => {
+    await openPage((s) => spend(s, MONTHLY));
+    await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
+    expect(norm(document.querySelector('[data-testid="subscriptions-total"]')!.textContent)).toBe(`Всего в год: ≈ ${fmt(4_900 * 12)}`);
+    expect(items()[0]).toContain(`В год ≈ ${fmt(4_900 * 12)}`);
+    expect(document.querySelector('[data-testid="subscription-rise"]')).toBeNull();
+  });
+
+  it('подорожало: было 49, стало 59 (+20%) — и в свёрнутой строке, и в раскрытой', async () => {
+    await openPage(rise);
+    await waitFor(() => expect(card()).not.toBeNull());
+    expect(norm(card()!.textContent)).toContain('Подорожало: 1.');
+    await expandCard();
+    expect(norm(document.querySelector('[data-testid="subscription-rise"]')!.textContent)).toBe(
+      `Подорожало: было ${fmt(4_900)}, стало ${fmt(5_900)} (+20%)`,
+    );
+    // годовая сумма — по нынешней цене
+    expect(items()[0]).toContain(`В год ≈ ${fmt(5_900 * 12)}`);
+    // прежние тексты на месте
+    expect(items()[0]).toContain(`${fmt(5_900)} раз в месяц · 3 платежа, последний 3 сентября`);
+  });
+
+  it('несколько подписок: общая сумма складывается по всем, а не только по показанным трём', async () => {
+    await openPage(async (s) => {
+      await spend(s, MONTHLY, { note: 'Netflix', amountMinor: 4_900 });
+      await spend(s, MONTHLY, { note: 'Spotify', amountMinor: 3_000 });
+      await spend(s, MONTHLY, { note: 'iCloud', amountMinor: 1_000 });
+      await spend(s, MONTHLY, { note: 'Облако', amountMinor: 2_000 });
+    });
+    await waitFor(() => expect(card()).not.toBeNull());
+    await expandCard();
+    expect(items()).toHaveLength(3); // показаны три, четвёртая за «Показать ещё»
+    expect(norm(document.querySelector('[data-testid="subscriptions-total"]')!.textContent)).toBe(`Всего в год: ≈ ${fmt((4_900 + 3_000 + 1_000 + 2_000) * 12)}`);
+  });
+});

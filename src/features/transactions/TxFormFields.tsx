@@ -11,8 +11,10 @@ import { TextInput } from '@/components/Field';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import type { LocalRow, TxKind, Wallet } from '@/domain/types';
 import { ContextRow, type CategoryState } from './ContextRow';
+import type { FrequentChoice } from './FrequentPanel';
 import { FeeField, applyPctKey } from './FeeField';
 import { FxNotice } from './FxNotice';
+import { NoteSuggestions, type NoteChoice } from './NoteSuggestions';
 import { ReceivedField } from './ReceivedField';
 import { NO_FEE, NOTE_MAX } from './txForm';
 import type { TxFormController } from './useTxFormController';
@@ -41,13 +43,21 @@ export interface TxFormFieldsProps {
   wallets: readonly LocalRow<Wallet>[];
   /** Категории нужного вида, уже упорядоченные: самые частые первыми. */
   categories: readonly ChipOption[];
-  /** Кнопка справа от переключателя вида (например, «Продиктовать расходы»): не удлиняет форму. */
+  /** Кнопка справа от переключателя вида (например, «Продиктовать операции»): не удлиняет форму. */
   kindAction?: ReactNode;
   /** Новая операция: что сказано про категорию (см. ContextRow). */
   categoryState?: CategoryState;
   onCategorySkip?: () => void;
   /** Enter в поле суммы сохраняет операцию; Ctrl/⌘+Enter — сохраняет и открывает новую (more). */
   onSubmit?: (more: boolean) => void;
+  /** Новая операция: частые операции текущего вида (полоса чипов в панели категорий) и что делать при нажатии. */
+  frequent?: readonly FrequentChoice[];
+  onPickFrequent?: (key: string) => void;
+  /** Новая операция: «Сохранить как шаблон» в панели категорий; нет — кнопки нет. */
+  onSaveTemplate?: () => void;
+  /** Новая операция: похожие записи для набираемой заметки (под полем заметки) и что делать при нажатии. */
+  noteSuggestions?: readonly NoteChoice[];
+  onPickNote?: (key: string) => void;
 }
 
 /** Круглая кнопка у края суммы (комиссия слева, заметка справа). */
@@ -84,7 +94,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -169,6 +179,9 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           categoryState={categoryState}
           onCategorySkip={onCategorySkip}
           onPicked={focusAmount}
+          frequent={frequent}
+          onPickFrequent={onPickFrequent}
+          onSaveTemplate={onSaveTemplate}
         />
         <FxNotice
           fx={c.fx}
@@ -230,9 +243,21 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
                     placeholder="Например, хлеб и молоко"
                     error={errors.note}
                   />
-                  <Button size="md" fullWidth onClick={() => setNoteOpen(false)}>
-                    Готово
-                  </Button>
+                  {noteSuggestions && noteSuggestions.length > 0 && onPickNote ? (
+                    // Подсказки занимают место «Готово» (такой же высоты): панель не растёт. Закрыть — Enter, тап мимо или Esc.
+                    <NoteSuggestions
+                      items={noteSuggestions}
+                      onPick={(key) => {
+                        setNoteOpen(false);
+                        onPickNote(key);
+                        focusAmount();
+                      }}
+                    />
+                  ) : (
+                    <Button size="md" fullWidth onClick={() => setNoteOpen(false)}>
+                      Готово
+                    </Button>
+                  )}
                 </div>
               </Floating>
             ) : undefined
