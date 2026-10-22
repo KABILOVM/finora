@@ -7,7 +7,7 @@ import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet'
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
 import { useRates } from '@/rates/hooks';
-import { todayLocal } from '@/lib/dates';
+import { addDays, todayLocal } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
 import { Sheet } from '@/components/Sheet';
 import type { DictCategory } from '@/domain/expensesAi';
@@ -21,9 +21,10 @@ import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
 import type { FrequentChoice } from '@/features/transactions/FrequentPanel';
 import { suggestNotes, useNoteIndex } from '@/features/transactions/noteSuggest';
+import { parseQuickLine } from '@/features/transactions/quickLine';
 import type { NoteChoice } from '@/features/transactions/NoteSuggestions';
 import { formFromPrefill } from '@/features/transactions/prefill';
-import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet, resolveDate } from '@/features/transactions/txForm';
+import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, pickDefaultWallet, resolveDate, ruDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
@@ -224,7 +225,53 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     }
     return out;
   }, [noteIndex, kind, c.form.note, wallets, categories]);
+  // «Ввод одной строкой»: «такси 20 карта» в заметке читается как сумма + кошелёк + категория (+ «вчера»); подставляется по нажатию
+  const quickLine = useMemo(
+    () =>
+      parseQuickLine(c.form.note, {
+        wallets,
+        categories,
+        noteIndex,
+        kind,
+        currentWalletId: c.form.walletId,
+        today: todayLocal(),
+      }),
+    [c.form.note, wallets, categories, noteIndex, kind, c.form.walletId],
+  );
+  const quickChoice = useMemo((): NoteChoice | null => {
+    if (!quickLine) return null;
+    const w = wallets.find((x) => x.id === (quickLine.walletId ?? c.form.walletId));
+    if (!w) return null;
+    const cat = quickLine.categoryId === null ? undefined : categories.find((x) => x.id === quickLine.categoryId);
+    const mixed = new Set(wallets.map((x) => x.currency)).size > 1;
+    const today = todayLocal();
+    // дата в строке задаётся только словами «сегодня / вчера / позавчера»: их же и показываем
+    const when =
+      quickLine.date === null ? null : quickLine.date === today ? 'сегодня' : quickLine.date === addDays(today, -1) ? 'вчера' : quickLine.date === addDays(today, -2) ? 'позавчера' : ruDate(quickLine.date);
+    return {
+      key: 'line',
+      accent: true,
+      note: quickLine.note !== '' ? quickLine.note : (cat?.name ?? 'Без заметки'),
+      ...(when ? { tag: when } : {}),
+      detail: [cat?.name ?? null, mixed ? `${w.name} · ${w.currency}` : w.name, when].filter(Boolean).join(' · '),
+      amount: formatMinor(quickLine.amountMinor, w.currency),
+      icon: cat?.icon ?? 'i:bolt',
+      ...(cat ? { color: cat.color } : {}),
+    };
+  }, [quickLine, wallets, categories, c.form.walletId]);
+  const pickLine = () => {
+    if (!quickLine) return;
+    if (quickLine.walletId !== null) c.setWallet(quickLine.walletId);
+    c.set({
+      note: quickLine.note,
+      amountMinor: quickLine.amountMinor,
+      ...(quickLine.categoryId !== null ? { categoryId: quickLine.categoryId } : {}),
+      ...(quickLine.date !== null ? { date: { mode: 'date' as const, value: quickLine.date } } : {}),
+    });
+    if (quickLine.categoryId !== null) setCategoryState('untouched');
+  };
   const pickNote = (key: string) => {
+    if (key === 'line') return pickLine();
     const m = noteMatches.find((x) => x.choice.key === key)?.e;
     if (!m) return;
     c.setWallet(m.walletId);
@@ -378,7 +425,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           onSubmit={(more) => void save(more)}
           frequent={frequentForKind}
           onPickFrequent={pickFrequent}
-          noteSuggestions={noteMatches.map((m) => m.choice)}
+          noteSuggestions={quickChoice ? [quickChoice, ...noteMatches.map((m) => m.choice)] : noteMatches.map((m) => m.choice)}
           onPickNote={pickNote}
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении

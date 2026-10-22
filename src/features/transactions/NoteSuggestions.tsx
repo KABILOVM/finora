@@ -1,4 +1,5 @@
 import { Glyph } from '@/components/Glyph';
+import { cn } from '@/lib/cn';
 
 /** Одна подсказка под полем заметки: всё уже превращено в текст, здесь только рисуем. */
 export interface NoteChoice {
@@ -11,6 +12,10 @@ export interface NoteChoice {
   amount: string;
   icon: string;
   color?: string;
+  /** Разобранная строка («такси 20 карта»): первый чип, выделен цветом, подпись «Применить». */
+  accent?: boolean;
+  /** Короткая пометка рядом с заметкой («вчера»): то, что изменится кроме суммы, но не видно из остального текста. */
+  tag?: string;
 }
 
 export const NOTE_SUGGEST_LABEL = 'Похожие записи';
@@ -27,13 +32,19 @@ export function NoteSuggestions({ items, onPick }: { items: readonly NoteChoice[
         <button
           key={it.key}
           type="button"
-          aria-label={`${it.note}, ${it.detail}, ${it.amount}`}
+          aria-label={`${it.accent ? 'Применить: ' : ''}${it.note}, ${it.detail}, ${it.amount}`}
           title={it.detail}
           onClick={() => onPick(it.key)}
-          className="flex min-h-[44px] max-w-[85%] shrink-0 items-center gap-2 rounded-full border border-border bg-surface-2 py-1 pl-1.5 pr-3 text-left transition-colors hover:bg-border/50 active:bg-border/80"
+          className={cn(
+            'flex min-h-[44px] max-w-[85%] shrink-0 items-center gap-2 rounded-full border py-1 pl-1.5 pr-3 text-left transition-colors',
+            it.accent
+              ? 'border-brand/50 bg-brand/10 hover:bg-brand/15 active:bg-brand/20'
+              : 'border-border bg-surface-2 hover:bg-border/50 active:bg-border/80',
+          )}
         >
           <Glyph value={it.icon} color={it.color} size={28} />
           <span className="min-w-0 truncate text-base font-semibold text-text">{it.note}</span>
+          {it.tag && <span className="shrink-0 text-sm font-medium text-brand">{it.tag}</span>}
           <span className="money shrink-0 text-base font-semibold text-muted">{it.amount}</span>
         </button>
       ))}
