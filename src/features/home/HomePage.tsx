@@ -18,6 +18,7 @@ import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
 import { RecentOps } from './RecentOps';
 import SaveRemainderCard from './SaveRemainderCard';
+import TemplatesRow from './TemplatesRow';
 import TripCard from './TripCard';
 import { WalletChips } from './WalletChips';
 import WeeklyCard from './WeeklyCard';
@@ -93,6 +94,7 @@ export default function HomePage() {
       <PageHeader title="Главная" className={HEADER_CLASS} />
       <div className="stagger flex flex-col gap-3 md:gap-4">
         <HomeHero total={total ?? null} base={base} />
+        <TemplatesRow />
         <AttentionRow />
         <MissedDaysCard />
         <WeeklyCard today={today} categories={categoryIndex} />

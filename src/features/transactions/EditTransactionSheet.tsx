@@ -18,6 +18,7 @@ import { useDebtTxRole } from '@/features/debts/useDebtTxRole';
 import { Receipt } from '@/features/shopping/Receipt';
 import { ADD_PATH } from '@/layout/nav';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
+import { SaveTemplateButton } from '@/features/templates/SaveTemplateButton';
 import { prefillOfForm } from './prefill';
 import { humanError, toastWithUndo } from './txActions';
 import { endSentence } from './txDisplay';
@@ -296,6 +297,13 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
             <Receipt txId={tx.id} currency={wallets.find((w) => w.id === tx.walletId)?.currency ?? tx.baseCurrency} />
           )}
           <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} onSubmit={() => void save()} />
+          {/* как и «Повторить»: операция по долгу шаблоном не бывает */}
+          {canRepeat && (
+            <SaveTemplateButton
+              prefill={c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId ? prefillOfForm(c.form, c.fee.minor) : null}
+              categoryName={categories.find((x) => x.id === c.form.categoryId)?.name ?? null}
+            />
+          )}
         </div>
       </Sheet>
       <ConfirmDialog

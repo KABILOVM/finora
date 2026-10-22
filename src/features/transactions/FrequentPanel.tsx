@@ -1,4 +1,5 @@
 import { Glyph } from '@/components/Glyph';
+import { Icon } from '@/components/Icon';
 
 /** Одна «частая» операция в панели категорий: всё уже превращено в текст, здесь только рисуем. */
 export interface FrequentChoice {
@@ -10,9 +11,12 @@ export interface FrequentChoice {
   amount: string;
   icon: string;
   color?: string;
+  /** Именованный шаблон (templates.ts): в строке стоит первым, со звёздочкой. */
+  template?: boolean;
 }
 
 export const FREQUENT_LABEL = 'Частые операции';
+export const TEMPLATES_LABEL = 'Шаблоны и частые операции';
 
 /**
  * Полоса чипов над категориями: «☕ Кофе 15 с.». Нажатие подставляет кошелёк, категорию, сумму и заметку сразу.
@@ -20,10 +24,11 @@ export const FREQUENT_LABEL = 'Частые операции';
  * наезжали друг на друга), а панель всё равно открывают, когда выбирают категорию.
  */
 export function FrequentStrip({ items, onPick }: { items: readonly FrequentChoice[]; onPick: (key: string) => void }) {
+  const withTemplates = items.some((it) => it.template);
   return (
     <div className="flex flex-col gap-1">
-      <p className="px-1 text-sm font-semibold text-muted">Часто вносите</p>
-      <div role="group" aria-label={FREQUENT_LABEL} className="flex gap-2 overflow-x-auto overscroll-x-contain px-0.5 pb-1 [scrollbar-width:thin]">
+      <p className="px-1 text-sm font-semibold text-muted">{withTemplates ? 'Шаблоны и частые' : 'Часто вносите'}</p>
+      <div role="group" aria-label={withTemplates ? TEMPLATES_LABEL : FREQUENT_LABEL} className="flex gap-2 overflow-x-auto overscroll-x-contain px-0.5 pb-1 [scrollbar-width:thin]">
         {items.map((it) => (
           <button
             key={it.key}
@@ -33,6 +38,7 @@ export function FrequentStrip({ items, onPick }: { items: readonly FrequentChoic
             className="flex min-h-[44px] max-w-[70%] shrink-0 items-center gap-2 rounded-full border border-border bg-surface py-1 pl-1.5 pr-3 text-left transition-colors hover:bg-surface-2 active:bg-border/60"
           >
             <Glyph value={it.icon} color={it.color} size={30} />
+            {it.template && <Icon name="star" size={14} className="-mr-1 shrink-0 text-brand" />}
             <span className="min-w-0 truncate text-base font-semibold text-text">{it.title}</span>
             <span className="money shrink-0 text-base font-semibold text-muted">{it.amount}</span>
           </button>

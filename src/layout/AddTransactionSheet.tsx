@@ -10,6 +10,9 @@ import { saveReceipt, undoReceipt } from '@/features/receipt/saveReceipt';
 import { checkReceipt } from '@/features/receipt/receiptAi';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
+import { SaveTemplateButton } from '@/features/templates/SaveTemplateButton';
+import { useTemplates } from '@/features/templates/templateStore';
+import { resolveTemplate, type Template } from '@/features/templates/templates';
 import { useActiveTrip } from '@/features/trips/activeTrip';
 import { withTag } from '@/features/trips/trips';
 import { useRates } from '@/rates/hooks';
@@ -29,7 +32,7 @@ import type { FrequentChoice } from '@/features/transactions/FrequentPanel';
 import { suggestNotes, useNoteIndex } from '@/features/transactions/noteSuggest';
 import { parseQuickLine } from '@/features/transactions/quickLine';
 import type { NoteChoice } from '@/features/transactions/NoteSuggestions';
-import { formFromPrefill } from '@/features/transactions/prefill';
+import { formFromPrefill, prefillOfForm } from '@/features/transactions/prefill';
 import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, MIN_DATE, pickDefaultWallet, resolveDate, ruDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
@@ -131,6 +134,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const toast = useToast();
   // «Режим поездки»: пока он включён, новые операции получают метку поездки в заметке
   const trip = useActiveTrip(store.userId);
+  const { templates } = useTemplates(store.userId);
   const formRef = useRef<HTMLDivElement>(null);
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
@@ -297,8 +301,44 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     c.set({ note: m.note, categoryId: m.categoryId, ...(c.form.amountMinor === null ? { amountMinor: m.amountMinor } : {}) });
     setCategoryState(m.categoryId === null ? 'skipped' : 'untouched');
   };
-  const frequentForKind = useMemo(() => frequent.filter((f) => f.op.kind === kind).map((f) => f.choice), [frequent, kind]);
+  // «Шаблоны»: именованные заготовки этого вида, которые можно внести сейчас; стоят в строке первыми
+  const templateChoices = useMemo(() => {
+    const mixed = new Set(wallets.map((w) => w.currency)).size > 1;
+    const out: { choice: FrequentChoice; template: Template }[] = [];
+    for (const t of templates) {
+      if (t.prefill.kind === 'transfer') continue;
+      const r = resolveTemplate(t, wallets, categories);
+      if (!r) continue;
+      out.push({
+        template: t,
+        choice: {
+          key: `t:${t.id}`,
+          template: true,
+          title: t.name,
+          subtitle: [r.category?.name ?? 'Без категории', mixed ? `${r.wallet.name} · ${r.wallet.currency}` : r.wallet.name, t.prefill.note !== '' ? t.prefill.note : null].filter(Boolean).join(' · '),
+          amount: formatMinor(t.prefill.amountMinor, r.wallet.currency),
+          icon: r.category?.icon ?? '🏷️',
+          ...(r.category ? { color: r.category.color } : {}),
+        },
+      });
+    }
+    return out;
+  }, [templates, wallets, categories]);
+  const frequentForKind = useMemo(() => {
+    const mine = templateChoices.filter((x) => x.template.prefill.kind === kind);
+    // частая операция, которая уже есть шаблоном (тот же кошелёк, категория, сумма и заметка), второй раз не нужна
+    const same = (op: RecentStats['frequent'][number]) =>
+      mine.some(({ template: { prefill: p } }) => p.walletId === op.walletId && p.categoryId === op.categoryId && p.amountMinor === op.amountMinor && p.note === op.note);
+    return [...mine.map((x) => x.choice), ...frequent.filter((f) => f.op.kind === kind && !same(f.op)).map((f) => f.choice)];
+  }, [templateChoices, frequent, kind]);
   const pickFrequent = (key: string) => {
+    const tpl = templateChoices.find((x) => x.choice.key === key)?.template;
+    if (tpl) {
+      c.setWallet(tpl.prefill.walletId);
+      c.set({ categoryId: tpl.prefill.categoryId, amountMinor: tpl.prefill.amountMinor, note: tpl.prefill.note });
+      setCategoryState(tpl.prefill.categoryId === null ? 'skipped' : 'untouched');
+      return;
+    }
     const f = frequent.find((x) => x.choice.key === key)?.op;
     if (!f) return;
     c.setWallet(f.walletId);
@@ -485,6 +525,11 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
               }} />
             </span>
           }
+        />
+        {/* Шаблон из этой формы: кнопка появляется, когда набрана сумма; под полями, чтобы ничего над суммой не двигать */}
+        <SaveTemplateButton
+          prefill={c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId ? prefillOfForm(c.form, c.fee.minor) : null}
+          categoryName={categories.find((x) => x.id === c.form.categoryId)?.name ?? null}
         />
       </div>
       <ConfirmDialog
