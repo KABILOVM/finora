@@ -17,6 +17,8 @@ export interface PostFormState {
   /** Перевод в одной валюте: открыто ли поле «Получено» (комиссия). */
   feeOpen: boolean;
   note: string;
+  /** Причина, почему сумма отличается от обычной (нужна доходу, см. reasonRequired): уходит в заметку операции. */
+  reason: string;
   /** Курс, как набрал человек (когда курса нет совсем или он поправил введённый ранее). */
   rateText: string;
 }
@@ -25,8 +27,24 @@ export interface PostErrors {
   amount?: string;
   toAmount?: string;
   note?: string;
+  reason?: string;
   rate?: string;
   form?: string;
+}
+
+/**
+ * Регулярный доход (зарплата) обычно приходит одной и той же суммой. Пришло другое — просим сказать почему («премия», «больничный»):
+ * через месяц по одной цифре не вспомнить. Платёж по долгу не в счёт: его сумма сама подгоняется под остаток долга.
+ */
+export function reasonRequired(rule: Pick<RecurringRule, 'kind' | 'amountMinor' | 'debtId'>, amount: Minor | null): boolean {
+  return rule.kind === 'income' && rule.debtId === null && amount !== null && amount > 0 && amount !== rule.amountMinor;
+}
+
+/** Заметка операции с причиной: «Зарплата (премия)»; заметки нет — одна причина. */
+export function noteWithReason(note: string, reason: string): string {
+  const n = note.trim();
+  const r = reason.trim();
+  return n === '' ? r : `${n} (${r})`;
 }
 
 /** Форма, заполненная из правила: сумма, заметка, у перевода — сумма зачисления из правила (с комиссией, если она была). */
@@ -46,6 +64,7 @@ export function initialPostForm(
       rule.toAmountMinor !== null &&
       rule.toAmountMinor !== rule.amountMinor,
     note: rule.note,
+    reason: '',
     rateText: '',
   };
 }
@@ -61,7 +80,7 @@ export type PreparedPost =
   | { ok: false; errors: PostErrors };
 
 export interface PrepareArgs {
-  rule: Pick<RecurringRule, 'kind' | 'amountMinor' | 'toAmountMinor' | 'note'>;
+  rule: Pick<RecurringRule, 'kind' | 'amountMinor' | 'toAmountMinor' | 'note' | 'debtId'>;
   form: PostFormState;
   wallet: Pick<Wallet, 'currency'> | undefined;
   toWallet: Pick<Wallet, 'currency'> | null | undefined;
@@ -91,8 +110,18 @@ export function preparePost(a: PrepareArgs): PreparedPost {
   if (amount === null) errors.amount = 'Введите сумму';
   else if (amount <= 0) errors.amount = 'Сумма должна быть больше нуля';
 
-  const note = form.note.trim();
-  if (note.length > NOTE_MAX) errors.note = `Заметка не длиннее ${NOTE_MAX} символов (сейчас ${note.length})`;
+  const baseNote = form.note.trim();
+  if (baseNote.length > NOTE_MAX) errors.note = `Заметка не длиннее ${NOTE_MAX} символов (сейчас ${baseNote.length})`;
+
+  let note = baseNote;
+  if (reasonRequired(rule, amount)) {
+    const reason = form.reason.trim();
+    if (reason === '') errors.reason = 'Укажите причину, почему сумма изменилась';
+    else {
+      note = noteWithReason(baseNote, reason);
+      if (!errors.note && note.length > NOTE_MAX) errors.reason = `Заметка вместе с причиной не длиннее ${NOTE_MAX} символов (сейчас ${note.length})`;
+    }
+  }
 
   let toAmount: Minor | null = null;
   if (rule.kind === 'transfer') {
@@ -109,7 +138,7 @@ export function preparePost(a: PrepareArgs): PreparedPost {
   const opts: FromRuleOptions = {};
   const amountChanged = amount !== rule.amountMinor;
   if (amountChanged) opts.amountMinor = amount;
-  if (form.note !== rule.note) opts.note = note;
+  if (form.note !== rule.note || note !== baseNote) opts.note = note;
   if (rule.kind === 'transfer' && toAmount !== null && (amountChanged || toAmount !== rule.toAmountMinor)) {
     opts.toAmountMinor = toAmount;
   }

@@ -16,12 +16,14 @@ import { useAutoPostFailures } from '@/recurring/autoPostState';
 import { monthlyTotals } from '@/recurring/monthly';
 import type { RuleFormState } from '@/recurring/ruleForm';
 import { AUTO_POST_MAX_AGE_DAYS } from '@/recurring/plan';
+import { findSalaryCategoryId, hasSalaryRule, salaryPrefill } from '@/recurring/salary';
 import { groupUpcoming, itemKey, SOON_DAYS } from '@/recurring/upcoming';
 import { useSkipped } from '@/recurring/useSkipped';
 import { useToday } from '@/recurring/useToday';
 import { PostSheet } from './PostSheet';
 import { ArchivedRow, RuleRow } from './RulesList';
 import { RuleSheet } from './RuleSheet';
+import { SalaryCard, useSalaryCardDismissed } from './SalaryCard';
 import { SkipDialog } from './SkipDialog';
 import { SkippedRow } from './SkippedList';
 import { candidateLabel, SubscriptionsCard } from './SubscriptionsCard';
@@ -82,6 +84,7 @@ export default function RecurringPage() {
   const stoppedPlans = useStoppedDebtPlans();
   const skipped = useSkipped(rules ?? [], today);
   const subs = useSubscriptions(lookups, today);
+  const [salaryDismissed, dismissSalary] = useSalaryCardDismissed();
 
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [posting, setPosting] = useState<PendingRef | null>(null);
@@ -226,6 +229,13 @@ export default function RecurringPage() {
       />
     ) : null;
 
+  // «Завести «ЗП»» — пока нет регулярного дохода-зарплаты и человек не отказался; стоит рядом с подсказками про подписки
+  const salaryCategoryId = findSalaryCategoryId(lookups.categories.values());
+  const salaryCard =
+    salaryDismissed || hasSalaryRule(rules, salaryCategoryId) ? null : (
+      <SalaryCard onCreate={() => setSheet({ kind: 'new', prefill: salaryPrefill(salaryCategoryId) })} onDismiss={dismissSalary} />
+    );
+
   const overdueRows = groups.overdue.slice(0, overdueShown);
   const overdueMore = groups.overdue.length - overdueRows.length;
 
@@ -245,6 +255,7 @@ export default function RecurringPage() {
 
       {rules.length === 0 ? (
         <>
+          {salaryCard}
           {subsCard}
           <EmptyState
             icon="repeat"
@@ -317,6 +328,7 @@ export default function RecurringPage() {
             </Card>
           )}
 
+          {salaryCard}
           {subsCard}
 
           {skipped.length > 0 && (
