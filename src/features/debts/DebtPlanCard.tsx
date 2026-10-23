@@ -11,7 +11,7 @@ import { ruDateShort } from './debtText';
 export interface DebtPlanCardProps {
   debt: LocalRow<Debt>;
   state: DebtState;
-  /** Живые планы долга (isLivePlanOf); обычно один — несколько бывает после объединения или правок с двух устройств. */
+  /** Живые планы долга (isLivePlanOf); их может быть несколько (взносы с разными датами). */
   plans: readonly LocalRow<RecurringRule>[];
   today: IsoDate;
   busy: boolean;
@@ -29,9 +29,7 @@ export function DebtPlanCard({ debt, state, plans, today, busy, onEdit, onStop }
         {many ? `Планы платежей (${plans.length})` : 'План платежей'}
       </h2>
       {many && (
-        <Notice tone="warning" className="mb-2 text-sm">
-          У долга несколько планов: платежи по ним складываются. Оставьте один, остальные остановите.
-        </Notice>
+        <Notice className="mb-2 text-sm">У долга несколько планов: платежи по ним идут отдельно и складываются. Когда долг будет погашен, планы остановятся сами.</Notice>
       )}
       <div className="flex flex-col gap-2">
         {plans.map((rule) => {

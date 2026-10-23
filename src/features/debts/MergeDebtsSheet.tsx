@@ -195,7 +195,7 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
           <p role="status" className="text-sm font-medium text-warning" data-testid="merge-plans">
             {plansTotal === 1
               ? `План платежей перейдёт к долгу «${target.debt.counterparty}».`
-              : `Планов платежей будет ${plansTotal}: все они пойдут по этому долгу, и платежи сложатся. Лишние можно остановить на странице долга.`}
+              : `Планов платежей будет ${plansTotal}: все они пойдут по этому долгу, и платежи сложатся. Ненужные можно остановить на странице долга.`}
           </p>
         )}
         {lostNames.length > 0 && (

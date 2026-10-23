@@ -377,46 +377,39 @@ describe('ошибка «долг закрыт / уже погашен» — о�
   });
 });
 
-describe('у долга один план: хранилище регулярных платежей не заводит второй', () => {
+describe('у долга может быть несколько планов: отдельные взносы с разными датами', () => {
   const second = (store: Store, walletId: string, debtId: string) =>
-    store.recurring.create({ kind: 'income', walletId, amountMinor: 10_000, frequency: 'weekly', startOn: '2026-11-02', debtId });
+    store.recurring.create({ kind: 'income', walletId, amountMinor: 10_000, frequency: 'monthly', startOn: '2026-11-20', debtId });
+  const liveOf = async (store: Store, debtId: string) =>
+    (await store.db.recurring_rules.toArray()).filter((r) => r.debtId === debtId && r.kind === 'income' && r.deletedAt === null && r.archivedAt === null);
 
-  it('новый платёж того же вида по долгу с живым планом — ошибка, правило не создано; выдача по расписанию — можно', async () => {
-    const { store, cash, debt } = await setup();
-    const before = await store.db.recurring_rules.count();
-    await expect(second(store, cash.id, debt.id)).rejects.toThrow('У долга «Али» уже есть план платежей: измените или остановите его на странице долга');
-    expect(await store.db.recurring_rules.count()).toBe(before);
-    await store.recurring.create({ kind: 'expense', walletId: cash.id, amountMinor: 1_000, frequency: 'monthly', startOn: '2026-11-03', debtId: debt.id });
-    expect(await store.db.recurring_rules.count()).toBe(before + 1);
+  it('новый платёж того же вида по долгу с живым планом создаётся: у долга два плана', async () => {
+    const { store, cash, debt, plan } = await setup();
+    const next = await second(store, cash.id, debt.id);
+    expect((await liveOf(store, debt.id)).map((r) => r.id).sort()).toEqual([plan.id, next.id].sort());
   });
 
-  it('план в архиве не мешает новому; вернуть старый из архива, пока есть новый, нельзя', async () => {
+  it('старый план можно вернуть из архива, пока есть новый', async () => {
     const { store, cash, debt, plan } = await setup();
     await store.recurring.archive(plan.id);
-    const next = await second(store, cash.id, debt.id);
-    await expect(store.recurring.restore(plan.id)).rejects.toThrow(/уже есть план платежей/);
-    expect((await store.db.recurring_rules.get(plan.id))!.archivedAt).not.toBeNull();
-    await store.recurring.archive(next.id);
+    await second(store, cash.id, debt.id);
     expect((await store.recurring.restore(plan.id)).archivedAt).toBeNull();
+    expect(await liveOf(store, debt.id)).toHaveLength(2);
   });
 
-  it('правка не может сделать правило вторым планом (привязать к долгу, сменить вид); правка самого плана — можно', async () => {
-    const { store, cash, debt, plan, issue, plain } = await setup();
-    await expect(store.recurring.update(plain.id, { kind: 'income', categoryId: null, debtId: debt.id })).rejects.toThrow(/уже есть план платежей/);
-    await expect(store.recurring.update(issue.id, { kind: 'income' })).rejects.toThrow(/уже есть план платежей/);
-    expect((await store.recurring.update(plan.id, { amountMinor: 25_000 })).amountMinor).toBe(25_000);
-    // другой долг — свой план можно
-    const other = await store.debts.create({ ...lent, counterparty: 'Вали' });
-    expect((await second(store, cash.id, other.id)).debtId).toBe(other.id);
+  it('правка может привязать правило к долгу или сменить вид — это ещё один план', async () => {
+    const { store, debt, issue, plain } = await setup();
+    expect((await store.recurring.update(plain.id, { kind: 'income', categoryId: null, debtId: debt.id })).debtId).toBe(debt.id);
+    expect((await store.recurring.update(issue.id, { kind: 'income' })).kind).toBe('income');
   });
 
-  it('уже существующий дубль (после объединения или с двух устройств) правке не мешает', async () => {
+  it('каждый план проводится сам по себе: платёж по одному не засчитывает дату другого', async () => {
     const { store, cash, debt, plan } = await setup();
-    await store.db.recurring_rules.update(plan.id, { archivedAt: '2026-10-01T00:00:00.000Z' });
-    const dup = await second(store, cash.id, debt.id);
-    await store.db.recurring_rules.update(plan.id, { archivedAt: null });
-    expect((await store.recurring.update(dup.id, { amountMinor: 12_000 })).amountMinor).toBe(12_000);
-    expect((await store.recurring.update(plan.id, { note: 'старый' })).note).toBe('старый');
-    expect((await store.recurring.archive(dup.id)).archivedAt).not.toBeNull();
+    const next = await second(store, cash.id, debt.id);
+    const a = await store.transactions.createFromRule(plan, '2026-11-01', { fitToDebt: true });
+    const b = await store.transactions.createFromRule(next, '2026-11-20', { fitToDebt: true });
+    expect(a.id).not.toBe(b.id);
+    expect(a.debtId).toBe(debt.id);
+    expect(b.debtId).toBe(debt.id);
   });
 });
