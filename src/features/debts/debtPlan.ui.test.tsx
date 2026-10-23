@@ -66,12 +66,8 @@ const addPlan = (s: Store, ctx: Ctx, over: Partial<RecurringInput> = {}, id = PL
     { id },
   );
 
-/** Второй живой план того же долга — как после объединения долгов или правок с двух устройств (сам репозиторий второй не заводит). */
-const addSecondPlan = async (s: Store, ctx: Ctx, over: Partial<RecurringInput>, id: string) => {
-  await s.db.recurring_rules.update(PLAN_ID, { archivedAt: '2026-10-01T00:00:00.000Z' });
-  await addPlan(s, ctx, over, id);
-  await s.db.recurring_rules.update(PLAN_ID, { archivedAt: null });
-};
+/** Второй живой план того же долга (взнос с другой датой). */
+const addSecondPlan = (s: Store, ctx: Ctx, over: Partial<RecurringInput>, id: string) => addPlan(s, ctx, over, id);
 
 /**
  * «Наличные» с 1 000 с.; долг «Алишер» 500 с. («мне должны»), выдан 1 октября деньгами с «Наличных».
@@ -176,7 +172,7 @@ describe('страница долга: карточка плана платеж�
     await waitFor(() => expect(screen.getAllByRole('status').some((el) => text(el).includes('План возвращён'))).toBe(true));
   });
 
-  it('«Остановить», затем новый план и «Отменить» на первом уведомлении: второй план не появляется — понятная ошибка', async () => {
+  it('«Остановить», затем новый план и «Отменить» на первом уведомлении: старый план возвращается, теперь их два', async () => {
     const { td, ctx } = await show((s, c) => addPlan(s, c));
     await planShown();
     await user.click(button('Остановить'));
@@ -188,15 +184,11 @@ describe('страница долга: карточка плана платеж�
       await addPlan(storeOf(td), ctx, { amountMinor: 10_000 }, PLAN_2_ID);
     });
     await waitFor(() => expect(planCards()).toHaveLength(1));
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined); // «Не удалось отменить» пишется в консоль
     await user.click(undo);
-    await waitFor(() => expect(screen.getAllByRole('alert').some((el) => text(el).includes('уже есть план платежей'))).toBe(true));
-    expect((await ruleRow(td))?.archivedAt).not.toBeNull(); // старый план так и остался остановленным
+    await eventually(async () => expect((await ruleRow(td))?.archivedAt).toBeNull());
     const live = (await storeOf(td).db.recurring_rules.toArray()).filter((r) => r.debtId === DEBT_ID && r.archivedAt === null && r.deletedAt === null);
-    expect(live.map((r) => r.id)).toEqual([PLAN_2_ID]);
-    expect(planCards()).toHaveLength(1);
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
+    expect(live.map((r) => r.id).sort()).toEqual([PLAN_ID, PLAN_2_ID]);
+    await waitFor(() => expect(planCards()).toHaveLength(2));
   });
 
   it('«Изменить» открывает правку регулярного платежа с суммой плана; сохранение меняет карточку', async () => {
@@ -214,7 +206,7 @@ describe('страница долга: карточка плана платеж�
     await waitFor(() => expect(text(planCards()[0]!.querySelector('p'))).toBe(`${fmt(25_000)} — каждый месяц, 1-го, до 01.01.2027`));
   });
 
-  it('два живых плана (после объединения или с двух устройств): «Планы платежей (2)» и предупреждение', async () => {
+  it('два живых плана (взносы с разными датами): «Планы платежей (2)» и пояснение', async () => {
     await show(async (s, ctx) => {
       await addPlan(s, ctx);
       await addSecondPlan(s, ctx, { amountMinor: 15_000, startOn: '2026-11-10', endOn: '2027-02-10' }, PLAN_2_ID);
@@ -222,7 +214,7 @@ describe('страница долга: карточка плана платеж�
     await waitFor(() => expect(planCards()).toHaveLength(2));
     expect(planHeading()).toBe('Планы платежей (2)');
     expect(text(planSection()!.querySelector('[role="status"]'))).toBe(
-      'У долга несколько планов: платежи по ним складываются. Оставьте один, остальные остановите.',
+      'У долга несколько планов: платежи по ним идут отдельно и складываются. Когда долг будет погашен, планы остановятся сами.',
     );
     const lines = planCards().map((c) => text(c.querySelector('p')));
     expect(lines).toContain(`${fmt(20_000)} — каждый месяц, 1-го, до 01.01.2027`);
