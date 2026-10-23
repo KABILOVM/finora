@@ -20,6 +20,7 @@ import {
   postErrorField,
   postNeedsFx,
   preparePost,
+  reasonRequired,
   type PostErrors,
   type PostFormState,
 } from '@/recurring/postForm';
@@ -100,6 +101,7 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
       const next: PostErrors = { ...e, form: undefined };
       if ('receivedOverride' in patch || 'feeOpen' in patch) next.toAmount = undefined;
       if ('note' in patch) next.note = undefined;
+      if ('note' in patch || 'reason' in patch) next.reason = undefined;
       if ('rateText' in patch) next.rate = undefined;
       return next;
     });
@@ -115,7 +117,7 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
       }
       return next;
     });
-    setErrors((e) => ({ ...e, amount: undefined, toAmount: undefined, form: undefined }));
+    setErrors((e) => ({ ...e, amount: undefined, toAmount: undefined, reason: undefined, form: undefined }));
   };
 
   const submit = async () => {
@@ -189,6 +191,8 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
 
   const noteLength = form.note.trim().length;
   const dateText = relativeText(date, today);
+  const needReason = reasonRequired(rule, form.amountMinor);
+  const amountCurrency = wallet?.currency ?? base;
 
   return (
     <Sheet
@@ -239,7 +243,7 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
 
         <FieldGroup label={isTransfer ? 'Сумма списания' : 'Сумма'}>
           <AmountInput
-            currency={wallet?.currency ?? base}
+            currency={amountCurrency}
             value={form.amountMinor}
             onChange={setAmount}
             label={isTransfer ? 'Сумма списания' : 'Сумма'}
@@ -253,6 +257,18 @@ export function PostSheet({ rule, date, today, lookups, onClose }: PostSheetProp
             </p>
           )}
         </FieldGroup>
+
+        {needReason && (
+          <TextInput
+            label="Причина изменения суммы"
+            hint={`Обычно ${formatMinor(rule.amountMinor, amountCurrency)}. Например: премия, больничный, вычет`}
+            value={form.reason}
+            onChange={(e) => set({ reason: e.target.value })}
+            autoComplete="off"
+            enterKeyHint="next"
+            error={errors.reason}
+          />
+        )}
 
         {isTransfer && received && (
           <ReceivedPart

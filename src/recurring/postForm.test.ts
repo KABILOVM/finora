@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FxView, ReceivedView } from '@/features/transactions/useTxFormController';
 import type { RateLookup } from '@/rates/types';
-import { initialPostForm, postErrorField, postNeedsFx, preparePost, type PostFormState } from './postForm';
+import { initialPostForm, noteWithReason, postErrorField, postNeedsFx, preparePost, reasonRequired, type PostFormState } from './postForm';
 import { buildReceivedView, receivedAmount } from './received';
 
 const rule = (over: Record<string, unknown> = {}) => ({
@@ -9,10 +9,11 @@ const rule = (over: Record<string, unknown> = {}) => ({
   amountMinor: 5_000,
   toAmountMinor: null as number | null,
   note: 'Аренда',
+  debtId: null as string | null,
   ...over,
 });
 const none: FxView = { kind: 'none' };
-const base = (over: Partial<PostFormState> = {}): PostFormState => ({ amountMinor: 5_000, receivedOverride: undefined, feeOpen: false, note: 'Аренда', rateText: '', ...over });
+const base = (over: Partial<PostFormState> = {}): PostFormState => ({ amountMinor: 5_000, receivedOverride: undefined, feeOpen: false, note: 'Аренда', reason: '', rateText: '', ...over });
 const tjs = { currency: 'TJS' };
 const usd = { currency: 'USD' };
 const lookup = (over: Partial<RateLookup> = {}): RateLookup => ({ rate: 10.9, source: 'nbt', asOf: '2026-10-10', stale: false, manual: false, ...over });
@@ -158,5 +159,65 @@ describe('buildReceivedView / receivedAmount', () => {
 
   it('receivedAmount: не перевод — ничего и без ошибки', () => {
     expect(receivedAmount(null, 1_000)).toEqual({ toAmount: null, error: null });
+  });
+});
+
+describe('доход: причина, если сумма изменилась', () => {
+  const salary = (over: Record<string, unknown> = {}) => rule({ kind: 'income', amountMinor: 500_000, note: 'Зарплата', ...over });
+  const form = (over: Partial<PostFormState> = {}) => base({ amountMinor: 500_000, note: 'Зарплата', ...over });
+
+  it('reasonRequired: только доход, не по долгу, с другой положительной суммой', () => {
+    expect(reasonRequired(salary(), 450_000)).toBe(true);
+    expect(reasonRequired(salary(), 500_000)).toBe(false);
+    expect(reasonRequired(salary(), null)).toBe(false);
+    expect(reasonRequired(salary(), 0)).toBe(false);
+    expect(reasonRequired(salary({ debtId: 'd1' }), 450_000)).toBe(false);
+    expect(reasonRequired(rule({ amountMinor: 5_000 }), 6_000)).toBe(false);
+    expect(reasonRequired(rule({ kind: 'transfer' }), 6_000)).toBe(false);
+  });
+
+  it('noteWithReason: «Заметка (причина)»; заметки нет — одна причина', () => {
+    expect(noteWithReason('Зарплата', ' премия ')).toBe('Зарплата (премия)');
+    expect(noteWithReason('  ', 'премия')).toBe('премия');
+  });
+
+  it('сумма та же — причина не нужна и в заметку не попадает, даже если её набрали', () => {
+    expect(preparePost(args({ rule: salary(), form: form({ reason: 'премия' }) }))).toEqual({ ok: true, opts: {} });
+  });
+
+  it('сумма другая, причины нет — ошибка у поля причины, ничего не записывается', () => {
+    const r = preparePost(args({ rule: salary(), form: form({ amountMinor: 550_000 }) }));
+    expect(r).toEqual({ ok: false, errors: { reason: 'Укажите причину, почему сумма изменилась' } });
+    const blank = preparePost(args({ rule: salary(), form: form({ amountMinor: 550_000, reason: '   ' }) }));
+    expect(blank.ok).toBe(false);
+  });
+
+  it('сумма другая, причина указана — уходят сумма и заметка «Зарплата (премия)»', () => {
+    const r = preparePost(args({ rule: salary(), form: form({ amountMinor: 550_000, reason: ' премия ' }) }));
+    expect(r).toEqual({ ok: true, opts: { amountMinor: 550_000, note: 'Зарплата (премия)' } });
+  });
+
+  it('заметку поправили руками — причина добавляется к новой заметке', () => {
+    const r = preparePost(args({ rule: salary(), form: form({ amountMinor: 450_000, note: 'Зарплата за октябрь', reason: 'вычет' }) }));
+    expect(r).toEqual({ ok: true, opts: { amountMinor: 450_000, note: 'Зарплата за октябрь (вычет)' } });
+  });
+
+  it('заметка стёрта — в заметку идёт одна причина', () => {
+    const r = preparePost(args({ rule: salary(), form: form({ amountMinor: 450_000, note: '', reason: 'больничный' }) }));
+    expect(r).toEqual({ ok: true, opts: { amountMinor: 450_000, note: 'больничный' } });
+  });
+
+  it('заметка вместе с причиной не помещается — ошибка у причины, а не молчаливая обрезка', () => {
+    const r = preparePost(args({ rule: salary({ note: 'я'.repeat(495) }), form: form({ amountMinor: 450_000, note: 'я'.repeat(495), reason: 'премия' }) }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.reason).toMatch(/не длиннее 500/);
+  });
+
+  it('расход с другой суммой причину не требует', () => {
+    expect(preparePost(args({ form: base({ amountMinor: 6_500 }) }))).toEqual({ ok: true, opts: { amountMinor: 6_500 } });
+  });
+
+  it('initialPostForm: причина пуста', () => {
+    expect(initialPostForm(salary(), 'TJS', undefined).reason).toBe('');
   });
 });
