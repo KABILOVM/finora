@@ -13,12 +13,14 @@ import type { CurrencyCode, Debt, DebtDirection, LocalRow, Minor } from '@/domai
 import { endSentence } from '@/features/transactions/txDisplay';
 import { NOTE_MAX } from '@/features/transactions/txForm';
 import { addDays, todayLocal } from '@/lib/dates';
-import { freshPlanIds, saveNewDebt, saveTopUp } from './debtActions';
+import { freshPlanIds, saveDebtEdit, saveNewDebt, saveTopUp } from './debtActions';
+import { debtEntryLines, entryEditText } from './debtEditMoney';
 import { emptyDebtForm, isDebtFormDirty, validateDebtForm, type DebtFormErrors, type DebtFormState } from './debtForm';
 import { findMatchingDebts, normName } from './debtMatch';
 import type { DebtItem } from './debtSummary';
 import { DIRECTION_ACTION, DIRECTION_LABEL, DIRECTION_NAME_LABEL, ruDateShort, TOP_UP_AMOUNT_LABEL } from './debtText';
 import { DayField, DueField } from './DebtDates';
+import { DebtEditMoneySection } from './DebtEditMoneySection';
 import { DebtMoneySection } from './DebtMoneySection';
 import { rankWallets, usePopularity } from '@/features/transactions/popularity';
 import { useWalletFx } from './useWalletFx';
@@ -113,6 +115,19 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   }, [store, orig?.id]);
   const locked = editing && linked !== false;
 
+  // Выдачи и пополнения долга деньгами: если они были, правка суммы двигает деньги вслед за ней. undefined — ещё читается.
+  const entryLines = useLiveQuery(async () => {
+    if (!orig) return [];
+    const { db } = store;
+    const [txs, ws] = await Promise.all([db.transactions.where('debtId').equals(orig.id).toArray(), db.wallets.toArray()]);
+    try {
+      return debtEntryLines(orig, txs, ws);
+    } catch (e) {
+      if (e instanceof RangeError) return []; // суммы не считаются: двигать деньги не за чем, ошибку покажет сохранение
+      throw e;
+    }
+  }, [store, orig?.id]);
+
   const pop = usePopularity();
   const candidates = (wallets ?? []).filter((w) => w.currency === form.currency);
   const defaultWalletId = settings?.defaultWalletId ?? null;
@@ -121,7 +136,12 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
     candidates.find((w) => w.id === defaultWalletId)?.id ??
     candidates[0]?.id ??
     null;
-  const moneyOn = !editing && wanted && candidates.length > 0 && walletId !== null;
+  // Правка суммы: выдача деньгами была — меняем её вслед за долгом; не было («на бумаге») и сумма выросла — предлагаем записать разницу
+  const delta = orig !== null && form.amountMinor !== null && form.amountMinor > 0 ? form.amountMinor - orig.principalMinor : 0;
+  const hasEntries = entryLines !== undefined && entryLines.length > 0;
+  const followsEntries = editing && delta !== 0 && hasEntries;
+  const newEntry = editing && delta > 0 && entryLines !== undefined && !hasEntries;
+  const moneyOn = (!editing || newEntry) && wanted && candidates.length > 0 && walletId !== null;
   const wallet = candidates.find((w) => w.id === walletId);
   const fx = useWalletFx(moneyOn ? wallet?.currency : undefined, base);
 
@@ -141,10 +161,10 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
     });
   };
 
-  const fail = (e: unknown, fallback: string, nothingSaved: boolean) => {
+  const fail = (e: unknown, fallback: string, nothingSaved: string | null) => {
     if (e instanceof ValidationError) {
       const key = errorKey(e.message);
-      const text = key === 'form' && nothingSaved ? `${endSentence(e.message)} Долг не записан: ничего не сохранилось.` : e.message;
+      const text = key === 'form' && nothingSaved !== null ? `${endSentence(e.message)} ${nothingSaved}` : e.message;
       setErrors({ [key]: text } as DebtFormErrors);
     } else {
       console.error(fallback, e);
@@ -219,12 +239,24 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
         if (value.note !== orig.note) patch.note = value.note;
         if (!locked && form.direction !== orig.direction) patch.direction = form.direction;
         if (!locked && form.currency !== orig.currency) patch.currency = form.currency;
-        if (Object.keys(patch).length > 0) await store.debts.update(orig.id, patch);
-        toast.success('Долг сохранён');
+        const res = await saveDebtEdit(store, {
+          debtId: orig.id,
+          patch,
+          money: wanted && (followsEntries || newEntry),
+          ...(moneyOn && walletId !== null
+            ? { newEntry: { walletId, txId: ids.current.txId, occurredOn: value.openedOn, ...(resolved?.ok && resolved.fx ? { fx: resolved.fx } : {}) } }
+            : {}),
+        });
+        if (resolved?.ok && res.moved) resolved.remember();
+        toast.success(res.moved ? 'Долг сохранён, деньги в кошельке обновлены' : 'Долг сохранён');
       }
       onClose();
     } catch (e) {
-      fail(e, editing ? 'Не удалось сохранить долг.' : 'Не удалось записать долг.', !editing);
+      fail(
+        e,
+        editing ? 'Не удалось сохранить долг.' : 'Не удалось записать долг.',
+        editing ? 'Правка не сохранена: ничего не изменилось.' : 'Долг не записан: ничего не сохранилось.',
+      );
     } finally {
       busy.current = false;
       setSaving(false);
@@ -401,6 +433,32 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             direction={form.direction}
             currency={form.currency}
             amountMinor={form.amountMinor}
+            candidates={rankWallets(candidates, pop)}
+            wanted={wanted}
+            onWanted={setWanted}
+            walletId={walletId}
+            onWallet={(id) => {
+              setWalletPick(id);
+              setWalletError(null);
+            }}
+            fx={fx}
+            fxError={rateError}
+            walletError={walletError}
+          />
+        )}
+        {followsEntries && entryLines && (
+          <DebtEditMoneySection
+            wanted={wanted}
+            onWanted={setWanted}
+            text={entryEditText(form.direction, form.currency, delta, entryLines, wallets)}
+          />
+        )}
+        {newEntry && (
+          <DebtMoneySection
+            topUp
+            direction={form.direction}
+            currency={form.currency}
+            amountMinor={delta}
             candidates={rankWallets(candidates, pop)}
             wanted={wanted}
             onWanted={setWanted}
