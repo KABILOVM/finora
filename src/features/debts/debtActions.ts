@@ -1,7 +1,8 @@
-import { newId, ValidationError, type DebtInput, type Store } from '@/db';
+import { DEBT_OVERFLOW_MESSAGE, newId, ValidationError, type DebtInput, type DebtPatch, type Store } from '@/db';
 import { isLivePlanOf, issueKind, paymentKind } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, DebtDirection, IsoDate, LocalRow, Minor, RecurringRule, Transaction, UUID } from '@/domain/types';
+import { debtEntryLines, planEntryAdjustment } from './debtEditMoney';
 import { ruDateShort } from './debtText';
 
 /** Движение денег, которое сопровождает новый долг: исходная операция (выдача/получение). */
@@ -62,6 +63,81 @@ export async function saveNewDebt(store: Store, plan: NewDebtPlan): Promise<NewD
         { id: plan.movement.txId },
       );
       return { debt, tx };
+    },
+  );
+}
+
+export interface DebtEditPlan {
+  debtId: UUID;
+  /** Только то, что человек изменил. */
+  patch: DebtPatch;
+  /** Двигать ли деньги вслед за изменением суммы долга (сумма не менялась — не имеет значения). */
+  money: boolean;
+  /** Выдачи деньгами у долга нет («на бумаге»), а сумма выросла: на эту операцию уходит разница. Есть выдача — не используется. */
+  newEntry?: IssueMovement & { occurredOn: IsoDate };
+}
+
+export interface DebtEditResult {
+  debt: LocalRow<Debt>;
+  /** Остаток какого-нибудь кошелька изменился. */
+  moved: boolean;
+}
+
+/**
+ * Правка долга. Изменилась сумма — деньги идут за ней (если money): выросла — растёт последняя выдача (или, если выдачи деньгами
+ * не было, записывается новая на разницу), уменьшилась — деньги возвращаются с последней выдачи, а если её не хватает, то и с прежних.
+ * Вся правка — ОДНОЙ транзакцией базы: не получилось подстроить операцию (кошелёк в архиве, нет курса…) — откатывается и сумма долга.
+ * Идемпотентность новой выдачи: операция с таким id уже есть — повтор её не дублирует.
+ */
+export async function saveDebtEdit(store: Store, plan: DebtEditPlan): Promise<DebtEditResult> {
+  const { db } = store;
+  // ВАЖНО: внутри транзакции нельзя ждать ничего, кроме базы (crypto и т.п.) — она закроется. Все id уже готовы.
+  return db.transaction(
+    'rw',
+    [db.debts, db.transactions, db.wallets, db.categories, db.settings, db.recurring_rules, db.meta],
+    async (): Promise<DebtEditResult> => {
+      const before = await db.debts.get(plan.debtId);
+      if (!before) throw new ValidationError('Долг не найден');
+      // Считаем от долга, как он лежит в базе: пока шит был открыт, синхронизация могла принести чужую правку суммы
+      const delta = plan.patch.principalMinor === undefined ? 0 : plan.patch.principalMinor - before.principalMinor;
+      const follow = plan.money && delta !== 0;
+      let entries: ReturnType<typeof debtEntryLines> = [];
+      if (follow) {
+        const [txs, wallets] = await Promise.all([db.transactions.where('debtId').equals(before.id).toArray(), db.wallets.toArray()]);
+        try {
+          entries = debtEntryLines(before, txs, wallets);
+        } catch (e) {
+          if (e instanceof RangeError) throw new ValidationError(DEBT_OVERFLOW_MESSAGE);
+          throw e;
+        }
+      }
+      const debt = Object.keys(plan.patch).length > 0 ? await store.debts.update(plan.debtId, plan.patch) : before;
+      if (!follow) return { debt, moved: false };
+
+      const adjustment = planEntryAdjustment(entries, delta);
+      for (const step of adjustment.steps) {
+        if (step.toMinor === 0) await store.transactions.softDelete(step.txId);
+        else await store.transactions.update(step.txId, { amountMinor: step.toMinor });
+      }
+      if (entries.length > 0 || delta < 0 || !plan.newEntry) return { debt, moved: adjustment.steps.length > 0 };
+
+      const { walletId, txId, occurredOn, fx } = plan.newEntry;
+      if (!(await db.transactions.get(txId))) {
+        await store.transactions.create(
+          {
+            kind: issueKind(debt.direction),
+            walletId,
+            amountMinor: delta,
+            categoryId: null,
+            occurredOn,
+            note: '',
+            debtId: debt.id,
+            ...(fx ? { fx } : {}),
+          },
+          { id: txId },
+        );
+      }
+      return { debt, moved: true };
     },
   );
 }

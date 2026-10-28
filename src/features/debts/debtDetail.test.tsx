@@ -378,6 +378,105 @@ describe('страница долга: правка', () => {
     expect(text(dlg)).toContain('это больше новой суммы, появится переплата');
   });
 
+  it('сумма выросла, деньги по долгу двигались: кошелёк уменьшается вслед за долгом (по умолчанию)', async () => {
+    const { td, ids } = await show();
+    const before = (await balances(td)).get(ids.cash)!;
+    await user.click(button('Править'));
+    const dlg = await findByRole('dialog', { name: 'Правка долга' });
+    expect(document.querySelector('[data-testid="debt-edit-money"]')).toBeNull(); // сумма не менялась — про деньги не спрашиваем
+    await eraseAmount(3);
+    await tapAmount('700');
+    const box = await waitFor(() => {
+      const el = document.querySelector('[data-testid="debt-edit-money"]');
+      if (!el) throw new Error('нет блока про деньги');
+      return el;
+    });
+    expect(text(box)).toContain('Остаток кошелька «Наличные» уменьшится на');
+    expect((box.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(true);
+    await user.click(within(dlg, 'Сохранить'));
+    await closed('Правка долга');
+    const txs = await debtTxs(td);
+    expect(txs).toHaveLength(1); // поправлена выдача, новых операций нет
+    expect(txs[0]).toMatchObject({ kind: 'expense', amountMinor: 70_000, walletId: ids.cash });
+    expect((await balances(td)).get(ids.cash)).toBe(before - 20_000);
+    expect((await storeOf(td).db.debts.get(DEBT_ID))?.principalMinor).toBe(70_000);
+  });
+
+  it('сумма уменьшилась: деньги возвращаются в кошелёк', async () => {
+    const { td, ids } = await show();
+    const before = (await balances(td)).get(ids.cash)!;
+    await user.click(button('Править'));
+    const dlg = await findByRole('dialog', { name: 'Правка долга' });
+    await eraseAmount(3);
+    await tapAmount('200');
+    await waitFor(() => expect(text(document.querySelector('[data-testid="debt-edit-money"]'))).toContain('вырастет на'));
+    await user.click(within(dlg, 'Сохранить'));
+    await closed('Правка долга');
+    expect((await balances(td)).get(ids.cash)).toBe(before + 30_000);
+  });
+
+  it('галочку «Изменить и движение денег» можно снять: меняется только долг', async () => {
+    const { td, ids } = await show();
+    const before = (await balances(td)).get(ids.cash)!;
+    await user.click(button('Править'));
+    const dlg = await findByRole('dialog', { name: 'Правка долга' });
+    await eraseAmount(3);
+    await tapAmount('700');
+    await user.click(await findByRole('checkbox', { name: 'Изменить и движение денег' }));
+    expect(text(document.querySelector('[data-testid="debt-edit-money"]'))).toContain('остатки кошельков останутся прежними');
+    await user.click(within(dlg, 'Сохранить'));
+    await closed('Правка долга');
+    expect((await debtTxs(td))[0]?.amountMinor).toBe(50_000);
+    expect((await balances(td)).get(ids.cash)).toBe(before);
+    expect((await storeOf(td).db.debts.get(DEBT_ID))?.principalMinor).toBe(70_000);
+  });
+
+  it('имя, срок и заметка без изменения суммы деньги не трогают', async () => {
+    const { td, ids } = await show();
+    const before = (await balances(td)).get(ids.cash)!;
+    await user.click(button('Править'));
+    const dlg = await findByRole('dialog', { name: 'Правка долга' });
+    await user.type(screen.getByRole('textbox', { name: 'Заметка' }), 'на ремонт');
+    expect(document.querySelector('[data-testid="debt-edit-money"]')).toBeNull();
+    await user.click(within(dlg, 'Сохранить'));
+    await closed('Правка долга');
+    expect((await balances(td)).get(ids.cash)).toBe(before);
+  });
+
+  it('долг «на бумаге», сумма выросла: можно записать разницу в кошелёк (по умолчанию записывается)', async () => {
+    const { td, ids } = await show(undefined, { issue: false });
+    const before = (await balances(td)).get(ids.cash)!;
+    await user.click(button('Править'));
+    const dlg = await findByRole('dialog', { name: 'Правка долга' });
+    expect(screen.queryByRole('checkbox', { name: 'Записать движение денег' })).toBeNull();
+    await eraseAmount(3);
+    await tapAmount('700');
+    const box = await findByRole('checkbox', { name: 'Записать движение денег' });
+    expect((box as HTMLInputElement).checked).toBe(true);
+    expect(text(document.querySelector('[aria-label="Движение денег"]'))).toContain('С кошелька «Наличные» спишется');
+    await user.click(within(dlg, 'Сохранить'));
+    await closed('Правка долга');
+    const txs = await debtTxs(td);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]).toMatchObject({ kind: 'expense', amountMinor: 20_000, walletId: ids.cash, occurredOn: '2026-10-01' });
+    expect((await balances(td)).get(ids.cash)).toBe(before - 20_000);
+  });
+
+  it('долг «на бумаге»: «Записать движение денег» снято — кошельки не меняются', async () => {
+    const { td, ids } = await show(undefined, { issue: false });
+    const before = (await balances(td)).get(ids.cash)!;
+    await user.click(button('Править'));
+    const dlg = await findByRole('dialog', { name: 'Правка долга' });
+    await eraseAmount(3);
+    await tapAmount('700');
+    await user.click(await findByRole('checkbox', { name: 'Записать движение денег' }));
+    await user.click(within(dlg, 'Сохранить'));
+    await closed('Правка долга');
+    expect(await debtTxs(td)).toHaveLength(0);
+    expect((await balances(td)).get(ids.cash)).toBe(before);
+    expect((await storeOf(td).db.debts.get(DEBT_ID))?.principalMinor).toBe(70_000);
+  });
+
   it('без изменений ничего не пишется', async () => {
     const { td } = await show();
     const before = await storeOf(td).db.debts.get(DEBT_ID);
