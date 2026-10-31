@@ -301,3 +301,50 @@ describe('DebtsRepo.merge: с кем объединён (другое имя в 
     expect(await store.db.debts.get(bobur.id)).toMatchObject({ note: 'за телефон', counterparty: 'Бобур', deletedAt: null });
   });
 });
+
+
+describe('DebtsRepo.merge: проценты', () => {
+  const bank = { direction: 'borrowed', counterparty: 'Банк', currency: 'TJS' } as const;
+
+  it('суммы процентов складываются; ставка и срок остаются, только если у всех долгов они одинаковые', async () => {
+    const store = await makeStore();
+    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
+    const b = await store.debts.create({ ...bank, principalMinor: 200_000, interestMinor: 30_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-02' });
+    await store.debts.merge(a.id, [b.id]);
+    expect(await store.db.debts.get(a.id)).toMatchObject({ principalMinor: 300_000, interestMinor: 40_000, interestRateBp: 2400, termMonths: 12 });
+  });
+
+  it('разные ставки или срок — остаётся сумма процентов без ставки и срока', async () => {
+    const store = await makeStore();
+    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
+    const b = await store.debts.create({ ...bank, principalMinor: 200_000, interestMinor: 30_000, interestRateBp: 1800, termMonths: 12, openedOn: '2026-10-02' });
+    await store.debts.merge(a.id, [b.id]);
+    expect(await store.db.debts.get(a.id)).toMatchObject({ interestMinor: 40_000, interestRateBp: null, termMonths: null });
+  });
+
+  it('долг без процентов в паре: проценты не «растекаются» на его сумму — ставка и срок убираются', async () => {
+    const store = await makeStore();
+    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
+    const b = await store.debts.create({ ...bank, principalMinor: 50_000, openedOn: '2026-10-02' });
+    await store.debts.merge(a.id, [b.id]);
+    expect(await store.db.debts.get(a.id)).toMatchObject({ principalMinor: 150_000, interestMinor: 10_000, interestRateBp: null, termMonths: null });
+  });
+
+  it('ни у кого нет процентов — их нет и после объединения', async () => {
+    const store = await makeStore();
+    const a = await store.debts.create({ ...bank, principalMinor: 100_000, openedOn: '2026-10-01' });
+    const b = await store.debts.create({ ...bank, principalMinor: 50_000, openedOn: '2026-10-02' });
+    await store.debts.merge(a.id, [b.id]);
+    expect(await store.db.debts.get(a.id)).toMatchObject({ interestMinor: null, interestRateBp: null, termMonths: null });
+  });
+
+  it('отмена объединения возвращает проценты как были', async () => {
+    const store = await makeStore();
+    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
+    const b = await store.debts.create({ ...bank, principalMinor: 200_000, interestMinor: 30_000, interestRateBp: 1800, termMonths: 6, openedOn: '2026-10-02' });
+    const merged = await store.debts.merge(a.id, [b.id]);
+    await store.debts.undoMerge(merged);
+    expect(await store.db.debts.get(a.id)).toMatchObject({ principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12 });
+    expect(await store.db.debts.get(b.id)).toMatchObject({ deletedAt: null, interestMinor: 30_000, interestRateBp: 1800, termMonths: 6 });
+  });
+});

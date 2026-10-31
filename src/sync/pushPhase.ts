@@ -88,6 +88,7 @@ export function describeRejection(err: TransportError): string {
 const SCHEMA_WAIT: ReadonlyArray<{ table: SyncTableName; section: string; what: string }> = [
   { table: 'wallets', section: 'раздел 11 — цели накопления', what: 'кошельки с целью и их операции' },
   { table: 'settings', section: 'раздел 13 — города для погоды', what: 'настройки' },
+  { table: 'debts', section: 'раздел 14 — проценты по долгам', what: 'долги с процентами и их операции' },
 ];
 
 /** Понятное человеку объяснение, почему часть записей ждёт: схема в облаке устарела. Без точки в конце (её ставит текст статуса). */

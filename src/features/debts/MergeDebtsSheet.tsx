@@ -177,6 +177,12 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
           <dl aria-label="Что получится" data-testid="merge-preview" className="grid grid-cols-2 gap-2 rounded-2xl bg-surface-2/70 p-3 text-sm">
             <dt className="text-muted">Сумма долга</dt>
             <dd className="money text-right font-semibold">{formatMinor(preview.principalMinor, cur)}</dd>
+            {preview.interestMinor > 0 && (
+              <>
+                <dt className="text-muted">Проценты</dt>
+                <dd className="money text-right font-semibold">{formatMinor(preview.interestMinor, cur)}</dd>
+              </>
+            )}
             <dt className="text-muted">Оплачено</dt>
             <dd className="money text-right font-semibold">{formatMinor(preview.paidMinor, cur)}</dd>
             <dt className="text-muted">Остаток</dt>

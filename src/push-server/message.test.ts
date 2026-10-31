@@ -255,6 +255,10 @@ describe('разбор строк базы (имена колонок — как
       closedAt: null,
     });
     expect(parsePlanDebtRow({ id: RULE, direction: 'lent', principal_minor: 5, currency: 'TJS' })).toMatchObject({ deletedAt: null, archivedAt: null, closedAt: null });
+    // проценты по долгу: число читается, null и отсутствие — «процентов нет»
+    expect(parsePlanDebtRow({ id: RULE, direction: 'borrowed', principal_minor: 5, interest_minor: 2, currency: 'TJS' })).toMatchObject({ interestMinor: 2 });
+    expect('interestMinor' in parsePlanDebtRow({ id: RULE, direction: 'borrowed', principal_minor: 5, interest_minor: null, currency: 'TJS' })!).toBe(false);
+    expect(parseDebtRow({ id: RULE, direction: 'borrowed', counterparty: 'Банк', principal_minor: 5, interest_minor: 2, currency: 'TJS', due_on: '2026-10-10' })).toMatchObject({ interestMinor: 2 });
     for (const bad of [null, { id: 'x', direction: 'lent', principal_minor: 5, currency: 'TJS' }, { id: RULE, direction: 'gift', principal_minor: 5, currency: 'TJS' }, { id: RULE, direction: 'lent', principal_minor: '5', currency: 'TJS' }]) {
       expect(parsePlanDebtRow(bad)).toBeNull();
     }

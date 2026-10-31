@@ -54,9 +54,9 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
   const busy = useRef(false);
   const txId = useRef(newId());
 
-  // Остаток после пополнения: сумма долга + пополнение − уже выплачено (переплата покрывает часть пополнения)
+  // Остаток после пополнения: сумма долга с процентами + пополнение − уже выплачено (переплата покрывает часть пополнения)
   const grownRemaining =
-    amount !== null && amount > 0 && Number.isSafeInteger(state.principalMinor + amount) ? Math.max(0, state.principalMinor + amount - state.paidMinor) : null;
+    amount !== null && amount > 0 && Number.isSafeInteger(state.totalMinor + amount) ? Math.max(0, state.totalMinor + amount - state.paidMinor) : null;
   // План «Платить частями»: если он закончится раньше, чем будет выплачен выросший долг, предлагаем продлить
   const rules = useRecurringRules();
   const plans = useMemo(() => (rules ?? []).filter((r) => isLivePlanOf(r, debt)), [rules, debt]);
@@ -182,6 +182,9 @@ export function TopUpSheet({ debt, state, base, onClose }: TopUpSheetProps) {
           {grown !== null && grownRemaining !== null && (
             <div className="text-center text-sm text-muted">
               <p>Сумма долга станет {endSentence(formatMinor(grown, debt.currency))}</p>
+              {state.interestMinor > 0 && (
+                <p>Проценты {formatMinor(state.interestMinor, debt.currency)} остаются прежними — их можно поправить в правке долга.</p>
+              )}
               <p className="font-semibold text-text" data-testid="topup-remaining">
                 Остаток станет {endSentence(formatMinor(grownRemaining, debt.currency))}
               </p>

@@ -64,6 +64,8 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
   debts: {
     party: ['direction', 'counterparty'],
     amount: ['principalMinor', 'currency'],
+    /** Проценты, ставка и срок — одной группой: ставка и срок без процентов сервер не примет. */
+    interest: ['interestMinor', 'interestRateBp', 'termMonths'],
     dates: ['openedOn', 'dueOn'],
     note: ['note'],
     closed: ['closedAt'],

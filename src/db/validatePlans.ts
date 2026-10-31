@@ -1,3 +1,4 @@
+import { RATE_BP_MAX, RATE_BP_MIN, TERM_MONTHS_MAX, TERM_MONTHS_MIN } from '@/domain/interest';
 import { NAME_MAX as SHOPPING_NAME_MAX, QTY_MAX, QTY_MIN, SHOPPING_UNITS } from '@/domain/shopping';
 import type { CurrencyCode, DebtDirection, Frequency, IsoDate, IsoDateTime, Minor, ShoppingUnit, TxKind, UUID } from '@/domain/types';
 import { fail } from './errors';
@@ -54,6 +55,12 @@ export interface DebtData {
   direction: DebtDirection;
   counterparty: string;
   principalMinor: Minor;
+  /** Проценты за весь срок (≥ 1) или null — без процентов. */
+  interestMinor: Minor | null;
+  /** Ставка в сотых долях процента годовых; только вместе с процентами. */
+  interestRateBp: number | null;
+  /** Срок в месяцах; только вместе с процентами. */
+  termMonths: number | null;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn: IsoDate | null;
@@ -62,13 +69,26 @@ export interface DebtData {
   archivedAt: IsoDateTime | null;
 }
 
+/** Необязательное поле: нет значения или null — null; иначе проверка как у обязательного. */
+const optional = <T>(v: unknown, read: (x: unknown) => T): T | null => (v === null || v === undefined ? null : read(v));
+
 export function parseDebtData(raw: Record<string, unknown>): DebtData {
   const noteRaw = raw['note'];
   const dueRaw = raw['dueOn'];
+  // Резервные копии и устройства до появления процентов этих полей не знают: нет поля — нет процентов.
+  const interestMinor = optional(raw['interestMinor'], (v) => reqMinorInRange(v, 'Проценты по долгу', 1, MINOR_LIMIT));
+  const interestRateBp = optional(raw['interestRateBp'], (v) => reqSafeInt(v, 'Ставка по долгу', RATE_BP_MIN, RATE_BP_MAX));
+  const termMonths = optional(raw['termMonths'], (v) => reqSafeInt(v, 'Длительность кредита (месяцев)', TERM_MONTHS_MIN, TERM_MONTHS_MAX));
+  if (interestMinor === null && (interestRateBp !== null || termMonths !== null)) {
+    fail('Проценты по долгу: ставка и срок бывают только вместе с процентами');
+  }
   return {
     direction: reqEnum(raw['direction'], 'Направление долга', DEBT_DIRECTIONS),
     counterparty: reqText(raw['counterparty'], 'Кто должен / кому должны', COUNTERPARTY_MAX),
     principalMinor: reqPositiveMinor(raw['principalMinor'], 'Сумма долга'),
+    interestMinor,
+    interestRateBp,
+    termMonths,
     currency: reqCurrency(raw['currency'], 'Валюта долга'),
     openedOn: reqDate(raw['openedOn'], 'Дата долга'),
     dueOn: dueRaw === null || dueRaw === undefined ? null : reqDate(dueRaw, 'Срок возврата'),

@@ -239,6 +239,10 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       const n = charLength(String(r['counterparty']));
       if (n < 1 || n > 80) fail('counterparty_len');
       if (!inBound(r['principal_minor'] ?? null, 1)) fail('principal');
+      if (r['interest_minor'] != null && !inBound(r['interest_minor'], 1)) fail('interest');
+      if (r['interest_rate_bp'] != null && !inBound(r['interest_rate_bp'], 1, 100_000)) fail('interest_rate');
+      if (r['term_months'] != null && !inBound(r['term_months'], 1, 600)) fail('term_months');
+      if (r['interest_minor'] == null && (r['interest_rate_bp'] != null || r['term_months'] != null)) fail('interest_shape');
       if (!CURRENCY_RE.test(String(r['currency']))) fail('currency_fmt');
       if (!dayOk(r['opened_on'] ?? null)) fail('opened_on');
       if (!dayOkOrNull(r['due_on'] ?? null)) fail('due_on');

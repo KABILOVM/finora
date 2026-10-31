@@ -114,6 +114,8 @@ export interface DebtOpts {
   direction?: 'lent' | 'borrowed';
   counterparty?: string;
   principal?: number;
+  /** Проценты за весь срок (колонка interest_minor); нет — пусто. */
+  interest?: number;
   currency?: string;
   closed?: boolean;
   archived?: boolean;
@@ -123,9 +125,9 @@ export async function debt(user: string, o: DebtOpts): Promise<string> {
   const did = id('d');
   await sql(
     user,
-    `insert into public.debts (id, created_at, client_updated_at, device_id, deleted_at, direction, counterparty, principal_minor, currency, opened_on, due_on, note, closed_at, archived_at)
-     values ($1, $2, $2, 'dev', $3, $4, $5, $6, $7, '2026-01-01', $8, '', $9, $10)`,
-    [did, TS, o.deleted ? TS : null, o.direction ?? 'lent', o.counterparty ?? 'Рустам', o.principal ?? 1000, o.currency ?? 'TJS', o.dueOn, o.closed ? TS : null, o.archived ? TS : null],
+    `insert into public.debts (id, created_at, client_updated_at, device_id, deleted_at, direction, counterparty, principal_minor, currency, opened_on, due_on, note, closed_at, archived_at, interest_minor)
+     values ($1, $2, $2, 'dev', $3, $4, $5, $6, $7, '2026-01-01', $8, '', $9, $10, $11)`,
+    [did, TS, o.deleted ? TS : null, o.direction ?? 'lent', o.counterparty ?? 'Рустам', o.principal ?? 1000, o.currency ?? 'TJS', o.dueOn, o.closed ? TS : null, o.archived ? TS : null, o.interest ?? null],
   );
   return did;
 }

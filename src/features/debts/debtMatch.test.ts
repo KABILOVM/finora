@@ -111,12 +111,18 @@ describe('mergePreview', () => {
     const b = item({ principalMinor: 30_000, dueOn: '2026-11-10' }, [5_000, 5_000]);
     expect(mergePreview([a, b])).toEqual({
       principalMinor: 70_000,
+      interestMinor: 0,
       paidMinor: 20_000,
       remainingMinor: 50_000,
       overpaidMinor: 0,
       dueOn: '2026-11-10',
       netted: false,
     });
+  });
+  it('проценты складываются, остаток считается от «сумма + проценты»', () => {
+    const a = item({ principalMinor: 40_000, interestMinor: 4_000 }, [10_000]);
+    const b = item({ principalMinor: 30_000, interestMinor: 6_000 }, [5_000]);
+    expect(mergePreview([a, b])).toMatchObject({ principalMinor: 70_000, interestMinor: 10_000, paidMinor: 15_000, remainingMinor: 65_000, overpaidMinor: 0, netted: false });
   });
   it('сроков нет — null; срок есть у одного — он', () => {
     expect(mergePreview([item(), item()])!.dueOn).toBeNull();

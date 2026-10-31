@@ -60,7 +60,7 @@ export function DebtRow({ item, today }: DebtRowProps) {
   const closed = debt.closedAt !== null;
   const active = !closed && !state.settled;
   const due = dueInfo(debt.dueOn, today, active);
-  const percent = progressPercent(state.paidMinor, state.principalMinor);
+  const percent = progressPercent(state.paidMinor, state.totalMinor);
   const word = repaidWord(debt.direction, percent);
   return (
     <Link to={`/debts/${debt.id}`} className={cn(base, closed && 'opacity-80')}>
@@ -83,7 +83,8 @@ export function DebtRow({ item, today }: DebtRowProps) {
         </span>
         <span className="text-muted">
           {word}
-          <span className="money"> · из {formatMinor(state.principalMinor, debt.currency)}</span>
+          <span className="money"> · из {formatMinor(state.totalMinor, debt.currency)}</span>
+          {state.interestMinor > 0 && <span> с процентами</span>}
         </span>
       </span>
     </Link>

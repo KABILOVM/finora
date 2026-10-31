@@ -175,6 +175,15 @@ describe('строгая проверка новых данных: ничего 
     ['долг: closedAt не метка', (f) => (f.debts[0].closedAt = 'вчера'), /Дата закрытия/],
     ['долг: нулевой символ', (f) => (f.debts[0].counterparty = 'А\u0000'), /нулевого символа/],
     ['долг: повторяющийся id', (f) => (f.debts[1].id = f.debts[0].id), /повторяющийся/],
+    ['долг: проценты 0', (f) => (f.debts[0].interestMinor = 0), /Проценты по долгу/],
+    ['долг: проценты больше 1e15', (f) => (f.debts[0].interestMinor = 1e15 + 1), /Проценты по долгу/],
+    ['долг: проценты дробные', (f) => (f.debts[0].interestMinor = 1.5), /Проценты по долгу/],
+    ['долг: ставка без процентов', (f) => ((f.debts[0].interestMinor = null), (f.debts[0].interestRateBp = 2400)), /только вместе с процентами/],
+    ['долг: срок без процентов', (f) => ((f.debts[0].interestMinor = null), (f.debts[0].termMonths = 12)), /только вместе с процентами/],
+    ['долг: ставка 0', (f) => ((f.debts[0].interestMinor = 5), (f.debts[0].interestRateBp = 0)), /Ставка по долгу/],
+    ['долг: ставка больше 1000 %', (f) => ((f.debts[0].interestMinor = 5), (f.debts[0].interestRateBp = 100_001)), /Ставка по долгу/],
+    ['долг: срок 0 месяцев', (f) => ((f.debts[0].interestMinor = 5), (f.debts[0].termMonths = 0)), /Длительность кредита/],
+    ['долг: срок 601 месяц', (f) => ((f.debts[0].interestMinor = 5), (f.debts[0].termMonths = 601)), /Длительность кредита/],
     // регулярные платежи
     ['правило: шаг 0', (f) => (f.recurringRules[0].intervalN = 0), /Шаг повторения/],
     ['правило: шаг 1001', (f) => (f.recurringRules[0].intervalN = 1001), /Шаг повторения/],
@@ -404,5 +413,39 @@ describe('копия чужого аккаунта (без блока настр
     const bobFood = await defaultId(USER_B, 'category:food');
     const budget = await bob.db.budgets.get(await defaultId(USER_B, `budget:${bobFood}`));
     expect(budget).toMatchObject({ categoryId: bobFood, amountMinor: 70_000 });
+  });
+});
+
+
+describe('копия с процентами по долгам', () => {
+  it('проценты, ставка и срок попадают в копию и возвращаются целыми; повторный импорт ничего не меняет', async () => {
+    const src = await fresh();
+    const credit = await src.debts.create({ direction: 'borrowed', counterparty: 'Банк', principalMinor: 1_000_000, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12, currency: 'TJS', openedOn: '2026-10-01' });
+    const file = await exportBackup(src);
+    expect(file.debts.find((d) => d.id === credit.id)).toMatchObject({ interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+
+    const dst = await fresh();
+    await importBackup(dst, clone(file) as BackupFile);
+    // записи при загрузке получают id по правилу аккаунта, поэтому ищем по содержимому
+    const [loaded] = await dst.db.debts.toArray();
+    expect(loaded).toMatchObject({ counterparty: 'Банк', principalMinor: 1_000_000, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+    expect(await importBackup(dst, clone(file) as BackupFile)).toMatchObject({ added: 0, replaced: 0 });
+    expect(await dst.db.debts.count()).toBe(1);
+  });
+
+  it('копия, сделанная до процентов (в долгах нет этих полей), загружается: проценты = null, версия копии не менялась', async () => {
+    const src = await fresh();
+    await src.debts.create({ direction: 'lent', counterparty: 'Али', principalMinor: 50_000, currency: 'TJS', openedOn: '2026-10-01' });
+    const file = clone(await exportBackup(src));
+    for (const d of file['debts']) {
+      delete d.interestMinor;
+      delete d.interestRateBp;
+      delete d.termMonths;
+    }
+    expect(file['version']).toBe(2);
+    const dst = await fresh();
+    await importBackup(dst, file as BackupFile);
+    const [d] = await dst.db.debts.toArray();
+    expect(d).toMatchObject({ principalMinor: 50_000, interestMinor: null, interestRateBp: null, termMonths: null });
   });
 });

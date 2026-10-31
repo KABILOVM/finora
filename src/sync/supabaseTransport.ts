@@ -89,10 +89,14 @@ const isMissingBaseColumn = (error: unknown): boolean => {
 };
 
 /**
- * Колонки, появившиеся в схеме позже (разделы 11 и 13 supabase/schema.sql): цель накопления у кошельков и города для погоды в
- * настройках. Сервер, у которого раздел ещё не выполнен, их не знает (PGRST204 «нет колонки в кэше схемы»).
+ * Колонки, появившиеся в схеме позже (разделы 11, 13 и 14 supabase/schema.sql): цель накопления у кошельков, города для погоды в
+ * настройках и проценты по долгам. Сервер, у которого раздел ещё не выполнен, их не знает (PGRST204 «нет колонки в кэше схемы»).
  */
-const LATE_COLUMN_SETS: readonly (readonly string[])[] = [['goal_minor', 'goal_on'], ['weather']];
+const LATE_COLUMN_SETS: readonly (readonly string[])[] = [
+  ['goal_minor', 'goal_on'],
+  ['weather'],
+  ['interest_minor', 'interest_rate_bp', 'term_months'],
+];
 
 /** Строка без колонок набора (для сервера, у которого раздел схемы ещё не выполнен). */
 const withoutColumns = (row: WireRow, columns: readonly string[]): WireRow => {

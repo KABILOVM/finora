@@ -91,6 +91,16 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         ['долг: срок раньше 2000 года', 'debts', () => deb({ dueOn: '1999-12-31' })],
         ['долг: заметка длиннее 500 символов', 'debts', () => deb({ note: tooLong })],
         ['долг: закрыт в невозможную дату', 'debts', () => deb({ closedAt: '1990-01-01T00:00:00.000Z' })],
+        // проценты по долгу (раздел 14 схемы)
+        ['долг: проценты 0', 'debts', () => deb({ interestMinor: 0 })],
+        ['долг: отрицательные проценты', 'debts', () => deb({ interestMinor: -1 })],
+        ['долг: проценты больше допустимых', 'debts', () => deb({ interestMinor: 1_000_000_000_000_001 })],
+        ['долг: ставка 0', 'debts', () => deb({ interestMinor: 5, interestRateBp: 0 })],
+        ['долг: ставка больше 1000 %', 'debts', () => deb({ interestMinor: 5, interestRateBp: 100_001 })],
+        ['долг: срок 0 месяцев', 'debts', () => deb({ interestMinor: 5, termMonths: 0 })],
+        ['долг: срок больше 600 месяцев', 'debts', () => deb({ interestMinor: 5, termMonths: 601 })],
+        ['долг: ставка без процентов', 'debts', () => deb({ interestMinor: null, interestRateBp: 2400 })],
+        ['долг: срок без процентов', 'debts', () => deb({ interestMinor: null, termMonths: 12 })],
         // бюджеты
         ['бюджет: сумма 0', 'budgets', () => bud({ amountMinor: 0 })],
         ['бюджет: отрицательная сумма', 'budgets', () => bud({ amountMinor: -100 })],
@@ -154,6 +164,10 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
       const debts = [
         makeDebt({ ...sync, counterparty: 'я'.repeat(80), note: 'я'.repeat(500), principalMinor: 1, openedOn: '2000-01-01', dueOn: '2100-01-01' }),
         makeDebt({ ...sync, counterparty: '😀'.repeat(80), note: '😀'.repeat(500), principalMinor: MAX, openedOn: '2100-01-01', dueOn: null }),
+        // проценты на нижней и верхней границе: сумма 1…1e15, ставка 1…100000, срок 1…600; только сумма процентов — без ставки и срока
+        makeDebt({ ...sync, interestMinor: 1, interestRateBp: 1, termMonths: 1 }),
+        makeDebt({ ...sync, interestMinor: MAX, interestRateBp: 100_000, termMonths: 600 }),
+        makeDebt({ ...sync, interestMinor: 12_345 }),
       ];
       const budgets = [makeBudget({ ...sync, amountMinor: 1 }), makeBudget({ ...sync, amountMinor: MAX })];
       const rules = [

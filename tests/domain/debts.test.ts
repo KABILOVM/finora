@@ -25,6 +25,49 @@ const op = (over: Partial<DebtTx> = {}): DebtTx => ({
   ...over,
 });
 
+describe('computeDebtState: проценты', () => {
+  const credit = (over: Partial<Parameters<typeof computeDebtState>[0]> = {}) => debt({ direction: 'borrowed', principalMinor: 1_000_000, interestMinor: 134_715, ...over });
+
+  it('остаток считается от «сумма долга + проценты»: проценты — это то, что нужно вернуть сверх полученного', () => {
+    const s = computeDebtState(credit(), [op({ kind: 'income', amountMinor: 1_000_000 }), op({ kind: 'expense', amountMinor: 94_560 })], wallets);
+    expect(s).toMatchObject({
+      principalMinor: 1_000_000, interestMinor: 134_715, totalMinor: 1_134_715, paidMinor: 94_560, remainingMinor: 1_040_155, overpaidMinor: 0,
+      issuedMinor: 1_000_000, settled: false,
+    });
+  });
+
+  it('проценты денег не двигают: «получено деньгами» — только сумма долга', () => {
+    const s = computeDebtState(credit(), [op({ kind: 'income', amountMinor: 1_000_000 })], wallets);
+    expect(s.issuedMinor).toBe(1_000_000);
+    expect(s.remainingMinor).toBe(1_134_715);
+  });
+
+  it('вернули только сумму долга — долг не погашен, остались проценты', () => {
+    const s = computeDebtState(credit(), [op({ kind: 'expense', amountMinor: 1_000_000 })], wallets);
+    expect(s).toMatchObject({ remainingMinor: 134_715, settled: false });
+  });
+
+  it('вернули всё с процентами — погашен без переплаты; лишнее — переплата', () => {
+    expect(computeDebtState(credit(), [op({ kind: 'expense', amountMinor: 1_134_715 })], wallets)).toMatchObject({ remainingMinor: 0, overpaidMinor: 0, settled: true });
+    expect(computeDebtState(credit(), [op({ kind: 'expense', amountMinor: 1_200_000 })], wallets)).toMatchObject({ remainingMinor: 0, overpaidMinor: 65_285, settled: true });
+  });
+
+  it('долг «мне должны» с процентами считается так же', () => {
+    const s = computeDebtState(debt({ principalMinor: 100_000, interestMinor: 10_000 }), [op({ amountMinor: 30_000 })], wallets);
+    expect(s).toMatchObject({ totalMinor: 110_000, remainingMinor: 80_000 });
+  });
+
+  it('без процентов (нет поля или null) всё как раньше', () => {
+    for (const over of [{}, { interestMinor: null }, { interestMinor: 0 }]) {
+      expect(computeDebtState(debt(over), [op({ amountMinor: 30_000 })], wallets)).toMatchObject({ interestMinor: 0, totalMinor: 100_000, remainingMinor: 70_000 });
+    }
+  });
+
+  it('сумма с процентами не помещается в безопасное целое — RangeError, а не неверное число', () => {
+    expect(() => computeDebtState(debt({ principalMinor: Number.MAX_SAFE_INTEGER, interestMinor: 10 }), [], wallets)).toThrow(RangeError);
+  });
+});
+
 describe('computeDebtState', () => {
   it('lent: выдача — расход, платежи — доходы; остаток = долг − платежи', () => {
     const s = computeDebtState(debt(), [op({ kind: 'expense', amountMinor: 100_000 }), op({ amountMinor: 30_000 }), op({ amountMinor: 20_000 })], wallets);
