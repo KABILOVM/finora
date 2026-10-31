@@ -8,7 +8,10 @@ import { PurchasesRow } from '@/features/products/PurchasesRow';
 import { PurchasesSheet } from '@/features/products/PurchasesSheet';
 import { checkLines, isGroceryCategory, totalOfLines, type PurchaseLine } from '@/features/products/purchase';
 import { parseReceiptWithAi, prepareReceiptImage } from '@/features/receipt/aiReceipt';
-import { ReceiptSheet } from '@/features/receipt/ReceiptSheet';
+import { ReceiptSheet, type ReceiptSheetProps } from '@/features/receipt/ReceiptSheet';
+import { useProductsData } from '@/features/products/useProductsData';
+import { matchProduct, normName } from '@/domain/products/catalog';
+import { productKeyOf } from '@/domain/products/stats';
 import { saveReceipt, undoReceipt } from '@/features/receipt/saveReceipt';
 import { checkReceipt } from '@/features/receipt/receiptAi';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
@@ -482,7 +485,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     });
     if (receipting) {
       return (
-        <ReceiptSheet
+        <ReceiptWithProducts
           wallets={wallets}
           base={settings.baseCurrency}
           categories={[...known]}
@@ -619,4 +622,18 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       />
     </Sheet>
   );
+}
+
+/**
+ * «Чек по позициям» с пометкой «Новый продукт»: название, которого нет ни в каталоге, ни в ваших прошлых покупках. История читается
+ * только пока открыт чек (не тормозит саму форму).
+ */
+function ReceiptWithProducts(props: Omit<ReceiptSheetProps, 'isNewProduct'>) {
+  const data = useProductsData();
+  const own = useMemo(() => (data ? new Set([...data.book.values()].map((s) => s.key)) : null), [data]);
+  const isNewProduct = useMemo(
+    () => (own === null ? undefined : (name: string) => normName(name) !== '' && matchProduct(name) === null && !own.has(productKeyOf(name))),
+    [own],
+  );
+  return <ReceiptSheet {...props} {...(isNewProduct ? { isNewProduct } : {})} />;
 }

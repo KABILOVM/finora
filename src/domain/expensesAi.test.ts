@@ -43,6 +43,29 @@ describe('normalizeAiExpenses', () => {
     expect(c).toMatchObject({ walletId: 'w3', categoryId: '', newCategory: '', date: '2026-10-12' });
     expect([a!.rid, b!.rid, c!.rid]).toEqual([1, 2, 3]);
   });
+  it('«автораспределение»: расход-продукт без категории от ИИ идёт в «Продукты»; названную ИИ категорию и не-продукты не трогаем', () => {
+    const [bread, milk, taxi, soap, own] = normalizeAiExpenses(
+      [
+        { title: 'хлеб', amount: 5, wallet: '', category: '', fee: 0, date: '', note: '' },
+        { title: 'молока', amount: 13, wallet: '', category: 'Транспорт', fee: 0, date: '', note: '' }, // ИИ назвал категорию — главнее
+        { title: 'такси', amount: 25, wallet: '', category: '', fee: 0, date: '', note: '' },
+        { title: 'мыло', amount: 4, wallet: '', category: '', fee: 0, date: '', note: '' },
+        { title: 'Курт сушёный', amount: 9, wallet: '', category: '', fee: 0, date: '', note: '' },
+      ],
+      ctx,
+    );
+    expect(bread).toMatchObject({ categoryId: 'c1', newCategory: '' });
+    expect(milk).toMatchObject({ categoryId: 'c2' });
+    expect(taxi).toMatchObject({ categoryId: '' });
+    expect(soap).toMatchObject({ categoryId: '' });
+    expect(own).toMatchObject({ categoryId: '' });
+  });
+  it('доход «хлеб» категорию расходов не получает; без категории «Продукты» ничего не подставляется', () => {
+    const [income] = normalizeAiExpenses([{ kind: 'income', title: 'хлеб', amount: 5, category: '' }], ctx);
+    expect(income).toMatchObject({ kind: 'income', categoryId: '' });
+    const [none] = normalizeAiExpenses([{ title: 'хлеб', amount: 5, category: '' }], { ...ctx, categories: [{ id: 'c2', name: 'Транспорт' }] });
+    expect(none).toMatchObject({ categoryId: '' });
+  });
   it('отбрасывает мусор и не падает на чужом ответе', () => {
     expect(normalizeAiExpenses('x', ctx)).toEqual([]);
     expect(normalizeAiExpenses([null, 5, { title: '', amount: 0 }, { title: 'ок', amount: -3 }, { title: 'нан', amount: NaN }], ctx).map((d) => [d.title, d.amountText])).toEqual([

@@ -1,5 +1,6 @@
 import type { ShoppingItem, ShoppingUnit } from './types';
 import type { ParsedItem } from './shoppingAi';
+import { matchProduct } from './products/catalog';
 
 /**
  * «Каталог» покупок — то, что человек уже вносил в список: название в его написании и единица, в которой он это берёт.
@@ -51,6 +52,23 @@ export function bindToCatalog(item: ParsedItem, catalog: readonly CatalogEntry[]
   const defaultQty = item.unit === 'pcs' && item.qtyMilli === 1000;
   if (!defaultQty || hit.unit === 'pcs') return { ...item, name: hit.name };
   return { ...item, name: hit.name, unit: hit.unit };
+}
+
+/**
+ * Привязка к встроенному каталогу продуктов: «картошки» → «Картофель», единица каталога — только если количество не называли
+ * (названную вслух единицу не меняем). Не нашли или неоднозначно — позиция как есть: в окне разбора она будет помечена «Новый продукт».
+ */
+export function bindToProducts(item: ParsedItem): ParsedItem {
+  const p = matchProduct(item.name);
+  if (!p) return item;
+  const defaultQty = item.unit === 'pcs' && item.qtyMilli === 1000;
+  if (!defaultQty || p.unit === 'pcs') return { ...item, name: p.name };
+  return { ...item, name: p.name, unit: p.unit };
+}
+
+/** Позиция из речи: сначала то, что человек уже вносил (его написание), потом встроенный каталог продуктов. */
+export function bindItem(item: ParsedItem, history: readonly CatalogEntry[]): ParsedItem {
+  return findInCatalog(item.name, history) ? bindToCatalog(item, history) : bindToProducts(item);
 }
 
 /** Подсказки из каталога по набранному: названия, где есть введённое (без точного совпадения). */

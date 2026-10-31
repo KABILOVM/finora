@@ -3,7 +3,7 @@ import { Button } from '@/components/Button';
 import { TextArea } from '@/components/Field';
 import { Sheet } from '@/components/Sheet';
 import { MAX_AI_TEXT, type ParsedItem } from '@/domain/shoppingAi';
-import { bindToCatalog, type CatalogEntry } from '@/domain/shoppingCatalog';
+import { bindItem, type CatalogEntry } from '@/domain/shoppingCatalog';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 import type { AiListResult } from './aiList';
@@ -55,7 +55,7 @@ export function ListTextSheet({
   const [items, setItems] = useState<EditableItem[] | null>(null);
   const nextRid = useRef(1);
   // Результат разбора: позиции привязываются к каталогу и получают номера строк.
-  const accept = (list: ParsedItem[]) => setItems(list.map((i) => ({ ...bindToCatalog(i, catalog), rid: nextRid.current++ })));
+  const accept = (list: ParsedItem[]) => setItems(list.map((i) => ({ ...bindItem(i, catalog), rid: nextRid.current++ })));
   const [error, setError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
