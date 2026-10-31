@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { createLazyGroups } from './lazyGroups';
 import { SERVICES as VECTOR_SERVICES, SERVICE_GROUPS as VECTOR_GROUPS, type ServiceMeta } from './serviceData';
 import { TJ_GROUPS, TJ_SERVICES } from './tjData';
 
@@ -45,49 +45,15 @@ export const LOGO_LOADERS: ReadonlyMap<string, () => Promise<{ LOGOS: GroupLogos
   ['shop', () => import('./serviceLogos/logos-shop')],
 ]);
 
-const loaded = new Map<string, GroupLogos>();
-const loading = new Map<string, Promise<void>>();
-const listeners = new Set<() => void>();
+const logos = createLazyGroups(LOGO_LOADERS, (m) => m.LOGOS, 'Не удалось загрузить логотипы сервисов:');
 
 /** Загружает логотипы группы (один раз). Никогда не отклоняется: при сбое значок остаётся пустой плиткой, а следующий показ попробует снова. */
-export function loadServiceLogos(group: string): Promise<void> {
-  const load = LOGO_LOADERS.get(group);
-  if (!load || loaded.has(group)) return Promise.resolve();
-  let pending = loading.get(group);
-  if (!pending) {
-    pending = load()
-      .then(
-        (m) => {
-          loaded.set(group, m.LOGOS);
-        },
-        (e: unknown) => {
-          console.error('Не удалось загрузить логотипы сервисов:', e);
-        },
-      )
-      .finally(() => {
-        loading.delete(group);
-        for (const notify of listeners) notify();
-      });
-    loading.set(group, pending);
-  }
-  return pending;
-}
-
-const subscribe = (notify: () => void): (() => void) => {
-  listeners.add(notify);
-  return () => {
-    listeners.delete(notify);
-  };
-};
+export const loadServiceLogos = logos.load;
 
 /** Логотип сервиса; null, пока файл его группы грузится (или такого сервиса нет). */
 export function useServiceLogo(id: string): Logo | null {
   const group = BY_ID.get(id)?.group ?? '';
-  const logos = useSyncExternalStore(subscribe, () => loaded.get(group));
-  useEffect(() => {
-    void loadServiceLogos(group);
-  }, [group]);
-  return logos?.[id] ?? null;
+  return logos.useGroup(group)?.[id] ?? null;
 }
 
 /** Строка для сравнения: без регистра, пробелов, знаков и точек («Apple Music» = «applemusic», «Booking.com» = «bookingcom»). */

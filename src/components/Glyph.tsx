@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { bankById } from '@/features/wallets/banks';
-import { Icon } from './Icon';
+import { useExtraIconMarkup } from './glyphExtras';
+import { DuoMarkup, Icon } from './Icon';
 import { resolveGlyph } from './glyphs';
 import { serviceById, serviceImageUrl, useServiceLogo } from './services';
 
@@ -16,6 +17,26 @@ export interface GlyphProps {
 
 /** Плитка со значком: иконка на подкрашенном фоне, знак банка на градиенте, логотип сервиса на его цвете или (для незнакомого эмодзи) сам эмодзи. */
 const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Оформление плитки значка: цвет на 18% прозрачности; сам значок — тот же цвет, смешанный с цветом текста (темнее на светлой теме, светлее на тёмной). */
+function tileTint(color: string | undefined): { className: string; style: CSSProperties } {
+  if (!color) return { className: 'bg-surface-2 text-muted', style: {} };
+  return {
+    className: '',
+    style: { backgroundColor: `color-mix(in srgb, ${color} 18%, transparent)`, color: `color-mix(in srgb, ${color} 72%, rgb(var(--text)))` },
+  };
+}
+
+/** Дополнительный значок: плитка как у обычных, разметка приходит из ленивого файла (пока он грузится, видна пустая плитка). */
+function ExtraGlyph({ name, color, base, inner, className }: { name: string; color: string | undefined; base: CSSProperties; inner: number; className?: string }) {
+  const markup = useExtraIconMarkup(name);
+  const tint = tileTint(color);
+  return (
+    <span aria-hidden="true" className={`inline-flex items-center justify-center ${tint.className} ${className ?? ''}`} style={{ ...base, ...tint.style }}>
+      {markup !== null && <DuoMarkup cacheKey={name} markup={markup} size={inner} />}
+    </span>
+  );
+}
 
 /** Логотип сервиса на плитке его фирменного цвета (цвет категории не нужен). Пока файл логотипов грузится, видна пустая плитка. */
 function ServiceGlyph({ id, base, inner, className }: { id: string; base: CSSProperties; inner: number; className?: string }) {
@@ -82,21 +103,17 @@ export function Glyph({ value, color: rawColor, size = 40, className }: GlyphPro
     return <ServiceGlyph id={g.id} base={base} inner={Math.round(size * 0.6)} className={className} />;
   }
 
+  if (g.kind === 'extra') {
+    return <ExtraGlyph name={g.name} color={color} base={base} inner={inner} className={className} />;
+  }
+
   if (g.kind === 'icon') {
+    const tint = tileTint(color);
     return (
       <span
         aria-hidden="true"
-        className={`inline-flex items-center justify-center ${color ? '' : 'bg-surface-2 text-muted'} ${className ?? ''}`}
-        style={{
-          ...base,
-          // Плитка — цвет на 18% прозрачности; сам значок — тот же цвет, смешанный с цветом текста (темнее на светлой теме, светлее на тёмной).
-          ...(color
-            ? {
-                backgroundColor: `color-mix(in srgb, ${color} 18%, transparent)`,
-                color: `color-mix(in srgb, ${color} 72%, rgb(var(--text)))`,
-              }
-            : {}),
-        }}
+        className={`inline-flex items-center justify-center ${tint.className} ${className ?? ''}`}
+        style={{ ...base, ...tint.style }}
       >
         <Icon name={g.name} size={inner} />
       </span>
