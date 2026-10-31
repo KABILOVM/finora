@@ -41,6 +41,19 @@ export function nameKey(name: string): string {
 const groupKeys = (g: CatalogGroup): Set<string> => new Set([g.name, ...(g.aka ?? [])].map(nameKey));
 const childKeys = (c: CatalogChild): Set<string> => new Set([c.name, ...(c.aka ?? [])].map(nameKey));
 
+/**
+ * Верхняя категория расходов/доходов человека, которая соответствует набору каталога (по названию набора и его синонимам, как в планировщике).
+ * Подкатегории не годятся: набор — это верхний уровень. Не архивная первой; null — такой категории нет.
+ */
+export function findGroupCategory(existing: readonly ExistingCategory[], groupSlug: string, catalog: readonly CatalogGroup[] = CATALOG): ExistingCategory | null {
+  const g = catalog.find((x) => x.slug === groupSlug);
+  if (!g) return null;
+  const keys = groupKeys(g);
+  const hits = existing.filter((c) => c.kind === g.kind && c.parentId === null && keys.has(nameKey(c.name)));
+  const best = (list: ExistingCategory[]) => list.find((c) => nameKey(c.name) === nameKey(g.name)) ?? list[0] ?? null;
+  return best(hits.filter((c) => !c.archived));
+}
+
 /* ------------------------------ план ------------------------------ */
 
 export type ParentState =

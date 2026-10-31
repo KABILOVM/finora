@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventually, makeTestDeps, renderAppRoot, write, type TestDeps } from '@/app/testkit';
 import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import type { Store } from '@/db';
+import { opsDeps, showApp, table } from '@/features/transactions/__fixtures__/opsKit';
 import CategoriesPage from '../CategoriesPage';
 import { CatalogOffer } from './CatalogOffer';
 import { __resetCatalogOfferMemory, markCatalogOffered, wasCatalogOffered } from './catalogOfferStorage';
@@ -153,17 +155,16 @@ describe('окно «Готовые категории»', () => {
 });
 
 describe('разовое предложение действующему человеку', () => {
+  /** Открывает приложение с готовой базой: с операциями (действующий человек) или без (новый). */
   async function mount(withOps: boolean) {
-    const td = makeTestDeps();
-    renderAppRoot(<CatalogOffer />, { deps: td.deps, path: '/' });
-    await eventually(() => {
-      if (td.stores.length === 0) throw new Error('хранилище ещё не открыто');
+    const td = opsDeps([table()], {
+      setup: async (s: Store) => {
+        if (!withOps) return;
+        const wallet = (await s.db.wallets.toArray())[0]!;
+        await s.transactions.create({ kind: 'income', walletId: wallet.id, amountMinor: 1000, occurredOn: '2026-10-01' });
+      },
     });
-    await eventually(async () => expect(await store(td).db.categories.count()).toBeGreaterThan(10));
-    if (withOps) {
-      const wallet = (await store(td).db.wallets.toArray())[0]!;
-      await write(() => store(td).transactions.create({ kind: 'income', walletId: wallet.id, amountMinor: 1000, occurredOn: '2026-10-01' }));
-    }
+    await showApp(<CatalogOffer />, td, '/');
     return td;
   }
 
@@ -176,23 +177,51 @@ describe('разовое предложение действующему чел�
     expect(wasCatalogOffered(store(td).userId)).toBe(true);
   }, 15000);
 
-  it('у нового человека (операций нет) окна нет', async () => {
-    await mount(false);
+  it('у нового человека (операций нет) окна нет, и позже, когда операции появятся, оно тоже не придёт', async () => {
+    const td = await mount(false);
+    await eventually(() => expect(wasCatalogOffered(store(td).userId)).toBe(true)); // новичку отметка ставится сразу
+    const wallet = (await store(td).db.wallets.toArray())[0]!;
+    await write(() => store(td).transactions.create({ kind: 'income', walletId: wallet.id, amountMinor: 1000, occurredOn: '2026-10-01' }));
     await new Promise((r) => setTimeout(r, 2200));
     expect(screen.queryByRole('dialog')).toBeNull();
   }, 15000);
 
   it('если уже предлагали, окна нет', async () => {
-    const td = makeTestDeps();
-    markCatalogOffered('00000000-0000-4000-8000-000000000000');
-    renderAppRoot(<CatalogOffer />, { deps: td.deps, path: '/' });
-    await eventually(() => {
-      if (td.stores.length === 0) throw new Error('хранилище ещё не открыто');
+    const td = opsDeps([table()], {
+      setup: async (s: Store) => {
+        const wallet = (await s.db.wallets.toArray())[0]!;
+        await s.transactions.create({ kind: 'income', walletId: wallet.id, amountMinor: 1000, occurredOn: '2026-10-01' });
+        markCatalogOffered(s.userId);
+      },
     });
-    markCatalogOffered(store(td).userId);
+    await showApp(<CatalogOffer />, td, '/');
     await new Promise((r) => setTimeout(r, 2200));
     expect(screen.queryByRole('dialog')).toBeNull();
   }, 15000);
+
+  it('когда все готовые наборы уже есть, предлагать нечего: окна нет, но отметка не ставится', async () => {
+    const td = opsDeps([table()], {
+      setup: async (s: Store) => {
+        const wallet = (await s.db.wallets.toArray())[0]!;
+        await s.transactions.create({ kind: 'income', walletId: wallet.id, amountMinor: 1000, occurredOn: '2026-10-01' });
+        const { CATALOG } = await import('./catalogData');
+        const { planCatalog, defaultSelection } = await import('./catalogPlan');
+        const { applyCatalog } = await import('./catalogApply');
+        const rows = await s.db.categories.toArray();
+        const plan = planCatalog(rows.map((c) => ({ id: c.id, name: c.name, kind: c.kind, parentId: c.parentId, archived: c.archivedAt !== null, color: c.color })));
+        const all = new Set<string>(defaultSelection(plan));
+        for (const g of plan.groups) {
+          all.add(g.key);
+          for (const c of g.children) all.add(c.key);
+        }
+        await applyCatalog(s, plan, all);
+        expect(CATALOG.length).toBeGreaterThan(0);
+      },
+    });
+    await showApp(<CatalogOffer />, td, '/');
+    await new Promise((r) => setTimeout(r, 2200));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  }, 20000);
 });
 
 describe('отметка «предлагали»', () => {

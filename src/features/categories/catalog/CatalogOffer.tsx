@@ -1,8 +1,6 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { Component, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useCategories, useOptionalStore, type Store } from '@/db';
-import { hasWork, planCatalog } from './catalogPlan';
 import { markCatalogOffered, wasCatalogOffered } from './catalogOfferStorage';
 
 const CatalogSheet = lazy(() => import('./CatalogSheet'));
@@ -31,14 +29,39 @@ function Gate({ store }: { store: Store }) {
   const all = useCategories(undefined, { includeArchived: true });
   const [offered, setOffered] = useState(() => wasCatalogOffered(store.userId));
   const [visible, setVisible] = useState(false);
-  // Предложение — для действующего человека: у него уже есть операции и ему ещё не предлагали. У нового операций нет, его ведёт мастер.
-  const used = useLiveQuery(async () => (await store.db.transactions.count()) > 0, [store]);
+  // Решаем один раз при запуске, как в «Что нового»: предложение — для тех, у кого к этому моменту уже были операции. У человека без операций
+  // (новый, его ведёт мастер) отметка ставится сразу: позже, когда у него появятся операции, окно уже не придёт.
+  const [used, setUsed] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      if (wasCatalogOffered(store.userId)) return;
+      const any = (await store.db.transactions.count()) > 0;
+      if (!any) markCatalogOffered(store.userId);
+      if (alive) setUsed(any);
+    })().catch((e: unknown) => console.error('Не удалось проверить, предлагать ли готовые категории:', e));
+    return () => {
+      alive = false;
+    };
+  }, [store]);
   const eligible = !offered && used === true;
 
-  const worth = useMemo(() => {
-    if (all === undefined) return false;
-    return planCatalog(all.map((c) => ({ id: c.id, name: c.name, kind: c.kind, parentId: c.parentId, archived: c.archivedAt !== null, color: c.color }))).groups.some(hasWork);
-  }, [all]);
+  // Каталог (около 150 записей) в основной файл не берём: план считается, только когда предложение вообще может понадобиться
+  const [worth, setWorth] = useState(false);
+  const mayOffer = eligible && all !== undefined;
+  useEffect(() => {
+    if (!mayOffer || all === undefined) return undefined;
+    let alive = true;
+    void import('./catalogPlan')
+      .then(({ planCatalog, hasWork }) => {
+        const existing = all.map((c) => ({ id: c.id, name: c.name, kind: c.kind, parentId: c.parentId, archived: c.archivedAt !== null, color: c.color }));
+        if (alive) setWorth(planCatalog(existing).groups.some(hasWork));
+      })
+      .catch((e: unknown) => console.error('Не удалось подготовить готовые категории:', e));
+    return () => {
+      alive = false;
+    };
+  }, [mayOffer, all]);
 
   const ready = eligible && worth && pathname === '/';
   useEffect(() => {
