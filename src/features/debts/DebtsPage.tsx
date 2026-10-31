@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -17,8 +17,8 @@ import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
 import { applyDebtFilters, debtFilterFields } from './debtFilters';
-import { defaultDirection, groupDebts, overdueCount, remainingByCurrency, type DebtItem } from './debtSummary';
-import { DIRECTION_LABEL } from './debtText';
+import { defaultDirection, groupDebts, isOwing, nearestDue, overdueCount, remainingByCurrency, repaidShare, type DebtItem } from './debtSummary';
+import { dueInfo, DIRECTION_LABEL, repaidWord, ruDateShort } from './debtText';
 import { DebtList, Fold, SettledSection } from './DebtLists';
 import { DebtSheet } from './DebtSheet';
 import { SplitBillSheet } from './SplitBillSheet';
@@ -59,6 +59,20 @@ function FilteredNote({ partialGroups, className }: { partialGroups: number; cla
   );
 }
 
+/** Плашка-«капсула» на цветной карточке итога: тёмная подложка держит белый текст читаемым на любом акценте. */
+function Capsule({ icon, children, testId }: { icon: 'alert' | 'list' | 'calendar'; children: ReactNode; testId?: string }) {
+  return (
+    <span data-testid={testId} className="inline-flex items-center gap-1.5 rounded-full bg-black/20 py-1 pl-2 pr-3 text-sm font-semibold">
+      <Icon name={icon} size={16} />
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Итог: цветная карточка (как «Всего» на главной) — сколько осталось по каждой валюте, сколько открытых долгов, просрочка, ближайший срок
+ * и общая полоса «сколько уже вернули». Валюты не складываем. Весь текст белый на цвете акцента (контраст проверен для всех акцентов).
+ */
 function Totals({
   items,
   direction,
@@ -77,28 +91,64 @@ function Totals({
   const sums = remainingByCurrency(items, base ?? undefined);
   const late = overdueCount(items, today);
   if (sums.ok && sums.totals.length === 0 && late === 0) return null;
+  const open = items.filter(isOwing).length;
+  // Полосу «вернули» рисуем только при одной валюте: суммы разных валют не складываем и в проценты
+  const single = sums.ok && sums.totals.length === 1 ? sums.totals[0] : undefined;
+  const share = single ? repaidShare(items, single.currency) : null;
+  const next = late === 0 ? nearestDue(items) : null;
+  const nextInfo = next ? dueInfo(next.debt.dueOn, today, true) : null;
   return (
-    <Card aria-label={`Итого: ${DIRECTION_LABEL[direction].toLowerCase()}`} data-testid="debts-totals" className="mb-4">
-      <p className="text-sm text-muted">{direction === 'lent' ? 'Вам должны всего' : 'Вы должны всего'}</p>
+    <Card
+      aria-label={`Итого: ${DIRECTION_LABEL[direction].toLowerCase()}`}
+      data-testid="debts-totals"
+      className="mb-4 border-transparent bg-gradient-to-br from-hero-from to-hero text-white"
+    >
+      <p className="text-sm font-medium">{direction === 'lent' ? 'Вам должны всего' : 'Вы должны всего'}</p>
       {sums.ok ? (
         <ul className="mt-1 flex flex-col gap-0.5">
           {sums.totals.map((t) => (
             <li key={t.currency}>
-              <MoneyText minor={t.minor} currency={t.currency} tone="none" className="text-[clamp(1.5rem,7vw,2rem)] font-bold leading-tight" />
+              <MoneyText minor={t.minor} currency={t.currency} tone="none" className="text-[clamp(1.75rem,8vw,2.25rem)] font-bold leading-tight" />
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-1 font-medium text-danger">{DEBT_OVERFLOW_MESSAGE}</p>
+        <p className="mt-1 font-semibold">{DEBT_OVERFLOW_MESSAGE}</p>
       )}
-      {sums.ok && sums.totals.length > 1 && <p className="mt-1 text-sm text-muted">Валюты не складываем: у каждой свой итог.</p>}
-      {late > 0 && (
-        <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-danger">
-          <Icon name="alert" size={18} className="shrink-0" />
-          Просрочено: {late} {pluralRu(late, 'долг', 'долга', 'долгов')}
-        </p>
+      {sums.ok && sums.totals.length > 1 && <p className="mt-1 text-sm">Валюты не складываем: у каждой свой итог.</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {open > 0 && (
+          <Capsule icon="list">
+            {open} {pluralRu(open, 'открытый долг', 'открытых долга', 'открытых долгов')}
+          </Capsule>
+        )}
+        {late > 0 && (
+          <Capsule icon="alert">Просрочено: {late} {pluralRu(late, 'долг', 'долга', 'долгов')}</Capsule>
+        )}
+        {next && nextInfo && next.debt.dueOn !== null && (
+          <Capsule icon="calendar">
+            Ближайший срок: {ruDateShort(next.debt.dueOn).slice(0, 5)}
+            {nextInfo.text !== '' && ` · ${nextInfo.text}`}
+          </Capsule>
+        )}
+      </div>
+      {share !== null && (
+        <div className="mt-3">
+          <div
+            role="progressbar"
+            aria-label={`Итого: ${repaidWord(direction, share)}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={share}
+            aria-valuetext={`${share}%`}
+            className="h-2 overflow-hidden rounded-full bg-black/25"
+          >
+            <div className="h-full rounded-full bg-white" style={{ width: `${Math.max(share, 2)}%` }} />
+          </div>
+          <p className="mt-1 text-sm font-medium">{repaidWord(direction, share)}</p>
+        </div>
       )}
-      {filtered && <FilteredNote partialGroups={partialGroups} />}
+      {filtered && <FilteredNote partialGroups={partialGroups} className="mt-2 text-sm" />}
     </Card>
   );
 }
@@ -277,7 +327,7 @@ export default function DebtsPage() {
           ) : noOpen ? (
             <p className="px-1 text-muted">Открытых долгов нет.</p>
           ) : (
-            groups.active.length > 0 && <DebtList items={groups.active} today={today} label={DIRECTION_LABEL[direction]} />
+            groups.active.length > 0 && <DebtList items={groups.active} today={today} label={DIRECTION_LABEL[direction]} sections />
           )}
           {groups.settled.length > 0 && <SettledSection items={groups.settled} today={today} busy={busy} onCloseAll={() => void closeSettled()} />}
           {groups.closed.length > 0 && (

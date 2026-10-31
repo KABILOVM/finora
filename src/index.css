@@ -1265,6 +1265,11 @@
     }
   }
 
+  /* Буквы кружка человека (features/debts/personAvatar.tsx): из атрибута, чтобы не попадать в текст строки. */
+  .person-initials::before {
+    content: attr(data-initials);
+  }
+
   /* «Свой цвет» в настройках, пока цвет не выбран: радуга. Когда выбран — обычный образец .accent-swatch с переменными цвета. */
   .custom-swatch-empty {
     background-image: conic-gradient(from 0deg, #f87171, #fbbf24, #a3e635, #34d399, #22d3ee, #60a5fa, #a78bfa, #f472b6, #f87171);

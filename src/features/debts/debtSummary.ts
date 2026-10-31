@@ -3,6 +3,7 @@ import { computeDebtState, type DebtPayment, type DebtState, type DebtTx } from 
 import { addMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, DebtDirection, IsoDate, LocalRow, Minor, UUID, Wallet } from '@/domain/types';
 import { compareRu } from '@/db/sort';
+import { progressPercent } from './debtText';
 
 /** Чистая сводка по долгам: остатки, группы для экрана, итоги по валютам, просрочка. Без React и без базы. */
 
@@ -213,6 +214,27 @@ export function remainingByCurrency(items: readonly DebtItem[], base?: CurrencyC
     return compareRu(a.currency, b.currency);
   });
   return { ok: true, totals };
+}
+
+/**
+ * Какая доля открытых долгов уже погашена: сумма выплаченного к сумме долгов (с процентами), целые проценты. Считается по ОДНОЙ валюте (суммы разных
+ * валют не складываем); долгов в ней нет, всё ещё не тронуто (0 выплат) или суммы не помещаются в расчёт — null.
+ */
+export function repaidShare(items: readonly DebtItem[], currency: CurrencyCode): number | null {
+  try {
+    let paid = 0;
+    let total = 0;
+    for (const it of items) {
+      if (!isOwing(it) || it.state === null || it.debt.currency !== currency) continue;
+      paid = addMinor(paid, Math.min(it.state.paidMinor, it.state.totalMinor));
+      total = addMinor(total, it.state.totalMinor);
+    }
+    if (total <= 0 || paid <= 0) return null;
+    return progressPercent(paid, total);
+  } catch (e) {
+    if (e instanceof RangeError) return null;
+    throw e;
+  }
 }
 
 /** Сколько долгов просрочено на сегодня: срок строго раньше сегодняшнего дня, а остаток ещё есть. */
