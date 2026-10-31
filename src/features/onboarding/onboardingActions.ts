@@ -52,7 +52,7 @@ export async function addWalletOnce(store: Store, draft: WalletDraft): Promise<A
 export async function editWallet(store: Store, wallet: LocalRow<Wallet>, draft: WalletDraft): Promise<LocalRow<Wallet>> {
   const name = checkName(draft.name);
   const { db } = store;
-  return db.transaction('rw', [db.wallets, db.transactions, db.recurring_rules, db.meta], async () => {
+  return db.transaction('rw', [db.wallets, db.transactions, db.recurring_rules, db.savings_goals, db.meta], async () => {
     const live = liveOnes(await db.wallets.toArray());
     if (live.some((w) => w.id !== wallet.id && sameName(w.name, name))) {
       throw new ValidationError('Кошелёк с таким названием уже есть');
@@ -72,7 +72,7 @@ export async function editWallet(store: Store, wallet: LocalRow<Wallet>, draft: 
 /** Убрать лишний кошелёк (в архив). Если он был «по умолчанию» — по умолчанию станет первый оставшийся. */
 export async function removeWallet(store: Store, wallet: LocalRow<Wallet>): Promise<void> {
   const { db } = store;
-  await db.transaction('rw', [db.wallets, db.transactions, db.recurring_rules, db.settings, db.meta], async () => {
+  await db.transaction('rw', [db.wallets, db.transactions, db.recurring_rules, db.savings_goals, db.settings, db.meta], async () => {
     await store.wallets.archive(wallet.id);
     const settings = await store.settings.get();
     if (settings?.defaultWalletId === wallet.id) {
@@ -89,7 +89,7 @@ export async function removeWallet(store: Store, wallet: LocalRow<Wallet>): Prom
 export async function setBaseCurrency(store: Store, code: CurrencyCode): Promise<void> {
   const seedId = await defaultId(store.userId, 'wallet:cash');
   const { db } = store;
-  await db.transaction('rw', [db.settings, db.wallets, db.transactions, db.recurring_rules, db.meta], async () => {
+  await db.transaction('rw', [db.settings, db.wallets, db.transactions, db.recurring_rules, db.savings_goals, db.meta], async () => {
     const settings = await store.settings.get();
     if (!settings) throw new ValidationError('Настройки ещё не созданы: дождитесь первой загрузки данных');
     if (settings.baseCurrency !== code) await store.settings.update({ baseCurrency: code });

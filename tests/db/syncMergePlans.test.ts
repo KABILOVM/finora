@@ -66,7 +66,7 @@ describe('новые таблицы принимаются с сервера', (
   it('лишние поля отбрасываются, обязательное пустое — ошибка и в базе ничего не меняется', async () => {
     const { store } = await device();
     const base = { createdAt: stamp(T0 - 9_000), clientUpdatedAt: OLD, deviceId: REMOTE, deletedAt: null };
-    const debt = { ...base, id: 'd-1', direction: 'lent', counterparty: 'Али', principalMinor: 5_000, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null };
+    const debt = { ...base, id: 'd-1', direction: 'lent', counterparty: 'Али', principalMinor: 5_000, category: '', currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null };
     await store.sync.applyRemotePage('debts', [{ entity: { ...debt, dirty: 0, лишнее: 1 } as never, serverSeq: 1 }], 1);
     expect(Object.keys((await store.db.debts.get('d-1'))!)).not.toContain('лишнее');
     await expect(store.sync.applyRemotePage('debts', [{ entity: { ...debt, id: 'd-2', counterparty: null } as never, serverSeq: 2 }], 2)).rejects.toBeInstanceOf(ValidationError);

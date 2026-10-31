@@ -25,7 +25,7 @@ describe('Проверка облака: всё в порядке', () => {
   it('каждая таблица читается один раз, повторы запроса выключены, в каждую из восьми таблиц пишется одна заведомо неверная строка', async () => {
     const { calls } = await check();
     expect(calls.selects.map((s) => s.table).sort()).toEqual(['budgets', 'categories', 'debts', 'exchange_rates', 'recurring_rules', 'savings_goals', 'settings', 'shopping_items', 'transactions', 'wallets']);
-    expect(calls.retriesOff).toBe(9);
+    expect(calls.retriesOff).toBe(10); // по разу на каждую из десяти таблиц, включая курсы
     expect(calls.selects.every((s) => s.limit > 0 && s.limit <= 50)).toBe(true);
     expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'savings_goals', 'settings', 'shopping_items', 'transactions', 'wallets']);
     for (const u of calls.upserts) {
