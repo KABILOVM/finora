@@ -21,8 +21,11 @@ export interface DebtPartCardProps {
   today: IsoDate;
   /** Планы платежей всех долгов: берутся те, что относятся к этой составляющей. */
   rules: readonly LocalRow<RecurringRule>[];
-  /** Куда ведёт «Открыть»: страница самой составляющей. */
-  openTo: string;
+  /**
+   * «Открыть» ведёт на страницу самой составляющей. У главного долга адрес с «?own=1»: без него откроется весь объединённый долг.
+   * Адрес собирается тут (фиксированное начало «/debts/»): статический аудит не пропускает ссылку, адрес которой пришёл переменной.
+   */
+  own?: boolean;
   disabled?: boolean;
   onPay: () => void;
 }
@@ -53,7 +56,7 @@ export function partTitle(item: DebtItem, rootName: string): string {
  * и осталось, плановые платежи. «Платёж» записывает платёж именно по этой составляющей, «Открыть» ведёт на её страницу (правка,
  * «Взял ещё», план «Платить частями», все платежи).
  */
-export function DebtPartCard({ item, rootName, today, rules, openTo, disabled = false, onPay }: DebtPartCardProps) {
+export function DebtPartCard({ item, rootName, today, rules, own = false, disabled = false, onPay }: DebtPartCardProps) {
   const { debt, state } = item;
   const title = partTitle(item, rootName);
   const closed = debt.closedAt !== null;
@@ -67,7 +70,7 @@ export function DebtPartCard({ item, rootName, today, rules, openTo, disabled = 
         <p role="alert" className="mt-1 text-sm font-medium text-danger">
           {DEBT_OVERFLOW_MESSAGE}
         </p>
-        <Link to={openTo} className={`${buttonClasses('secondary')} mt-3`}>
+        <Link to={`/debts/${debt.id}${own ? '?own=1' : ''}`} className={`${buttonClasses('secondary')} mt-3`}>
           Открыть
         </Link>
       </Card>
@@ -141,7 +144,7 @@ export function DebtPartCard({ item, rootName, today, rules, openTo, disabled = 
         <Button variant="primary" icon="plus" disabled={disabled || !canPay} onClick={onPay} aria-label={`Платёж: ${title}`}>
           Платёж
         </Button>
-        <Link to={openTo} className={buttonClasses('secondary')} aria-label={`Открыть: ${title}`}>
+        <Link to={`/debts/${debt.id}${own ? '?own=1' : ''}`} className={buttonClasses('secondary')} aria-label={`Открыть: ${title}`}>
           Открыть
         </Link>
       </div>

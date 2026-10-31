@@ -191,7 +191,7 @@ export function DebtGroupView({ group, items, base }: DebtGroupViewProps) {
               rootName={debt.counterparty}
               today={today}
               rules={rules ?? []}
-              openTo={i === 0 ? `/debts/${p.debt.id}?own=1` : `/debts/${p.debt.id}`}
+              own={i === 0}
               disabled={archived || busy}
               onPay={() => setPaying(p)}
             />
