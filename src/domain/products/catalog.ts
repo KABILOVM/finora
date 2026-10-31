@@ -42,6 +42,15 @@ export function productByName(name: string): Product | undefined {
   return k === '' ? undefined : BY_KEY.get(k);
 }
 
+/**
+ * Ключ продукта в истории: продукт каталога («c:kartofel») или своё название («n:курт сушёный»). «Картошка» и «Картофель» — один ключ.
+ * По нему считаются цены (stats.ts) и память цен списка покупок (shopping.ts, priceKey).
+ */
+export function productKeyOf(name: string): string {
+  const p = productByName(name);
+  return p ? `c:${p.id}` : `n:${normName(name)}`;
+}
+
 /** Начало слова без падежного окончания: «картошки» → «картошк», «помидоров» → «помидор». Короткие слова не трогаем. */
 function stemOf(token: string): string {
   if (token.length >= 7) return token.slice(0, -2);

@@ -29,15 +29,23 @@ function useDeletedReceiptIds(): ReadonlySet<string> | undefined {
   }, [store]);
 }
 
-/** Всё для экрана «Продукты»: книга цен по купленным позициям в основной валюте. undefined — читается; null — настроек ещё нет. */
-export function useProductsData(): ProductsData | null | undefined {
+/** Живые позиции списка без позиций удалённых чеков: из них считаются цены (экран «Продукты», «Покупки»). undefined — читается. */
+export function useLiveShoppingItems(): LocalRow<ShoppingItem>[] | undefined {
   const all = useShoppingItems();
-  const settings = useSettings();
   const deleted = useDeletedReceiptIds();
   return useMemo(() => {
-    if (all === undefined || settings === undefined || deleted === undefined) return undefined;
+    if (all === undefined || deleted === undefined) return undefined;
+    return deleted.size === 0 ? all : all.filter((i) => i.transactionId === null || !deleted.has(i.transactionId));
+  }, [all, deleted]);
+}
+
+/** Всё для экрана «Продукты»: книга цен по купленным позициям в основной валюте. undefined — читается; null — настроек ещё нет. */
+export function useProductsData(): ProductsData | null | undefined {
+  const items = useLiveShoppingItems();
+  const settings = useSettings();
+  return useMemo(() => {
+    if (items === undefined || settings === undefined) return undefined;
     if (settings === null) return null;
-    const items = deleted.size === 0 ? all : all.filter((i) => i.transactionId === null || !deleted.has(i.transactionId));
     return { base: settings.baseCurrency, items, book: buildPriceBook(items, new Date().toISOString()) };
-  }, [all, settings, deleted]);
+  }, [items, settings]);
 }

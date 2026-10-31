@@ -6,8 +6,13 @@ import { TextInput } from '@/components/Field';
 import { Segmented } from '@/components/Segmented';
 import { Sheet } from '@/components/Sheet';
 import { ValidationError } from '@/db';
+import { normName } from '@/domain/products/catalog';
+import type { PriceBook } from '@/domain/products/stats';
 import { NAME_MAX, parseQty, qtyToInput, UNIT_LABEL, type ItemView } from '@/domain/shopping';
 import type { CurrencyCode, Minor, ShoppingUnit } from '@/domain/types';
+import { moneyText, priceLine } from '@/features/products/productText';
+import { statsOfName } from '@/features/products/purchase';
+import { searchProducts } from '@/features/products/suggest';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 
 export interface ItemFormValue {
@@ -24,15 +29,19 @@ export interface ItemSheetProps {
   currency: CurrencyCode;
   /** Прошлые покупки: быстрый выбор названия вместе с единицей. */
   recent: readonly { name: string; unit: ShoppingUnit }[];
+  /** Личные цены продуктов: подсказки каталога при наборе названия и «прошлый раз / в среднем». Нет — без подсказок. */
+  book?: PriceBook;
   onSave: (value: ItemFormValue) => Promise<void>;
   onRemove?: () => Promise<void>;
   onClose: () => void;
 }
 
 const UNIT_OPTIONS = (['pcs', 'kg', 'l'] as const).map((u) => ({ value: u, label: UNIT_LABEL[u] }));
+/** Сколько подсказок каталога показываем под названием. */
+const SUGGEST_MAX = 6;
 
 /** Добавить или изменить позицию: название, количество, единица (шт / кг / л); у отмеченной ещё и цена. */
-export function ItemSheet({ view, currency, recent, onSave, onRemove, onClose }: ItemSheetProps) {
+export function ItemSheet({ view, currency, recent, book, onSave, onRemove, onClose }: ItemSheetProps) {
   const item = view?.item ?? null;
   const [name, setName] = useState(item?.name ?? '');
   const [unit, setUnit] = useState<ShoppingUnit>(item?.unit ?? 'pcs');
@@ -42,6 +51,10 @@ export function ItemSheet({ view, currency, recent, onSave, onRemove, onClose }:
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
   const checked = view?.checked === true;
+  // название выбрали из подсказки: список подсказок убираем, пока название не изменят
+  const [picked, setPicked] = useState<string | null>(null);
+  const suggestions = !item && book && picked !== name && normName(name) !== '' ? searchProducts(name, book, SUGGEST_MAX) : [];
+  const past = book && normName(name) !== '' ? statsOfName(book, name, unit) : null;
 
   const changeUnit = (next: ShoppingUnit) => {
     setUnit(next);
@@ -127,6 +140,27 @@ export function ItemSheet({ view, currency, recent, onSave, onRemove, onClose }:
           enterKeyHint="done"
           data-autofocus
         />
+        {suggestions.length > 0 && (
+          <ul aria-label="Продукты из каталога" className="-mt-2 divide-y divide-border rounded-2xl border border-border bg-surface/80">
+            {suggestions.map((s) => (
+              <li key={s.key}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setName(s.name);
+                    changeUnit(s.unit);
+                    setPicked(s.name);
+                    setErrors((x) => ({ ...x, name: undefined, form: undefined }));
+                  }}
+                  className="flex min-h-[52px] w-full flex-col justify-center px-3.5 py-1.5 text-left active:bg-border/50"
+                >
+                  <span className="truncate font-medium">{s.name}</span>
+                  <span className="truncate text-xs text-muted">{priceLine(s.stats, s.unit, currency)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {!item && name.trim() === '' && recent.length > 0 && (
           <FieldGroup label="Покупали раньше">
             <ChipPicker
@@ -157,6 +191,11 @@ export function ItemSheet({ view, currency, recent, onSave, onRemove, onClose }:
           autoComplete="off"
           enterKeyHint="done"
         />
+        {past !== null && (
+          <p className="-mt-2 text-sm text-muted" data-testid="item-past-price">
+            Прошлый раз {moneyText(past.lastUnitMinor, currency)}, в среднем {moneyText(past.avgUnitMinor, currency)} за {UNIT_LABEL[past.unit]}
+          </p>
+        )}
         {checked && (
           <FieldGroup label="Цена в магазине (за всю позицию)" error={errors.price}>
             <AmountInput label="Цена в магазине" currency={currency} value={price} onChange={(v) => { setPrice(v); setErrors((x) => ({ ...x, price: undefined })); }} tone="expense" showKeypad={false} />

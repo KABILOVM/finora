@@ -2,7 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { useSettings, useShoppingItems, useStore } from '@/db';
 import { useBudgetsData } from '@/features/budgets/useBudgetsData';
-import { activeItems, priceMemory, totalsOf, viewItem, type ItemView, type ShoppingTotals } from '@/domain/shopping';
+import { averageMemory, buildPriceBook, type PriceBook } from '@/domain/products/stats';
+import { useLiveShoppingItems } from '@/features/products/useProductsData';
+import { activeItems, planByAverage, priceMemory, totalsOf, viewItem, type ItemView, type ShoppingTotals } from '@/domain/shopping';
 import type { CurrencyCode, LocalRow, Minor, ShoppingItem } from '@/domain/types';
 import { monthKey, todayLocal } from '@/lib/dates';
 
@@ -20,6 +22,10 @@ export interface ShoppingData {
   all: LocalRow<ShoppingItem>[];
   views: ItemView[];
   memory: ReadonlyMap<string, Minor>;
+  /** Книга цен продуктов: последняя и средняя цена (экран «Продукты»); подсказки при добавлении позиции. */
+  book: PriceBook;
+  /** План по средним ценам (где средней нет — по последней); null — суммы не помещаются в расчёт. */
+  planAvgMinor: Minor | null;
   /** null — суммы не помещаются в расчёт. */
   totals: ShoppingTotals | null;
   /** Категория покупок: та, что была в прошлой покупке, иначе «Продукты». */
@@ -50,18 +56,23 @@ function useShoppingCategory(): { id: string; name: string } | null | undefined 
 /** Всё, что нужно экрану «Покупки»: позиции с ценами, итоги, остаток бюджета. undefined — ещё читается; null — настроек ещё нет. */
 export function useShoppingData(): ShoppingData | null | undefined {
   const items = useShoppingItems();
+  // цены считаем без позиций удалённых чеков: расход удалили или «Отменили» — эти цены не покупка
+  const live = useLiveShoppingItems();
   const settings = useSettings();
   const category = useShoppingCategory();
   const budgets = useBudgetsData(monthKey(todayLocal()));
 
   return useMemo(() => {
-    if (items === undefined || settings === undefined || category === undefined || budgets === undefined) return undefined;
+    if (items === undefined || live === undefined || settings === undefined || category === undefined || budgets === undefined) return undefined;
     if (settings === null) return null; // настроек ещё нет: основная валюта неизвестна
-    const memory = priceMemory(items);
+    const memory = priceMemory(live);
+    const book = buildPriceBook(live, new Date().toISOString());
     const active = activeItems(items);
     let totals: ShoppingTotals | null = null;
+    let planAvgMinor: Minor | null = null;
     try {
       totals = totalsOf(active, memory);
+      planAvgMinor = planByAverage(active, averageMemory(book), memory);
     } catch (e) {
       if (!(e instanceof RangeError)) throw e;
     }
@@ -75,9 +86,11 @@ export function useShoppingData(): ShoppingData | null | undefined {
       all: items,
       views: active.map((i) => viewItem(i, memory)),
       memory,
+      book,
+      planAvgMinor,
       totals,
       categoryId: category?.id ?? null,
       budget,
     };
-  }, [items, settings, category, budgets]);
+  }, [items, live, settings, category, budgets]);
 }
