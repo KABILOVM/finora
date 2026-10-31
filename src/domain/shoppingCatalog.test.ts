@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bindToCatalog, buildCatalog, findInCatalog, nameKey, suggestFromCatalog } from './shoppingCatalog';
+import { bindItem, bindToCatalog, bindToProducts, buildCatalog, findInCatalog, nameKey, suggestFromCatalog } from './shoppingCatalog';
 import type { ShoppingItem, ShoppingUnit } from './types';
 
 const item = (name: string, unit: ShoppingUnit, over: Partial<ShoppingItem> = {}): ShoppingItem =>
@@ -71,5 +71,26 @@ describe('каталог покупок', () => {
     expect(suggestFromCatalog('масло', c).map((x) => x.name)).toEqual(['Масло сливочное', 'Подсолнечное масло']);
     expect(suggestFromCatalog('масло', c, 1)).toHaveLength(1);
     expect(suggestFromCatalog('', c)).toEqual([]);
+  });
+});
+
+describe('привязка к встроенному каталогу продуктов', () => {
+  it('bindToProducts: «картошки» → «Картофель» в килограммах, если количество не называли; названную единицу не меняем', () => {
+    expect(bindToProducts({ name: 'картошки', qtyMilli: 1000, unit: 'pcs' })).toEqual({ name: 'Картофель', qtyMilli: 1000, unit: 'kg' });
+    expect(bindToProducts({ name: 'картошки', qtyMilli: 2500, unit: 'kg' })).toEqual({ name: 'Картофель', qtyMilli: 2500, unit: 'kg' });
+    expect(bindToProducts({ name: 'молока', qtyMilli: 2000, unit: 'pcs' })).toEqual({ name: 'Молоко', qtyMilli: 2000, unit: 'pcs' });
+  });
+
+  it('не нашли или неоднозначно — позиция та же самая (в окне разбора она будет «Новый продукт»)', () => {
+    const own = { name: 'Курт сушёный', qtyMilli: 1000, unit: 'pcs' as const };
+    expect(bindToProducts(own)).toBe(own);
+    const ambiguous = { name: 'масло', qtyMilli: 1000, unit: 'pcs' as const };
+    expect(bindToProducts(ambiguous)).toBe(ambiguous);
+  });
+
+  it('bindItem: ваше прежнее написание главнее каталога; нет в истории — каталог продуктов', () => {
+    const history = [{ name: 'Картошка', unit: 'kg' as const }];
+    expect(bindItem({ name: 'картошки', qtyMilli: 1000, unit: 'pcs' }, history)).toEqual({ name: 'Картошка', qtyMilli: 1000, unit: 'kg' });
+    expect(bindItem({ name: 'яблок', qtyMilli: 1000, unit: 'pcs' }, history)).toEqual({ name: 'Яблоки', qtyMilli: 1000, unit: 'kg' });
   });
 });

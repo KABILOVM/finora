@@ -31,6 +31,9 @@ test.describe('59. Чек по позициям', () => {
     await page.getByRole('option', { name: /Транспорт/ }).click();
 
     await expect(dlg.getByTestId('receipt-group')).toHaveCount(2);
+    // «Хлеб» — продукт каталога, «Билет» — нет ни в каталоге, ни в ваших покупках: помечен «Новый продукт»
+    await expect(dlg.getByTestId('receipt-line').nth(1)).toContainText('Новый продукт');
+    await expect(dlg.getByTestId('receipt-line').first()).not.toContainText('Новый продукт');
     await dlg.getByTestId('receipt-summary').scrollIntoViewIfNeeded();
     await shot(page, '59-receipt-edit', testInfo);
     await noHorizontalScroll(page, 'Чек по позициям');

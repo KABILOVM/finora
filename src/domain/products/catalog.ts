@@ -91,6 +91,72 @@ export function searchCatalog(query: string, opts: { limit?: number; group?: Pro
   return opts.limit === undefined ? out : out.slice(0, opts.limit);
 }
 
+/** Окончания, которые отсекаем при сравнении основ слов (длинные первыми): «картошки» и «картошка» — одна основа «картош». */
+const ENDINGS = [
+  'ого', 'его', 'ому', 'ему', 'ами', 'ями', 'ыми', 'ими', 'ией',
+  'ов', 'ев', 'ей', 'ом', 'ем', 'ах', 'ях', 'ую', 'юю', 'ая', 'яя', 'ой', 'ый', 'ий', 'ое', 'ее', 'ие', 'ые', 'ам', 'ям', 'ья', 'ье', 'ью', 'ия',
+  'а', 'я', 'у', 'ю', 'ы', 'и', 'е', 'о', 'ь', 'й',
+];
+
+/** Основа слова: без падежного окончания, но не короче трёх букв («сыра» → «сыр», «чай» остаётся «чай»). */
+function stemWord(w: string): string {
+  for (const e of ENDINGS) if (w.endsWith(e) && w.length - e.length >= 3) return w.slice(0, -e.length);
+  return w;
+}
+const stemKeyOf = (key: string): string => key.split(' ').map(stemWord).join(' ');
+
+/** Основы всех названий и синонимов → продукт; null — основа у двух разных продуктов (неоднозначно). */
+let stemIndex: ReadonlyMap<string, Product | null> | null = null;
+function stems(): ReadonlyMap<string, Product | null> {
+  if (stemIndex) return stemIndex;
+  const m = new Map<string, Product | null>();
+  for (const p of CATALOG) {
+    for (const k of p.keys) {
+      const sk = stemKeyOf(k);
+      const cur = m.get(sk);
+      if (cur === undefined) m.set(sk, p);
+      else if (cur !== null && cur.id !== p.id) m.set(sk, null);
+    }
+  }
+  return (stemIndex = m);
+}
+
+/**
+ * Уверенное сопоставление названия из голоса или чека с продуктом каталога: «картошки» → Картофель, «Молоко 3,2% 1л» → Молоко.
+ * Не угадываем: точное название или синоним, иначе совпадение всех слов по основам (падежи и числа). Неоднозначное («печенья» — печенье
+ * или печень), частичное слово («кар») и слова, которых нет в каталоге («Сыр Российский Брест»), — null: пусть человек выберет сам.
+ */
+export function matchProduct(name: string): Product | null {
+  const direct = productByName(name);
+  if (direct) return direct;
+  // числа, проценты, граммовки («3,2%», «1л», «500г», «С1») названия не меняют
+  const tokens = normName(name)
+    .split(' ')
+    .filter((t) => t.length > 1 && !/\d/.test(t));
+  if (tokens.length === 0) return null;
+  return BY_KEY.get(tokens.join(' ')) ?? stems().get(stemKeyOf(tokens.join(' '))) ?? null;
+}
+
+/** Продукт питания (не «Дом и гигиена»): такая позиция на чеке из магазина относится к категории «Продукты». */
+export const isFoodProduct = (p: Product): boolean => p.group !== 'home';
+
+/** Напитки и сладкое на словах чаще «кафе» (кофе, мороженое), чем покупка в магазине: в речи их в «Продукты» сами не кладём. */
+const OUT_OF_HOME: ReadonlySet<ProductGroupId> = new Set(['drinks', 'sweets']);
+
+/** Бесспорный продукт для речи: овощи, мясо, молочное, хлеб, крупы… (не напитки, не сладкое, не «Дом и гигиена»). */
+export const isStapleProduct = (p: Product): boolean => isFoodProduct(p) && !OUT_OF_HOME.has(p.group);
+
+/**
+ * «Автораспределение»: продукт питания, названный на чеке или в речи, без категории попадает в «Продукты» человека (категорию ищем по
+ * названию среди его категорий расходов). Для речи — только бесспорные продукты (`staplesOnly`), для чека из магазина — любые
+ * продукты питания. Нет такой категории или название не из каталога — null: ничего не навязываем.
+ */
+export function groceryCategoryFor(name: string, categories: readonly { id: string; name: string }[], opts: { staplesOnly?: boolean } = {}): string | null {
+  const p = matchProduct(name);
+  if (!p || !(opts.staplesOnly ? isStapleProduct(p) : isFoodProduct(p))) return null;
+  return categories.find((c) => normName(c.name) === 'продукты')?.id ?? null;
+}
+
 /** Единица по умолчанию для названия из каталога; null — продукта нет в каталоге. */
 export function defaultUnitFor(name: string): ShoppingUnit | null {
   return productByName(name)?.unit ?? null;

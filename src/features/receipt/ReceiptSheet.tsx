@@ -28,6 +28,8 @@ export interface ReceiptSheetProps {
   undo: (created: readonly LocalRow<Transaction>[]) => Promise<void>;
   /** Закрыть окно. saved — сколько расходов записано. */
   onClose: (saved: number) => void;
+  /** Название — не из каталога и не из ваших покупок («Новый продукт»). Нет — пометок нет. */
+  isNewProduct?: (name: string) => boolean;
 }
 
 /**
@@ -35,7 +37,7 @@ export interface ReceiptSheetProps {
  * а сами позиции видны в «Чеке» расхода. Так один поход в магазин ложится на «Продукты», «Быт» и «Здоровье» по-честному. Всё можно
  * поправить до сохранения; сверка с итогом на чеке показывает, не пропала ли позиция. «Отменить» после сохранения убирает все расходы чека.
  */
-export function ReceiptSheet({ wallets, base, categories, defaultWalletId, today, analyze, save, undo, onClose }: ReceiptSheetProps) {
+export function ReceiptSheet({ wallets, base, categories, defaultWalletId, today, analyze, save, undo, onClose, isNewProduct }: ReceiptSheetProps) {
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const nextRid = useRef(1);
@@ -201,7 +203,7 @@ export function ReceiptSheet({ wallets, base, categories, defaultWalletId, today
 
           <section aria-label="Позиции чека">
             <h3 className="mb-1 text-sm font-semibold text-muted">Позиции · нажмите, чтобы поправить</h3>
-            <ReceiptLinesEditor lines={draft.lines} onChange={(lines) => setDraft({ ...draft, lines })} categories={categories} currency={base} errors={errors} openRid={openRid} onOpenChange={setOpenRid} />
+            <ReceiptLinesEditor lines={draft.lines} onChange={(lines) => setDraft({ ...draft, lines })} categories={categories} currency={base} errors={errors} openRid={openRid} onOpenChange={setOpenRid} {...(isNewProduct ? { isNewProduct } : {})} />
             <Button variant="ghost" icon="plus" className="mt-1" onClick={addLine}>
               Добавить позицию
             </Button>

@@ -4,9 +4,10 @@ import { TextInput } from '@/components/Field';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { Segmented } from '@/components/Segmented';
+import { matchProduct, normName, searchCatalog } from '@/domain/products/catalog';
 import { expectedPrice, itemTitle, NAME_MAX, parseQty, priceKey, qtyToInput, UNIT_LABEL } from '@/domain/shopping';
 import type { ParsedItem } from '@/domain/shoppingAi';
-import { findInCatalog, suggestFromCatalog, type CatalogEntry } from '@/domain/shoppingCatalog';
+import { findInCatalog, nameKey, suggestFromCatalog, type CatalogEntry } from '@/domain/shoppingCatalog';
 import type { CurrencyCode, Minor, ShoppingUnit } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { priceText } from './shoppingText';
@@ -48,7 +49,8 @@ export function ParsedItemsEditor({ items, onChange, catalog, memory, currency }
     <ul className="divide-y divide-border rounded-2xl bg-surface-2 px-1">
       {items.map((i) => {
         const isOpen = open === i.rid;
-        const linked = findInCatalog(i.name, catalog) !== null;
+        // «в каталоге»: уже покупали (ваше написание) или это продукт встроенного каталога; иначе — новый продукт
+        const linked = findInCatalog(i.name, catalog) !== null || matchProduct(i.name) !== null;
         const price = guess(i, memory);
         return (
           <li key={i.rid} className="py-0.5">
@@ -62,18 +64,20 @@ export function ParsedItemsEditor({ items, onChange, catalog, memory, currency }
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{i.name}</span>
-                  {(linked || price !== null) && (
-                    <span className="flex items-center gap-1 text-xs text-muted">
-                      {linked && (
-                        <>
-                          <Icon name="check" size={12} className="text-brand" />
-                          <span>в каталоге</span>
-                        </>
-                      )}
-                      {linked && price !== null && <span aria-hidden="true">·</span>}
-                      {price !== null && <span className="money">≈ {priceText(price, currency)}</span>}
-                    </span>
-                  )}
+                  <span className="flex items-center gap-1 text-xs text-muted">
+                    {linked ? (
+                      <>
+                        <Icon name="check" size={12} className="text-brand" />
+                        <span>в каталоге</span>
+                      </>
+                    ) : (
+                      <span className="font-semibold text-brand" data-testid="new-product">
+                        Новый продукт
+                      </span>
+                    )}
+                    {price !== null && <span aria-hidden="true">·</span>}
+                    {price !== null && <span className="money">≈ {priceText(price, currency)}</span>}
+                  </span>
                 </span>
                 <span className="shrink-0 text-muted">{amount(i)}</span>
                 <Icon name="chevron" size={16} className={cn('shrink-0 text-muted transition-transform', isOpen && 'rotate-90')} />
@@ -122,7 +126,11 @@ function RowEditor({
   const [qty, setQty] = useState(qtyToInput(item.qtyMilli));
   const [qtyError, setQtyError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
-  const suggestions = suggestFromCatalog(name, catalog);
+  // подсказки: сначала то, что уже покупали, потом встроенный каталог продуктов (без повторов)
+  const own = suggestFromCatalog(name, catalog);
+  const seen = new Set(own.map((c) => nameKey(c.name)));
+  const builtin = normName(name) === '' ? [] : searchCatalog(name, { limit: 6 }).filter((p) => !seen.has(nameKey(p.name)) && nameKey(p.name) !== nameKey(name));
+  const suggestions: CatalogEntry[] = [...own, ...builtin.map((p) => ({ name: p.name, unit: p.unit }))].slice(0, 6);
 
   const changeName = (v: string) => {
     setName(v);

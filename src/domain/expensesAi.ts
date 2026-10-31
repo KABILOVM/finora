@@ -1,4 +1,5 @@
 import { draftToMinor, minorToDraft } from '@/components/amountText';
+import { groceryCategoryFor } from './products/catalog';
 import { factorOf } from './currency';
 import { addMinor } from './money';
 import type { CurrencyCode, IsoDate, Minor } from './types';
@@ -104,6 +105,8 @@ export function normalizeAiExpenses(raw: unknown, ctx: DictContext, firstRid = 1
     };
     const catName = kind === 'transfer' ? '' : clean(o.category, CATEGORY_NAME_MAX);
     const cat = matchByName(catName, kind === 'income' ? (ctx.incomeCategories ?? []) : ctx.categories);
+    // расход без названной категории: «Хлеб», «Молоко» — продукты из каталога, их кладём в «Продукты» человека
+    const groceryId = kind === 'expense' && cat === null && catName === '' ? groceryCategoryFor(title, ctx.categories, { staplesOnly: true }) : null;
     // куда перевели: только свой другой счёт; не назван или неясно — оставляем пустым, человек выберет
     const to = kind === 'transfer' ? matchByName(clean(o.toWallet, 80), ctx.wallets.filter((w) => w.id !== wallet.id)) : null;
     const date = typeof o.date === 'string' && isValidIsoDate(o.date) ? o.date : ctx.today;
@@ -115,7 +118,7 @@ export function normalizeAiExpenses(raw: unknown, ctx: DictContext, firstRid = 1
       feeText: toText(num(o.fee)),
       walletId: wallet.id,
       toWalletId: to?.id ?? '',
-      categoryId: cat?.id ?? '',
+      categoryId: cat?.id ?? groceryId ?? '',
       newCategory: cat || catName === '' ? '' : capitalize(catName),
       date,
       note: clean(o.note, NOTE_PART_MAX),
