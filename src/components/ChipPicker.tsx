@@ -8,6 +8,8 @@ export interface ChipOption {
   icon?: string;
   /** Цвет значка (#rrggbb). */
   color?: string;
+  /** Мелкая подпись перед названием: у подкатегории — название родителя («Коммунальные услуги › Вода»). */
+  sub?: string;
 }
 
 export interface ChipPickerProps {
@@ -50,7 +52,10 @@ export function ChipPicker({ options, value, onChange, ariaLabel, layout = 'wrap
             )}
           >
             {opt.icon && <Glyph value={opt.icon} color={opt.color} size={26} />}
-            <span className="whitespace-nowrap">{opt.label}</span>
+            <span className="whitespace-nowrap">
+              {opt.sub && <span className="font-normal text-muted">{opt.sub} › </span>}
+              {opt.label}
+            </span>
           </button>
         );
       })}

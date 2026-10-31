@@ -66,6 +66,7 @@ export function IconSelect({
           <span style={{ width: glyph, height: glyph }} className="shrink-0" aria-hidden="true" />
         )}
         <span className={cn('min-w-0 flex-1 truncate text-base font-semibold', !current && 'text-muted')}>
+          {current?.sub && <span className="font-normal text-muted">{current.sub} › </span>}
           {current?.label ?? placeholder}
         </span>
         <Icon name="chevron" size={14} className={cn('shrink-0 text-muted transition-transform', open ? '-rotate-90' : 'rotate-90')} />
@@ -100,7 +101,10 @@ export function IconSelect({
                   ) : (
                     <span className="h-[30px] w-[30px] shrink-0" aria-hidden="true" />
                   )}
-                  <span className="min-w-0 flex-1 truncate text-base font-semibold">{o.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-base font-semibold">
+                    {o.sub && <span className="font-normal text-muted">{o.sub} › </span>}
+                    {o.label}
+                  </span>
                   {selected && <Icon name="check" size={18} className="shrink-0" />}
                 </button>
               );

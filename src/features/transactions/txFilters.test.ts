@@ -8,6 +8,7 @@ import {
   filtersToParams,
   matchesSearch,
   NO_CATEGORY,
+  toTxFilter,
   totalsByCurrency,
   transactionsQuery,
   transferFeeMinor,
@@ -246,3 +247,29 @@ describe('transactionsQuery: запрос для ссылки с готовым�
   });
 });
 
+describe('toTxFilter: фильтр по категории и подкатегории', () => {
+  const cats = [
+    { id: 'comm', parentId: null },
+    { id: 'water', parentId: 'comm' },
+    { id: 'light', parentId: 'comm' },
+    { id: 'food', parentId: null },
+  ];
+  const f = (categoryId: string): ListFilters => ({ ...defaultFilters('2026-10-31'), categoryId });
+
+  it('родитель показывает и операции подкатегорий', () => {
+    const out = toTxFilter(f('comm'), '', '2026-10-31', cats);
+    expect(out.categoryId).toBeUndefined();
+    expect([...(out.categoryIds ?? [])].sort()).toEqual(['comm', 'light', 'water']);
+  });
+
+  it('категория без подкатегорий и подкатегория — только свои операции, как раньше', () => {
+    expect(toTxFilter(f('food'), '', '2026-10-31', cats)).toMatchObject({ categoryId: 'food' });
+    expect(toTxFilter(f('food'), '', '2026-10-31', cats).categoryIds).toBeUndefined();
+    expect(toTxFilter(f('water'), '', '2026-10-31', cats)).toMatchObject({ categoryId: 'water' });
+  });
+
+  it('без списка категорий (по умолчанию) и «Без категории» — прежнее поведение', () => {
+    expect(toTxFilter(f('comm'), '', '2026-10-31')).toMatchObject({ categoryId: 'comm' });
+    expect(toTxFilter({ ...defaultFilters('2026-10-31'), categoryId: NO_CATEGORY }, '', '2026-10-31', cats)).toMatchObject({ categoryId: null });
+  });
+});

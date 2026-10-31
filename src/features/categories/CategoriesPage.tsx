@@ -12,20 +12,24 @@ import { useToast } from '@/components/Toast';
 import { useCategories, useStore } from '@/db';
 import type { Category, CategoryKind, LocalRow } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
+import { childrenOf, groupUnderParents, hasChildren, parentIn } from './categoryTree';
 import { CategorySheet } from './CategorySheet';
 
-type SheetState = { kind: 'new' } | { kind: 'edit'; category: LocalRow<Category> };
+type SheetState = { kind: 'new'; parentId?: string } | { kind: 'edit'; category: LocalRow<Category> };
 
 const TABS = [
   { value: 'expense', label: 'Расходы', tone: 'expense' },
   { value: 'income', label: 'Доходы', tone: 'income' },
 ] as const;
 
-function CategoryIcon({ category }: { category: Category }) {
-  return <Glyph value={category.icon} color={category.color} size={40} />;
+function CategoryIcon({ category, small = false }: { category: Category; small?: boolean }) {
+  return <Glyph value={category.icon} color={category.color} size={small ? 32 : 40} />;
 }
 
-/** Категории (без подкатегорий): две вкладки, добавить, переименовать, сменить значок, архив и возврат. */
+/**
+ * Категории: две вкладки, добавить, переименовать, сменить значок, архив и возврат. Подкатегории (один уровень): под родителем с отступом;
+ * родителя в архив убирают вместе с его подкатегориями (в подтверждении об этом сказано), возвращают по одной.
+ */
 export default function CategoriesPage() {
   const store = useStore();
   const toast = useToast();
@@ -38,6 +42,11 @@ export default function CategoriesPage() {
 
   const active = useMemo(() => (all ?? []).filter((c) => c.archivedAt === null), [all]);
   const archived = useMemo(() => (all ?? []).filter((c) => c.archivedAt !== null), [all]);
+  const activeById = useMemo(() => new Map(active.map((c) => [c.id, c] as const)), [active]);
+  const allById = useMemo(() => new Map((all ?? []).map((c) => [c.id, c] as const)), [all]);
+  // родитель, затем его подкатегории; категория с архивным родителем остаётся в списке как обычная
+  const ordered = useMemo(() => groupUnderParents(active), [active]);
+  const archivingKids = archiving ? childrenOf(archiving.id, active) : [];
 
   const fail = (e: unknown, fallback: string) => {
     console.error(fallback, e);
@@ -48,6 +57,8 @@ export default function CategoriesPage() {
     if (busy) return;
     setBusy(true);
     try {
+      // сначала подкатегории, потом родитель: если что-то пойдёт не так, родитель остаётся на месте вместе с оставшимися детьми
+      for (const kid of childrenOf(c.id, active)) await store.categories.archive(kid.id);
       await store.categories.archive(c.id);
       toast.success(`Категория «${c.name}» убрана в архив`);
       setArchiving(null);
@@ -107,11 +118,20 @@ export default function CategoriesPage() {
       ) : (
         <Card padding="none">
           <ul className="divide-y divide-border">
-            {active.map((c) => (
-              <li key={c.id}>
-                <ListRow leading={<CategoryIcon category={c} />} title={c.name} chevron onClick={() => setSheet({ kind: 'edit', category: c })} />
-              </li>
-            ))}
+            {ordered.map((c) => {
+              const sub = parentIn(c, activeById) !== null;
+              return (
+                <li key={c.id}>
+                  <ListRow
+                    className={sub ? 'pl-10' : undefined}
+                    leading={<CategoryIcon category={c} small={sub} />}
+                    title={c.name}
+                    chevron
+                    onClick={() => setSheet({ kind: 'edit', category: c })}
+                  />
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}
@@ -134,7 +154,12 @@ export default function CategoriesPage() {
               <ul className="divide-y divide-border">
                 {archived.map((c) => (
                   <li key={c.id} className="flex items-center pr-2">
-                    <ListRow className="min-w-0 flex-1" leading={<CategoryIcon category={c} />} title={c.name} />
+                    <ListRow
+                      className="min-w-0 flex-1"
+                      leading={<CategoryIcon category={c} />}
+                      title={c.name}
+                      subtitle={c.parentId !== null ? allById.get(c.parentId)?.name : undefined}
+                    />
                     <Button variant="secondary" aria-label={`Вернуть: ${c.name}`} disabled={busy} onClick={() => void restore(c)}>
                       Вернуть
                     </Button>
@@ -148,13 +173,23 @@ export default function CategoriesPage() {
 
       {sheet && all && (
         <CategorySheet
-          key={sheet.kind === 'edit' ? sheet.category.id : 'new'}
+          key={sheet.kind === 'edit' ? sheet.category.id : `new-${sheet.parentId ?? ''}`}
           category={sheet.kind === 'edit' ? sheet.category : null}
           kind={kind}
           others={all
             .filter((c) => sheet.kind !== 'edit' || c.id !== sheet.category.id)
             .map((c) => ({ name: c.name, archived: c.archivedAt !== null }))}
+          parents={active.filter((c) => c.parentId === null && (sheet.kind !== 'edit' || c.id !== sheet.category.id))}
+          hasChildren={sheet.kind === 'edit' && hasChildren(sheet.category.id, all)}
+          defaultParentId={sheet.kind === 'new' ? (sheet.parentId ?? null) : null}
           onClose={() => setSheet(null)}
+          onAddChild={
+            sheet.kind === 'edit' && sheet.category.parentId === null
+              ? () => {
+                  setSheet({ kind: 'new', parentId: sheet.category.id });
+                }
+              : undefined
+          }
           onArchive={
             sheet.kind === 'edit'
               ? () => {
@@ -172,7 +207,11 @@ export default function CategoriesPage() {
         loading={busy}
         title={archiving ? `Убрать «${archiving.name}» в архив?` : ''}
         confirmLabel="В архив"
-        message="Категория пропадёт из выбора при добавлении операций. Старые операции останутся с этой категорией. Её можно вернуть из архива."
+        message={
+          archivingKids.length > 0
+            ? `Вместе с ней в архив уйдут подкатегории (${archivingKids.length}): ${archivingKids.map((k) => k.name).join(', ')}. Они пропадут из выбора при добавлении операций. Старые операции останутся с прежними категориями. Вернуть можно из архива, по одной.`
+            : 'Категория пропадёт из выбора при добавлении операций. Старые операции останутся с этой категорией. Её можно вернуть из архива.'
+        }
         onConfirm={() => archiving && void archive(archiving)}
         onCancel={() => !busy && setArchiving(null)}
       />

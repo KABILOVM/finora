@@ -69,7 +69,7 @@ export function useTransactions(
   // null («без категории») и undefined («любая») — разные фильтры, поэтому undefined в ключе заменён меткой
   const part = (v: unknown) => (v === undefined ? '\u2205' : v);
   const key = JSON.stringify(
-    [filter.from, filter.to, filter.walletId, filter.categoryId, filter.kind, filter.search, filter.debtId, limit].map(part),
+    [filter.from, filter.to, filter.walletId, filter.categoryId, filter.categoryIds, filter.kind, filter.search, filter.debtId, limit].map(part),
   );
   return useLiveQuery(async () => {
     // период берём по индексу даты, остальное — чистым фильтром

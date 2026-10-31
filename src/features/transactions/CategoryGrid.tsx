@@ -86,6 +86,7 @@ export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequ
           return (
             <button key={opt.value} type="button" aria-pressed={selected} onClick={() => onPick(opt.value)} className={cellClass(selected)}>
               {opt.icon ? <Glyph value={opt.icon} color={opt.color} size={32} /> : <span className="h-8 w-8" aria-hidden="true" />}
+              {opt.sub && <span className="-mb-0.5 line-clamp-1 w-full break-words text-[10px] leading-tight text-muted">{opt.sub}</span>}
               <span lang="ru" className="line-clamp-2 w-full break-words text-caption font-medium leading-tight [hyphens:auto]">
                 {opt.label}
               </span>

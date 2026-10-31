@@ -23,6 +23,7 @@ import {
   type RuleFormState,
 } from '@/recurring/ruleForm';
 import { RuleFields } from './RuleFields';
+import { buildCategoryOptions } from '@/features/categories/categoryTree';
 import { ScheduleFields } from './ScheduleFields';
 import type { RecurringLookups } from './useRecurringData';
 
@@ -100,7 +101,7 @@ export function RuleSheet({ rule: liveRule, lookups, today, prefill, onClose }: 
       (c) => c.deletedAt === null && c.kind === form.kind && (c.archivedAt === null || c.id === form.categoryId),
     );
     const ordered = pop && !isTransfer ? rankCategories(list, form.kind as CategoryKind, pop) : sortByOrderThenName(list);
-    return ordered.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }));
+    return buildCategoryOptions(ordered);
   }, [lookups.categories, form.kind, form.categoryId, isTransfer, pop]);
 
   const debts = useMemo(
