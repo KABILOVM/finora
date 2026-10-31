@@ -382,6 +382,179 @@ describe('поиск по категории, кошельку и сумме', (
   });
 });
 
+describe('выделение и массовые действия', () => {
+  const selectBtn = () => screen.getByRole('button', { name: 'Выбрать операции' });
+  const rowButton = (needle: string) => {
+    const hit = Array.from(document.querySelectorAll('section[aria-label] button')).find((b) => (b.textContent ?? '').includes(needle));
+    if (!hit) throw new Error(`Нет строки «${needle}»`);
+    return hit as HTMLElement;
+  };
+  const pick = (...needles: string[]) => needles.reduce((p, n) => p.then(() => user.click(rowButton(n))), Promise.resolve());
+  const barText = () => (document.querySelector('[data-testid="bulk-bar"]')?.textContent ?? '').replace(/\s+/g, ' ');
+  const categoryId = async (td: Awaited<ReturnType<typeof openList>>, name: string, kind: 'expense' | 'income' = 'expense') =>
+    (await storeOf(td).db.categories.toArray()).find((c) => c.name === name && c.kind === kind)?.id ?? '';
+  /** «Удалить» в диалоге подтверждения (такая же кнопка есть и в панели выбора). */
+  const confirmDelete = () => {
+    const dialog = screen.getByRole('alertdialog');
+    return user.click(Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Удалить') as HTMLElement);
+  };
+  const txOf = async (td: Awaited<ReturnType<typeof openList>>, key: string) => storeOf(td).db.transactions.get(hist.txs[key] ?? '');
+
+  it('«Выбрать» включает режим: нажатие отмечает строку, а не открывает правку; «Готово» выходит и сбрасывает выбор', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull();
+
+    await user.click(selectBtn());
+    expect(barText()).toContain('Выберите операции');
+    expect(rowButton('обед')).toHaveAttribute('aria-pressed', 'false');
+    await pick('обед');
+    expect(currentPath()).toBe('/transactions'); // правка не открылась
+    expect(rowButton('обед')).toHaveAttribute('aria-pressed', 'true');
+    expect(barText()).toContain('Выбрано: 1');
+    await pick('обед');
+    expect(barText()).toContain('Выберите операции'); // повторное нажатие снимает отметку
+
+    await pick('обед');
+    await user.click(screen.getByRole('button', { name: 'Готово' }));
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull();
+    expect(rowButton('обед')).not.toHaveAttribute('aria-pressed');
+    await user.click(rowButton('обед')); // обычный режим: открывает правку
+    expect(currentPath()).toBe(`/edit/${hist.txs['lunch']}`);
+  });
+
+  it('«Выбрать все» отмечает всё показанное, «Снять выбор» — снимает', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await user.click(screen.getByRole('button', { name: 'Выбрать все' }));
+    expect(barText()).toContain('Выбрано: 5');
+    await user.click(screen.getByRole('button', { name: 'Снять выбор' }));
+    expect(barText()).toContain('Выберите операции');
+  });
+
+  it('кнопки «Категория» и «Удалить» недоступны, пока ничего не выбрано', async () => {
+    await openList();
+    await user.click(selectBtn());
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Удалить' })).toBeDisabled();
+  });
+
+  it('смена категории у нескольких расходов, «Отменить» возвращает прежние', async () => {
+    const td = await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    const food = await categoryId(td, 'Еда');
+    const market = await categoryId(td, 'Продукты');
+    const transport = await categoryId(td, 'Транспорт');
+
+    await user.click(selectBtn());
+    await pick('обед', 'такси'); // Еда и Транспорт
+    await user.click(screen.getByRole('button', { name: 'Категория' }));
+    const dialog = await findByRole('dialog', { name: 'Категория для 2 операций' });
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled(); // категория ещё не выбрана
+    const chipFor = (name: string) =>
+      Array.from(dialog.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim().includes(name)) as HTMLElement;
+    await user.click(chipFor('Продукты'));
+    await user.click(screen.getByRole('button', { name: 'Применить' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText('Категория изменена у операций: 2.')).toBeInTheDocument();
+    expect((await txOf(td, 'lunch'))?.categoryId).toBe(market);
+    expect((await txOf(td, 'taxi'))?.categoryId).toBe(market);
+    expect((await txOf(td, 'coffee'))?.categoryId).toBe(food); // не выбранная не тронута
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull(); // режим закрылся
+
+    await user.click(screen.getByRole('button', { name: 'Отменить' }));
+    await waitFor(async () => expect((await txOf(td, 'lunch'))?.categoryId).toBe(food));
+    expect((await txOf(td, 'taxi'))?.categoryId).toBe(transport);
+  });
+
+  it('категорию нельзя менять вперемешку (расход и доход) и у переводов — с причиной', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await pick('обед', 'аванс'); // расход и доход
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeDisabled();
+    expect(barText()).toContain('Выделите только расходы или только доходы');
+    await pick('обед'); // остался один доход
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeEnabled();
+    await pick('Наличные → Карта'); // перевод
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeDisabled();
+    expect(barText()).toContain('У переводов категории нет');
+  });
+
+  it('удаление: подтверждение, строки пропадают, «Отменить» возвращает; отмена диалога ничего не делает', async () => {
+    const td = await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await pick('обед', 'аванс');
+    await user.click(screen.getByRole('button', { name: 'Удалить' }));
+    await findByRole('alertdialog', { name: 'Удалить выбранные операции (2)?' });
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect((await txOf(td, 'lunch'))?.deletedAt).toBeNull();
+    expect(barText()).toContain('Выбрано: 2'); // выбор сохранился
+
+    await user.click(screen.getByRole('button', { name: 'Удалить' }));
+    await findByRole('alertdialog', { name: 'Удалить выбранные операции (2)?' });
+    await confirmDelete();
+    await waitFor(() => expect(has('обед')).toBe(false));
+    expect(has('аванс')).toBe(false);
+    expect(has('такси')).toBe(true);
+    expect(screen.getByText('Удалено операций: 2.')).toBeInTheDocument();
+    expect((await txOf(td, 'lunch'))?.deletedAt).not.toBeNull();
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Отменить' }));
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(has('аванс')).toBe(true);
+    expect((await txOf(td, 'lunch'))?.deletedAt).toBeNull();
+  });
+
+  it('часть операций не удалась — удалённые вернуть можно, неудавшаяся осталась, об этом сказано', async () => {
+    const td = await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    const real = storeOf(td).transactions.softDelete.bind(storeOf(td).transactions);
+    vi.spyOn(storeOf(td).transactions, 'softDelete').mockImplementation(async (id) => {
+      if (id === hist.txs['taxi']) throw new Error('сбой записи');
+      return real(id);
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await user.click(selectBtn());
+    await pick('обед', 'такси');
+    await user.click(screen.getByRole('button', { name: 'Удалить' }));
+    await findByRole('alertdialog', { name: 'Удалить выбранные операции (2)?' });
+    await confirmDelete();
+    await waitFor(() => expect(screen.getByText('Удалено операций: 1. Не удалось удалить: 1.')).toBeInTheDocument());
+    expect(has('обед')).toBe(false);
+    expect(has('такси')).toBe(true);
+    expect((await txOf(td, 'taxi'))?.deletedAt).toBeNull();
+  });
+
+  it('смена списка (период) оставляет выделенным только то, что ещё на экране', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await pick('обед', 'такси');
+    expect(barText()).toContain('Выбрано: 2');
+    await period('Прошлый');
+    await waitFor(() => expect(has('рынок')).toBe(true));
+    expect(barText()).toContain('Выберите операции'); // выбранные остались в октябре, их на экране нет
+    await pick('рынок');
+    expect(barText()).toContain('Выбрано: 1');
+    // вернулись в октябрь: прежние отметки не «воскресли» — выбор снимается вместе с исчезновением строк с экрана
+    await period('Этот месяц');
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(barText()).toContain('Выберите операции');
+    expect(rowButton('обед')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('кнопки «Выбрать» нет, пока операций нет', async () => {
+    await openList({ empty: true });
+    expect(screen.queryByRole('button', { name: 'Выбрать операции' })).toBeNull();
+  });
+});
+
 describe('фильтры: сумма и «откуда операция»', () => {
   const amountField = (name: 'От' | 'До') => screen.getByRole('textbox', { name }) as HTMLInputElement;
   const type = async (name: 'От' | 'До', value: string) => {
