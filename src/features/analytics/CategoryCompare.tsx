@@ -95,7 +95,9 @@ export function CategoryCompare({ deltas, categories, base, month, totalMinor, c
                       <span className="block h-full rounded-pill bg-brand/70" style={{ width: `${Math.max(share, 2)}%` }} />
                     </span>
                   )}
-                  {ready && (
+                  {/* «новая» уже говорит, что раньше трат не было (и aria-метка у неё то же); повторять это в каждой такой строке — шум.
+                      «без сравнения» пояснение оставляет: оно объясняет, почему у категории нет процента. */}
+                  {ready && (d.previousMinor > 0 || d.status === 'later') && (
                     <span className="mt-0.5 block text-xs text-muted">
                       {d.previousMinor > 0 ? `${capitalize(then)} ${formatMinor(d.previousMinor, base)}` : `${capitalize(then)} трат не было`}
                     </span>
