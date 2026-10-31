@@ -168,4 +168,42 @@ describe('экран «Бюджеты»: цели накопления', () => {
     await user.click(await findByRole('button', { name: 'Вернуть цель: Отпуск' }));
     await findByRole('button', { name: 'Цель «Отпуск»: править' });
   });
+
+  it('цель удаляется после подтверждения и возвращается из уведомления; отмена ничего не удаляет', async () => {
+    const td = await openPage(NO_HISTORY);
+    await createGoal('Отпуск', '3000');
+    const goalRow = () => screen.queryByRole('button', { name: 'Цель «Отпуск»: править' });
+    const stored = async () => (await storeOf(td).db.savings_goals.toArray())[0];
+
+    await user.click(await findByRole('button', { name: 'Цель «Отпуск»: править' }));
+    await user.click(await findByRole('button', { name: 'Удалить цель' }));
+    await user.click(await findByRole('button', { name: 'Отмена' }));
+    expect((await stored())?.deletedAt).toBeNull();
+
+    await user.click(await findByRole('button', { name: 'Удалить цель' }));
+    await user.click(await findByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(goalRow()).toBeNull());
+    expect((await stored())?.deletedAt).not.toBeNull();
+    // после удаления форма закрыта и приглашение поставить цель снова на месте
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitById('goals-empty');
+
+    await user.click(await findByRole('button', { name: 'Вернуть' }));
+    await findByRole('button', { name: 'Цель «Отпуск»: править' });
+    expect((await stored())?.deletedAt).toBeNull();
+  });
+
+  it('цель из архива можно удалить насовсем (скрыть)', async () => {
+    const td = await openPage(NO_HISTORY);
+    await createGoal('Отпуск', '3000');
+    await user.click(await findByRole('button', { name: 'Цель «Отпуск»: править' }));
+    await user.click(await findByRole('button', { name: 'Убрать в архив' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Цель «Отпуск»: править' })).toBeNull());
+
+    await user.click(await findByRole('button', { name: /^Архив целей/ }));
+    await user.click(await findByRole('button', { name: 'Удалить цель: Отпуск' }));
+    await user.click(await findByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Вернуть цель: Отпуск' })).toBeNull());
+    expect((await storeOf(td).db.savings_goals.toArray())[0]?.deletedAt).not.toBeNull();
+  });
 });

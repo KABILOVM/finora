@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/Button';
+import { FilterBar } from '@/components/filters/FilterBar';
+import type { FilterField } from '@/components/filters/filterState';
 import { Skeleton } from '@/components/Skeleton';
-import type { IsoDate } from '@/domain/types';
+import type { IsoDate, UUID } from '@/domain/types';
 import { budgetLabel } from '@/features/budgets/budgetText';
 import { useCategoryIndex } from '@/features/transactions/txData';
+import { categoryFilterOptions, effectiveCategory, filterSpendRows } from './categoryFilter';
 import { IncomeFlowCard } from './IncomeFlowCard';
 import { PeriodCategories } from './PeriodCategories';
 import { PeriodControls } from './PeriodControls';
@@ -52,6 +55,8 @@ export function PeriodsView({ params, today, onChange }: PeriodsViewProps) {
   const state = usePeriodReport(period, mode);
   const categories = useCategoryIndex();
   const [wrapped, setWrapped] = useState(false);
+  // Фильтр по категории расходов: лежит в состоянии вкладки, а не в адресе — адрес здесь целиком занят выбором периода
+  const [asked, setAsked] = useState<UUID | null>(null);
   const problem = selection.kind === 'custom' ? customProblem(selection.from, selection.to, today) : null;
 
   const controls = <PeriodControls selection={selection} onChange={onChange} today={today} dateError={problem} />;
@@ -106,7 +111,19 @@ export function PeriodsView({ params, today, onChange }: PeriodsViewProps) {
       </>
     );
   }
-  const resetKey = `${report.period.from}:${report.period.to}:${mode}`;
+  // Фильтр сужает только список «Расходы по категориям»; итоги, доходы, «По месяцам» и «Итоги года» остаются по всем операциям.
+  // Доли в списке считаются от всех расходов периода, поэтому подпись под заголовком это говорит.
+  const known = new Set(categories.keys());
+  const filterId = effectiveCategory(asked, known);
+  const parentOf = new Map([...categories].map(([id, c]) => [id, c.parentId] as const));
+  const filterOptions = categoryFilterOptions(report.expenseDeltas, categories, filterId);
+  const filterFields: FilterField[] =
+    filterOptions.length > 1
+      ? [{ key: 'category', label: 'Категория', type: 'select', anyLabel: 'Все категории', options: filterOptions, hint: 'С подкатегориями.' }]
+      : [];
+  const expenseDeltas = filterSpendRows(report.expenseDeltas, filterId, parentOf);
+  const filterName = filterId === null ? null : (categories.get(filterId)?.name ?? 'Категория удалена');
+  const resetKey = `${report.period.from}:${report.period.to}:${mode}:${filterId ?? ''}`;
   // «Итоги года» карточками — только для года (идущего: «на сегодня»)
   const cards =
     report.period.kind === 'year'
@@ -123,11 +140,24 @@ export function PeriodsView({ params, today, onChange }: PeriodsViewProps) {
           </Button>
         )}
         <IncomeFlowCard summary={current} categories={categories} base={base} />
+        {filterFields.length > 0 && (
+          <FilterBar
+            title="Фильтр по категории"
+            fields={filterFields}
+            values={{ category: filterId ?? '' }}
+            onChange={(v) => setAsked(v['category'] === undefined || v['category'] === '' ? null : v['category'])}
+          />
+        )}
         <Section id="period-expenses" title="Расходы по категориям">
-          {report.expenseDeltas.length === 0 ? (
-            <p className="text-muted">Расходов за этот период нет.</p>
+          {filterName !== null && (
+            <p className="mb-2 text-sm text-muted" data-testid="period-filter-note">
+              Только «{filterName}». Доли — от всех расходов периода.
+            </p>
+          )}
+          {expenseDeltas.length === 0 ? (
+            <p className="text-muted">{filterName !== null ? `По категории «${filterName}» расходов за этот период нет.` : 'Расходов за этот период нет.'}</p>
           ) : (
-            <PeriodCategories key={resetKey} deltas={report.expenseDeltas} categories={categories} base={base} totalMinor={current.expenseMinor} kind="expense" phrase={phrase} />
+            <PeriodCategories key={resetKey} deltas={expenseDeltas} categories={categories} base={base} totalMinor={current.expenseMinor} kind="expense" phrase={phrase} />
           )}
         </Section>
         {report.incomeDeltas.length > 0 && (

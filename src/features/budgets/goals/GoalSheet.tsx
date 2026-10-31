@@ -10,6 +10,7 @@ import { ValidationError, useStore } from '@/db';
 import { endOfMonth } from '@/domain/forecast';
 import type { CurrencyCode, IsoDate, LocalRow, Minor, SavingsGoal, Wallet } from '@/domain/types';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
+import { DeleteGoalDialog } from './DeleteGoalDialog';
 import { MAX_DATE, MIN_DATE } from '@/features/transactions/txForm';
 import { UNDO_MS } from '@/features/transactions/txActions';
 import { addDays, isValidIsoDate } from '@/lib/dates';
@@ -61,6 +62,7 @@ export function GoalSheet({ goal, base, savingsWallets, goals, onClose }: GoalSh
   const [dueError, setDueError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const busy = useRef(false);
 
   // Свободные кошельки: в основной валюте и не привязанные к другой цели (свой текущий — можно)
@@ -169,6 +171,11 @@ export function GoalSheet({ goal, base, savingsWallets, goals, onClose }: GoalSh
               Убрать в архив
             </Button>
           )}
+          {editing && (
+            <Button variant="ghost" fullWidth className="text-danger" disabled={saving} onClick={() => setDeleting(true)}>
+              Удалить цель
+            </Button>
+          )}
         </div>
       }
     >
@@ -267,6 +274,7 @@ export function GoalSheet({ goal, base, savingsWallets, goals, onClose }: GoalSh
           )}
         </div>
       </div>
+      {editing && deleting && <DeleteGoalDialog goal={goal} onClose={() => setDeleting(false)} onDeleted={onClose} />}
     </Sheet>
   );
 }

@@ -17,6 +17,7 @@ import { goalBarLabel, goalDueLine, goalPaceLine, goalRemainingLine, goalSavedLi
 import { humanError } from '@/features/transactions/txActions';
 import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
+import { DeleteGoalDialog } from './DeleteGoalDialog';
 import { EssentialSheet } from './EssentialSheet';
 import { GoalPlanCard } from './GoalPlanCard';
 import { GoalSheet } from './GoalSheet';
@@ -97,6 +98,7 @@ export function GoalsSection({ base, forecast }: GoalsSectionProps) {
   const store = useStore();
   const [sheet, setSheet] = useState<SheetState>(null);
   const [essential, setEssential] = useState(false);
+  const [deleting, setDeleting] = useState<LocalRow<SavingsGoal> | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -218,6 +220,9 @@ export function GoalsSection({ base, forecast }: GoalsSectionProps) {
                       <Button variant="secondary" aria-label={`Вернуть цель: ${g.name}`} disabled={busy} onClick={() => void restore(g)}>
                         Вернуть
                       </Button>
+                      <Button variant="ghost" className="text-danger" aria-label={`Удалить цель: ${g.name}`} disabled={busy} onClick={() => setDeleting(g)}>
+                        Удалить
+                      </Button>
                     </li>
                   ))}
                 </ul>
@@ -245,6 +250,7 @@ export function GoalsSection({ base, forecast }: GoalsSectionProps) {
           onClose={() => setSheet(null)}
         />
       )}
+      {deleting && <DeleteGoalDialog goal={deleting} onClose={() => setDeleting(null)} />}
       {essential && data && <EssentialSheet categories={expenseCategories} onClose={() => setEssential(false)} />}
     </section>
   );
