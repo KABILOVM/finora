@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { OWNER_LAYOUT, ownerId } from './ownerLayout.fixture';
 import { actionable, countSelected, defaultSelection, isGroupOn, nameKey, planCatalog, toggleChild, toggleGroup, type ExistingCategory } from './catalogPlan';
 
 let n = 0;
@@ -215,6 +216,58 @@ describe('планировщик на реальных названиях (сп�
   it('слепленные при переносе из другой программы названия («Еда, Кафе и рестораны») не трогаются', () => {
     const touched = new Set(plan.groups.flatMap((g) => g.children).flatMap((c) => (c.existing ? [c.existing.id] : [])));
     for (const j of junk) expect(touched.has(j.id), j.name).toBe(false);
+  });
+});
+
+describe('планировщик на полной раскладке реального аккаунта (ownerLayout.fixture.ts)', () => {
+  const plan = planCatalog(OWNER_LAYOUT);
+  const movedNames = (slug: string) => group(plan, slug).children.filter((c) => c.action === 'move').map((c) => c.existing?.name);
+  const kinds = (slug: string) => group(plan, slug).children.map((c) => `${c.action}:${c.child.slug}`);
+
+  it('«Квартплата» становится родителем коммунальных услуг; «Отопление» и «Подъезд» (они под «Платежи») не дублируются', () => {
+    const g = group(plan, 'utilities');
+    expect(g.parent).toMatchObject({ action: 'present', id: ownerId('expense', 'Квартплата') });
+    expect(g.children.map((c) => c.child.slug)).toEqual(['electricity', 'water', 'gas', 'trash']);
+    expect(g.children.every((c) => c.action === 'create')).toBe(true);
+  });
+
+  it('«Еда»: «Кафе и рестораны» переезжает внутрь, «Еда на улице» уже там', () => {
+    expect(group(plan, 'dining').parent).toMatchObject({ action: 'present', id: ownerId('expense', 'Еда') });
+    expect(movedNames('dining')).toEqual(['Кафе и рестораны']);
+    expect(kinds('dining')).toContain('present:cafe');
+  });
+
+  it('«Игрушки» и «Родители» собираются в новую «Семью»; «Перелёт», «Налоги», «Рассрочка» и «Подарки» — каждый в свой набор', () => {
+    expect(group(plan, 'family').parent).toEqual({ action: 'create' });
+    expect(movedNames('family').sort()).toEqual(['Игрушки', 'Родители']);
+    expect(movedNames('travel')).toEqual(['Перелет']);
+    expect(movedNames('finance')).toEqual(['Налоги']);
+    expect(movedNames('debts')).toEqual(['Рассрочка']);
+    expect(movedNames('celebrations')).toEqual(['Подарки']);
+    expect(movedNames('beauty')).toEqual(['Личная гигиена']);
+  });
+
+  it('«Хозяйственные расходы» — это «Дом и быт»: набор берёт их родителем, а не заводит рядом свой', () => {
+    expect(group(plan, 'household').parent).toMatchObject({ action: 'present', id: ownerId('expense', 'Хозяйственные расходы') });
+  });
+
+  it('категории с подкатегориями и слепленные при переносе названия остаются как есть', () => {
+    const touched = new Set(plan.groups.flatMap((g) => g.children).flatMap((c) => (c.existing ? [c.existing.id] : [])));
+    for (const c of OWNER_LAYOUT) {
+      if (c.name.includes(',')) expect(touched.has(c.id), c.name).toBe(false);
+    }
+    expect(touched.has(ownerId('expense', 'Одежда'))).toBe(false); // у неё свои подкатегории
+    expect(group(plan, 'shopping').children.some((c) => c.child.slug === 'clothes')).toBe(false);
+  });
+
+  it('«Социальные выплаты» (подкатегория «Доходов») не мешает: набор «Пенсии и пособия» не предлагается, дубля нет', () => {
+    expect(plan.groups.find((g) => g.group.slug === 'social')).toBeUndefined();
+  });
+
+  it('ничего из того, что у человека уже стоит под нужным родителем, не двигается и не создаётся заново', () => {
+    for (const g of plan.groups) for (const c of g.children) if (c.action === 'present') expect(c.existing).toBeDefined();
+    expect(kinds('health')).toEqual(expect.arrayContaining(['present:doctors', 'present:medicine']));
+    expect(kinds('transport')).toEqual(expect.arrayContaining(['present:public', 'present:taxi']));
   });
 });
 
