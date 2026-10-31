@@ -6,11 +6,16 @@ import { basics, makeStore } from './helpers';
 
 const base = { direction: 'lent', counterparty: 'Али', currency: 'TJS' } as const;
 
-/** Два долга Али («мне должны»): 400 с выдачей и платежом 100, и 300 с выдачей, удалённым платежом и регулярным платежом. */
+/**
+ * Два долга Али («мне должны») с РАЗНЫМИ условиями: у первого 400 с процентами 24 % на 12 месяцев, выдачей и платежом 100;
+ * у второго 300 без процентов, с выдачей, удалённым платежом и регулярным платежом.
+ */
 async function setup() {
   const store = await makeStore();
   const { cash, usd } = await basics(store);
-  const d1 = await store.debts.create({ ...base, principalMinor: 40_000, openedOn: '2026-10-05', dueOn: '2026-11-20', note: 'на ремонт' });
+  const d1 = await store.debts.create({
+    ...base, principalMinor: 40_000, interestMinor: 5_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-05', dueOn: '2026-11-20', note: 'на ремонт',
+  });
   const d2 = await store.debts.create({ ...base, principalMinor: 30_000, openedOn: '2026-10-01', dueOn: '2026-11-10', note: 'на учёбу' });
   const issue1 = await store.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 40_000, occurredOn: '2026-10-05', debtId: d1.id });
   const pay1 = await store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 10_000, occurredOn: '2026-10-08', debtId: d1.id });
@@ -23,89 +28,111 @@ async function setup() {
     const d = (await store.db.debts.get(id))!;
     return computeDebtState(d, await store.db.transactions.toArray(), await store.db.wallets.toArray());
   };
-  return { store, cash, usd, d1, d2, issue1, pay1, issue2, pay2, rule, balance, state };
+  const link = async (id: string) => (await store.db.debts.get(id))!.mergedIntoId;
+  return { store, cash, usd, d1, d2, issue1, pay1, issue2, pay2, rule, balance, state, link };
 }
 
 const snapshot = async (store: Store) =>
   JSON.stringify([await store.db.debts.toArray(), await store.db.transactions.toArray(), await store.db.recurring_rules.toArray()]);
 
-describe('DebtsRepo.merge: объединение долгов', () => {
-  it('всё собирается в один долг: сумма, самая ранняя дата, ближайший срок, склеенные заметки', async () => {
-    const { store, d1, d2 } = await setup();
+describe('DebtsRepo.merge: объединение долгов (составляющие, а не склейка)', () => {
+  it('источник входит в состав главного долга; у каждого остаются свои сумма, проценты, ставка, срок, даты и заметка', async () => {
+    const { store, d1, d2, link } = await setup();
     const res = await store.debts.merge(d1.id, [d2.id]);
-    expect(res).toMatchObject({ targetId: d1.id, sourceIds: [d2.id] });
-    expect(await store.db.debts.get(d1.id)).toMatchObject({
-      principalMinor: 70_000,
-      openedOn: '2026-10-01',
-      dueOn: '2026-11-10',
-      note: 'на ремонт\nна учёбу',
-      closedAt: null,
-      deletedAt: null,
-      dirty: 1,
+    expect(res).toEqual({ targetId: d1.id, links: [{ id: d2.id, from: null }] });
+    expect(await link(d2.id)).toBe(d1.id);
+    expect(await link(d1.id)).toBeNull();
+    expect(await store.db.debts.get(d2.id)).toMatchObject({
+      principalMinor: 30_000, interestMinor: null, interestRateBp: null, termMonths: null, openedOn: '2026-10-01', dueOn: '2026-11-10', note: 'на учёбу',
+      deletedAt: null, closedAt: null, dirty: 1,
     });
-    expect(await store.db.debts.get(d2.id)).toMatchObject({ deletedAt: expect.any(String), dirty: 1 });
+    expect(await store.db.debts.get(d1.id)).toMatchObject({
+      principalMinor: 40_000, interestMinor: 5_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-05', dueOn: '2026-11-20', note: 'на ремонт', deletedAt: null,
+    });
   });
 
-  it('операции источника, в том числе удалённая, и регулярный платёж переходят к общему долгу', async () => {
-    const { store, d1, d2, issue2, pay2, rule } = await setup();
-    const res = await store.debts.merge(d1.id, [d2.id]);
-    expect(res.txs.map((t) => t.id).sort()).toEqual([issue2.id, pay2.id].sort());
-    expect(res.txs.every((t) => t.from === d2.id)).toBe(true);
-    expect(res.rules).toEqual([{ id: rule.id, from: d2.id }]);
-    for (const t of [issue2, pay2]) expect(await store.db.transactions.get(t.id)).toMatchObject({ debtId: d1.id, dirty: 1 });
+  it('операции и регулярные платежи остаются при своих долгах (ничего не переезжает), в том числе удалённая операция', async () => {
+    const { store, d1, d2, issue1, pay1, issue2, pay2, rule } = await setup();
+    await store.debts.merge(d1.id, [d2.id]);
+    for (const [t, debtId] of [[issue1, d1.id], [pay1, d1.id], [issue2, d2.id], [pay2, d2.id]] as const) {
+      expect(await store.db.transactions.get(t.id)).toMatchObject({ debtId });
+    }
     expect(await store.db.transactions.get(pay2.id)).toMatchObject({ deletedAt: expect.any(String) }); // осталась удалённой
-    expect(await store.db.recurring_rules.get(rule.id)).toMatchObject({ debtId: d1.id, deletedAt: null });
+    expect(await store.db.recurring_rules.get(rule.id)).toMatchObject({ debtId: d2.id, deletedAt: null });
   });
 
-  it('деньги в кошельках не двигаются, в доходы и расходы месяца ничего не попадает, остаток общий', async () => {
+  it('деньги в кошельках не двигаются, в доходы и расходы месяца ничего не попадает, остаток каждой части свой', async () => {
     const { store, d1, d2, balance, state } = await setup();
     const before = await balance();
     await store.debts.merge(d1.id, [d2.id]);
     expect(await balance()).toEqual(before);
     expect(summarizeMonth(await store.db.transactions.toArray(), '2026-10', 'TJS')).toMatchObject({ expenseMinor: 0, incomeMinor: 0 });
-    // сумма 700, выдано 700, оплачено 100 (удалённый платёж 50 не считается): осталось 600
-    expect(await state(d1.id)).toMatchObject({ principalMinor: 70_000, issuedMinor: 70_000, paidMinor: 10_000, remainingMinor: 60_000, issues: [] });
+    // у первого сумма 400 + проценты 50 − платёж 100 = 350; у второго 300 − 0 (платёж удалён) = 300
+    expect(await state(d1.id)).toMatchObject({ principalMinor: 40_000, interestMinor: 5_000, paidMinor: 10_000, remainingMinor: 35_000, issues: [] });
+    expect(await state(d2.id)).toMatchObject({ principalMinor: 30_000, interestMinor: 0, paidMinor: 0, remainingMinor: 30_000, issues: [] });
   });
 
   it('объединяет сразу несколько долгов', async () => {
-    const { store, d1, d2 } = await setup();
+    const { store, d1, d2, link } = await setup();
     const d3 = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
-    await store.debts.merge(d1.id, [d2.id, d3.id]);
-    expect((await store.db.debts.get(d1.id))!.principalMinor).toBe(71_000);
-    for (const d of [d2, d3]) expect((await store.db.debts.get(d.id))!.deletedAt).not.toBeNull();
+    const res = await store.debts.merge(d1.id, [d2.id, d3.id]);
+    expect(res.links.map((l) => l.id).sort()).toEqual([d2.id, d3.id].sort());
+    expect(await link(d2.id)).toBe(d1.id);
+    expect(await link(d3.id)).toBe(d1.id);
   });
 
-  it('повтор источника в списке не удваивает сумму', async () => {
+  it('повтор источника в списке ничего не удваивает; повторное объединение не меняет и не пачкает строки', async () => {
     const { store, d1, d2 } = await setup();
     const res = await store.debts.merge(d1.id, [d2.id, d2.id]);
-    expect(res.sourceIds).toEqual([d2.id]);
-    expect((await store.db.debts.get(d1.id))!.principalMinor).toBe(70_000);
+    expect(res.links).toEqual([{ id: d2.id, from: null }]);
+    const snap = await snapshot(store);
+    expect((await store.debts.merge(d1.id, [d2.id])).links).toEqual([]);
+    expect(await snapshot(store)).toBe(snap);
   });
 
-  it('сроков нет ни у кого — срока нет и у общего долга; срок только у одного — он и остаётся', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01' });
-    const b = await store.debts.create({ ...base, principalMinor: 200, openedOn: '2026-10-02' });
-    expect((await store.debts.merge(a.id, [b.id])).after.dueOn).toBeNull();
-    const c = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01' });
-    const d = await store.debts.create({ ...base, principalMinor: 200, openedOn: '2026-10-02', dueOn: '2026-12-01' });
-    expect((await store.debts.merge(c.id, [d.id])).after.dueOn).toBe('2026-12-01');
+  it('закрытые долги входят в состав, как есть: закрытость остаётся у каждой части', async () => {
+    const { store, d1, d2 } = await setup();
+    await store.debts.close(d2.id);
+    await store.debts.merge(d1.id, [d2.id]);
+    expect((await store.db.debts.get(d1.id))!.closedAt).toBeNull();
+    expect((await store.db.debts.get(d2.id))!.closedAt).not.toBeNull();
   });
 
-  describe('закрытые долги', () => {
-    it('открыт хоть один — общий долг открыт', async () => {
-      const { store, d1, d2 } = await setup();
-      await store.debts.close(d1.id);
-      await store.debts.merge(d1.id, [d2.id]);
-      expect((await store.db.debts.get(d1.id))!.closedAt).toBeNull();
+  it('объединение ничего не пишет в основной долг: он не помечается изменённым из-за составляющих', async () => {
+    const { store, d1, d2 } = await setup();
+    const before = await store.db.debts.get(d1.id);
+    await store.debts.merge(d1.id, [d2.id]);
+    expect(await store.db.debts.get(d1.id)).toEqual(before);
+  });
+
+  describe('главный долг объединения', () => {
+    it('присоединяемый долг приводит с собой свои составляющие: вложенности нет', async () => {
+      const { store, d1, d2, link } = await setup();
+      const d3 = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+      await store.debts.merge(d1.id, [d2.id]); // d1 — главный, d2 — составляющая
+      const res = await store.debts.merge(d3.id, [d1.id]); // d1 переходит в состав d3 вместе с d2
+      expect(res.links.map((l) => l.id).sort()).toEqual([d1.id, d2.id].sort());
+      expect(await link(d1.id)).toBe(d3.id);
+      expect(await link(d2.id)).toBe(d3.id);
+      expect(await link(d3.id)).toBeNull();
     });
 
-    it('все закрыты — общий остаётся закрытым', async () => {
+    it('составляющую нельзя сделать главным: понятная ошибка, ничего не меняется', async () => {
       const { store, d1, d2 } = await setup();
-      await store.debts.close(d1.id);
-      await store.debts.close(d2.id);
       await store.debts.merge(d1.id, [d2.id]);
-      expect((await store.db.debts.get(d1.id))!.closedAt).not.toBeNull();
+      const d3 = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+      const snap = await snapshot(store);
+      await expect(store.debts.merge(d2.id, [d3.id])).rejects.toThrow(/уже входит в состав долга «Али»/);
+      expect(await snapshot(store)).toBe(snap);
+    });
+
+    it('составляющую чужого состава нельзя взять в свой: сначала вывести из прежнего', async () => {
+      const { store, d1, d2 } = await setup();
+      await store.debts.merge(d1.id, [d2.id]);
+      const other = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+      const snap = await snapshot(store);
+      await expect(store.debts.merge(other.id, [d2.id])).rejects.toThrow(/сначала выведите его из объединения/);
+      expect(await snapshot(store)).toBe(snap);
     });
   });
 
@@ -135,216 +162,186 @@ describe('DebtsRepo.merge: объединение долгов', () => {
       await expect(store.debts.merge(d1.id, [d2.id])).rejects.toThrow(/в архиве/);
     });
 
-    it('сам с собой и пустой список', async () => {
+    it('пустой список, долг с самим собой, неизвестный id — отказ, ничего не меняется', async () => {
       const { store, d1 } = await setup();
-      await expect(store.debts.merge(d1.id, [d1.id])).rejects.toThrow(/с самим собой/);
-      await expect(store.debts.merge(d1.id, [])).rejects.toThrow(/Выберите долги/);
-    });
-
-    it('удалённый и неизвестный долг', async () => {
-      const { store, d1, d2 } = await setup();
-      await expect(store.debts.merge(d1.id, ['a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1'])).rejects.toThrow(/Долг не найден/);
-      await store.debts.softDelete(d2.id, 'keep-operations');
-      await expect(store.debts.merge(d1.id, [d2.id])).rejects.toThrow(/удалён/);
-    });
-
-    it('сумма не помещается в предел сервера: ошибка и ни одна строка не изменена (всё или ничего)', async () => {
-      const { store, d1, d2 } = await setup();
-      await store.debts.increase(d1.id, 1_000_000_000_000_000 - 40_000);
       const snap = await snapshot(store);
-      await expect(store.debts.merge(d1.id, [d2.id])).rejects.toThrow(ValidationError);
+      await expect(store.debts.merge(d1.id, [])).rejects.toThrow(ValidationError);
+      await expect(store.debts.merge(d1.id, [d1.id])).rejects.toThrow(/с самим собой/);
+      await expect(store.debts.merge(d1.id, ['00000000-0000-4000-8000-000000000000'])).rejects.toThrow(/не найден/);
+      expect(await snapshot(store)).toBe(snap);
+    });
+
+    it('удалённый долг', async () => {
+      const { store, d1, d2 } = await setup();
+      await store.debts.softDelete(d2.id, 'keep-operations');
+      const snap = await snapshot(store);
+      await expect(store.debts.merge(d1.id, [d2.id])).rejects.toThrow(/удалён/);
+      expect(await snapshot(store)).toBe(snap);
+    });
+
+    it('одна плохая строка в списке отменяет всё: остальные источники не входят в состав', async () => {
+      const { store, d1, d2 } = await setup();
+      const usd = await store.debts.create({ ...base, currency: 'USD', principalMinor: 100, openedOn: '2026-10-02' });
+      const snap = await snapshot(store);
+      await expect(store.debts.merge(d1.id, [d2.id, usd.id])).rejects.toThrow(ValidationError);
       expect(await snapshot(store)).toBe(snap);
     });
   });
 
-  it('очень длинные заметки обрезаются до предела с «…», а объединение проходит', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01', note: 'а'.repeat(400) });
-    const b = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01', note: 'б'.repeat(400) });
-    const res = await store.debts.merge(a.id, [b.id]);
-    expect(res.after.note.length).toBeLessThanOrEqual(500);
-    expect(res.after.note.endsWith('…')).toBe(true);
-    expect(res.after.note.startsWith('а'.repeat(400))).toBe(true);
-  });
-
-  it('обрезка не разрывает смайлик пополам', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01', note: 'а'.repeat(497) });
-    const b = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01', note: '😀😀' });
-    // 497 знаков + «\n» + смайлик (2 знака): обрезка до 499 знаков оставила бы «голову» смайлика последней — её нужно убрать целиком
-    const res = await store.debts.merge(a.id, [b.id]);
-    expect(res.after.note.length).toBeLessThanOrEqual(500);
-    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(res.after.note)).toBe(false);
-    expect(res.after.note).toBe(`${'а'.repeat(497)}…`);
-  });
-
-  it('одинаковые заметки не дублируются', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01', note: 'аванс' });
-    const b = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-01', note: ' аванс ' });
-    expect((await store.debts.merge(a.id, [b.id])).after.note).toBe('аванс');
+  it('нельзя менять валюту или направление долга, который объединён с другими', async () => {
+    const { store, d1, d2 } = await setup();
+    const free = await store.debts.create({ ...base, principalMinor: 100, openedOn: '2026-10-02' });
+    const part = await store.debts.create({ ...base, principalMinor: 50, openedOn: '2026-10-03' }); // без операций
+    await store.debts.merge(free.id, [part.id, d2.id]);
+    await expect(store.debts.update(free.id, { currency: 'USD' })).rejects.toThrow(/объединён с другими/);
+    await expect(store.debts.update(part.id, { direction: 'borrowed' })).rejects.toThrow(/объединён с другими/);
+    // у долга с операциями прежнее правило про операции остаётся в силе
+    await expect(store.debts.update(d2.id, { direction: 'borrowed' })).rejects.toThrow(/по нему уже есть операции/);
+    // другие поля правятся как обычно, и связь при правке не слетает
+    await store.debts.update(part.id, { note: 'изменено', interestMinor: 700, interestRateBp: 1200, termMonths: 6 });
+    expect(await store.db.debts.get(part.id)).toMatchObject({ mergedIntoId: free.id, note: 'изменено', interestMinor: 700 });
+    expect(d1.id).not.toBe(free.id);
   });
 });
 
 describe('DebtsRepo.undoMerge', () => {
-  it('возвращает долги, операции и правила как были', async () => {
-    const { store, d1, d2, issue2, pay2, rule, state } = await setup();
-    const before = await snapshot(store);
-    const stateBefore = [await state(d1.id), await state(d2.id)];
+  it('возвращает каждого туда, где он был; платежи и суммы не трогает', async () => {
+    const { store, d1, d2, link, state } = await setup();
+    const before = await state(d2.id);
     const res = await store.debts.merge(d1.id, [d2.id]);
     await store.debts.undoMerge(res);
-    expect(await store.db.debts.get(d1.id)).toMatchObject({ principalMinor: 40_000, openedOn: '2026-10-05', dueOn: '2026-11-20', note: 'на ремонт' });
+    expect(await link(d2.id)).toBeNull();
+    expect(await state(d2.id)).toEqual(before);
+  });
+
+  it('вместе с составляющими присоединённого главного долга: все возвращаются на прежние места', async () => {
+    const { store, d1, d2, link } = await setup();
+    const d3 = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+    await store.debts.merge(d1.id, [d2.id]);
+    const res = await store.debts.merge(d3.id, [d1.id]);
+    await store.debts.undoMerge(res);
+    expect(await link(d1.id)).toBeNull();
+    expect(await link(d2.id)).toBe(d1.id); // d2 снова при d1
+  });
+
+  it('долг успели править — отмена всё равно проходит: связь возвращается, правки остаются', async () => {
+    const { store, d1, d2, link } = await setup();
+    const res = await store.debts.merge(d1.id, [d2.id]);
+    await store.debts.update(d2.id, { note: 'поправили после объединения' });
+    await store.debts.undoMerge(res);
+    expect(await link(d2.id)).toBeNull();
+    expect((await store.db.debts.get(d2.id))!.note).toBe('поправили после объединения');
+  });
+
+  it('кого с тех пор перенесли в другой состав, отмена не трогает; повтор безопасен', async () => {
+    const { store, d1, d2, link } = await setup();
+    const res = await store.debts.merge(d1.id, [d2.id]);
+    await store.debts.unmerge(d2.id);
+    const other = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+    await store.debts.merge(other.id, [d2.id]);
+    await store.debts.undoMerge(res);
+    expect(await link(d2.id)).toBe(other.id);
+    await store.debts.undoMerge(res); // повтор
+    expect(await link(d2.id)).toBe(other.id);
+  });
+
+  it('главный долг удалён — отменять нечего, ошибки нет, составляющая не получает ссылку на удалённый долг', async () => {
+    const { store, d1, d2, link } = await setup();
+    const res = await store.debts.merge(d1.id, [d2.id]);
+    await store.debts.softDelete(d1.id, 'keep-operations'); // составляющая выходит из состава сама
+    await expect(store.debts.undoMerge(res)).resolves.toBeTruthy();
+    expect(await link(d2.id)).toBeNull();
+  });
+});
+
+describe('DebtsRepo.unmerge: выход из объединения', () => {
+  it('составляющая выходит одна и становится отдельным долгом; остальные остаются', async () => {
+    const { store, d1, d2, link } = await setup();
+    const d3 = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+    await store.debts.merge(d1.id, [d2.id, d3.id]);
+    const res = await store.debts.unmerge(d2.id);
+    expect(res).toEqual({ targetId: d1.id, partIds: [d2.id] });
+    expect(await link(d2.id)).toBeNull();
+    expect(await link(d3.id)).toBe(d1.id);
+  });
+
+  it('у главного долга выходят все составляющие', async () => {
+    const { store, d1, d2, link } = await setup();
+    const d3 = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+    await store.debts.merge(d1.id, [d2.id, d3.id]);
+    const res = await store.debts.unmerge(d1.id);
+    expect(res.targetId).toBe(d1.id);
+    expect(res.partIds.sort()).toEqual([d2.id, d3.id].sort());
+    expect(await link(d2.id)).toBeNull();
+    expect(await link(d3.id)).toBeNull();
+  });
+
+  it('долг сам по себе — ничего не меняет; повторное объединение тем же списком возвращает всё как было', async () => {
+    const { store, d1, d2, link } = await setup();
+    const snap = await snapshot(store);
+    expect(await store.debts.unmerge(d1.id)).toEqual({ targetId: d1.id, partIds: [] });
+    expect(await snapshot(store)).toBe(snap);
+    await store.debts.merge(d1.id, [d2.id]);
+    const res = await store.debts.unmerge(d1.id);
+    await store.debts.merge(res.targetId, res.partIds);
+    expect(await link(d2.id)).toBe(d1.id);
+  });
+});
+
+describe('объединение целиком: закрыть, архивировать, удалить', () => {
+  it('архив и возврат с withParts касаются всех составляющих; без него — только долга', async () => {
+    const { store, d1, d2 } = await setup();
+    await store.debts.merge(d1.id, [d2.id]);
+    await store.debts.archive(d1.id);
+    expect((await store.db.debts.get(d1.id))!.archivedAt).not.toBeNull();
+    expect((await store.db.debts.get(d2.id))!.archivedAt).toBeNull();
+    await store.debts.restore(d1.id);
+    await store.debts.archive(d1.id, { withParts: true });
+    expect((await store.db.debts.get(d2.id))!.archivedAt).not.toBeNull();
+    await store.debts.restore(d1.id, { withParts: true });
+    expect((await store.db.debts.get(d1.id))!.archivedAt).toBeNull();
+    expect((await store.db.debts.get(d2.id))!.archivedAt).toBeNull();
+  });
+
+  it('закрыть и открыть снова с withParts — всем составляющим сразу', async () => {
+    const { store, d1, d2 } = await setup();
+    await store.debts.merge(d1.id, [d2.id]);
+    await store.debts.close(d1.id, { withParts: true });
+    expect((await store.db.debts.get(d1.id))!.closedAt).not.toBeNull();
+    expect((await store.db.debts.get(d2.id))!.closedAt).not.toBeNull();
+    await store.debts.reopen(d1.id, { withParts: true });
+    expect((await store.db.debts.get(d2.id))!.closedAt).toBeNull();
+  });
+
+  it('удаление главного долга: составляющие остаются отдельными долгами со своими платежами; отмена возвращает объединение', async () => {
+    const { store, d1, d2, rule, link } = await setup();
+    await store.debts.merge(d1.id, [d2.id]);
+    const deletion = await store.debts.softDelete(d1.id, 'keep-operations');
+    expect(deletion.unmergedIds).toEqual([d2.id]);
+    expect(await link(d2.id)).toBeNull();
     expect((await store.db.debts.get(d2.id))!.deletedAt).toBeNull();
-    for (const t of [issue2, pay2]) expect((await store.db.transactions.get(t.id))!.debtId).toBe(d2.id);
-    expect((await store.db.recurring_rules.get(rule.id))!.debtId).toBe(d2.id);
-    expect([await state(d1.id), await state(d2.id)]).toEqual(stateBefore);
-    // по содержимому всё как до (служебные метки правок, конечно, новые)
-    const strip = (s: string) => s.replace(/"(clientUpdatedAt|dirtyGroups|dirtyBase|dirty)":(\[[^\]]*\]|\{[^}]*\}|"[^"]*"|\d+|null),?/g, '');
-    expect(strip(await snapshot(store))).toBe(strip(before));
+    expect(await store.db.recurring_rules.get(rule.id)).toMatchObject({ debtId: d2.id, archivedAt: null });
+    await store.debts.undoDelete(deletion);
+    expect(await link(d2.id)).toBe(d1.id);
   });
 
-  it('повтор безопасен', async () => {
-    const { store, d1, d2 } = await setup();
-    const res = await store.debts.merge(d1.id, [d2.id]);
-    await store.debts.undoMerge(res);
-    const snap = await snapshot(store);
-    await store.debts.undoMerge(res);
-    expect(await snapshot(store)).toBe(snap);
+  it('удаление составляющей: главный долг и остальные не затронуты', async () => {
+    const { store, d1, d2, link } = await setup();
+    const d3 = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+    await store.debts.merge(d1.id, [d2.id, d3.id]);
+    const deletion = await store.debts.softDelete(d2.id, 'keep-operations');
+    expect(deletion.unmergedIds).toBeUndefined();
+    expect(await link(d3.id)).toBe(d1.id);
+    expect((await store.db.debts.get(d1.id))!.deletedAt).toBeNull();
   });
 
-  it('долг успели изменить — отмена отказывает и ничего не трогает', async () => {
-    const { store, d1, d2 } = await setup();
-    const res = await store.debts.merge(d1.id, [d2.id]);
-    await store.debts.update(d1.id, { note: 'новая заметка' });
-    const snap = await snapshot(store);
-    await expect(store.debts.undoMerge(res)).rejects.toThrow(/уже изменили/);
-    expect(await snapshot(store)).toBe(snap);
-  });
-
-  it('платёж, добавленный после объединения, остаётся у общего долга; перепривязанную другим долгом операцию не трогает', async () => {
-    const { store, cash, d1, d2, issue2 } = await setup();
-    const res = await store.debts.merge(d1.id, [d2.id]);
-    const late = await store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 1_000, occurredOn: '2026-10-20', debtId: d1.id });
-    const other = await store.debts.create({ ...base, principalMinor: 5_000, openedOn: '2026-10-02' });
-    await store.transactions.update(issue2.id, { debtId: other.id });
-    await store.debts.undoMerge(res);
-    expect((await store.db.transactions.get(late.id))!.debtId).toBe(d1.id);
-    expect((await store.db.transactions.get(issue2.id))!.debtId).toBe(other.id);
-  });
-
-  it('общий долг удалён — отменить нельзя, понятная ошибка', async () => {
-    const { store, d1, d2 } = await setup();
-    const res = await store.debts.merge(d1.id, [d2.id]);
-    await store.debts.softDelete(d1.id, 'keep-operations');
-    await expect(store.debts.undoMerge(res)).rejects.toThrow(/удалён/);
-  });
-});
-
-describe('DebtsRepo.merge: с кем объединён (другое имя в заметке)', () => {
-  it('другое имя — строка «Объединён с: Бобур (от 05.03.2026)» сразу после своей заметки, перед заметками источников', async () => {
-    const { store, d1 } = await setup();
-    const bobur = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 10_000, openedOn: '2026-03-05', note: 'за телефон' });
-    const res = await store.debts.merge(d1.id, [bobur.id]);
-    expect(res.after.note).toBe('на ремонт\nОбъединён с: Бобур (от 05.03.2026)\nза телефон');
-    expect((await store.db.debts.get(d1.id))!.note).toBe('на ремонт\nОбъединён с: Бобур (от 05.03.2026)\nза телефон');
-    expect(res.after.counterparty).toBe('Али'); // имя основного долга остаётся
-  });
-
-  it('тот же человек (регистр, лишние пробелы, ё/е) — строки «Объединён с» нет', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01', note: 'первый' });
-    const b = await store.debts.create({ ...base, counterparty: '  АЛИШЁР ', principalMinor: 200, openedOn: '2026-03-05', note: 'второй' });
-    const res = await store.debts.merge(a.id, [b.id]);
-    expect(res.after.note).toBe('первый\nвторой');
-    expect(res.after.note).not.toContain('Объединён с');
-  });
-
-  it('без заметок у всех — в заметке только строка про другое имя; одноимённый источник строки не добавляет', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01' });
-    const same = await store.debts.create({ ...base, counterparty: 'алишер', principalMinor: 100, openedOn: '2026-10-02' });
-    const other = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05' });
-    const res = await store.debts.merge(a.id, [same.id, other.id]);
-    expect(res.after.note).toBe('Объединён с: Бобур (от 05.03.2026)');
-  });
-
-  it('несколько других имён — по строке на каждый долг в порядке выбора, совпадающие строки не дублируются', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01' });
-    const vali = await store.debts.create({ ...base, counterparty: 'Вали', principalMinor: 100, openedOn: '2026-09-15', note: 'на свадьбу' });
-    const b1 = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05' });
-    const b2 = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05' });
-    const b3 = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-04-10' });
-    const res = await store.debts.merge(a.id, [vali.id, b1.id, b2.id, b3.id]);
-    expect(res.after.note).toBe(
-      ['Объединён с: Вали (от 15.09.2026)', 'Объединён с: Бобур (от 05.03.2026)', 'Объединён с: Бобур (от 10.04.2026)', 'на свадьбу'].join('\n'),
-    );
-    expect(res.after.principalMinor).toBe(500);
-  });
-
-  it('длинные заметки: строка «Объединён с» стоит сразу после заметки основного и при обрезке не теряется', async () => {
-    const { store } = await setup();
-    const a = await store.debts.create({ ...base, counterparty: 'Алишер', principalMinor: 100, openedOn: '2026-10-01', note: 'а'.repeat(400) });
-    const b = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 100, openedOn: '2026-03-05', note: 'б'.repeat(400) });
-    const res = await store.debts.merge(a.id, [b.id]);
-    expect(res.after.note.length).toBeLessThanOrEqual(500);
-    expect(res.after.note.startsWith(`${'а'.repeat(400)}\nОбъединён с: Бобур (от 05.03.2026)\nб`)).toBe(true);
-    expect(res.after.note.endsWith('…')).toBe(true);
-  });
-
-  it('отмена объединения возвращает прежнюю заметку основного долга, без строки «Объединён с»', async () => {
-    const { store, d1 } = await setup();
-    const bobur = await store.debts.create({ ...base, counterparty: 'Бобур', principalMinor: 10_000, openedOn: '2026-03-05', note: 'за телефон' });
-    const res = await store.debts.merge(d1.id, [bobur.id]);
-    await store.debts.undoMerge(res);
-    expect(await store.db.debts.get(d1.id)).toMatchObject({ note: 'на ремонт', counterparty: 'Али', principalMinor: 40_000, openedOn: '2026-10-05' });
-    expect(await store.db.debts.get(bobur.id)).toMatchObject({ note: 'за телефон', counterparty: 'Бобур', deletedAt: null });
-  });
-});
-
-
-describe('DebtsRepo.merge: проценты', () => {
-  const bank = { direction: 'borrowed', counterparty: 'Банк', currency: 'TJS' } as const;
-
-  it('суммы процентов складываются; ставка и срок остаются, только если у всех долгов они одинаковые', async () => {
-    const store = await makeStore();
-    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
-    const b = await store.debts.create({ ...bank, principalMinor: 200_000, interestMinor: 30_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-02' });
-    await store.debts.merge(a.id, [b.id]);
-    expect(await store.db.debts.get(a.id)).toMatchObject({ principalMinor: 300_000, interestMinor: 40_000, interestRateBp: 2400, termMonths: 12 });
-  });
-
-  it('разные ставки или срок — остаётся сумма процентов без ставки и срока', async () => {
-    const store = await makeStore();
-    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
-    const b = await store.debts.create({ ...bank, principalMinor: 200_000, interestMinor: 30_000, interestRateBp: 1800, termMonths: 12, openedOn: '2026-10-02' });
-    await store.debts.merge(a.id, [b.id]);
-    expect(await store.db.debts.get(a.id)).toMatchObject({ interestMinor: 40_000, interestRateBp: null, termMonths: null });
-  });
-
-  it('долг без процентов в паре: проценты не «растекаются» на его сумму — ставка и срок убираются', async () => {
-    const store = await makeStore();
-    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
-    const b = await store.debts.create({ ...bank, principalMinor: 50_000, openedOn: '2026-10-02' });
-    await store.debts.merge(a.id, [b.id]);
-    expect(await store.db.debts.get(a.id)).toMatchObject({ principalMinor: 150_000, interestMinor: 10_000, interestRateBp: null, termMonths: null });
-  });
-
-  it('ни у кого нет процентов — их нет и после объединения', async () => {
-    const store = await makeStore();
-    const a = await store.debts.create({ ...bank, principalMinor: 100_000, openedOn: '2026-10-01' });
-    const b = await store.debts.create({ ...bank, principalMinor: 50_000, openedOn: '2026-10-02' });
-    await store.debts.merge(a.id, [b.id]);
-    expect(await store.db.debts.get(a.id)).toMatchObject({ interestMinor: null, interestRateBp: null, termMonths: null });
-  });
-
-  it('отмена объединения возвращает проценты как были', async () => {
-    const store = await makeStore();
-    const a = await store.debts.create({ ...bank, principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01' });
-    const b = await store.debts.create({ ...bank, principalMinor: 200_000, interestMinor: 30_000, interestRateBp: 1800, termMonths: 6, openedOn: '2026-10-02' });
-    const merged = await store.debts.merge(a.id, [b.id]);
-    await store.debts.undoMerge(merged);
-    expect(await store.db.debts.get(a.id)).toMatchObject({ principalMinor: 100_000, interestMinor: 10_000, interestRateBp: 2400, termMonths: 12 });
-    expect(await store.db.debts.get(b.id)).toMatchObject({ deletedAt: null, interestMinor: 30_000, interestRateBp: 1800, termMonths: 6 });
+  it('отмена удаления не отнимает составляющую у нового состава, в который её успели включить', async () => {
+    const { store, d1, d2, link } = await setup();
+    await store.debts.merge(d1.id, [d2.id]);
+    const deletion = await store.debts.softDelete(d1.id, 'keep-operations');
+    const other = await store.debts.create({ ...base, principalMinor: 1_000, openedOn: '2026-10-12' });
+    await store.debts.merge(other.id, [d2.id]);
+    await store.debts.undoDelete(deletion);
+    expect(await link(d2.id)).toBe(other.id);
   });
 });

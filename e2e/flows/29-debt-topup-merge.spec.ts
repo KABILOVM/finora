@@ -113,8 +113,9 @@ test.describe('29. Добавить ещё в долг и объединение
     await noHorizontalScroll(page, 'шит объединения');
     await merge.getByRole('button', { name: /^Объединить: 2 долга$/ }).click();
     await expect(merge).toBeHidden();
+    // страница стала страницей объединённого долга: итог 1 000 и две составляющие со своими условиями (ничего не склеено)
     await expect(remaining(page)).toContainText(money('1 000 с.'));
-    await expect(entries.getByRole('listitem')).toHaveCount(3);
+    await expect(page.getByTestId('debt-part')).toHaveCount(2);
 
     // кошелёк не изменился: 2 000 − 500 − 300 − 200
     await goSection(page, 'Кошельки');
@@ -125,8 +126,10 @@ test.describe('29. Добавить ещё в долг и объединение
     await expect(debtLinks(page)).toHaveCount(1);
     await expect(debtLinks(page).first()).toContainText(money('1 000 с.'));
 
-    // 6. «Дал ещё в долг» со страницы долга
+    // 6. «Дал ещё в долг» — на странице самой составляющей («Открыть»): у каждой части свои условия
     await debtLinks(page).first().click();
+    await page.getByRole('link', { name: /^Открыть: / }).first().click();
+    await expect(remaining(page)).toContainText(money('800 с.'));
     await page.getByRole('button', { name: 'Дал ещё в долг', exact: true }).click();
     const top = sheet(page, 'Дал ещё в долг');
     await expect(top).toBeVisible();
@@ -136,7 +139,7 @@ test.describe('29. Добавить ещё в долг и объединение
     await shot(page, '29-topup-sheet', testInfo);
     await top.getByRole('button', { name: 'Добавить к долгу', exact: true }).click();
     await expect(top).toBeHidden();
-    await expect(remaining(page)).toContainText(money('1 100 с.'));
+    await expect(remaining(page)).toContainText(money('900 с.'));
     await goSection(page, 'Кошельки');
     expect(await walletRowText(page, 'Наличные')).toMatch(money('900 с.'));
 

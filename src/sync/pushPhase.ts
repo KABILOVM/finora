@@ -88,7 +88,7 @@ export function describeRejection(err: TransportError): string {
 const SCHEMA_WAIT: ReadonlyArray<{ table: SyncTableName; section: string; what: string }> = [
   { table: 'wallets', section: 'раздел 11 — цели накопления', what: 'кошельки с целью и их операции' },
   { table: 'settings', section: 'раздел 13 — города для погоды', what: 'настройки' },
-  { table: 'debts', section: 'раздел 14 — проценты по долгам', what: 'долги с процентами и их операции' },
+  { table: 'debts', section: 'раздел 14 — проценты по долгам; раздел 15 — объединение долгов', what: 'долги с процентами или объединённые и их операции' },
 ];
 
 /** Понятное человеку объяснение, почему часть записей ждёт: схема в облаке устарела. Без точки в конце (её ставит текст статуса). */
@@ -208,7 +208,7 @@ interface ParentRef {
 /**
  * Кто от кого зависит (составные внешние ключи в supabase/schema.sql):
  * операции — от кошельков, категорий, долгов и регулярных платежей; регулярные платежи — от кошельков, категорий и долгов;
- * бюджеты — от категорий; долги, кошельки, категории и настройки ни от кого.
+ * бюджеты — от категорий; долги — от главного долга своего объединения (merged_into_id); кошельки, категории и настройки ни от кого.
  */
 const PARENTS: Partial<Record<SyncTableName, readonly ParentRef[]>> = {
   transactions: [
@@ -218,6 +218,8 @@ const PARENTS: Partial<Record<SyncTableName, readonly ParentRef[]>> = {
     { field: 'debtId', parent: 'debts' },
     { field: 'recurringRuleId', parent: 'recurring_rules' },
   ],
+  // объединение: составляющая ссылается на главный долг той же таблицы; главный отправляется раньше (следующим проходом)
+  debts: [{ field: 'mergedIntoId', parent: 'debts' }],
   recurring_rules: [
     { field: 'walletId', parent: 'wallets' },
     { field: 'toWalletId', parent: 'wallets' },

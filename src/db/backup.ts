@@ -224,6 +224,10 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
         fail('Резервная копия: операция ссылается на несуществующий регулярный платёж');
       }
     }
+    // составляющая объединения ссылается на главный долг: он обязан быть в базе или в файле (иначе связь повисла бы)
+    for (const d of file.debts) {
+      if (d.mergedIntoId != null && !debts.has(d.mergedIntoId)) fail('Резервная копия: долг входит в состав несуществующего долга');
+    }
     checkPlanRefs(file, { wallets, categories, debts, rules }, { debts: dbt.winners, rules: rr.winners, budgets: b.winners });
     checkDebtPins(debtsBefore, debts, dbt.winners, transactions, t.winners, rules, rr.winners);
     checkDebtCurrencies(transactions, t.winners, wallets, debts);

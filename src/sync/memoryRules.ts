@@ -243,6 +243,7 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (r['interest_rate_bp'] != null && !inBound(r['interest_rate_bp'], 1, 100_000)) fail('interest_rate');
       if (r['term_months'] != null && !inBound(r['term_months'], 1, 600)) fail('term_months');
       if (r['interest_minor'] == null && (r['interest_rate_bp'] != null || r['term_months'] != null)) fail('interest_shape');
+      if (r['merged_into_id'] != null && r['merged_into_id'] === r['id']) fail('merged_into_self');
       if (!CURRENCY_RE.test(String(r['currency']))) fail('currency_fmt');
       if (!dayOk(r['opened_on'] ?? null)) fail('opened_on');
       if (!dayOkOrNull(r['due_on'] ?? null)) fail('due_on');
@@ -316,6 +317,7 @@ const FOREIGN_KEYS: Partial<Record<SyncTableName, readonly FkRef[]>> = {
     ['debt_id', 'debts', 'transactions_debt_fk'],
     ['recurring_rule_id', 'recurring_rules', 'transactions_recurring_rule_fk'],
   ],
+  debts: [['merged_into_id', 'debts', 'debts_merged_into_fk']],
   budgets: [['category_id', 'categories', 'budgets_category_fk']],
   recurring_rules: [
     ['wallet_id', 'wallets', 'recurring_rules_wallet_fk'],

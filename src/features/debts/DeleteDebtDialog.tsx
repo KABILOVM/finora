@@ -15,6 +15,8 @@ interface Props {
   wallets: ReadonlyMap<UUID, LocalRow<Wallet>>;
   base: CurrencyCode;
   loading: boolean;
+  /** Сколько долгов входит в состав этого (объединение): они не удаляются, а становятся отдельными. */
+  partsCount?: number;
   onConfirm: (mode: DebtDeleteMode) => void;
   onCancel: () => void;
 }
@@ -39,7 +41,7 @@ function safePreview(...args: Parameters<typeof previewDebtDelete>): DeletePrevi
  * не выбран ни один, и «Удалить» недоступно, пока выбора нет (оба варианта меняют итоги, просто по-разному). Операций нет —
  * выбирать нечего. Кнопка «Отмена» остаётся в фокусе (как у всех подтверждений), ничего не меняется, пока не нажато «Удалить».
  */
-export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, base, loading, onConfirm, onCancel }: Props) {
+export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, base, loading, partsCount = 0, onConfirm, onCancel }: Props) {
   const store = useStore();
   const [mode, setMode] = useState<DebtDeleteMode | null>(null);
   useEffect(() => {
@@ -97,6 +99,11 @@ export function DeleteDebtDialog({ open, debtId, counterparty, txs, wallets, bas
           ) : (
             <p data-testid="debt-delete-hint">
               {preview ? deleteHint(preview) : `Будет удалено: ${opsCount(count)}. Остатки кошельков вернутся такими, как были до этого долга.`}
+            </p>
+          )}
+          {partsCount > 0 && (
+            <p data-testid="debt-delete-parts">
+              Долги, объединённые с этим ({partsCount}), не удаляются: они станут отдельными, со своими суммами, платежами и планами.
             </p>
           )}
           {rules !== undefined && rules > 0 && (

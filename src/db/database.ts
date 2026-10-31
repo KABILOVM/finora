@@ -48,6 +48,7 @@ export function dbNameFor(userId: string): string {
  *    Новая колонка в TABLE_SPECS требует такой же версии для своей таблицы (страж — tests/db/dexieUpgrade.test.ts).
  *  - 7: у долгов проценты (interestMinor, interestRateBp, termMonths — без индексов). Старым долгам в upgrade() проставляется null,
  *    а долги забираются с сервера заново (как в версии 6): прежняя версия получала их, отбрасывая незнакомые колонки.
+ *  - 8: у долгов mergedIntoId (объединение с составляющими, без индекса). Старым долгам null, долги забираются с сервера заново.
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -144,6 +145,21 @@ export class FinoraDB extends Dexie {
             if (d['interestMinor'] === undefined) d['interestMinor'] = null;
             if (d['interestRateBp'] === undefined) d['interestRateBp'] = null;
             if (d['termMonths'] === undefined) d['termMonths'] = null;
+            if (typeof d['serverSeq'] === 'number') d['serverSeq'] = 0;
+          });
+      });
+    // Объединение с составляющими: тот же порядок, что в версии 7. Прежняя версия получала долги, отбрасывая незнакомую колонку
+    // merged_into_id, и без повторного получения первая же правка стёрла бы связь на сервере.
+    this.version(8)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('meta').bulkDelete([cursorKey('debts')]);
+        await tx.table('meta').bulkPut([{ key: resyncKey('debts'), value: true }]);
+        await tx
+          .table('debts')
+          .toCollection()
+          .modify((d: Record<string, unknown>) => {
+            if (d['mergedIntoId'] === undefined) d['mergedIntoId'] = null;
             if (typeof d['serverSeq'] === 'number') d['serverSeq'] = 0;
           });
       });

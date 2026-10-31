@@ -26,8 +26,9 @@ export interface NettingPlan {
   after: ReadonlyMap<UUID, Minor>;
 }
 
+// Объединённый долг в зачёте не участвует: платёж зачёта не делится между его частями, у которых свои условия (части зачитываются на своих страницах)
 const usable = (it: DebtItem, currency: CurrencyCode): it is DebtItem & { state: NonNullable<DebtItem['state']> } =>
-  it.state !== null && it.debt.currency === currency && it.debt.closedAt === null && it.debt.archivedAt === null && it.state.remainingMinor > 0;
+  it.parts === undefined && it.state !== null && it.debt.currency === currency && it.debt.closedAt === null && it.debt.archivedAt === null && it.state.remainingMinor > 0;
 
 /**
  * План зачёта по долгам человека в валюте `currency`. null — зачитывать нечего: нет одной из сторон или суммы не помещаются в расчёт.

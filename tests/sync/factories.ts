@@ -129,6 +129,7 @@ export function makeDebt(overrides: Partial<Debt> = {}): Debt {
     interestMinor: null,
     interestRateBp: null,
     termMonths: null,
+    mergedIntoId: null,
     currency: 'TJS',
     openedOn: '2026-09-01',
     dueOn: null,

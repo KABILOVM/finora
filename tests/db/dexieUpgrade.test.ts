@@ -455,6 +455,64 @@ describe('обновление базы с версии 6 до 7: процент
   });
 });
 
+describe('обновление базы с версии 7 до 8: объединение долгов', () => {
+  const stores7 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions: 'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const D_SEEN = '0a3a28c0-5fdc-4385-8fca-7c24d9aabb41';
+  const D_EDITED = '0a3a28c0-5fdc-4385-8fca-7c24d9aabb42';
+  const D_NEW = '0a3a28c0-5fdc-4385-8fca-7c24d9aabb43';
+  const debt = (id: string, local: object) => ({
+    ...sync, id, direction: 'borrowed', counterparty: 'Банк', principalMinor: 1_000_000, interestMinor: null, interestRateBp: null, termMonths: null,
+    currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null, syncError: null, ...local,
+  });
+
+  it('у старых долгов mergedIntoId = null (а не undefined); долги забираются с сервера заново; правки и память о них на месте', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(7).stores(stores7);
+    await old.open();
+    const memory = { dirtyGroups: ['note'], dirtyBase: { note: { b: { note: '' }, at: '2026-10-02T00:00:00.000Z' } } };
+    await old.table('debts').bulkAdd([
+      debt(D_SEEN, { dirty: 0, serverSeq: 4 }),
+      debt(D_EDITED, { dirty: 1, serverSeq: 5, note: 'договор', ...memory }), // заметка правлена, ещё не отправлена
+      debt(D_NEW, { dirty: 1, serverSeq: null }), // создан здесь, сервер его ещё не видел
+    ]);
+    await old.table('meta').bulkPut([
+      { key: 'cursor:debts', value: 5 },
+      { key: 'cursor:wallets', value: 9 },
+      { key: 'initialPullDone', value: true },
+    ]);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      expect(await store.db.meta.get('cursor:debts')).toBeUndefined();
+      expect(await store.sync.getCursor('debts')).toBe(0);
+      expect(await store.sync.needsResync('debts')).toBe(true); // метка держит повтор, даже если вкладка со старым кодом запишет курсор
+      expect(await store.sync.getCursor('wallets')).toBe(9); // остальные таблицы не забираются заново
+      expect(await store.sync.needsResync('wallets')).toBe(false);
+
+      const seen = await store.db.debts.get(D_SEEN);
+      expect(seen).toMatchObject({ dirty: 0, serverSeq: 0, mergedIntoId: null });
+      expect('mergedIntoId' in seen!).toBe(true);
+      expect(await store.db.debts.get(D_EDITED)).toMatchObject({ dirty: 1, serverSeq: 0, note: 'договор', mergedIntoId: null, ...memory });
+      expect(await store.db.debts.get(D_NEW)).toMatchObject({ dirty: 1, serverSeq: null, mergedIntoId: null });
+      expect(await store.sync.hasMergeableEdits()).toBe(true); // правка существующего долга перед отправкой сверится с сервером
+    } finally {
+      store.close();
+    }
+  });
+});
+
 /**
  * Страж. Версия приложения, ещё не знающая новой колонки, получает строки без неё (select('*') + отбор по TABLE_SPECS) и
  * запоминает их серверную версию и курсор. После обновления строка выглядит «без значения», с сервера она больше не придёт,
@@ -462,7 +520,7 @@ describe('обновление базы с версии 6 до 7: процент
  * в src/db/database.ts). Поэтому колонка в TABLE_SPECS добавляется ВМЕСТЕ с версией базы, которая заново забирает её таблицу.
  */
 describe('новая колонка договора требует версии базы, которая заново забирает таблицу', () => {
-  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции) и версия 7 (долги). */
+  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции), версии 7 и 8 (долги). */
   const SNAPSHOT: Record<SyncTableName, string[]> = {
     settings: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather'],
     wallets: [
@@ -476,7 +534,7 @@ describe('новая колонка договора требует версии
     ],
     debts: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'direction', 'counterparty', 'principalMinor', 'interestMinor',
-      'interestRateBp', 'termMonths', 'currency', 'openedOn', 'dueOn', 'note', 'closedAt', 'archivedAt',
+      'interestRateBp', 'termMonths', 'mergedIntoId', 'currency', 'openedOn', 'dueOn', 'note', 'closedAt', 'archivedAt',
     ],
     budgets: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'categoryId', 'amountMinor', 'currency', 'period', 'archivedAt'],
     recurring_rules: [

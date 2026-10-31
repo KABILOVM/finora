@@ -61,6 +61,8 @@ export interface DebtData {
   interestRateBp: number | null;
   /** Срок в месяцах; только вместе с процентами. */
   termMonths: number | null;
+  /** Долг, в состав которого входит этот (объединение); null — сам по себе или главный. */
+  mergedIntoId: UUID | null;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn: IsoDate | null;
@@ -89,6 +91,8 @@ export function parseDebtData(raw: Record<string, unknown>): DebtData {
     interestMinor,
     interestRateBp,
     termMonths,
+    // Копии и устройства до объединения с составляющими этого поля не знают: нет поля — долг сам по себе.
+    mergedIntoId: optId(raw['mergedIntoId'], 'Долг, в состав которого входит этот'),
     currency: reqCurrency(raw['currency'], 'Валюта долга'),
     openedOn: reqDate(raw['openedOn'], 'Дата долга'),
     dueOn: dueRaw === null || dueRaw === undefined ? null : reqDate(dueRaw, 'Срок возврата'),

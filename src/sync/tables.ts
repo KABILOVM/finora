@@ -125,6 +125,7 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'interestMinor', column: 'interest_minor', type: 'int', nullable: true },
       { field: 'interestRateBp', column: 'interest_rate_bp', type: 'int', nullable: true },
       { field: 'termMonths', column: 'term_months', type: 'int', nullable: true },
+      { field: 'mergedIntoId', column: 'merged_into_id', type: 'uuid', nullable: true },
       { field: 'currency', column: 'currency', type: 'text' },
       { field: 'openedOn', column: 'opened_on', type: 'date' },
       { field: 'dueOn', column: 'due_on', type: 'date', nullable: true },

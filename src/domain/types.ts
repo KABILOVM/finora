@@ -150,6 +150,12 @@ export interface Debt extends SyncFields {
   interestMinor: Minor | null;
   interestRateBp: number | null;
   termMonths: number | null;
+  /**
+   * Объединение: id долга, в состав которого входит этот. У каждой составляющей остаются свои сумма, проценты, ставка, срок, даты,
+   * платежи и планы; общая сумма — их сумма (domain/debtGroups.ts). null — долг сам по себе или он главный в объединении.
+   * Вложенности нет: главный долг сам ни в чей состав не входит.
+   */
+  mergedIntoId: UUID | null;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn: IsoDate | null;

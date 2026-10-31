@@ -2,11 +2,16 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { useStore } from '@/db';
 import type { CurrencyCode, Debt, LocalRow, Transaction, UUID, Wallet } from '@/domain/types';
-import { buildDebtItems, type DebtItem } from './debtSummary';
+import { buildDebtItems, foldGroups, type DebtItem } from './debtSummary';
 
 export interface DebtsData {
-  /** Все живые долги (и закрытые, и в архиве) с остатками, в порядке показа. */
+  /**
+   * Живые долги (и закрытые, и в архиве) с остатками, в порядке показа. Объединённый долг — ОДНИМ элементом (итог по составляющим,
+   * свои долги частей — в parts); составляющих отдельными строками здесь нет. Списки и итоги читают это.
+   */
   items: DebtItem[];
+  /** Все живые долги по одному, как они есть (составляющие тоже), каждый со своим остатком: для страниц отдельных долгов. */
+  every: DebtItem[];
   /** Основная валюта пользователя; null — настройки ещё не созданы. */
   base: CurrencyCode | null;
 }
@@ -39,6 +44,7 @@ export function useDebtsData(): DebtsData | undefined {
   return useMemo(() => {
     if (!raw) return undefined;
     const wallets = new Map<UUID, LocalRow<Wallet>>(raw.wallets.map((w) => [w.id, w]));
-    return { items: buildDebtItems(raw.debts, raw.txs, wallets), base: raw.base };
+    const every = buildDebtItems(raw.debts, raw.txs, wallets);
+    return { items: foldGroups(every), every, base: raw.base };
   }, [raw]);
 }

@@ -100,7 +100,7 @@ export default function DebtsPage() {
     if (busy) return;
     setBusy(true);
     try {
-      await store.debts.restore(it.debt.id);
+      await store.debts.restore(it.debt.id, { withParts: true });
       toast.success(`Долг «${it.debt.counterparty}» возвращён из архива`);
     } catch (e) {
       console.error('Не удалось вернуть долг из архива:', e);
@@ -119,7 +119,7 @@ export default function DebtsPage() {
       // один сбой не должен оставлять остальные незакрытыми: идём до конца и говорим, сколько получилось
       for (const id of ids) {
         try {
-          await store.debts.close(id);
+          await store.debts.close(id, { withParts: true });
           done.push(id);
         } catch (e) {
           console.error('Не удалось закрыть погашенный долг:', e);
@@ -137,7 +137,7 @@ export default function DebtsPage() {
           let failed = 0;
           for (const id of done) {
             try {
-              await store.debts.reopen(id);
+              await store.debts.reopen(id, { withParts: true });
             } catch (e) {
               failed++;
               console.error('Не удалось открыть долг снова:', e);

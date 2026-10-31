@@ -1,10 +1,11 @@
 // @vitest-environment node
 /**
- * «Добавить ещё в долг» и объединение долгов доезжают до второго устройства (долг, операции, регулярные платежи), отмена тоже.
+ * «Добавить ещё в долг» и объединение долгов (связь части с главным долгом) доезжают до второго устройства, отмена и выход тоже.
  * Известные ограничения (см. комментарии у тестов «одновременно») проверены явно: устройства сходятся к одному состоянию и ничего не ломается.
  */
 import { describe, expect, it } from 'vitest';
 import { computeBalances } from '@/domain/balances';
+import { mergeLinks } from '@/domain/debtGroups';
 import { computeDebtState } from '@/domain/debts';
 import { exportBackup, type Store } from '@/db';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
@@ -44,34 +45,47 @@ async function withTwoDebts() {
 }
 
 describe('объединение долгов: второе устройство', () => {
-  it('долг собран, источник удалён, операции и регулярный платёж переехали; на сервере deleted_at; остатки кошелька те же', async () => {
+  it('часть входит в состав главного долга; у каждой свои сумма, даты и срок, операции и план остаются при ней; на сервере merged_into_id; остатки кошелька те же', async () => {
     const { server, a, b, clock, w, d1, d2, issue2, rule } = await withTwoDebts();
     const before = computeBalances(await b.store.db.wallets.toArray(), await b.store.db.transactions.toArray()).get(w);
     clock.a = BASE + 1_000;
     await a.store.debts.merge(d1.id, [d2.id]);
     await converge(a, b);
-    expect(server.dump(USER, 'debts').find((r) => r['id'] === d2.id)?.['deleted_at']).toEqual(expect.any(String));
-    expect(await b.store.db.debts.get(d1.id)).toMatchObject({ principalMinor: 70_000, openedOn: '2026-10-01', dueOn: '2026-11-10', dirty: 0 });
-    expect((await b.store.db.debts.get(d2.id))!.deletedAt).not.toBeNull();
-    expect(await b.store.db.transactions.get(issue2.id)).toMatchObject({ debtId: d1.id, dirty: 0 });
-    expect(await b.store.db.recurring_rules.get(rule.id)).toMatchObject({ debtId: d1.id, dirty: 0 });
+    expect(server.dump(USER, 'debts').find((r) => r['id'] === d2.id)?.['merged_into_id']).toBe(d1.id);
+    expect(server.dump(USER, 'debts').find((r) => r['id'] === d1.id)?.['merged_into_id']).toBeNull();
+    expect(await b.store.db.debts.get(d2.id)).toMatchObject({ mergedIntoId: d1.id, principalMinor: 30_000, openedOn: '2026-10-01', dueOn: '2026-11-10', deletedAt: null, dirty: 0 });
+    expect(await b.store.db.debts.get(d1.id)).toMatchObject({ mergedIntoId: null, principalMinor: 40_000, openedOn: '2026-10-05', dueOn: '2026-11-20', deletedAt: null });
+    // ничего не переехало: операция и план остались у своего долга
+    expect(await b.store.db.transactions.get(issue2.id)).toMatchObject({ debtId: d2.id, dirty: 0 });
+    expect(await b.store.db.recurring_rules.get(rule.id)).toMatchObject({ debtId: d2.id, dirty: 0 });
     expect(computeBalances(await b.store.db.wallets.toArray(), await b.store.db.transactions.toArray()).get(w)).toEqual(before);
-    expect(await debtState(b.store, d1.id)).toMatchObject({ principalMinor: 70_000, issuedMinor: 70_000, paidMinor: 10_000, remainingMinor: 60_000 });
+    expect(await debtState(b.store, d1.id)).toMatchObject({ principalMinor: 40_000, issuedMinor: 40_000, paidMinor: 10_000, remainingMinor: 30_000 });
+    expect(await debtState(b.store, d2.id)).toMatchObject({ principalMinor: 30_000, issuedMinor: 30_000, paidMinor: 0, remainingMinor: 30_000 });
     expect(await state(a.store)).toEqual(await state(b.store));
   });
 
-  it('отмена объединения тоже доезжает', async () => {
+  it('отмена объединения и выход из объединения тоже доезжают', async () => {
     const { a, b, clock, d1, d2, issue2, rule } = await withTwoDebts();
     clock.a = BASE + 1_000;
     const res = await a.store.debts.merge(d1.id, [d2.id]);
     await converge(a, b);
+    expect((await b.store.db.debts.get(d2.id))!.mergedIntoId).toBe(d1.id);
     clock.a = BASE + 2_000;
     await a.store.debts.undoMerge(res);
     await converge(a, b);
-    expect(await b.store.db.debts.get(d1.id)).toMatchObject({ principalMinor: 40_000, dueOn: '2026-11-20' });
-    expect((await b.store.db.debts.get(d2.id))!.deletedAt).toBeNull();
+    expect(await b.store.db.debts.get(d1.id)).toMatchObject({ principalMinor: 40_000, dueOn: '2026-11-20', mergedIntoId: null });
+    expect(await b.store.db.debts.get(d2.id)).toMatchObject({ deletedAt: null, mergedIntoId: null });
     expect((await b.store.db.transactions.get(issue2.id))!.debtId).toBe(d2.id);
     expect((await b.store.db.recurring_rules.get(rule.id))!.debtId).toBe(d2.id);
+    expect(await state(a.store)).toEqual(await state(b.store));
+    // объединили снова и вывели часть на втором устройстве
+    clock.a = BASE + 3_000;
+    await a.store.debts.merge(d1.id, [d2.id]);
+    await converge(a, b);
+    clock.b = BASE + 4_000;
+    await b.store.debts.unmerge(d2.id);
+    await converge(a, b);
+    expect((await a.store.db.debts.get(d2.id))!.mergedIntoId).toBeNull();
     expect(await state(a.store)).toEqual(await state(b.store));
   });
 
@@ -82,11 +96,11 @@ describe('объединение долгов: второе устройство
     await a.store.debts.merge(d1.id, [d2.id]);
     server.setOnline(true);
     await converge(a, b);
-    expect((await b.store.db.debts.get(d2.id))!.deletedAt).not.toBeNull();
-    expect((await b.store.db.debts.get(d1.id))!.principalMinor).toBe(70_000);
+    expect((await b.store.db.debts.get(d2.id))!.mergedIntoId).toBe(d1.id);
+    expect((await b.store.db.debts.get(d1.id))!.principalMinor).toBe(40_000); // главный долг не менялся
   });
 
-  it('известное ограничение: платёж, добавленный на втором устройстве к источнику, пока первое объединяло, остаётся на удалённом долге — но устройства сходятся', async () => {
+  it('платёж, добавленный на втором устройстве к части, пока первое объединяло, остаётся у своей части и входит в итог (прежнего ограничения нет)', async () => {
     const { server, a, b, clock, w, d1, d2 } = await withTwoDebts();
     server.setOnline(false);
     clock.a = BASE + 1_000;
@@ -96,10 +110,42 @@ describe('объединение долгов: второе устройство
     server.setOnline(true);
     await converge(a, b);
     expect(await state(a.store)).toEqual(await state(b.store));
-    // деньги в кошельке учтены, а у долга-источника (удалён) платёж виден только в операциях
     expect((await a.store.db.transactions.get(late.id))!.debtId).toBe(d2.id);
-    expect((await a.store.db.debts.get(d2.id))!.deletedAt).not.toBeNull();
+    expect((await a.store.db.debts.get(d2.id))).toMatchObject({ deletedAt: null, mergedIntoId: d1.id });
+    expect((await debtState(a.store, d2.id)).paidMinor).toBe(7_000); // платёж виден у своей части
     expect((await debtState(a.store, d1.id)).paidMinor).toBe(10_000);
+  });
+
+  it('два устройства одновременно объединили долги друг с другом (цикл): устройства сходятся, связь не действует, оба долга остаются видны', async () => {
+    const { server, a, b, clock, d1, d2 } = await withTwoDebts();
+    server.setOnline(false);
+    clock.a = BASE + 1_000;
+    await a.store.debts.merge(d1.id, [d2.id]); // d2 в составе d1
+    clock.b = BASE + 2_000;
+    await b.store.debts.merge(d2.id, [d1.id]); // d1 в составе d2
+    server.setOnline(true);
+    await converge(a, b);
+    expect(await state(a.store)).toEqual(await state(b.store));
+    const debts = (await a.store.db.debts.toArray()).filter((d) => d.deletedAt === null);
+    expect(debts.map((d) => d.id).sort()).toEqual([d1.id, d2.id].sort());
+    expect(mergeLinks(debts).rootOf.size).toBe(0); // ни одна из двух связей не действует: оба долга сами по себе
+  });
+
+  it('главный долг удалён на втором устройстве, пока первое присоединяло к нему часть: часть остаётся живым долгом, связь не действует', async () => {
+    const { server, a, b, clock, d1, d2 } = await withTwoDebts();
+    server.setOnline(false);
+    clock.a = BASE + 1_000;
+    await a.store.debts.merge(d1.id, [d2.id]);
+    clock.b = BASE + 2_000;
+    await b.store.debts.softDelete(d1.id, 'keep-operations');
+    server.setOnline(true);
+    await converge(a, b);
+    expect(await state(a.store)).toEqual(await state(b.store));
+    const all = await a.store.db.debts.toArray();
+    expect(all.find((d) => d.id === d1.id)!.deletedAt).not.toBeNull();
+    expect(all.find((d) => d.id === d2.id)!.deletedAt).toBeNull();
+    expect(mergeLinks(all).rootOf.size).toBe(0);
+    expect((await debtState(a.store, d2.id)).remainingMinor).toBe(30_000); // долг цел со своими операциями
   });
 });
 

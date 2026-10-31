@@ -6,6 +6,7 @@ import { DEBT_OVERFLOW_MESSAGE } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { IsoDate } from '@/domain/types';
 import { cn } from '@/lib/cn';
+import { pluralRu } from '@/lib/plural';
 import type { DebtItem } from './debtSummary';
 import { dueInfo, dueLine, progressPercent, repaidWord } from './debtText';
 
@@ -78,6 +79,11 @@ export function DebtRow({ item, today }: DebtRowProps) {
             {due.tone === 'overdue' && <Icon name="alert" size={16} className="mr-1 inline align-[-3px]" />}
             {dueLine(debt.dueOn, due)}
           </span>
+          {item.parts && (
+            <Badge tone="neutral" className="ml-2">
+              {item.parts.length} {pluralRu(item.parts.length, 'долг', 'долга', 'долгов')}
+            </Badge>
+          )}
           {closed && <Badge tone="neutral" className="ml-2">Закрыт</Badge>}
           {!closed && state.settled && <Badge tone="income" className="ml-2">Погашен</Badge>}
         </span>
