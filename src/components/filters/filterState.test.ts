@@ -1,36 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { countFilters, emptyFilters, filterLabels, isEmptyFilter, pruneFilters, valueOf, type FilterField } from './filterState';
 
-const FIELDS: FilterField[] = [
-  { key: 'category', label: 'Категория', type: 'select', anyLabel: 'Все категории', options: [{ value: 'food', label: 'Еда' }, { value: 'fun', label: 'Развлечения' }] },
-  { key: 'level', label: 'Статус', type: 'chips', anyLabel: 'Любой', options: [{ value: 'ok', label: 'В норме' }, { value: 'over', label: 'Исчерпано' }] },
+const fields: FilterField[] = [
+  { key: 'kind', label: 'Вид', type: 'chips', anyLabel: 'Все виды', options: [{ value: 'a', label: 'Альфа' }, { value: 'b', label: 'Бета' }] },
+  { key: 'cat', label: 'Категория', type: 'select', anyLabel: 'Все категории', options: [{ value: 'x', label: 'Икс' }] },
 ];
 
-describe('filterState', () => {
-  it('пустой набор: все поля «любые», включённых нет', () => {
-    const empty = emptyFilters(FIELDS);
-    expect(empty).toEqual({ category: '', level: '' });
-    expect(countFilters(FIELDS, empty)).toBe(0);
-    expect(isEmptyFilter(FIELDS, empty)).toBe(true);
-    expect(filterLabels(FIELDS, empty)).toEqual([]);
+describe('логика универсальных фильтров', () => {
+  it('emptyFilters: все поля — «любой»', () => {
+    expect(emptyFilters(fields)).toEqual({ kind: '', cat: '' });
+    expect(emptyFilters([])).toEqual({});
   });
 
-  it('считает и называет включённые поля в порядке полей', () => {
-    const v = { level: 'over', category: 'food' };
-    expect(countFilters(FIELDS, v)).toBe(2);
-    expect(filterLabels(FIELDS, v)).toEqual(['Еда', 'Исчерпано']);
+  it('valueOf: нет значения — пустая строка', () => {
+    expect(valueOf({ kind: 'a' }, 'kind')).toBe('a');
+    expect(valueOf({}, 'kind')).toBe('');
   });
 
-  it('лишние ключи и пропущенные значения не мешают', () => {
-    expect(countFilters(FIELDS, { other: 'x' })).toBe(0);
-    expect(valueOf({}, 'category')).toBe('');
+  it('countFilters считает только поля из набора; лишние ключи не в счёт', () => {
+    expect(countFilters(fields, { kind: 'a', cat: '' })).toBe(1);
+    expect(countFilters(fields, { kind: 'a', cat: 'x', other: 'y' })).toBe(2);
+    expect(countFilters(fields, { other: 'y' })).toBe(0);
+    expect(isEmptyFilter(fields, {})).toBe(true);
+    expect(isEmptyFilter(fields, { cat: 'x' })).toBe(false);
   });
 
-  it('исчезнувший вариант считается «любым»', () => {
-    expect(pruneFilters(FIELDS, { category: 'gone', level: 'ok' })).toEqual({ category: '', level: 'ok' });
+  it('pruneFilters: выбор, которого больше нет среди вариантов, становится «любым»; лишние ключи отбрасываются', () => {
+    expect(pruneFilters(fields, { kind: 'b', cat: 'удалена', other: 'y' })).toEqual({ kind: 'b', cat: '' });
+    expect(pruneFilters(fields, {})).toEqual({ kind: '', cat: '' });
   });
 
-  it('у выбранного значения без варианта подпись — название поля, а не пустота', () => {
-    expect(filterLabels(FIELDS, { category: 'gone' })).toEqual(['Категория']);
+  it('filterLabels: названия включённых в порядке полей; название поля, если варианта уже нет', () => {
+    expect(filterLabels(fields, { kind: 'b', cat: 'x' })).toEqual(['Бета', 'Икс']);
+    expect(filterLabels(fields, { cat: 'x' })).toEqual(['Икс']);
+    expect(filterLabels(fields, { kind: 'нет' })).toEqual(['Вид']);
+    expect(filterLabels(fields, {})).toEqual([]);
   });
 });
