@@ -20,6 +20,7 @@ import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { ToastProvider } from '@/components/Toast';
 import BudgetAlerts from '@/features/budgets/BudgetAlerts';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
+import { CatalogOffer } from '@/features/categories/catalog/CatalogOffer';
 import { WhatsNew } from '@/features/whatsnew/WhatsNew';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
 import { InstallPrompt } from '@/install/InstallPrompt';
@@ -187,6 +188,8 @@ export default function App() {
             <OnboardingGate />
             {/* После обновления: один раз коротко, что изменилось */}
             <WhatsNew />
+            {/* Действующему человеку: один раз предложить готовые категории с подкатегориями */}
+            <CatalogOffer />
           </AppRoot>
         </HashRouter>
       </ToastProvider>

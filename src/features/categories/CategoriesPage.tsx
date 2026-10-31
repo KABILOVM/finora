@@ -1,5 +1,5 @@
 import { Glyph } from '@/components/Glyph';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -14,6 +14,9 @@ import type { Category, CategoryKind, LocalRow } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 import { childrenOf, groupUnderParents, hasChildren, parentIn } from './categoryTree';
 import { CategorySheet } from './CategorySheet';
+
+// Готовых наборов много (около 150 записей): грузятся только когда окно открывают
+const CatalogSheet = lazy(() => import('./catalog/CatalogSheet'));
 
 type SheetState = { kind: 'new'; parentId?: string } | { kind: 'edit'; category: LocalRow<Category> };
 
@@ -39,6 +42,7 @@ export default function CategoriesPage() {
   const [archiving, setArchiving] = useState<LocalRow<Category> | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [catalog, setCatalog] = useState(false);
 
   const active = useMemo(() => (all ?? []).filter((c) => c.archivedAt === null), [all]);
   const archived = useMemo(() => (all ?? []).filter((c) => c.archivedAt !== null), [all]);
@@ -101,8 +105,11 @@ export default function CategoriesPage() {
           setKind(v);
           setShowArchived(false);
         }}
-        className="mb-4"
+        className="mb-3"
       />
+      <Button variant="secondary" icon="stars" fullWidth disabled={all === undefined} onClick={() => setCatalog(true)} className="mb-4">
+        Готовые категории с подкатегориями
+      </Button>
 
       {all === undefined ? (
         <p role="status" className="py-10 text-center text-muted">
@@ -199,6 +206,12 @@ export default function CategoriesPage() {
               : undefined
           }
         />
+      )}
+
+      {catalog && (
+        <Suspense fallback={null}>
+          <CatalogSheet mode="manage" onClose={() => setCatalog(false)} />
+        </Suspense>
       )}
 
       <ConfirmDialog

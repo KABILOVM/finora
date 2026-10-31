@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Glyph } from '@/components/Glyph';
 import { Segmented } from '@/components/Segmented';
@@ -10,12 +10,15 @@ import { cn } from '@/lib/cn';
 import { setCategoryEnabled } from './onboardingActions';
 import { WizardFrame } from './WizardFrame';
 
+const CatalogSheet = lazy(() => import('@/features/categories/catalog/CatalogSheet'));
+
 /** Шаг 3: категории. Стандартные видны с галочками; снятая галочка прячет категорию (архив), поставленная возвращает. */
 export function CategoriesStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const store = useStore();
   const toast = useToast();
   const [kind, setKind] = useState<CategoryKind>('expense');
   const [adding, setAdding] = useState(false);
+  const [catalog, setCatalog] = useState(false);
   const busy = useRef(false);
 
   const all = useCategories(kind, { includeArchived: true });
@@ -72,9 +75,17 @@ export function CategoriesStep({ onBack, onNext }: { onBack: () => void; onNext:
           );
         })}
       </ul>
+      <Button variant="secondary" icon="stars" onClick={() => setCatalog(true)}>
+        Готовые наборы с подкатегориями
+      </Button>
       <Button variant="secondary" icon="plus" onClick={() => setAdding(true)}>
         Добавить свою
       </Button>
+      {catalog && (
+        <Suspense fallback={null}>
+          <CatalogSheet mode="onboarding" onClose={() => setCatalog(false)} />
+        </Suspense>
+      )}
       {adding && (
         <CategorySheet
           category={null}
