@@ -36,6 +36,14 @@ describe('каталог готовых категорий: данные', () =>
     }
   });
 
+  it('значение поля icon («i:имя») и цвет помещаются в границы базы (до 32 знаков), как их проверяет сервер', () => {
+    for (const g of CATALOG) {
+      expect(`i:${g.icon}`.length, g.name).toBeLessThanOrEqual(32);
+      expect(g.color.length, g.name).toBeLessThanOrEqual(32);
+      for (const c of g.children) expect(`i:${c.icon}`.length, `${g.name} › ${c.name}`).toBeLessThanOrEqual(32);
+    }
+  });
+
   it('у каждой группы есть подсказка и от двух подкатегорий; обязательными бывают только расходные', () => {
     for (const g of CATALOG) {
       expect(g.hint.length, g.name).toBeGreaterThan(5);
