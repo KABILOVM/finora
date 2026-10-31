@@ -239,6 +239,18 @@ describe('долги: срок и остаток', () => {
     expect(debtRemainingMinor(debt(), [tx({ kind: 'expense' })], wallets)).toBe(100_000n); // выдача долга
   });
 
+  it('проценты по долгу входят в остаток (как в приложении): сумма + проценты − платежи', () => {
+    const credit = debt({ direction: 'borrowed', principalMinor: 100_000, interestMinor: 13_000 });
+    expect(debtRemainingMinor(credit, [], wallets)).toBe(113_000n);
+    expect(debtRemainingMinor(credit, [tx({ kind: 'expense', amountMinor: 100_000 })], wallets)).toBe(13_000n); // вернули только сумму — проценты остались
+    expect(debtRemainingMinor(credit, [tx({ kind: 'expense', amountMinor: 113_000 })], wallets)).toBe(0n);
+    expect(debtRemainingMinor(credit, [tx({ kind: 'expense', amountMinor: 120_000 })], wallets)).toBe(0n);
+    // нет процентов, ноль или мусор вместо числа — считаем как «процентов нет»
+    for (const interestMinor of [undefined, 0, -5, 1.5, Number.NaN]) {
+      expect(debtRemainingMinor(debt({ interestMinor }), [], wallets), String(interestMinor)).toBe(100_000n);
+    }
+  });
+
   it('переплата и ровное погашение: остаток 0, не отрицательный', () => {
     expect(debtRemainingMinor(debt(), [tx({ amountMinor: 100_000 })], wallets)).toBe(0n);
     expect(debtRemainingMinor(debt(), [tx({ amountMinor: 150_000 })], wallets)).toBe(0n);

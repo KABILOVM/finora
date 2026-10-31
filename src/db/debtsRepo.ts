@@ -12,6 +12,12 @@ export interface DebtInput {
   direction: DebtDirection;
   counterparty: string;
   principalMinor: Minor;
+  /** Проценты за весь срок (кредит в банке); не указано или null — без процентов. Платят сверх principalMinor. */
+  interestMinor?: Minor | null;
+  /** Ставка, сотые доли процента годовых (2400 = 24 %). Только вместе с interestMinor. */
+  interestRateBp?: number | null;
+  /** Срок в месяцах. Только вместе с interestMinor. */
+  termMonths?: number | null;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn?: IsoDate | null;
@@ -97,11 +103,25 @@ export interface DebtsRepo {
   undoDelete(deletion: DebtDeletion): Promise<LocalRow<Debt>>;
 }
 
-const INPUT_KEYS = ['direction', 'counterparty', 'principalMinor', 'currency', 'openedOn', 'dueOn', 'note'] as const;
+const INPUT_KEYS = [
+  'direction',
+  'counterparty',
+  'principalMinor',
+  'interestMinor',
+  'interestRateBp',
+  'termMonths',
+  'currency',
+  'openedOn',
+  'dueOn',
+  'note',
+] as const;
 const DATA_KEYS: readonly (keyof DebtData)[] = [
   'direction',
   'counterparty',
   'principalMinor',
+  'interestMinor',
+  'interestRateBp',
+  'termMonths',
   'currency',
   'openedOn',
   'dueOn',
@@ -114,6 +134,9 @@ const dataOf = (d: Debt): DebtData => ({
   direction: d.direction,
   counterparty: d.counterparty,
   principalMinor: d.principalMinor,
+  interestMinor: d.interestMinor,
+  interestRateBp: d.interestRateBp,
+  termMonths: d.termMonths,
   currency: d.currency,
   openedOn: d.openedOn,
   dueOn: d.dueOn,
@@ -124,6 +147,21 @@ const dataOf = (d: Debt): DebtData => ({
 
 function checkDates(d: DebtData): void {
   if (d.dueOn !== null && d.dueOn < d.openedOn) throw new ValidationError('Срок возврата не может быть раньше даты долга');
+}
+
+/**
+ * Проценты объединённого долга: суммы процентов складываются. Ставка и срок остаются, только если процентами обложены все
+ * объединяемые долги и у них они одинаковые; иначе «ставки долга» нет — остаётся сумма процентов.
+ */
+function mergedInterest(all: readonly Debt[]): Pick<DebtData, 'interestMinor' | 'interestRateBp' | 'termMonths'> {
+  let sum: Minor = 0;
+  for (const d of all) sum = addMinor(sum, d.interestMinor ?? 0);
+  if (sum === 0) return { interestMinor: null, interestRateBp: null, termMonths: null };
+  const first = all[0] as Debt;
+  const same = all.every(
+    (d) => (d.interestMinor ?? 0) > 0 && d.interestRateBp === first.interestRateBp && d.termMonths === first.termMonths,
+  );
+  return { interestMinor: sum, interestRateBp: same ? first.interestRateBp : null, termMonths: same ? first.termMonths : null };
 }
 
 const NOTE_SEPARATOR = '\n';
@@ -230,7 +268,15 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
 
     async update(id, patch) {
       const clean = cleanPatch(patch, INPUT_KEYS, 'Долг');
-      return save(id, (cur) => parseDebtData({ ...dataOf(cur), ...clean }));
+      return save(id, (cur) => {
+        const next: Record<string, unknown> = { ...dataOf(cur), ...clean };
+        // Проценты сняли, а ставку и срок не тронули: они без процентов не бывают — уходят вместе с ними
+        if (clean.interestMinor === null) {
+          if (clean.interestRateBp === undefined) next['interestRateBp'] = null;
+          if (clean.termMonths === undefined) next['termMonths'] = null;
+        }
+        return parseDebtData(next);
+      });
     },
 
     async increase(id, deltaMinor, opts) {
@@ -267,11 +313,13 @@ export function createDebtsRepo(ctx: RepoContext): DebtsRepo {
 
         let principal = target.principalMinor;
         for (const s of sources) principal = addMinor(principal, s.principalMinor);
+        const interest = mergedInterest(all);
         const dues = all.map((d) => d.dueOn).filter((d): d is IsoDate => d !== null);
         const before = dataOf(target);
         const after = parseDebtData({
           ...before,
           principalMinor: principal,
+          ...interest,
           openedOn: all.reduce((min, d) => (d.openedOn < min ? d.openedOn : min), target.openedOn),
           dueOn: dues.length > 0 ? dues.reduce((min, d) => (d < min ? d : min)) : null,
           // другое имя пропадёт из списка — в заметке остаётся, с кем объединён (сразу после своей заметки: при обрезке не теряется)

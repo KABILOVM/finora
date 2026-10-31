@@ -8,6 +8,7 @@ import { ToggleRow } from '@/components/ToggleRow';
 import { useToast } from '@/components/Toast';
 import { newId, useSettings, useStore, useWallets, ValidationError } from '@/db';
 import type { DebtState } from '@/domain/debts';
+import { suggestedMonthlyMinor } from '@/domain/interest';
 import { formatMinor } from '@/domain/money';
 import type { Debt, IsoDate, LocalRow, Minor } from '@/domain/types';
 import { longDate } from '@/features/budgets/budgetText';
@@ -43,6 +44,9 @@ export function PayInPartsSheet({ debt, state, onClose }: PayInPartsSheetProps) 
   const settings = useSettings();
   const pop = usePopularity();
   const remaining = state.remainingMinor;
+  // Кредит с известным сроком: платёж по договору — сумма с процентами поровну на срок. Предлагаем его, пока он не больше остатка.
+  const contract = state.interestMinor > 0 ? suggestedMonthlyMinor(state.totalMinor, debt.termMonths) : null;
+  const contractShown = contract !== null && contract <= remaining ? contract : null;
 
   const [amount, setAmount] = useState<Minor | null>(null);
   const [walletPick, setWalletPick] = useState<string | null>(null);
@@ -165,6 +169,18 @@ export function PayInPartsSheet({ debt, state, onClose }: PayInPartsSheetProps) 
                 }}
               />
               <div role="group" aria-label="Быстрый выбор срока" className="flex flex-wrap justify-center gap-2">
+                {contractShown !== null && (
+                  <Button
+                    variant="secondary"
+                    data-testid="parts-contract"
+                    onClick={() => {
+                      setAmount(contractShown);
+                      clear();
+                    }}
+                  >
+                    По договору — {formatMinor(contractShown, debt.currency)}
+                  </Button>
+                )}
                 {QUICK_MONTHS.map((m) => (
                   <Button
                     key={m}

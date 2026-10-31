@@ -1012,3 +1012,44 @@ begin
   end if;
 end
 $$;
+
+
+-- 14. Проценты по долгам -------------------------------------------------------------------
+-- У долга (например, кредита в банке) могут быть проценты. interest_minor — сумма процентов за весь срок в минимальных единицах
+-- валюты долга: её платят сверх principal_minor, остаток долга считается от «сумма + проценты» (клиент, src/domain/debts.ts).
+-- interest_rate_bp — ставка в сотых долях процента годовых (2400 = 24 %), term_months — срок в месяцах; это то, из чего сумма
+-- процентов получена (для показа и подсказки платежа). Ставка и срок бывают только вместе с процентами.
+-- Долг без процентов: все три колонки пустые. Блок идемпотентен, как разделы 8, 11 и 13: колонки «add column if not exists»,
+-- ограничения — только если их ещё нет. Данные не трогаются, триггер sync_guard, права и политики остаются прежними.
+-- Старые приложения колонок не знают: при записи они их не присылают, и сохранённые проценты не затираются.
+-- Выполнять до выкладки приложения; повторный запуск безопасен.
+alter table public.debts add column if not exists interest_minor    bigint;
+alter table public.debts add column if not exists interest_rate_bp  bigint;
+alter table public.debts add column if not exists term_months       bigint;
+
+do $$
+declare
+  r record;
+begin
+  for r in
+    select * from (values
+      ('debts', 'debts_interest',      'interest_minor is null or interest_minor between 1 and 1000000000000000'),
+      ('debts', 'debts_interest_rate', 'interest_rate_bp is null or interest_rate_bp between 1 and 100000'),
+      ('debts', 'debts_term_months',   'term_months is null or term_months between 1 and 600'),
+      ('debts', 'debts_interest_shape', 'interest_minor is not null or (interest_rate_bp is null and term_months is null)')
+    ) as c (tbl, cname, expr)
+  loop
+    if not exists (
+      select 1 from pg_constraint
+       where conname = r.cname and conrelid = format('public.%I', r.tbl)::regclass
+    ) then
+      execute format('alter table public.%I add constraint %I check (%s) not valid', r.tbl, r.cname, r.expr);
+      begin
+        execute format('alter table public.%I validate constraint %I', r.tbl, r.cname);
+      exception when check_violation then
+        raise warning 'В таблице % есть старые строки, нарушающие ограничение %; новые и изменённые строки оно проверяет', r.tbl, r.cname;
+      end;
+    end if;
+  end loop;
+end
+$$;

@@ -8,6 +8,7 @@ import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { ValidationError, useSettings, useStore, useWallets, type DebtPatch } from '@/db';
 import { CURRENCIES, currencyInfo } from '@/domain/currency';
+import { annuityPlan, formatRateBp } from '@/domain/interest';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, DebtDirection, LocalRow, Minor } from '@/domain/types';
 import { endSentence } from '@/features/transactions/txDisplay';
@@ -15,12 +16,13 @@ import { NOTE_MAX } from '@/features/transactions/txForm';
 import { addDays, todayLocal } from '@/lib/dates';
 import { freshPlanIds, saveDebtEdit, saveNewDebt, saveTopUp } from './debtActions';
 import { debtEntryLines, entryEditText } from './debtEditMoney';
-import { emptyDebtForm, isDebtFormDirty, validateDebtForm, type DebtFormErrors, type DebtFormState } from './debtForm';
+import { emptyDebtForm, isDebtFormDirty, patchDebtForm, validateDebtForm, type DebtFormErrors, type DebtFormState } from './debtForm';
 import { findMatchingDebts, normName } from './debtMatch';
 import type { DebtItem } from './debtSummary';
 import { DIRECTION_ACTION, DIRECTION_LABEL, DIRECTION_NAME_LABEL, ruDateShort, TOP_UP_AMOUNT_LABEL } from './debtText';
 import { DayField, DueField } from './DebtDates';
 import { DebtEditMoneySection } from './DebtEditMoneySection';
+import { DebtInterestSection } from './DebtInterestSection';
 import { DebtMoneySection } from './DebtMoneySection';
 import { rankWallets, usePopularity } from '@/features/transactions/popularity';
 import { useWalletFx } from './useWalletFx';
@@ -56,10 +58,17 @@ export function errorKey(message: string): keyof DebtFormErrors {
   if (/^Срок/.test(m)) return 'dueOn';
   if (/^Дата долга/.test(m)) return 'openedOn';
   if (/^Заметка/.test(m)) return 'note';
+  if (/^Проценты/.test(m)) return 'interest';
+  if (/^Ставка/.test(m)) return 'rate';
+  if (/^Длительность/.test(m)) return 'term';
   return 'form';
 }
 
 function formFromDebt(d: LocalRow<Debt>): DebtFormState {
+  const rateText = d.interestRateBp !== null ? formatRateBp(d.interestRateBp) : '';
+  const termText = d.termMonths !== null ? String(d.termMonths) : '';
+  // Сумма процентов, которая не получается из ставки и срока, — введена руками (по договору): пересчёт её не трогает
+  const plan = d.interestRateBp !== null && d.termMonths !== null ? annuityPlan(d.principalMinor, d.interestRateBp, d.termMonths) : null;
   return {
     direction: d.direction,
     counterparty: d.counterparty,
@@ -69,6 +78,11 @@ function formFromDebt(d: LocalRow<Debt>): DebtFormState {
     hasDue: d.dueOn !== null,
     dueOn: d.dueOn ?? addDays(d.openedOn, 30),
     note: d.note,
+    hasInterest: d.interestMinor !== null,
+    rateText,
+    termText,
+    interestMinor: d.interestMinor,
+    interestManual: d.interestMinor !== null && plan?.interestMinor !== d.interestMinor,
   };
 }
 
@@ -101,7 +115,8 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
 
   // Тот же человек, то же направление и валюта: предлагаем добавить к существующему долгу. «Добавить» выбрано — долг не создаётся,
   // сумма идёт как пополнение. Выбор привязан к найденному долгу: сменили имя или валюту — совпадения пересчитались, выбор сам снялся.
-  const matches = orig === null && existing ? findMatchingDebts(existing, form) : [];
+  // Долг с процентами — отдельный договор: к существующему долгу его не присоединяем
+  const matches = orig === null && existing && !form.hasInterest ? findMatchingDebts(existing, form) : [];
   const matchKey = `${form.direction}|${form.currency}|${normName(form.counterparty)}`;
   const joined = matches.find((m) => m.debt.id === joinId) ?? null;
   const asking = matches.length > 0 && joined === null && declinedKey !== matchKey;
@@ -148,10 +163,13 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   if (wallets === undefined || settings === undefined || pop === undefined) return null;
 
   const set = (patch: Partial<DebtFormState>) => {
-    setForm((f) => ({ ...f, ...patch }));
+    setForm((f) => patchDebtForm(f, patch));
     setErrors((e) => {
       const next = { ...e };
       delete next.form;
+      if ('amountMinor' in patch || 'hasInterest' in patch || 'interestMinor' in patch || 'rateText' in patch || 'termText' in patch) delete next.interest;
+      if ('rateText' in patch) delete next.rate;
+      if ('termText' in patch) delete next.term;
       if ('counterparty' in patch) delete next.counterparty;
       if ('amountMinor' in patch) delete next.amount;
       if ('openedOn' in patch) delete next.openedOn;
@@ -216,6 +234,9 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             direction: form.direction,
             counterparty: value.counterparty,
             principalMinor: value.principalMinor,
+            interestMinor: value.interestMinor,
+            interestRateBp: value.interestRateBp,
+            termMonths: value.termMonths,
             currency: form.currency,
             openedOn: value.openedOn,
             dueOn: value.dueOn,
@@ -234,6 +255,9 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
         const patch: DebtPatch = {};
         if (value.counterparty !== orig.counterparty) patch.counterparty = value.counterparty;
         if (value.principalMinor !== orig.principalMinor) patch.principalMinor = value.principalMinor;
+        if (value.interestMinor !== orig.interestMinor) patch.interestMinor = value.interestMinor;
+        if (value.interestRateBp !== orig.interestRateBp) patch.interestRateBp = value.interestRateBp;
+        if (value.termMonths !== orig.termMonths) patch.termMonths = value.termMonths;
         if (value.openedOn !== orig.openedOn) patch.openedOn = value.openedOn;
         if (value.dueOn !== orig.dueOn) patch.dueOn = value.dueOn;
         if (value.note !== orig.note) patch.note = value.note;
@@ -264,7 +288,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
   };
 
   const currencyOptions = CURRENCIES.some((c) => c.code === form.currency) ? CURRENCIES : [...CURRENCIES, currencyInfo(form.currency)];
-  const smaller = editing && form.amountMinor !== null && paidMinor > form.amountMinor;
+  const smaller = editing && form.amountMinor !== null && paidMinor > form.amountMinor + (form.hasInterest ? (form.interestMinor ?? 0) : 0);
 
   return (
     <Sheet
@@ -403,6 +427,24 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             </p>
           )}
         </div>
+
+        {!joined && (
+          <DebtInterestSection
+            direction={form.direction}
+            currency={form.currency}
+            principalMinor={form.amountMinor}
+            on={form.hasInterest}
+            onToggle={(hasInterest) => set({ hasInterest })}
+            rateText={form.rateText}
+            onRate={(rateText) => set({ rateText })}
+            termText={form.termText}
+            onTerm={(termText) => set({ termText })}
+            interestMinor={form.interestMinor}
+            manual={form.interestManual}
+            onInterest={(interestMinor) => set({ interestMinor })}
+            errors={{ rate: errors.rate, term: errors.term, interest: errors.interest }}
+          />
+        )}
 
         <DayField label={joined ? 'Дата пополнения' : 'Дата долга'} value={form.openedOn} onChange={(openedOn) => set({ openedOn })} error={errors.openedOn} />
         <DueField

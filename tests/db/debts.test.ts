@@ -184,3 +184,96 @@ describe('операции с debtId', () => {
     expect(computeBalances(await store.db.wallets.toArray(), await store.db.transactions.toArray()).get(cash.id)).toBe(100_000 - 30_000 - 1_000);
   });
 });
+
+
+describe('проценты по долгу (кредит в банке)', () => {
+  const credit = { direction: 'borrowed', counterparty: 'Банк', principalMinor: 1_000_000, currency: 'TJS', openedOn: '2026-10-01' } as const;
+
+  it('долг без процентов: все три поля null', async () => {
+    const store = await makeStore();
+    expect(await store.debts.create(input)).toMatchObject({ interestMinor: null, interestRateBp: null, termMonths: null });
+  });
+
+  it('создаётся с процентами, ставкой и сроком; всё лежит в базе', async () => {
+    const store = await makeStore();
+    const d = await store.debts.create({ ...credit, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+    expect(d).toMatchObject({ principalMinor: 1_000_000, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12, dirty: 1 });
+    expect(await store.db.debts.get(d.id)).toEqual(d);
+  });
+
+  it('можно указать только сумму процентов (по договору), без ставки и срока', async () => {
+    const store = await makeStore();
+    expect(await store.debts.create({ ...credit, interestMinor: 120_000 })).toMatchObject({ interestMinor: 120_000, interestRateBp: null, termMonths: null });
+  });
+
+  it('границы: проценты 1…1e15, ставка 1…100000, срок 1…600', async () => {
+    const store = await makeStore();
+    await store.debts.create({ ...credit, interestMinor: 1, interestRateBp: 1, termMonths: 1 });
+    await store.debts.create({ ...credit, interestMinor: 1e15, interestRateBp: 100_000, termMonths: 600 });
+    const bad: Array<[object, RegExp]> = [
+      [{ interestMinor: 0 }, /Проценты по долгу/],
+      [{ interestMinor: 1e15 + 1 }, /Проценты по долгу/],
+      [{ interestMinor: 1.5 }, /Проценты по долгу/],
+      [{ interestMinor: 5, interestRateBp: 0 }, /Ставка по долгу/],
+      [{ interestMinor: 5, interestRateBp: 100_001 }, /Ставка по долгу/],
+      [{ interestMinor: 5, interestRateBp: 24.5 }, /Ставка по долгу/],
+      [{ interestMinor: 5, termMonths: 0 }, /Длительность кредита/],
+      [{ interestMinor: 5, termMonths: 601 }, /Длительность кредита/],
+    ];
+    for (const [over, message] of bad) {
+      await expect(store.debts.create({ ...credit, ...over } as never), JSON.stringify(over)).rejects.toThrow(message);
+    }
+    expect(await store.db.debts.count()).toBe(2); // отказы ничего не записали
+  });
+
+  it('ставка и срок без процентов не бывают', async () => {
+    const store = await makeStore();
+    await expect(store.debts.create({ ...credit, interestRateBp: 2400 })).rejects.toThrow(ValidationError);
+    await expect(store.debts.create({ ...credit, termMonths: 12 })).rejects.toThrow(/только вместе с процентами/);
+    await expect(store.debts.create({ ...credit, interestMinor: null, interestRateBp: 2400 })).rejects.toThrow(ValidationError);
+  });
+
+  it('update: проценты добавляются, меняются и снимаются; ставка и срок уходят вместе с процентами', async () => {
+    const store = await makeStore();
+    const d = await store.debts.create(credit);
+    const withInterest = await store.debts.update(d.id, { interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+    expect(withInterest).toMatchObject({ interestMinor: 134_715, interestRateBp: 2400, termMonths: 12, dirty: 1 });
+    expect(withInterest.dirtyGroups).toEqual(['interest']); // правка помечена своей группой слияния: она не конфликтует с правкой заметки или срока на другом устройстве
+
+    const changed = await store.debts.update(d.id, { interestMinor: 150_000 });
+    expect(changed).toMatchObject({ interestMinor: 150_000, interestRateBp: 2400, termMonths: 12 }); // ставку и срок не трогали
+
+    const cleared = await store.debts.update(d.id, { interestMinor: null }); // только проценты: ставка и срок без них недопустимы
+    expect(cleared).toMatchObject({ interestMinor: null, interestRateBp: null, termMonths: null });
+    expect(await store.db.debts.get(d.id)).toMatchObject({ interestMinor: null, interestRateBp: null, termMonths: null });
+  });
+
+  it('update: ставка без процентов отклоняется, долг не меняется', async () => {
+    const store = await makeStore();
+    const d = await store.debts.create(credit);
+    await expect(store.debts.update(d.id, { interestRateBp: 2400 })).rejects.toThrow(/только вместе с процентами/);
+    expect(await store.db.debts.get(d.id)).toEqual(d);
+  });
+
+  it('пустая правка с теми же процентами ничего не пишет', async () => {
+    const store = await makeStore();
+    const d = await store.debts.create({ ...credit, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+    const same = await store.debts.update(d.id, { interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+    expect(same).toEqual(d);
+  });
+
+  it('правка процентов не мешает менять направление/валюту только там, где это и так запрещено: операции по-прежнему закрепляют валюту', async () => {
+    const store = await makeStore();
+    const { cash } = await basics(store);
+    const d = await store.debts.create({ ...credit, interestMinor: 134_715 });
+    await store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 1_000_000, occurredOn: '2026-10-01', debtId: d.id });
+    await expect(store.debts.update(d.id, { currency: 'USD' })).rejects.toThrow(/по нему уже есть операции/);
+    await expect(store.debts.update(d.id, { interestMinor: 140_000 })).resolves.toMatchObject({ interestMinor: 140_000 });
+  });
+
+  it('«ещё в долг» увеличивает сумму долга, проценты остаются прежними', async () => {
+    const store = await makeStore();
+    const d = await store.debts.create({ ...credit, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+    expect(await store.debts.increase(d.id, 500_000)).toMatchObject({ principalMinor: 1_500_000, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
+  });
+});

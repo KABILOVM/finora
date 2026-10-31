@@ -1,4 +1,5 @@
 import { COUNTERPARTY_MAX } from '@/db';
+import { annuityPlan, interestFor, parseRateBp, parseTermMonths, rateError, termError, INTEREST_MINOR_MAX, type AnnuityPlan } from '@/domain/interest';
 import type { DebtDirection, IsoDate, Minor } from '@/domain/types';
 import { addDays } from '@/lib/dates';
 import { checkDate, NOTE_MAX } from '@/features/transactions/txForm';
@@ -16,11 +17,52 @@ export interface DebtFormState {
   hasDue: boolean;
   dueOn: IsoDate;
   note: string;
+  /** Включён блок «Проценты» (кредит в банке). */
+  hasInterest: boolean;
+  /** Ставка, % годовых — как ввёл человек ('24', '18,5'). */
+  rateText: string;
+  /** Срок в месяцах — как ввёл человек. */
+  termText: string;
+  /** Проценты за весь срок: посчитаны по ставке и сроку или введены руками. */
+  interestMinor: Minor | null;
+  /** Сумму процентов ввели руками: пересчёт по ставке и сроку её больше не меняет. */
+  interestManual: boolean;
+}
+
+/** Расчёт процентов по форме: сумма долга, ставка и срок заданы и годятся — проценты за срок (аннуитет); иначе null. */
+export function planOfForm(f: Pick<DebtFormState, 'amountMinor' | 'rateText' | 'termText'>): AnnuityPlan | null {
+  if (f.amountMinor === null || f.amountMinor <= 0) return null;
+  const rate = parseRateBp(f.rateText);
+  const term = parseTermMonths(f.termText);
+  if (rate === null || term === null) return null;
+  return annuityPlan(f.amountMinor, rate, term);
+}
+
+/**
+ * Правка формы с пересчётом процентов: пока сумму процентов не вводили руками, она следует за суммой долга, ставкой и сроком.
+ * Ввод суммы процентов руками (непустой) фиксирует её; очистка поля возвращает автоматический расчёт.
+ */
+export function patchDebtForm(prev: DebtFormState, patch: Partial<DebtFormState>): DebtFormState {
+  const next: DebtFormState = { ...prev, ...patch };
+  if ('interestMinor' in patch) next.interestManual = patch.interestMinor !== null && patch.interestMinor !== undefined;
+  const touchesCalc = 'amountMinor' in patch || 'rateText' in patch || 'termText' in patch || 'hasInterest' in patch;
+  if (next.hasInterest && !next.interestManual && touchesCalc) {
+    const rate = parseRateBp(next.rateText);
+    const term = parseTermMonths(next.termText);
+    next.interestMinor =
+      next.amountMinor !== null && next.amountMinor > 0 && rate !== null && term !== null ? interestFor(next.amountMinor, rate, term) : null;
+  }
+  return next;
 }
 
 /** Есть ли в форме долга несохранённый ввод. Новый долг: имя, сумма, заметка; правка: любое отличие от долга. */
 export function isDebtFormDirty(form: DebtFormState, initial: DebtFormState, editing: boolean): boolean {
-  const typed = form.counterparty.trim() !== initial.counterparty.trim() || form.amountMinor !== initial.amountMinor || form.note !== initial.note;
+  const typed =
+    form.counterparty.trim() !== initial.counterparty.trim() ||
+    form.amountMinor !== initial.amountMinor ||
+    form.note !== initial.note ||
+    form.hasInterest !== initial.hasInterest ||
+    (form.hasInterest && (form.rateText !== initial.rateText || form.termText !== initial.termText || form.interestMinor !== initial.interestMinor));
   if (!editing) return typed;
   return (
     typed ||
@@ -38,12 +80,19 @@ export interface DebtFormErrors {
   openedOn?: string;
   dueOn?: string;
   note?: string;
+  rate?: string;
+  term?: string;
+  interest?: string;
   form?: string;
 }
 
 export interface DebtFormValue {
   counterparty: string;
   principalMinor: Minor;
+  /** Проценты за весь срок; null — без процентов (тогда ставка и срок тоже null). */
+  interestMinor: Minor | null;
+  interestRateBp: number | null;
+  termMonths: number | null;
   openedOn: IsoDate;
   dueOn: IsoDate | null;
   note: string;
@@ -53,7 +102,21 @@ export interface DebtFormValue {
 export const cleanName = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
 export function emptyDebtForm(direction: DebtDirection, currency: string, today: IsoDate): DebtFormState {
-  return { direction, counterparty: '', currency, amountMinor: null, openedOn: today, hasDue: false, dueOn: addDays(today, 30), note: '' };
+  return {
+    direction,
+    counterparty: '',
+    currency,
+    amountMinor: null,
+    openedOn: today,
+    hasDue: false,
+    dueOn: addDays(today, 30),
+    note: '',
+    hasInterest: false,
+    rateText: '',
+    termText: '',
+    interestMinor: null,
+    interestManual: false,
+  };
 }
 
 export function validateDebtForm(f: DebtFormState): { errors: DebtFormErrors; value: DebtFormValue | null } {
@@ -79,8 +142,34 @@ export function validateDebtForm(f: DebtFormState): { errors: DebtFormErrors; va
   const note = f.note.trim();
   if (note.length > NOTE_MAX) errors.note = `Заметка не длиннее ${NOTE_MAX} символов (сейчас ${note.length})`;
 
+  // Проценты: ставка и срок необязательны (сумму можно ввести по договору), но если введены — должны читаться
+  let interestMinor: Minor | null = null;
+  let interestRateBp: number | null = null;
+  let termMonths: number | null = null;
+  if (f.hasInterest) {
+    if (f.rateText.trim() !== '') {
+      const bp = parseRateBp(f.rateText);
+      const e = rateError(bp);
+      if (e) errors.rate = e;
+      else interestRateBp = bp;
+    }
+    if (f.termText.trim() !== '') {
+      const months = parseTermMonths(f.termText);
+      const e = termError(months);
+      if (e) errors.term = e;
+      else termMonths = months;
+    }
+    if (f.interestMinor === null) errors.interest = 'Укажите проценты: введите ставку и срок или сумму процентов за весь срок';
+    else if (f.interestMinor <= 0) errors.interest = 'Проценты должны быть больше нуля';
+    else if (f.interestMinor > INTEREST_MINOR_MAX) errors.interest = 'Сумма процентов слишком велика';
+    else interestMinor = f.interestMinor;
+  }
+
   if (Object.keys(errors).length > 0 || f.amountMinor === null) return { errors, value: null };
-  return { errors, value: { counterparty, principalMinor: f.amountMinor, openedOn: f.openedOn, dueOn, note } };
+  return {
+    errors,
+    value: { counterparty, principalMinor: f.amountMinor, interestMinor, interestRateBp, termMonths, openedOn: f.openedOn, dueOn, note },
+  };
 }
 
 export interface PaymentFormInput {

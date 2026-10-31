@@ -139,11 +139,17 @@ export type DebtDirection = 'lent' | 'borrowed';
 /**
  * Долг. lent — мне должны (я дал), borrowed — я должен (мне дали). Остаток считается из операций с debtId (см. domain/debts.ts),
  * нигде не хранится. Валюта долга = валюта кошельков его операций.
+ * Проценты (кредит в банке): interestMinor — сумма процентов за весь срок, её платят сверх principalMinor; null — без процентов.
+ * interestRateBp (сотые доли процента годовых, 2400 = 24 %) и termMonths (месяцев) — то, из чего она получена: для показа и
+ * подсказки платежа, на остаток не влияют. Ставка и срок бывают только вместе с процентами (domain/interest.ts).
  */
 export interface Debt extends SyncFields {
   direction: DebtDirection;
   counterparty: string;
   principalMinor: Minor;
+  interestMinor: Minor | null;
+  interestRateBp: number | null;
+  termMonths: number | null;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn: IsoDate | null;

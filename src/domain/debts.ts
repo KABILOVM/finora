@@ -7,15 +7,19 @@ import type { CurrencyCode, Debt, IsoDate, Minor, RecurringRule, Transaction, UU
  * Операции долга — расходы/доходы с debtId (переводы к долгу не относятся):
  *  - lent («мне должны», я дал): выдача — РАСХОД (деньги ушли от меня), платежи мне — ДОХОДЫ;
  *  - borrowed («я должен», мне дали): получение — ДОХОД, мои платежи — РАСХОДЫ.
- * Остаток = исходная сумма долга (principalMinor) − сумма платежей. Для показа он не меньше 0, а переплата (платежей больше долга)
- * считается отдельно. Исходная операция в остаток не входит (сумма долга задана самим долгом), но суммируется отдельно
- * (issuedMinor) — по ней видно, выдан ли долг деньгами.
+ * Остаток = исходная сумма долга (principalMinor) + проценты (interestMinor, если они есть) − сумма платежей. Для показа он не
+ * меньше 0, а переплата (платежей больше долга) считается отдельно. Исходная операция в остаток не входит (сумма долга задана
+ * самим долгом), но суммируется отдельно (issuedMinor) — по ней видно, выдан ли долг деньгами; проценты денег не двигают:
+ * они лишь увеличивают то, что нужно вернуть.
  * Валюта операции — валюта её кошелька. Операция в валюте, отличной от валюты долга, в остаток НЕ входит и попадает в диагностику
  * (issues): складывать дирамы с долларами нельзя. То же для операции с неизвестным кошельком и для «перевода с debtId».
  */
 
 export type DebtTx = Pick<Transaction, 'id' | 'kind' | 'walletId' | 'amountMinor' | 'occurredOn' | 'createdAt' | 'deletedAt' | 'debtId'>;
-export type DebtInfo = Pick<Debt, 'id' | 'direction' | 'principalMinor' | 'currency'>;
+export type DebtInfo = Pick<Debt, 'id' | 'direction' | 'principalMinor' | 'currency'> & {
+  /** Проценты за весь срок; нет поля или null — долг без процентов. */
+  interestMinor?: Minor | null;
+};
 
 export type DebtIssueReason = 'foreign-currency' | 'unknown-wallet' | 'transfer' | 'bad-amount';
 
@@ -35,12 +39,16 @@ export interface DebtPayment {
 
 export interface DebtState {
   principalMinor: Minor;
+  /** Проценты за весь срок (0 — без процентов). */
+  interestMinor: Minor;
+  /** Всего вернуть: сумма долга + проценты. От неё считаются остаток, переплата и доля выплаченного. */
+  totalMinor: Minor;
   currency: CurrencyCode;
   /** Сумма платежей (операции того же вида, что «возврат долга»). */
   paidMinor: Minor;
-  /** principal − платежи, но не меньше 0. */
+  /** principal + проценты − платежи, но не меньше 0. */
   remainingMinor: Minor;
-  /** Платежи сверх суммы долга (0, если переплаты нет). */
+  /** Платежи сверх суммы долга с процентами (0, если переплаты нет). */
   overpaidMinor: Minor;
   /** Сумма исходных операций (выдача/получение долга). */
   issuedMinor: Minor;
@@ -131,10 +139,14 @@ export function computeDebtState(
   }
 
   const principal = debt.principalMinor;
-  const left = principal - paid; // оба в безопасных целых, разность не выходит за ±2·MAX_SAFE
+  const interest = debt.interestMinor ?? 0;
+  const total = addMinor(principal, interest); // сумма не помещается в безопасное целое — RangeError, как у платежей
+  const left = total - paid; // оба в безопасных целых, разность не выходит за ±2·MAX_SAFE
   const remaining = left > 0 ? left : 0;
   return {
     principalMinor: principal,
+    interestMinor: interest,
+    totalMinor: total,
     currency: debt.currency,
     paidMinor: paid,
     remainingMinor: remaining,

@@ -45,6 +45,8 @@ export function mergeCandidates(items: readonly DebtItem[], target: Pick<Debt, '
 
 export interface MergePreview {
   principalMinor: Minor;
+  /** Сумма процентов объединяемых долгов (0 — процентов нет). */
+  interestMinor: Minor;
   paidMinor: Minor;
   remainingMinor: Minor;
   overpaidMinor: Minor;
@@ -56,24 +58,27 @@ export interface MergePreview {
 
 /**
  * Что получится после объединения (в точности как посчитает computeDebtState по общему набору операций):
- * сумма = Σ сумм, оплачено = Σ платежей, остаток = сумма − оплачено, но не меньше 0. null — суммы не помещаются в расчёт.
+ * сумма = Σ сумм, проценты = Σ процентов, оплачено = Σ платежей, остаток = сумма + проценты − оплачено, но не меньше 0.
+ * null — суммы не помещаются в расчёт.
  */
 export function mergePreview(items: readonly DebtItem[]): MergePreview | null {
   try {
     let principal: Minor = 0;
+    let interest: Minor = 0;
     let paid: Minor = 0;
     let remainingSum: Minor = 0;
     let dueOn: IsoDate | null = null;
     for (const it of items) {
       if (it.state === null) return null;
       principal = addMinor(principal, it.state.principalMinor);
+      interest = addMinor(interest, it.state.interestMinor);
       paid = addMinor(paid, it.state.paidMinor);
       remainingSum = addMinor(remainingSum, it.state.remainingMinor);
       if (it.debt.dueOn !== null && (dueOn === null || it.debt.dueOn < dueOn)) dueOn = it.debt.dueOn;
     }
-    const left = principal - paid;
+    const left = addMinor(principal, interest) - paid;
     const remaining = left > 0 ? left : 0;
-    return { principalMinor: principal, paidMinor: paid, remainingMinor: remaining, overpaidMinor: left < 0 ? -left : 0, dueOn, netted: remaining < remainingSum };
+    return { principalMinor: principal, interestMinor: interest, paidMinor: paid, remainingMinor: remaining, overpaidMinor: left < 0 ? -left : 0, dueOn, netted: remaining < remainingSum };
   } catch (e) {
     if (e instanceof RangeError) return null;
     throw e;

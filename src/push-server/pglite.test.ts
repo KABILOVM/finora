@@ -279,7 +279,21 @@ describe('настоящая схема: что напоминается, а ч�
     // долги прочитаны по id, без отбора по сроку и отметкам; операции — только у открытых долгов
     const debtReads = emu.log.filter((c) => c.method === 'GET' && c.table === 'debts').map((c) => decodeURIComponent(c.query));
     expect(debtReads).toHaveLength(1);
-    expect(debtReads[0]).toMatch(/^\?select=id,direction,principal_minor,currency,deleted_at,archived_at,closed_at&user_id=eq\.[0-9a-f-]{36}&id=in\.\([0-9a-f,-]+\)&limit=8$/);
+    expect(debtReads[0]).toMatch(/^\?select=id,direction,principal_minor,interest_minor,currency,deleted_at,archived_at,closed_at&user_id=eq\.[0-9a-f-]{36}&id=in\.\([0-9a-f,-]+\)&limit=8$/);
+  });
+
+  it('кредит с процентами: вернули только сумму долга — остаток есть (проценты), план продолжает напоминать; вернули всё — молчит', async () => {
+    await settings(USER_A, { debts: false });
+    await subscription(USER_A, '11111111-1111-4111-8111-111111111111');
+    const w = await wallet(USER_A);
+    const owing = await debt(USER_A, { dueOn: null, direction: 'borrowed', principal: 1000, interest: 200 });
+    const settled = await debt(USER_A, { dueOn: null, direction: 'borrowed', principal: 1000, interest: 200 });
+    await tx(USER_A, { walletId: w, occurredOn: '2026-10-01', kind: 'expense', debtId: owing, amount: 1000 }); // остались проценты: 200
+    await tx(USER_A, { walletId: w, occurredOn: '2026-10-01', kind: 'expense', debtId: settled, amount: 1200 }); // сумма с процентами
+    const planOwing = await rule(USER_A, { walletId: w, kind: 'expense', debtId: owing, startOn: '2026-01-10' });
+    await rule(USER_A, { walletId: w, kind: 'expense', debtId: settled, startOn: '2026-01-10' });
+    expect((await cron()).body).toMatchObject({ sent: 1, errors: 0 });
+    expect((await logRows(USER_A)).map((l) => `${l.kind}:${l.ref}`)).toEqual([`payment:${planOwing}:2026-10-10`]);
   });
 
   it('план платежей по долгу: нет ни одного правила с долгом — долги, их операции и кошельки не читаются', async () => {

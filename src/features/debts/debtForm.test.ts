@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, emptyDebtForm, isDebtFormDirty, overpayOf, validateDebtForm, validatePayment, validateTopUp, type DebtFormState, type TopUpFormInput } from './debtForm';
+import { cleanName, emptyDebtForm, isDebtFormDirty, overpayOf, patchDebtForm, planOfForm, validateDebtForm, validatePayment, validateTopUp, type DebtFormState, type TopUpFormInput } from './debtForm';
 
 const form = (over: Partial<DebtFormState> = {}): DebtFormState => ({
   ...emptyDebtForm('lent', 'TJS', '2026-10-15'),
@@ -12,7 +12,9 @@ describe('validateDebtForm', () => {
   it('нормальная форма: имя очищено, срока нет', () => {
     const r = validateDebtForm(form({ counterparty: '  Али   шер ' }));
     expect(r.errors).toEqual({});
-    expect(r.value).toEqual({ counterparty: 'Али шер', principalMinor: 50_000, openedOn: '2026-10-15', dueOn: null, note: '' });
+    expect(r.value).toEqual({
+      counterparty: 'Али шер', principalMinor: 50_000, interestMinor: null, interestRateBp: null, termMonths: null, openedOn: '2026-10-15', dueOn: null, note: '',
+    });
   });
   it('пустое имя и нет суммы', () => {
     const r = validateDebtForm(form({ counterparty: '   ', amountMinor: null }));
@@ -136,5 +138,85 @@ describe('isDebtFormDirty: есть ли что терять при закрыт
     expect(isDebtFormDirty({ ...start, direction: 'borrowed' }, start, true)).toBe(true);
     expect(isDebtFormDirty({ ...start, dueOn: '2027-01-01' }, start, true)).toBe(false); // срока нет — дата в поле не в счёт
     expect(isDebtFormDirty({ ...start, hasDue: true, dueOn: '2027-01-01' }, start, true)).toBe(true);
+  });
+});
+
+
+describe('проценты в форме долга', () => {
+  const credit = (over: Partial<DebtFormState> = {}): DebtFormState =>
+    form({ direction: 'borrowed', counterparty: 'Банк', amountMinor: 1_000_000, hasInterest: true, rateText: '24', termText: '12', ...over });
+
+  it('ставка и срок сами считают проценты за весь срок (аннуитет), пока сумму не вводили руками', () => {
+    const f = patchDebtForm(credit(), { rateText: '24' });
+    expect(f.interestMinor).toBe(134_715);
+    expect(f.interestManual).toBe(false);
+    expect(planOfForm(f)).toMatchObject({ paymentMinor: 94_560, interestMinor: 134_715 });
+  });
+
+  it('включили проценты — посчитались; сменили сумму долга, ставку, срок — пересчитались', () => {
+    let f = patchDebtForm(form({ direction: 'borrowed', amountMinor: 1_000_000, rateText: '24', termText: '12' }), { hasInterest: true });
+    expect(f.interestMinor).toBe(134_715);
+    f = patchDebtForm(f, { amountMinor: 2_000_000 });
+    expect(Math.abs(f.interestMinor! - 2 * 134_715)).toBeLessThanOrEqual(5); // вдвое больше долг — вдвое больше процентов (с точностью округления графика)
+    f = patchDebtForm(f, { termText: '24' });
+    expect(f.interestMinor).toBeGreaterThan(269_430);
+    f = patchDebtForm(f, { rateText: '' });
+    expect(f.interestMinor).toBeNull(); // без ставки считать нечего
+  });
+
+  it('сумма, введённая руками, пересчётом не трогается; очистка поля возвращает автоматический расчёт', () => {
+    let f = patchDebtForm(credit(), { rateText: '24' });
+    f = patchDebtForm(f, { interestMinor: 150_000 });
+    expect(f).toMatchObject({ interestMinor: 150_000, interestManual: true });
+    f = patchDebtForm(f, { termText: '24', amountMinor: 3_000_000 });
+    expect(f.interestMinor).toBe(150_000);
+    f = patchDebtForm(f, { interestMinor: null });
+    expect(f.interestManual).toBe(false);
+    f = patchDebtForm(f, { termText: '12' });
+    expect(f.interestMinor).toBe(patchDebtForm(credit({ amountMinor: 3_000_000 }), { rateText: '24' }).interestMinor);
+  });
+
+  it('проценты выключены — ничего не считается и в долг не попадает', () => {
+    const f = patchDebtForm(form({ rateText: '24', termText: '12' }), { amountMinor: 1_000_000 });
+    expect(f.interestMinor).toBeNull();
+    const r = validateDebtForm({ ...f, interestMinor: 123 }); // даже если в форме остался хвост
+    expect(r.value).toMatchObject({ interestMinor: null, interestRateBp: null, termMonths: null });
+  });
+
+  it('проверка: ставка, срок и сумма процентов читаются; значения уходят в долг', () => {
+    const f = patchDebtForm(credit(), { rateText: '24,5' });
+    const r = validateDebtForm(f);
+    expect(r.errors).toEqual({});
+    expect(r.value).toMatchObject({ principalMinor: 1_000_000, interestMinor: f.interestMinor, interestRateBp: 2450, termMonths: 12 });
+  });
+
+  it('можно указать только сумму процентов по договору — без ставки и срока', () => {
+    const f = patchDebtForm(credit({ rateText: '', termText: '' }), { interestMinor: 120_000 });
+    const r = validateDebtForm(f);
+    expect(r.errors).toEqual({});
+    expect(r.value).toMatchObject({ interestMinor: 120_000, interestRateBp: null, termMonths: null });
+  });
+
+  it('понятные ошибки: нечитаемая ставка и срок, нет суммы процентов, ноль', () => {
+    expect(validateDebtForm(credit({ rateText: 'abc', interestMinor: 1 })).errors.rate).toMatch(/число/);
+    expect(validateDebtForm(credit({ rateText: '0', interestMinor: 1 })).errors.rate).toMatch(/больше нуля/);
+    expect(validateDebtForm(credit({ rateText: '1001', interestMinor: 1 })).errors.rate).toMatch(/1000/);
+    expect(validateDebtForm(credit({ termText: '1,5', interestMinor: 1 })).errors.term).toMatch(/целое/);
+    expect(validateDebtForm(credit({ termText: '601', interestMinor: 1 })).errors.term).toMatch(/600/);
+    expect(validateDebtForm(credit({ rateText: '', termText: '', interestMinor: null })).errors.interest).toMatch(/Укажите проценты/);
+    expect(validateDebtForm(credit({ interestMinor: 0 })).errors.interest).toMatch(/больше нуля/);
+    expect(validateDebtForm(credit({ rateText: '', termText: '', interestMinor: 2_000_000_000_000_000 })).errors.interest).toMatch(/слишком велика/);
+    expect(validateDebtForm(credit({ interestMinor: 1, rateText: 'abc' })).value).toBeNull();
+  });
+
+  it('ввод процентов считается несохранённым вводом', () => {
+    const base = form();
+    expect(isDebtFormDirty(base, base, false)).toBe(false);
+    expect(isDebtFormDirty({ ...base, hasInterest: true }, base, false)).toBe(true);
+    const on = credit();
+    expect(isDebtFormDirty(on, on, true)).toBe(false);
+    expect(isDebtFormDirty({ ...on, rateText: '25' }, on, true)).toBe(true);
+    expect(isDebtFormDirty({ ...on, termText: '13' }, on, true)).toBe(true);
+    expect(isDebtFormDirty({ ...on, interestMinor: 1 }, on, true)).toBe(true);
   });
 });

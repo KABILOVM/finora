@@ -1,3 +1,4 @@
+import { formatRateBp } from '@/domain/interest';
 import type { DebtDirection, IsoDate, Minor } from '@/domain/types';
 import { isValidIsoDate } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
@@ -61,6 +62,19 @@ export function dueInfo(dueOn: IsoDate | null, today: IsoDate, active = true): D
 export function ruDateShort(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+}
+
+/** Месяцев словами: «1 месяц», «12 месяцев». */
+export const monthsWord = (n: number): string => `${n} ${pluralRu(n, 'месяц', 'месяца', 'месяцев')}`;
+
+/**
+ * Ставка и срок одной строкой: «24 % годовых · 12 месяцев». Нет ни ставки, ни срока (проценты введены суммой) — пустая строка.
+ */
+export function interestTermsLine(rateBp: number | null, termMonths: number | null): string {
+  const parts: string[] = [];
+  if (rateBp !== null) parts.push(`${formatRateBp(rateBp)} % годовых`);
+  if (termMonths !== null) parts.push(monthsWord(termMonths));
+  return parts.join(' · ');
 }
 
 /** Сколько процентов долга погашено: целое 0…100 (вниз, чтобы «100%» значило «выплачено полностью»). BigInt: суммы до 1e15, умножение на 100 не помещается в double. */

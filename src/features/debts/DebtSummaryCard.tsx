@@ -8,7 +8,7 @@ import { formatMinor } from '@/domain/money';
 import type { Debt, IsoDate, LocalRow } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { formatDayLabel } from '@/lib/dates';
-import { dueInfo, progressPercent, REMAINING_LABEL, repaidWord, ruDateShort } from './debtText';
+import { dueInfo, interestTermsLine, progressPercent, REMAINING_LABEL, repaidWord, ruDateShort } from './debtText';
 import { DebtBar } from './DebtRow';
 
 function Line({ label, children, strong = false }: { label: string; children: ReactNode; strong?: boolean }) {
@@ -30,7 +30,7 @@ export interface DebtSummaryCardProps {
 export function DebtSummaryCard({ debt, state, today }: DebtSummaryCardProps) {
   const closed = debt.closedAt !== null;
   const due = dueInfo(debt.dueOn, today, !closed && !state.settled);
-  const percent = progressPercent(state.paidMinor, state.principalMinor);
+  const percent = progressPercent(state.paidMinor, state.totalMinor);
   const word = repaidWord(debt.direction, percent);
   const cur = debt.currency;
   return (
@@ -56,6 +56,23 @@ export function DebtSummaryCard({ debt, state, today }: DebtSummaryCardProps) {
         <Line label="Сумма долга">
           <MoneyText minor={state.principalMinor} currency={cur} tone="none" />
         </Line>
+        {state.interestMinor > 0 && (
+          <>
+            <Line label="Проценты">
+              <span data-testid="debt-interest">
+                <MoneyText minor={state.interestMinor} currency={cur} tone="none" />
+              </span>
+              {interestTermsLine(debt.interestRateBp, debt.termMonths) !== '' && (
+                <span className="block text-sm text-muted">{interestTermsLine(debt.interestRateBp, debt.termMonths)}</span>
+              )}
+            </Line>
+            <Line label="Всего к возврату" strong>
+              <span data-testid="debt-total">
+                <MoneyText minor={state.totalMinor} currency={cur} tone="none" />
+              </span>
+            </Line>
+          </>
+        )}
         <Line label="Оплачено">
           <MoneyText minor={state.paidMinor} currency={cur} tone="none" />
         </Line>

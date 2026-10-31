@@ -87,6 +87,7 @@ describe('состав групп (как в договоре задачи)', ()
     expect(MERGE_GROUPS.debts).toEqual({
       party: ['direction', 'counterparty'],
       amount: ['principalMinor', 'currency'],
+      interest: ['interestMinor', 'interestRateBp', 'termMonths'],
       dates: ['openedOn', 'dueOn'],
       note: ['note'],
       closed: ['closedAt'],
@@ -150,8 +151,8 @@ const BASE: Record<SyncTableName, Record<string, unknown>> = {
   },
   budgets: { categoryId: null, amountMinor: 100, currency: 'TJS', period: 'month', archivedAt: null, deletedAt: null },
   debts: {
-    direction: 'lent', counterparty: 'Али', principalMinor: 100, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '',
-    closedAt: null, archivedAt: null, deletedAt: null,
+    direction: 'lent', counterparty: 'Али', principalMinor: 100, interestMinor: null, interestRateBp: null, termMonths: null, currency: 'TJS',
+    openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null, deletedAt: null,
   },
   recurring_rules: {
     kind: 'expense', walletId: 'w1', toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: null, debtId: null, note: '',

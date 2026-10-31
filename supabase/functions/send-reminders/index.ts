@@ -563,12 +563,14 @@ export interface DebtLite {
   direction: 'lent' | 'borrowed';
   counterparty: string;
   principalMinor: number;
+  /** Проценты за весь срок (платят сверх суммы долга); нет поля или 0 — без процентов. */
+  interestMinor?: number;
   currency: string;
   dueOn: IsoDate;
 }
 
 /** Долг плана платежей — любой (удалённый, в архиве, закрытый, без срока): всё, от чего зависит, стоит ли план. */
-export interface PlanDebtLite extends Pick<DebtLite, 'id' | 'direction' | 'principalMinor' | 'currency'> {
+export interface PlanDebtLite extends Pick<DebtLite, 'id' | 'direction' | 'principalMinor' | 'interestMinor' | 'currency'> {
   deletedAt: string | null;
   archivedAt: string | null;
   closedAt: string | null;
@@ -708,16 +710,17 @@ export function debtDueKind(dueOn: unknown, today: IsoDate): DebtDueKind | null 
 }
 
 /**
- * Остаток долга — как domain/debts.ts: исходная сумма минус платежи. Платёж — живая операция этого долга того вида, что
+ * Остаток долга — как domain/debts.ts: исходная сумма плюс проценты минус платежи. Платёж — живая операция этого долга того вида, что
  * «возврат» для направления (мне должны → доход, я должен → расход) в кошельке ТОЙ ЖЕ валюты, что долг. Остальные
  * (другая валюта, неизвестный кошелёк, выдача долга, перевод) в остаток не входят. Не меньше 0. Считает точно (BigInt).
  */
 export function debtRemainingMinor(
-  debt: Pick<DebtLite, 'id' | 'direction' | 'principalMinor' | 'currency'>,
+  debt: Pick<DebtLite, 'id' | 'direction' | 'principalMinor' | 'interestMinor' | 'currency'>,
   txs: readonly DebtTxLite[],
   currencyByWallet: ReadonlyMap<string, string>,
 ): bigint {
   if (!Number.isSafeInteger(debt.principalMinor) || debt.principalMinor <= 0) return 0n;
+  const interest = debt.interestMinor !== undefined && Number.isSafeInteger(debt.interestMinor) && debt.interestMinor > 0 ? BigInt(debt.interestMinor) : 0n;
   const payKind = debt.direction === 'lent' ? 'income' : 'expense';
   let paid = 0n;
   for (const t of txs) {
@@ -726,7 +729,7 @@ export function debtRemainingMinor(
     if (currencyByWallet.get(t.walletId) !== debt.currency) continue;
     paid += BigInt(t.amountMinor);
   }
-  const left = BigInt(debt.principalMinor) - paid;
+  const left = BigInt(debt.principalMinor) + interest - paid;
   return left > 0n ? left : 0n;
 }
 
@@ -1055,20 +1058,37 @@ export function parseRuleRow(row: unknown): RuleLite | null {
 
 export function parseDebtRow(row: unknown): DebtLite | null {
   if (!isRec(row) || typeof row.id !== 'string' || !isUuid(row.id)) return null;
-  const { direction, counterparty, principal_minor: principal, currency, due_on: dueOn } = row;
+  const { direction, counterparty, principal_minor: principal, interest_minor: interest, currency, due_on: dueOn } = row;
   if (direction !== 'lent' && direction !== 'borrowed') return null;
   if (typeof principal !== 'number' || typeof currency !== 'string' || typeof dueOn !== 'string') return null;
-  return { id: row.id.toLowerCase(), direction, counterparty: typeof counterparty === 'string' ? counterparty : '', principalMinor: principal, currency, dueOn };
+  return {
+    id: row.id.toLowerCase(),
+    direction,
+    counterparty: typeof counterparty === 'string' ? counterparty : '',
+    principalMinor: principal,
+    ...(typeof interest === 'number' ? { interestMinor: interest } : {}),
+    currency,
+    dueOn,
+  };
 }
 
 /** Долг плана платежей. Отметка (удалён, в архиве, закрыт) — любая строка; не строка — отметки нет. */
 export function parsePlanDebtRow(row: unknown): PlanDebtLite | null {
   if (!isRec(row) || typeof row.id !== 'string' || !isUuid(row.id)) return null;
-  const { direction, principal_minor: principal, currency } = row;
+  const { direction, principal_minor: principal, interest_minor: interest, currency } = row;
   if (direction !== 'lent' && direction !== 'borrowed') return null;
   if (typeof principal !== 'number' || typeof currency !== 'string') return null;
   const stamp = (v: unknown): string | null => (typeof v === 'string' ? v : null);
-  return { id: row.id.toLowerCase(), direction, principalMinor: principal, currency, deletedAt: stamp(row.deleted_at), archivedAt: stamp(row.archived_at), closedAt: stamp(row.closed_at) };
+  return {
+    id: row.id.toLowerCase(),
+    direction,
+    principalMinor: principal,
+    ...(typeof interest === 'number' ? { interestMinor: interest } : {}),
+    currency,
+    deletedAt: stamp(row.deleted_at),
+    archivedAt: stamp(row.archived_at),
+    closedAt: stamp(row.closed_at),
+  };
 }
 
 export function parseDebtTxRow(row: unknown): DebtTxLite | null {
@@ -1296,7 +1316,7 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
       const out: PlanDebtLite[] = [];
       for (const part of chunks(uuids(debtIds), IN_CHUNK)) {
         const raw = await call('GET', 'debts', [
-          ['select', 'id,direction,principal_minor,currency,deleted_at,archived_at,closed_at'],
+          ['select', 'id,direction,principal_minor,interest_minor,currency,deleted_at,archived_at,closed_at'],
           ['user_id', `eq.${userId}`],
           ['id', `in.(${part.join(',')})`],
           ['limit', String(part.length)],
@@ -1327,7 +1347,7 @@ export function createPostgrestStore(opts: { base: string; key: string; fetchImp
       const rows = await allRows(
         'debts',
         [
-          ['select', 'id,direction,counterparty,principal_minor,currency,due_on'],
+          ['select', 'id,direction,counterparty,principal_minor,interest_minor,currency,due_on'],
           ['user_id', `eq.${userId}`],
           ['deleted_at', 'is.null'],
           ['archived_at', 'is.null'],
