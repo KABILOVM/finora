@@ -564,8 +564,9 @@ describe('добавление, правка и архив лимита', () => 
     await write(() => storeOf(td).settings.update({ baseCurrency: 'USD' }));
     await user.click(await waitFor(() => rowButton('Все расходы')));
     await findByRole('dialog', { name: 'Лимит: Все расходы' });
-    expect(screen.getByText(/Раньше лимит был в TJS\. Укажите сумму в USD/)).toBeTruthy();
-    expect((screen.getByRole('textbox', { name: /^Сумма лимита/ }) as HTMLInputElement).value).toBe('');
+    // под нагрузкой текст листа появляется позже самого диалога — ждём его, а не читаем сразу
+    await waitFor(() => expect(screen.getByText(/Раньше лимит был в TJS\. Укажите сумму в USD/)).toBeTruthy());
+    expect(((await findByRole('textbox', { name: /^Сумма лимита/ })) as HTMLInputElement).value).toBe('');
     await tapAmount('50');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
