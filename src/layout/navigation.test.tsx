@@ -105,11 +105,11 @@ describe('переходы из страницы «Ещё»', () => {
     expect(current(bottomNav())).toEqual(['Ещё']);
   });
 
-  it('в «Ещё» одиннадцать пунктов в четырёх группах: всё, чего нет в нижней панели (аналитика там есть)', async () => {
+  it('в «Ещё» двенадцать пунктов в четырёх группах: всё, чего нет в нижней панели (аналитика там есть)', async () => {
     renderAt('/more');
     await findByRole('heading', { name: 'Ещё', level: 1 });
     const links = screen.getAllByRole('link').filter((a) => screen.getByRole('main').contains(a));
-    expect(links).toHaveLength(11);
+    expect(links).toHaveLength(12);
     expect(links.map((a) => a.textContent)).not.toContain('Аналитика');
   });
 

@@ -30,6 +30,7 @@ describe('MorePage', () => {
       '/recurring',
       '/trips',
       '/shopping',
+      '/products',
       '/rates',
       '/weather',
       '/settings/categories',
@@ -75,6 +76,6 @@ describe('MorePage', () => {
 
   it('данные ещё читаются — статусов нет, список на месте', () => {
     show(undefined);
-    expect(screen.getAllByRole('link')).toHaveLength(11);
+    expect(screen.getAllByRole('link')).toHaveLength(12);
   });
 });

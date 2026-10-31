@@ -29,6 +29,7 @@ export const SECTIONS: readonly Section[] = [
   { id: 'recurring', path: '/recurring', title: 'Регулярные платежи', icon: 'repeat', group: 'planning' },
   { id: 'trips', path: '/trips', title: 'Поездки', icon: 'plane', group: 'planning' },
   { id: 'shopping', path: '/shopping', title: 'Покупки', icon: 'cart', group: 'tools' },
+  { id: 'products', path: '/products', title: 'Продукты', icon: 'food', group: 'tools' },
   { id: 'rates', path: '/rates', title: 'Курсы валют', icon: 'transfer', group: 'tools' },
   { id: 'weather', path: '/weather', title: 'Погода', icon: 'cloud', group: 'tools' },
   { id: 'categories', path: '/settings/categories', title: 'Категории', icon: 'tag', group: 'app', side: false },
