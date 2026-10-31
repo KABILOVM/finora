@@ -15,6 +15,7 @@ import { formatMinor } from '@/domain/money';
 import { formatDayLabel, monthKey, todayLocal } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { useSyncEnabled } from '@/sync/syncContext';
+import { DayHeader } from './DayHeader';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionRow } from './TransactionRow';
 import { useCategoryIndex, useWalletIndex } from './txData';
@@ -180,23 +181,7 @@ export default function TransactionsPage() {
                 const label = formatDayLabel(g.date, today);
                 return (
                   <section key={g.date} aria-label={label} className="mb-4">
-                    <header className="flex items-baseline justify-between gap-2 px-1 pb-1">
-                      <h2 className="text-sm font-semibold text-muted">{label}</h2>
-                      <span className="text-sm">
-                        {total ? (
-                          <>
-                            {total.excluded > 0 && (
-                              <span className="mr-2 text-xs text-muted">
-                                без {total.excluded} {pluralRu(total.excluded, 'операции', 'операций', 'операций')} в другой валюте
-                              </span>
-                            )}
-                            <MoneyText minor={total.netMinor} currency={settings.baseCurrency} sign="always" className="font-semibold" />
-                          </>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </span>
-                    </header>
+                    <DayHeader label={label} total={total} base={settings.baseCurrency} />
                     <Card padding="none" className="divide-y divide-border overflow-hidden">
                       {g.items.map((tx) => (
                         <TransactionRow

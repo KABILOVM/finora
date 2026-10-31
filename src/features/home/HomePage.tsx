@@ -104,7 +104,7 @@ export default function HomePage() {
         <WalletChips wallets={wallets} balances={balances} />
         <BudgetsWidget />
         <UpcomingWidget />
-        <RecentOps wallets={walletIndex} categories={categoryIndex} />
+        <RecentOps wallets={walletIndex} categories={categoryIndex} today={today} base={base} />
       </div>
     </HideAmountsProvider>
   );

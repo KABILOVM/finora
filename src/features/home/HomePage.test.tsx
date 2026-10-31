@@ -403,18 +403,77 @@ describe('«Требует внимания»: денег не хватит', ()
   });
 });
 
-describe('последние операции', () => {
-  it('пять последних, новые сверху, и ссылка «Все операции»', async () => {
+describe('операции за сегодня и вчера', () => {
+  const dayGroup = (label: string) => document.querySelector(`section[aria-labelledby="home-recent"] section[aria-label="${label}"]`);
+  const dayRows = (label: string) => Array.from(dayGroup(label)?.querySelectorAll('button') ?? []).map((b) => text(b));
+
+  it('два дня подряд: «Сегодня», затем «Вчера», внутри дня новые сверху; всё старше — по ссылке «Все операции»', async () => {
     await openHome();
-    const rows = recentRows();
-    expect(rows).toHaveLength(5);
-    expect(rows[0]).toContain('аванс');
-    expect(rows[1]).toContain('обед');
-    expect(rows.join('|')).toContain('coffee');
-    expect(rows.join('|')).toContain('Наличные → Карта');
-    expect(rows.join('|')).toContain('такси');
-    expect(rows.join('|')).not.toContain('рынок');
+    const today = dayRows('Сегодня');
+    expect(today).toHaveLength(2);
+    expect(today[0]).toContain('аванс');
+    expect(today[1]).toContain('обед');
+    const yesterday = dayRows('Вчера');
+    expect(yesterday).toHaveLength(3);
+    expect(yesterday.join('|')).toContain('coffee');
+    expect(yesterday.join('|')).toContain('Наличные → Карта');
+    expect(yesterday.join('|')).toContain('такси');
+    // «Сегодня» идёт выше «Вчера»
+    const labels = Array.from(document.querySelectorAll('section[aria-labelledby="home-recent"] h3')).map((h) => text(h));
+    expect(labels).toEqual(['Сегодня', 'Вчера']);
+    // операции сентября и июля сюда не попадают
+    expect(recentRows().join('|')).not.toContain('рынок');
+    expect(recentRows().join('|')).not.toContain('Работа');
     expect(screen.getByRole('link', { name: 'Все операции' })).toHaveAttribute('href', '/transactions');
+  });
+
+  it('у каждого дня свой итог: приход минус расход в основной валюте', async () => {
+    await openHome();
+    // 15.10: аванс +5000,00 и обед −12,50
+    expect(text(dayGroup('Сегодня')?.querySelector('header') ?? null)).toContain(fmt(498_750, 'TJS', 'always'));
+  });
+
+  it('больше пяти операций за день не обрезаются: список идёт вниз целиком', async () => {
+    await openHome({
+      setup: async (s) => {
+        hist = await seedHistory(s);
+        for (let i = 1; i <= 8; i++) {
+          await s.transactions.create({ kind: 'expense', walletId: hist.cash, amountMinor: 100 * i, occurredOn: '2026-10-15', note: `доп ${i}` });
+        }
+      },
+    });
+    // 2 + 8 за сегодня и 3 за вчера
+    expect(dayRows('Сегодня')).toHaveLength(10);
+    expect(dayRows('Вчера')).toHaveLength(3);
+    expect(recentRows()).toHaveLength(13);
+    for (let i = 1; i <= 8; i++) expect(recentRows().join('|')).toContain(`доп ${i}`);
+  });
+
+  it('за сегодня ничего нет — показан только вчерашний день, без пустого «Сегодня»', async () => {
+    await openHome({
+      setup: async (s) => {
+        hist = await seedHistory(s);
+        await s.transactions.softDelete(hist.txs['lunch'] ?? '');
+        await s.transactions.softDelete(hist.txs['advance'] ?? '');
+      },
+    });
+    expect(dayGroup('Сегодня')).toBeNull();
+    expect(dayRows('Вчера')).toHaveLength(3);
+  });
+
+  it('свежих операций нет, но старые есть: подсказка вместо списка и ссылка «Все операции»', async () => {
+    await openHome({
+      setup: async (s) => {
+        hist = await seedHistory(s);
+        for (const key of ['lunch', 'advance', 'taxi', 'move', 'coffee']) {
+          await s.transactions.softDelete(hist.txs[key] ?? '');
+        }
+      },
+    });
+    expect(screen.getByText('За сегодня и вчера операций нет')).toBeInTheDocument();
+    expect(recentRows()).toHaveLength(0);
+    expect(screen.getByRole('link', { name: 'Все операции' })).toHaveAttribute('href', '/transactions');
+    expect(screen.getByRole('link', { name: 'Добавить операцию' })).toHaveAttribute('href', '/add');
   });
 
   it('нажатие на строку открывает правку поверх главной', async () => {
