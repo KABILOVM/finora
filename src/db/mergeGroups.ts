@@ -52,6 +52,8 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     name: ['name'],
     kind: ['kind', 'parentId'],
     look: ['color', 'icon', 'sortOrder'],
+    /** «Обязательная» категория (цели накопления её не урезают): правится отдельно от названия и вида. */
+    essential: ['essential'],
     archived: ['archivedAt'],
     deleted: ['deletedAt'],
   },
@@ -68,6 +70,8 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     interest: ['interestMinor', 'interestRateBp', 'termMonths'],
     /** Объединение: в состав какого долга входит этот. */
     link: ['mergedIntoId'],
+    /** Категория долга (для списка и фильтра): правится отдельно от суммы и заметки. */
+    category: ['category'],
     dates: ['openedOn', 'dueOn'],
     note: ['note'],
     closed: ['closedAt'],
@@ -87,6 +91,16 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     qty: ['qtyMilli', 'unit'],
     /** Отметка, цена, покупка и чек — одной группой: «куплено» без отметки и цены сервер не примет. */
     state: ['priceMinor', 'checkedAt', 'purchasedAt', 'transactionId'],
+    deleted: ['deletedAt'],
+  },
+  savings_goals: {
+    name: ['name'],
+    /** Сумма и валюта цели правятся вместе. */
+    target: ['targetMinor', 'currency'],
+    due: ['dueOn'],
+    /** Кошелёк, остаток которого считается накопленным. */
+    wallet: ['walletId'],
+    archived: ['archivedAt'],
     deleted: ['deletedAt'],
   },
   settings: {

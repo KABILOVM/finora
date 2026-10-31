@@ -18,6 +18,8 @@ export interface DebtInput {
   interestRateBp?: number | null;
   /** Срок в месяцах. Только вместе с interestMinor. */
   termMonths?: number | null;
+  /** Категория долга — короткий текст («Друзья», «Кредит»), по нему фильтруется список; не задано или '' — без категории. */
+  category?: string;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn?: IsoDate | null;
@@ -124,6 +126,7 @@ const INPUT_KEYS = [
   'interestMinor',
   'interestRateBp',
   'termMonths',
+  'category',
   'currency',
   'openedOn',
   'dueOn',
@@ -137,6 +140,7 @@ const DATA_KEYS: readonly (keyof DebtData)[] = [
   'interestRateBp',
   'termMonths',
   'mergedIntoId',
+  'category',
   'currency',
   'openedOn',
   'dueOn',
@@ -153,6 +157,8 @@ const dataOf = (d: Debt): DebtData => ({
   interestRateBp: d.interestRateBp,
   termMonths: d.termMonths,
   mergedIntoId: d.mergedIntoId ?? null,
+  // строки, записанные до появления категории, хранят undefined: без ?? '' пустая правка пометила бы долг изменённым
+  category: d.category ?? '',
   currency: d.currency,
   openedOn: d.openedOn,
   dueOn: d.dueOn,

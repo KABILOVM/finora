@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Category, Entity, Settings, Transaction, TxKind, Wallet } from '@/domain/types';
 import { SYNC_TABLES, fromWire, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
 import { TransportError, type SyncTransport } from '@/sync/transport';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSavingsGoal, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
 import { HOUR, MIN, expectRejected, failure, find, iso, markerUuid, must, newId, pullAll, type ServerHarness, type Stamp } from './conformanceKit';
 import { runStage2Conformance } from './conformanceStage2';
 
@@ -38,6 +38,8 @@ function makeSubject(table: SyncTableName, userId: string, t: SyncTransport, t0:
         return makeRecurringRule({ ...sync, id, walletId: parent.id, note: `m${n}` });
       case 'shopping_items':
         return makeShoppingItem({ ...sync, id, name: `m${n}` });
+      case 'savings_goals':
+        return makeSavingsGoal({ ...sync, id, name: `m${n}` });
     }
   };
   return {
@@ -99,7 +101,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       };
     };
 
-    it('1. круговой обмен: push → pull возвращает ту же сущность (все 8 таблиц)', async () => {
+    it('1. круговой обмен: push → pull возвращает ту же сущность (все 9 таблиц)', async () => {
       const { userId, t } = fresh();
       const t0 = h.now().getTime();
       const sync = (k: number) => ({ createdAt: iso(t0 - HOUR + k * 1000), clientUpdatedAt: iso(t0 - HOUR + k * 1000 + 500), deviceId: 'device-a' });
@@ -107,7 +109,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       const w1 = makeWallet({ ...sync(0), openingBalanceMinor: 150_000, kind: 'savings', goalMinor: 1_000_000_000_000_000, goalOn: '2100-01-01' });
       const w2 = makeWallet({ ...sync(1), currency: 'USD', kind: 'card', name: 'Карта «Алиф»', archivedAt: iso(t0 - 30 * MIN), deletedAt: iso(t0 - 20 * MIN), goalMinor: 1, goalOn: '2000-01-01' });
       const cat = makeCategory({ ...sync(2), kind: 'income', name: 'Зарплата', archivedAt: iso(t0 - 10 * MIN) });
-      const sub = makeCategory({ ...sync(3), parentId: cat.id });
+      const sub = makeCategory({ ...sync(3), parentId: cat.id, essential: 1 }); // «обязательная» категория возвращается единицей
       // города для погоды: ровно 8000 знаков (считаются символы, а не байты и не половинки пар) должны вернуться без изменений
       const settings = makeSettings(userId, { ...sync(4), defaultWalletId: w1.id, weekStartsOn: 0, weather: '🌤'.repeat(8000) });
       const expense = makeTransaction({ ...sync(5), walletId: w1.id, categoryId: sub.id, note: 'Обед, «плов»', amountMinor: 12_345, baseAmountMinor: 12_345 });
@@ -115,8 +117,8 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       const income = makeTransaction({ ...sync(7), kind: 'income', walletId: w1.id, categoryId: cat.id, amountMinor: 500_000, baseAmountMinor: 500_000 });
       const transfer = makeTransaction({ ...sync(8), kind: 'transfer', walletId: w1.id, toWalletId: w2.id, amountMinor: 109_00, toAmountMinor: 1_000 });
       // этап 2: долг, бюджеты (общий и по категории), регулярные платежи всех видов, операции со ссылками на долг и правило
-      const debt = makeDebt({ ...sync(9), direction: 'borrowed', counterparty: 'Рустам «друг»', principalMinor: 2_500_000, dueOn: '2026-12-31', note: 'до зарплаты', closedAt: iso(t0 - 5 * MIN), archivedAt: iso(t0 - 4 * MIN) });
-      const debtOpen = makeDebt({ ...sync(10), currency: 'USD', openedOn: '2000-01-01' });
+      const debt = makeDebt({ ...sync(9), direction: 'borrowed', counterparty: 'Рустам «друг»', principalMinor: 2_500_000, dueOn: '2026-12-31', note: 'до зарплаты', closedAt: iso(t0 - 5 * MIN), archivedAt: iso(t0 - 4 * MIN), category: 'Друзья' });
+      const debtOpen = makeDebt({ ...sync(10), currency: 'USD', openedOn: '2000-01-01', category: '😀'.repeat(40) }); // 40 символов — предел
       const budgetTotal = makeBudget({ ...sync(11), amountMinor: 1_000_000_000_000_000 });
       const budgetCat = makeBudget({ ...sync(12), categoryId: sub.id, amountMinor: 120_000, archivedAt: iso(t0 - 3 * MIN) });
       const ruleExpense = makeRecurringRule({ ...sync(13), walletId: w1.id, categoryId: sub.id, amountMinor: 45_000, note: 'Аренда', frequency: 'monthly', startOn: '2026-10-01', endOn: '2027-10-01', autoPost: 1 });
@@ -129,6 +131,11 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       const shopOpen = makeShoppingItem({ ...sync(19), name: 'Хлеб', unit: 'pcs', qtyMilli: 3000 });
       const shopCart = makeShoppingItem({ ...sync(20), name: 'Яблоки', unit: 'kg', qtyMilli: 1400, priceMinor: 0, checkedAt: iso(t0 - MIN) });
       const shopBought = makeShoppingItem({ ...sync(21), name: 'Молоко', unit: 'l', qtyMilli: 1_000_000_000, priceMinor: 1_000_000_000_000_000, checkedAt: iso(t0 - MIN), purchasedAt: iso(t0 - MIN / 2), transactionId: expense.id, deletedAt: iso(t0 - 1000) });
+      // цели накопления: без кошелька, с кошельком-накоплением и на пределах (название 60 символов, сумма 1e15, срок 2100-01-01, в архиве)
+      const goalOpen = makeSavingsGoal({ ...sync(22), name: 'Отпуск' });
+      const goalBound = makeSavingsGoal({ ...sync(23), name: 'Машина «мечта»', targetMinor: 25_000_000, dueOn: '2027-06-01', walletId: w1.id });
+      const goalEdge = makeSavingsGoal({ ...sync(24), name: '😀'.repeat(60), targetMinor: 1_000_000_000_000_000, dueOn: '2100-01-01', currency: 'USD', archivedAt: iso(t0 - 2 * MIN), deletedAt: iso(t0 - MIN) });
+      const goalMin = makeSavingsGoal({ ...sync(25), name: 'я', targetMinor: 1, dueOn: '2000-01-01' });
       const sent: Record<SyncTableName, Entity[]> = {
         settings: [settings],
         wallets: [w1, w2],
@@ -138,6 +145,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
         recurring_rules: [ruleExpense, ruleTransfer, ruleDebt],
         transactions: [expense, usd, income, transfer, repay, scheduled, fee],
         shopping_items: [shopOpen, shopCart, shopBought],
+        savings_goals: [goalOpen, goalBound, goalEdge, goalMin],
       };
       for (const table of SYNC_TABLES) await t.push(table, sent[table].map((e) => toWire(table, e))); // порядок: родители раньше детей
       for (const table of SYNC_TABLES) {
@@ -248,7 +256,7 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
         }
       });
 
-      for (const table of ['wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions'] as const) {
+      for (const table of ['wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'savings_goals'] as const) {
         it(`push с id чужой строки (${table}) не меняет её`, async () => {
           const A = await setup(table);
           await A.put(1, 0, 'dev-a');

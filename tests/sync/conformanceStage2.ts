@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Budget, Debt, Entity, RecurringRule, Transaction, TxKind, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, Entity, RecurringRule, SavingsGoal, Transaction, TxKind, Wallet } from '@/domain/types';
 import { fromWire, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
 import { HOUR, MIN, expectRejected, find, iso, must, newId, pullAll, type ServerHarness } from './conformanceKit';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSavingsGoal, makeTransaction, makeUserId, makeWallet } from './factories';
 
 /**
  * Сценарии для таблиц этапа 2 (долги, бюджеты, регулярные платежи) и новых полей операций (debt_id, recurring_rule_id,
@@ -35,6 +35,8 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
       const deb = (o: Partial<Debt>): WireRow => toWire('debts', makeDebt({ ...sync(), ...o }));
       const bud = (o: Partial<Budget>): WireRow => toWire('budgets', makeBudget({ ...sync(), ...o }));
       const rul = (o: Partial<RecurringRule>): WireRow => toWire('recurring_rules', makeRecurringRule({ ...sync(), walletId: ctx.w1.id, ...o }));
+      const cat = (o: Partial<Category>): WireRow => toWire('categories', makeCategory({ ...sync(), ...o }));
+      const goal = (o: Partial<SavingsGoal>): WireRow => toWire('savings_goals', makeSavingsGoal({ ...sync(), ...o }));
 
       beforeAll(async () => {
         // чужой пользователь A: кошелёк, категория, долг, платёж
@@ -105,6 +107,25 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         ['долг: в составе самого себя', 'debts', () => { const id = newId(); return deb({ id, mergedIntoId: id }); }],
         ['долг: в составе долга другого пользователя', 'debts', () => deb({ mergedIntoId: ctx.foreignDebtId })],
         ['долг: в составе несуществующего долга', 'debts', () => deb({ mergedIntoId: newId() })],
+        // «обязательная» категория (раздел 16 схемы)
+        ['категория: «обязательная» = 2', 'categories', () => cat({ essential: 2 as 0 })],
+        ['категория: «обязательная» отрицательная', 'categories', () => cat({ essential: -1 as 0 })],
+        // категория долга (раздел 17 схемы)
+        ['долг: категория длиннее 40 символов', 'debts', () => deb({ category: 'я'.repeat(41) })],
+        ['долг: категория длиннее 40 символов (эмодзи)', 'debts', () => deb({ category: '😀'.repeat(41) })],
+        // цели накопления (раздел 18 схемы)
+        ['цель: пустое название', 'savings_goals', () => goal({ name: '' })],
+        ['цель: название длиннее 60 символов', 'savings_goals', () => goal({ name: 'я'.repeat(61) })],
+        ['цель: название длиннее 60 символов (эмодзи)', 'savings_goals', () => goal({ name: '😀'.repeat(61) })],
+        ['цель: сумма 0', 'savings_goals', () => goal({ targetMinor: 0 })],
+        ['цель: отрицательная сумма', 'savings_goals', () => goal({ targetMinor: -1 })],
+        ['цель: сумма больше допустимой', 'savings_goals', () => goal({ targetMinor: 1_000_000_000_000_001 })],
+        ['цель: плохая валюта', 'savings_goals', () => goal({ currency: 'tjs' })],
+        ['цель: срок раньше 2000 года', 'savings_goals', () => goal({ dueOn: '1999-12-31' })],
+        ['цель: срок позже 2100 года', 'savings_goals', () => goal({ dueOn: '2100-01-02' })],
+        ['цель: в архиве с невозможной датой', 'savings_goals', () => goal({ archivedAt: '1990-01-01T00:00:00.000Z' })],
+        ['цель: кошелёк другого пользователя', 'savings_goals', () => goal({ walletId: ctx.foreignWalletId })],
+        ['цель: несуществующий кошелёк', 'savings_goals', () => goal({ walletId: newId() })],
         // бюджеты
         ['бюджет: сумма 0', 'budgets', () => bud({ amountMinor: 0 })],
         ['бюджет: отрицательная сумма', 'budgets', () => bud({ amountMinor: -100 })],
@@ -145,6 +166,8 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         it(title, async () => {
           const good =
             table === 'debts' ? deb({})
+            : table === 'categories' ? cat({})
+            : table === 'savings_goals' ? goal({})
             : table === 'budgets' ? bud({})
             : table === 'recurring_rules' ? rul({})
             : tx({});
@@ -236,5 +259,55 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
       // чужие долги и правила не видны через pull
       expect(await pullAll(B.t, 'debts')).toHaveLength(1);
       expect(await pullAll(B.t, 'recurring_rules')).toEqual([]);
+    });
+    it('15. «обязательная» категория, категория долга и цели накопления: границы принимаются и приходят обратно без искажений', async () => {
+      const { t } = fresh();
+      const t0 = h.now().getTime();
+      const sync = { createdAt: iso(t0 - HOUR), clientUpdatedAt: iso(t0 - HOUR), deviceId: 'device-a' };
+      const w1 = makeWallet({ ...sync, kind: 'savings' });
+      await t.push('wallets', [toWire('wallets', w1)]);
+      const MAX = 1_000_000_000_000_000;
+      const categories = [makeCategory({ ...sync, essential: 0 }), makeCategory({ ...sync, essential: 1 })];
+      const debts = [makeDebt({ ...sync, category: '' }), makeDebt({ ...sync, category: 'я'.repeat(40) }), makeDebt({ ...sync, category: '😀'.repeat(40) })];
+      const goals = [
+        makeSavingsGoal({ ...sync, name: 'я', targetMinor: 1, dueOn: '2000-01-01' }),
+        makeSavingsGoal({ ...sync, name: '😀'.repeat(60), targetMinor: MAX, dueOn: '2100-01-01', walletId: w1.id }),
+        makeSavingsGoal({ ...sync, name: 'я'.repeat(60), currency: 'USD', archivedAt: iso(t0 - MIN) }),
+      ];
+      await t.push('categories', categories.map((e) => toWire('categories', e)));
+      await t.push('debts', debts.map((e) => toWire('debts', e)));
+      await t.push('savings_goals', goals.map((e) => toWire('savings_goals', e)));
+      const sent: Array<[SyncTableName, Entity[]]> = [['categories', categories], ['debts', debts], ['savings_goals', goals]];
+      for (const [table, list] of sent) {
+        const got = new Map((await pullAll(t, table)).map((r) => [r.id as string, fromWire(table, r).entity]));
+        for (const e of list) expect(got.get(e.id), `${table}/${e.id}`).toEqual(e);
+      }
+    });
+
+    it('16. колонки, которую клиент не прислал (старое приложение), берётся значение по умолчанию, а сохранённое не затирается', async () => {
+      const { t } = fresh();
+      const t0 = h.now().getTime();
+      const sync = { createdAt: iso(t0 - HOUR), clientUpdatedAt: iso(t0 - HOUR), deviceId: 'device-a' };
+      const cat = makeCategory({ ...sync, essential: 1 });
+      const debt = makeDebt({ ...sync, category: 'Кредит' });
+      const stripped = (table: 'categories' | 'debts', e: Category | Debt, column: string, stamp: number): WireRow => {
+        const { [column]: _dropped, ...rest } = toWire(table, { ...e, clientUpdatedAt: iso(t0 - HOUR + stamp), deviceId: 'device-old' });
+        void _dropped;
+        return rest;
+      };
+      // новая запись без колонки — значение по умолчанию (0 и пустой текст)
+      await t.push('categories', [stripped('categories', makeCategory({ ...sync }), 'essential', 1)]);
+      await t.push('debts', [stripped('debts', makeDebt({ ...sync }), 'category', 1)]);
+      const freshCat = (await pullAll(t, 'categories'))[0] as Record<string, unknown>;
+      const freshDebt = (await pullAll(t, 'debts'))[0] as Record<string, unknown>;
+      expect(freshCat['essential']).toBe(0);
+      expect(freshDebt['category']).toBe('');
+      // запись с настоящим значением, потом правка «старым» приложением без колонки: значение остаётся
+      await t.push('categories', [toWire('categories', cat)]);
+      await t.push('debts', [toWire('debts', debt)]);
+      await t.push('categories', [{ ...stripped('categories', { ...cat, name: 'Переименована' }, 'essential', 10) }]);
+      await t.push('debts', [{ ...stripped('debts', { ...debt, note: 'правка' }, 'category', 10) }]);
+      expect(must(await find(t, 'categories', cat.id), 'категория')).toMatchObject({ essential: 1, name: 'Переименована' });
+      expect(must(await find(t, 'debts', debt.id), 'долг')).toMatchObject({ category: 'Кредит', note: 'правка' });
     });
 }

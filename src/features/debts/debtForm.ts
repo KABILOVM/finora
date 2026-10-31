@@ -1,4 +1,5 @@
 import { COUNTERPARTY_MAX } from '@/db';
+import { DEBT_CATEGORY_MAX } from '@/domain/debtCategory';
 import { annuityPlan, interestFor, parseRateBp, parseTermMonths, rateError, termError, INTEREST_MINOR_MAX, type AnnuityPlan } from '@/domain/interest';
 import type { DebtDirection, IsoDate, Minor } from '@/domain/types';
 import { addDays } from '@/lib/dates';
@@ -17,6 +18,8 @@ export interface DebtFormState {
   hasDue: boolean;
   dueOn: IsoDate;
   note: string;
+  /** Категория долга как ввёл человек; '' — без категории. Чистится при проверке (domain/debtCategory.ts). */
+  category: string;
   /** Включён блок «Проценты» (кредит в банке). */
   hasInterest: boolean;
   /** Ставка, % годовых — как ввёл человек ('24', '18,5'). */
@@ -61,6 +64,7 @@ export function isDebtFormDirty(form: DebtFormState, initial: DebtFormState, edi
     form.counterparty.trim() !== initial.counterparty.trim() ||
     form.amountMinor !== initial.amountMinor ||
     form.note !== initial.note ||
+    cleanName(form.category) !== cleanName(initial.category) ||
     form.hasInterest !== initial.hasInterest ||
     (form.hasInterest && (form.rateText !== initial.rateText || form.termText !== initial.termText || form.interestMinor !== initial.interestMinor));
   if (!editing) return typed;
@@ -80,6 +84,7 @@ export interface DebtFormErrors {
   openedOn?: string;
   dueOn?: string;
   note?: string;
+  category?: string;
   rate?: string;
   term?: string;
   interest?: string;
@@ -96,6 +101,8 @@ export interface DebtFormValue {
   openedOn: IsoDate;
   dueOn: IsoDate | null;
   note: string;
+  /** Категория долга, очищенная; '' — без категории. */
+  category: string;
 }
 
 /** Пробелы по краям срезаются, внутренние повторы схлопываются: «  Али   шер » → «Али шер». */
@@ -111,6 +118,7 @@ export function emptyDebtForm(direction: DebtDirection, currency: string, today:
     hasDue: false,
     dueOn: addDays(today, 30),
     note: '',
+    category: '',
     hasInterest: false,
     rateText: '',
     termText: '',
@@ -142,6 +150,11 @@ export function validateDebtForm(f: DebtFormState): { errors: DebtFormErrors; va
   const note = f.note.trim();
   if (note.length > NOTE_MAX) errors.note = `Заметка не длиннее ${NOTE_MAX} символов (сейчас ${note.length})`;
 
+  // Категория необязательна; длинную не обрезаем молча, а просим сократить
+  const category = cleanName(f.category);
+  const categoryLength = Array.from(category).length;
+  if (categoryLength > DEBT_CATEGORY_MAX) errors.category = `Категория не длиннее ${DEBT_CATEGORY_MAX} символов (сейчас ${categoryLength})`;
+
   // Проценты: ставка и срок необязательны (сумму можно ввести по договору), но если введены — должны читаться
   let interestMinor: Minor | null = null;
   let interestRateBp: number | null = null;
@@ -168,7 +181,7 @@ export function validateDebtForm(f: DebtFormState): { errors: DebtFormErrors; va
   if (Object.keys(errors).length > 0 || f.amountMinor === null) return { errors, value: null };
   return {
     errors,
-    value: { counterparty, principalMinor: f.amountMinor, interestMinor, interestRateBp, termMonths, openedOn: f.openedOn, dueOn, note },
+    value: { counterparty, principalMinor: f.amountMinor, interestMinor, interestRateBp, termMonths, openedOn: f.openedOn, dueOn, note, category },
   };
 }
 

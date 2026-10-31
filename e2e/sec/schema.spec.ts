@@ -63,7 +63,7 @@ async function commit(who: Who, sql: string, params: unknown[] = []): Promise<vo
   });
 }
 
-const TABLES = ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items'] as const;
+const TABLES = ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items', 'savings_goals'] as const;
 const WALLET_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const NOW = '2026-10-10T10:00:00Z';
 
@@ -136,7 +136,7 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
         has_table_privilege('authenticated', c.oid, 'delete') as auth_del,
         has_table_privilege('authenticated', c.oid, 'truncate') as auth_trunc
       from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname='public' and c.relkind='r'`);
-    expect(privs.rows.length).toBe(12); // 8 таблиц синхронизации + курсы валют + подписки, настройки напоминаний, журнал отправленного
+    expect(privs.rows.length).toBe(13); // 9 таблиц синхронизации + курсы валют + подписки, настройки напоминаний, журнал отправленного
     for (const r of privs.rows) expect(r, r.t).toMatchObject({ anon_any: false, auth_del: false, auth_trunc: false });
     // anon не имеет ни одного отдельного права
     const anonAny = await db.query<{ t: string }>(`select c.relname as t from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and (${['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'].map((p) => `has_table_privilege('anon', c.oid, '${p}')`).join(' or ')})`);
@@ -242,9 +242,9 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
       expect('error' in r ? r.error : 'ok', sql.replace(/\s+/g, ' ').slice(0, 80)).toBe('ok');
     }
   });
-  test('каталог: политик ровно 31 (select / insert / update × 10 своих таблиц + 1 select у курсов), политик на delete и «для всех» нет', async () => {
+  test('каталог: политик ровно 34 (select / insert / update × 11 своих таблиц + 1 select у курсов), политик на delete и «для всех» нет', async () => {
     const pol = await db.query<{ tablename: string; cmd: string; roles: string }>(`select tablename, cmd, roles::text as roles from pg_policies where schemaname = 'public'`);
-    expect(pol.rows).toHaveLength(31);
+    expect(pol.rows).toHaveLength(34);
     for (const t of [...TABLES, 'push_subscriptions', 'reminder_settings']) expect(pol.rows.filter((p) => p.tablename === t).map((p) => p.cmd).sort(), t).toEqual(['INSERT', 'SELECT', 'UPDATE']);
     expect(pol.rows.filter((p) => p.tablename === 'push_log'), 'журнал отправленного: политик нет, доступ только у service_role').toEqual([]);
     expect(pol.rows.filter((p) => p.tablename === 'exchange_rates').map((p) => p.cmd)).toEqual(['SELECT']);
@@ -346,6 +346,104 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
       const r = await run(asA, item(n, o));
       expect('error' in r ? r.error : 'ok', `позиция ${n}`).toBe('ok');
     }
+  });
+
+  test('цели накопления: чужие цели недоступны, ограничения отвергаются по имени, чужой кошелёк нельзя привязать', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const asB: Who = { role: 'authenticated', sub: B };
+    const id = (n: number) => `55555555-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const WALLET_B = id(800);
+    await commit(asB, walletInsert(WALLET_B, 'Копилка B'));
+    const cols = `(id, created_at, client_updated_at, device_id, name, target_minor, currency, due_on, wallet_id, archived_at)`;
+    const goal = (n: number, o: { name?: string; target?: number; currency?: string; due?: string; wallet?: string | null; archived?: string } = {}) =>
+      `insert into public.savings_goals ${cols} values ('${id(n)}', '${NOW}', '${NOW}', 'd', '${o.name ?? 'Отпуск'}', ${o.target ?? 500000}, '${o.currency ?? 'TJS'}', '${o.due ?? '2026-12-31'}', ${o.wallet === undefined || o.wallet === null ? 'null' : `'${o.wallet}'`}, ${o.archived ? `'${o.archived}'` : 'null'})`;
+    await commit(asA, goal(1));
+    const seen = await run(asB, `select id from public.savings_goals`);
+    expect('rows' in seen && seen.rows, 'B читает цели A').toEqual([]);
+    const upd = await run(asB, `update public.savings_goals set client_updated_at = now() where id = '${id(1)}'`);
+    expect('rowCount' in upd && upd.rowCount, 'B правит цели A').toBe(0);
+    const take = await run(asB, `${goal(1, { name: 'ВЗЛОМ' })} on conflict (id) do update set name = excluded.name, client_updated_at = '2099-01-01', device_id = 'zzz'`);
+    expect('error' in take, 'upsert поверх чужой цели обязан упасть').toBe(true);
+    const still = await run(asA, `select name from public.savings_goals where id = '${id(1)}'`);
+    expect('rows' in still && still.rows).toEqual([{ name: 'Отпуск' }]);
+    const del = await run(asA, `delete from public.savings_goals where id = '${id(1)}'`);
+    expect('error' in del, 'удалять цели нельзя никому').toBe(true);
+    const anon = await run({ role: 'anon' }, `select id from public.savings_goals`);
+    expect('error' in anon && anon.code, 'anon читает цели').toBe('42501');
+
+    const cases: Array<[string, string]> = [
+      ['savings_goals_name_len', goal(2, { name: '' })],
+      ['savings_goals_name_len', goal(3, { name: 'я'.repeat(61) })],
+      ['savings_goals_name_len', goal(4, { name: '😀'.repeat(61) })],
+      ['savings_goals_target', goal(5, { target: 0 })],
+      ['savings_goals_target', goal(6, { target: -1 })],
+      ['savings_goals_target', goal(7, { target: 1_000_000_000_000_001 })],
+      ['savings_goals_currency_fmt', goal(8, { currency: 'tjs' })],
+      ['savings_goals_due_on', goal(9, { due: '1999-12-31' })],
+      ['savings_goals_due_on', goal(10, { due: '2100-01-02' })],
+      ['savings_goals_ts_sane', goal(11, { archived: '1990-01-01T00:00:00Z' })],
+    ];
+    for (const [name, sql] of cases) {
+      const r = await run(asA, sql);
+      expect('error' in r && r.code, name).toBe('23514');
+      expect('error' in r && r.error, name).toContain(name);
+    }
+    // кошелёк другого пользователя и несуществующий: нарушение составного внешнего ключа
+    for (const [n, wallet] of [[12, WALLET_B], [13, id(999)]] as const) {
+      const r = await run(asA, goal(n, { wallet }));
+      expect('error' in r && r.code, `кошелёк ${wallet}`).toBe('23503');
+      expect('error' in r && r.error).toContain('savings_goals_wallet_fk');
+    }
+    // свой кошелёк, границы и пустая ссылка — можно
+    await commit(asA, walletInsert(id(801), 'Копилка A'));
+    for (const [n, o] of [
+      [20, { wallet: id(801) }],
+      [21, { name: 'я'.repeat(60), target: 1, due: '2000-01-01' }],
+      [22, { name: '😀'.repeat(60), target: 1_000_000_000_000_000, due: '2100-01-01', archived: NOW }],
+    ] as const) {
+      const r = await run(asA, goal(n, o));
+      expect('error' in r ? r.error : 'ok', `цель ${n}`).toBe('ok');
+    }
+  });
+
+  test('«обязательная» категория и категория долга: значения по умолчанию, границы отвергаются по имени', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const id = (n: number) => `66666666-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const cat = (n: number, extra = '') =>
+      `insert into public.categories (id, created_at, client_updated_at, device_id, name, kind, color, icon, sort_order ${extra ? ',' + extra.split('=')[0] : ''})
+       values ('${id(n)}', '${NOW}', '${NOW}', 'd', 'Аренда', 'expense', '#fff', 'x', 0 ${extra ? ',' + extra.split('=')[1] : ''})`;
+    const debt = (n: number, category?: string) =>
+      `insert into public.debts (id, created_at, client_updated_at, device_id, direction, counterparty, principal_minor, currency, opened_on, note ${category === undefined ? '' : ', category'})
+       values ('${id(n)}', '${NOW}', '${NOW}', 'd', 'lent', 'Имя', 1, 'TJS', '2026-09-01', '' ${category === undefined ? '' : `, '${category}'`})`;
+    // без колонки (старое приложение) — значения по умолчанию
+    await commit(asA, cat(1));
+    await commit(asA, debt(2));
+    const defaults = await db.query<{ essential: string | number; category: string }>(
+      `select (select essential from public.categories where id = '${id(1)}') as essential, (select category from public.debts where id = '${id(2)}') as category`,
+    );
+    expect(defaults.rows[0]).toEqual({ essential: 0, category: '' });
+    for (const [name, sql] of [
+      ['categories_essential', cat(3, 'essential=2')],
+      ['categories_essential', cat(4, 'essential=-1')],
+      ['debts_category_len', debt(5, 'я'.repeat(41))],
+      ['debts_category_len', debt(6, '😀'.repeat(41))],
+    ] as const) {
+      const r = await run(asA, sql);
+      expect('error' in r && r.code, name).toBe('23514');
+      expect('error' in r && r.error, name).toContain(name);
+    }
+    for (const [n, sql] of [
+      [7, cat(7, 'essential=1')],
+      [8, cat(8, 'essential=0')],
+      [9, debt(9, 'я'.repeat(40))],
+      [10, debt(10, '😀'.repeat(40))],
+    ] as const) {
+      const r = await run(asA, sql);
+      expect('error' in r ? r.error : 'ok', `запись ${n}`).toBe('ok');
+    }
+    // пустое (NULL) значение колонок отвергается: они not null
+    const nullEssential = await run(asA, cat(11, 'essential=null'));
+    expect('error' in nullEssential && nullEssential.code, 'essential = null').toBe('23502');
   });
 
   test('этап 2: ограничения долгов, бюджетов и платежей отвергаются по имени; комиссия перевода принимается', async () => {

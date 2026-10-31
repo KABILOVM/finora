@@ -21,11 +21,15 @@ import { monthKey } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
 import { ToggleRow } from '@/components/ToggleRow';
+import { countFilters, emptyFilters, pruneFilters, type FilterValues } from '@/components/filters/filterState';
 import { setBudgetAlertsEnabled, useBudgetAlertsEnabled } from './budgetAlertsPref';
+import { BudgetFilters } from './BudgetFilters';
+import { budgetFilterFields, filterBudgets } from './budgetFilters';
 import { BudgetRow } from './BudgetRow';
 import { BudgetSheet } from './BudgetSheet';
 import { budgetLabel, excludedText, paceNote } from './budgetText';
 import { ForecastCard } from './ForecastCard';
+import { GoalsSection } from './goals/GoalsSection';
 import { useBudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
 
@@ -89,12 +93,21 @@ export default function BudgetsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [busy, setBusy] = useState(false);
   const [params, setParams] = useSearchParams();
+  const [filters, setFilters] = useState<FilterValues>({});
 
   const progressById = useMemo(() => {
     const map = new Map<string, BudgetProgress>();
     if (data && !('overflow' in data) && data.progress.ok) for (const p of data.progress.items) map.set(p.id, p);
     return map;
   }, [data]);
+
+  // Поля фильтра зависят от лимитов и месяца (уровни меняются с тратами); выбранное, чего больше нет среди вариантов, считается «любым».
+  const filterFields = useMemo(
+    () => (data && !('overflow' in data) ? budgetFilterFields(data.active, progressById, data.categories) : []),
+    [data, progressById],
+  );
+  const filterValues = useMemo(() => pruneFilters(filterFields, filters), [filterFields, filters]);
+  const filtering = countFilters(filterFields, filterValues) > 0;
 
   const restore = async (b: LocalRow<Budget>, name: string) => {
     if (busy) return;
@@ -157,6 +170,7 @@ export default function BudgetsPage() {
     content = <EmptyState icon="alert" title="Не удалось посчитать" text="Суммы слишком большие, проверьте данные." />;
   } else {
     const { base, active, archived, categories, summary, progress } = data;
+    const visible = filterBudgets(active, progressById, filterValues);
     content = (
       <>
         <MonthSwitcher month={month} max={currentMonth} onChange={(m) => setPicked(m === currentMonth ? null : m)} />
@@ -166,6 +180,7 @@ export default function BudgetsPage() {
           </p>
         )}
         <LevelChips items={progress.ok ? progress.items : []} />
+        <BudgetFilters fields={filterFields} values={filterValues} onChange={setFilters} />
         {active.length === 0 ? (
           <EmptyState
             icon="pie"
@@ -181,7 +196,15 @@ export default function BudgetsPage() {
         ) : (
           <Card padding="none" className="mt-1">
             <ul className="divide-y divide-border">
-              {active.map((b) => {
+              {visible.length === 0 && (
+                <li data-testid="budgets-filter-empty" className="flex flex-col items-start gap-2 px-4 py-4">
+                  <p className="text-muted">Нет лимитов, подходящих под выбранные фильтры.</p>
+                  <Button variant="secondary" onClick={() => setFilters(emptyFilters(filterFields))}>
+                    Сбросить фильтры
+                  </Button>
+                </li>
+              )}
+              {visible.map((b) => {
                 const p = progressById.get(b.id);
                 if (!p) return null;
                 const label = budgetLabel(b.categoryId, categories);
@@ -199,7 +222,8 @@ export default function BudgetsPage() {
                   </li>
                 );
               })}
-              {progress.hasCategoryBudgets && progress.unlimitedMinor > 0 && (
+              {/* «Без лимита» — не лимит, а остаток расходов: при включённом фильтре в отфильтрованный список он не входит */}
+              {!filtering && progress.hasCategoryBudgets && progress.unlimitedMinor > 0 && (
                 <li className="px-4 py-3.5">
                   <div className="flex items-center gap-3">
                     <Glyph value="➖" size={44} />
@@ -266,6 +290,7 @@ export default function BudgetsPage() {
       <PageHeader title="Бюджеты" actions={addButton} />
       <div className="flex flex-col gap-4">
         <ForecastCard forecast={forecast} />
+        {ready && <GoalsSection base={data.base} forecast={forecast} />}
         <section aria-labelledby="budgets-title">
           <SectionHeader id="budgets-title">Лимиты на месяц</SectionHeader>
           {content}

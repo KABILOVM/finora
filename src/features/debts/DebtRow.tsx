@@ -7,8 +7,10 @@ import { formatMinor } from '@/domain/money';
 import type { IsoDate } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
+import { debtCategoriesOf } from './debtFilters';
 import type { DebtItem } from './debtSummary';
 import { dueInfo, dueLine, progressPercent, repaidWord } from './debtText';
+import { DebtCategoryBadges } from './DebtCategoryBadges';
 
 export interface DebtBarProps {
   percent: number;
@@ -84,6 +86,7 @@ export function DebtRow({ item, today }: DebtRowProps) {
               {item.parts.length} {pluralRu(item.parts.length, 'долг', 'долга', 'долгов')}
             </Badge>
           )}
+          <DebtCategoryBadges categories={debtCategoriesOf(item)} className="ml-2" />
           {closed && <Badge tone="neutral" className="ml-2">Закрыт</Badge>}
           {!closed && state.settled && <Badge tone="income" className="ml-2">Погашен</Badge>}
         </span>

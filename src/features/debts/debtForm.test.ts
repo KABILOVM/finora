@@ -8,12 +8,31 @@ const form = (over: Partial<DebtFormState> = {}): DebtFormState => ({
   ...over,
 });
 
+describe('validateDebtForm: категория', () => {
+  it('пусто — без категории; пробелы чистятся', () => {
+    expect(validateDebtForm(form()).value?.category).toBe('');
+    expect(validateDebtForm(form({ category: '   ' })).value?.category).toBe('');
+    expect(validateDebtForm(form({ category: '  Соседи   по даче ' })).value?.category).toBe('Соседи по даче');
+  });
+  it('40 символов — можно, 41 — понятная ошибка (молча не обрезаем)', () => {
+    expect(validateDebtForm(form({ category: 'я'.repeat(40) })).value?.category).toHaveLength(40);
+    const r = validateDebtForm(form({ category: 'я'.repeat(41) }));
+    expect(r.value).toBeNull();
+    expect(r.errors.category).toMatch(/не длиннее 40/);
+  });
+  it('изменённая категория — несохранённый ввод; пробелы по краям — нет', () => {
+    const start = form({ category: 'Друзья' });
+    expect(isDebtFormDirty({ ...start, category: 'Семья' }, start, true)).toBe(true);
+    expect(isDebtFormDirty({ ...start, category: ' Друзья ' }, start, true)).toBe(false);
+  });
+});
+
 describe('validateDebtForm', () => {
   it('нормальная форма: имя очищено, срока нет', () => {
     const r = validateDebtForm(form({ counterparty: '  Али   шер ' }));
     expect(r.errors).toEqual({});
     expect(r.value).toEqual({
-      counterparty: 'Али шер', principalMinor: 50_000, interestMinor: null, interestRateBp: null, termMonths: null, openedOn: '2026-10-15', dueOn: null, note: '',
+      counterparty: 'Али шер', principalMinor: 50_000, interestMinor: null, interestRateBp: null, termMonths: null, openedOn: '2026-10-15', dueOn: null, note: '', category: '',
     });
   });
   it('пустое имя и нет суммы', () => {

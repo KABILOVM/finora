@@ -3,6 +3,7 @@ import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { MoneyText } from '@/components/MoneyText';
+import { normalizeDebtCategory } from '@/domain/debtCategory';
 import type { DebtState } from '@/domain/debts';
 import { formatMinor } from '@/domain/money';
 import type { Debt, IsoDate, LocalRow } from '@/domain/types';
@@ -24,15 +25,19 @@ export interface DebtSummaryCardProps {
   debt: LocalRow<Debt>;
   state: DebtState;
   today: IsoDate;
+  /** Категории долга, если их надо показать не по самому долгу: у объединения их несколько (по частям). */
+  categories?: readonly string[];
 }
 
 /** Главная карточка страницы долга: остаток крупно, оплачено, переплата, срок, дата, как двигались деньги, заметка. */
-export function DebtSummaryCard({ debt, state, today }: DebtSummaryCardProps) {
+export function DebtSummaryCard({ debt, state, today, categories }: DebtSummaryCardProps) {
   const closed = debt.closedAt !== null;
   const due = dueInfo(debt.dueOn, today, !closed && !state.settled);
   const percent = progressPercent(state.paidMinor, state.totalMinor);
   const word = repaidWord(debt.direction, percent);
   const cur = debt.currency;
+  const own = normalizeDebtCategory(debt.category ?? '');
+  const shownCategories = categories ?? (own === '' ? [] : [own]);
   return (
     <Card aria-label="Остаток долга" data-testid="debt-summary">
       <div className="flex flex-wrap items-center gap-2">
@@ -104,6 +109,11 @@ export function DebtSummaryCard({ debt, state, today }: DebtSummaryCardProps) {
           )}
         </Line>
         <Line label="Дата долга">{formatDayLabel(debt.openedOn, today)}</Line>
+        {shownCategories.length > 0 && (
+          <Line label="Категория">
+            <span data-testid="debt-category-line">{shownCategories.join(', ')}</span>
+          </Line>
+        )}
         <Line label={debt.direction === 'lent' ? 'Выдано деньгами' : 'Получено деньгами'}>
           {state.issuedMinor > 0 ? (
             <span className="money">{formatMinor(state.issuedMinor, cur)}</span>

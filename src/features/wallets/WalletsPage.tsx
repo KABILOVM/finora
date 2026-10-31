@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { FilterBar } from '@/components/filters/FilterBar';
+import { countFilters, emptyFilters, pruneFilters, type FilterValues } from '@/components/filters/filterState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { IconButton } from '@/components/IconButton';
@@ -27,6 +29,7 @@ import { ReconcileAllSheet } from './ReconcileAllSheet';
 import { ReconcileSheet } from './ReconcileSheet';
 import { computeWalletsTotal } from '@/rates/walletsTotal';
 import { WALLET_KIND_LABELS } from './walletUi';
+import { filterWallets, walletFilterFields } from './walletFilters';
 import { useGoals } from './useGoals';
 import { WalletSheet } from './WalletSheet';
 
@@ -81,10 +84,19 @@ export default function WalletsPage() {
   const [archiving, setArchiving] = useState<LocalRow<Wallet> | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [filters, setFilters] = useState<FilterValues>({});
 
   const active = useMemo(() => (wallets ?? []).filter((w) => w.archivedAt === null), [wallets]);
   const archived = useMemo(() => (wallets ?? []).filter((w) => w.archivedAt !== null), [wallets]);
   const base = settings?.baseCurrency;
+
+  // Фильтр сужает только списки ниже: «Всего», сверка и итог по валютам считаются по всем активным кошелькам.
+  // Поля строятся по активным кошелькам; выбранное, чего больше нет среди вариантов, считается «любым».
+  const filterFields = useMemo(() => walletFilterFields(active, base), [active, base]);
+  const filterValues = useMemo(() => pruneFilters(filterFields, filters), [filterFields, filters]);
+  const filtering = countFilters(filterFields, filterValues) > 0;
+  const shownActive = useMemo(() => filterWallets(active, filterValues), [active, filterValues]);
+  const shownArchived = useMemo(() => filterWallets(archived, filterValues), [archived, filterValues]);
 
   const goalById = useMemo(() => new Map((goals ?? []).map((g) => [g.wallet.id, g])), [goals]);
 
@@ -241,37 +253,57 @@ export default function WalletsPage() {
           action={base ? <Button onClick={() => setSheet({ kind: 'new' })}>Добавить кошелёк</Button> : undefined}
         />
       ) : (
-        <Card padding="none">
-          <ul className="divide-y divide-border">
-            {active.map((w) => {
-              const bal = balanceOf(w);
-              const goal = goalById.get(w.id);
-              return (
-                <li key={w.id}>
-                  <div className="flex items-center pr-2">
-                    {/* вся строка — ссылка на экран кошелька, правка — отдельная кнопка-карандаш */}
-                    <ListRow
-                      className="min-w-0 flex-1"
-                      to={`/wallets/${w.id}`}
-                      leading={<WalletIcon wallet={w} />}
-                      title={w.name}
-                      subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
-                      trailing={
-                        overflow ? (
-                          <Unavailable />
-                        ) : (
-                          <MoneyText minor={bal} currency={w.currency} tone={bal < 0 ? 'expense' : 'none'} className="font-semibold" />
-                        )
-                      }
-                    />
-                    <IconButton icon="edit" label={`Изменить: ${w.name}`} onClick={() => setSheet({ kind: 'edit', wallet: w })} />
-                  </div>
-                  {goal && <GoalLine item={goal} />}
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+        <>
+          {filterFields.length > 0 && (
+            <FilterBar title="Фильтры кошельков" fields={filterFields} values={filterValues} onChange={setFilters} className="mb-2" />
+          )}
+          {filtering && (
+            <p className="mb-2 px-1 text-sm text-muted" data-testid="wallets-filter-note">
+              Фильтр действует на список. «Всего» считается по всем активным кошелькам.
+            </p>
+          )}
+          {shownActive.length === 0 && (
+            <div data-testid="wallets-filter-empty" className="mb-3 flex flex-col items-start gap-2 px-1">
+              <p className="text-muted">Нет кошельков, подходящих под выбранные фильтры.</p>
+              <Button variant="secondary" onClick={() => setFilters(emptyFilters(filterFields))}>
+                Сбросить фильтры
+              </Button>
+            </div>
+          )}
+          {shownActive.length > 0 && (
+            <Card padding="none">
+              <ul className="divide-y divide-border">
+                {shownActive.map((w) => {
+                  const bal = balanceOf(w);
+                  const goal = goalById.get(w.id);
+                  return (
+                    <li key={w.id}>
+                      <div className="flex items-center pr-2">
+                        {/* вся строка — ссылка на экран кошелька, правка — отдельная кнопка-карандаш */}
+                        <ListRow
+                          className="min-w-0 flex-1"
+                          to={`/wallets/${w.id}`}
+                          leading={<WalletIcon wallet={w} />}
+                          title={w.name}
+                          subtitle={`${WALLET_KIND_LABELS[w.kind]} · ${w.currency}`}
+                          trailing={
+                            overflow ? (
+                              <Unavailable />
+                            ) : (
+                              <MoneyText minor={bal} currency={w.currency} tone={bal < 0 ? 'expense' : 'none'} className="font-semibold" />
+                            )
+                          }
+                        />
+                        <IconButton icon="edit" label={`Изменить: ${w.name}`} onClick={() => setSheet({ kind: 'edit', wallet: w })} />
+                      </div>
+                      {goal && <GoalLine item={goal} />}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          )}
+        </>
       )}
 
       {active.length > 1 && !overflow && (
@@ -280,7 +312,7 @@ export default function WalletsPage() {
         </Button>
       )}
 
-      {archived.length > 0 && (
+      {shownArchived.length > 0 && (
         <section className="mt-6">
           <button
             type="button"
@@ -289,14 +321,14 @@ export default function WalletsPage() {
             className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-1 text-left font-semibold text-muted"
           >
             <span>
-              Архив · {archived.length} {pluralRu(archived.length, 'кошелёк', 'кошелька', 'кошельков')}
+              Архив · {shownArchived.length} {pluralRu(shownArchived.length, 'кошелёк', 'кошелька', 'кошельков')}
             </span>
             <Icon name="chevron" size={18} className={showArchived ? 'rotate-90' : ''} />
           </button>
           {showArchived && (
             <Card padding="none" className="mt-1">
               <ul className="divide-y divide-border">
-                {archived.map((w) => (
+                {shownArchived.map((w) => (
                   <li key={w.id} className="flex items-center pr-2">
                     <ListRow
                       className="min-w-0 flex-1"

@@ -281,17 +281,31 @@ export interface CategoryData {
   icon: string;
   sortOrder: number;
   archivedAt: IsoDateTime | null;
+  /** 1 — обязательная категория (цели накопления её не урезают); у доходных всегда 0. */
+  essential: 0 | 1;
+}
+
+/**
+ * «Обязательная» категория: нет поля (старые строки, копии и устройства до этой возможности) — нет; true/1 — да, false/0 — нет.
+ * Доходная категория не бывает обязательной: у неё всегда 0 (понять, что «урезать» в доходах, нечего).
+ */
+export function parseEssential(v: unknown, kind: CategoryKind): 0 | 1 {
+  if (v === undefined || v === null || v === false || v === 0) return 0;
+  if (v === true || v === 1) return kind === 'expense' ? 1 : 0;
+  return fail('Обязательная категория: ожидалось «да» или «нет»');
 }
 
 export function parseCategoryData(raw: Record<string, unknown>): CategoryData {
+  const kind = reqEnum(raw['kind'], 'Вид категории', CATEGORY_KINDS);
   return {
     name: reqText(raw['name'], 'Название категории', LIMITS.name),
-    kind: reqEnum(raw['kind'], 'Вид категории', CATEGORY_KINDS),
+    kind,
     parentId: optId(raw['parentId'], 'Родительская категория'),
     color: reqText(raw['color'], 'Цвет категории', LIMITS.short),
     icon: reqText(raw['icon'], 'Значок категории', LIMITS.short),
     sortOrder: reqSafeInt(raw['sortOrder'], 'Порядок категории', SORT_ORDER_MIN, SORT_ORDER_MAX),
     archivedAt: optStamp(raw['archivedAt'], 'Дата архивации категории'),
+    essential: parseEssential(raw['essential'], kind),
   };
 }
 

@@ -1,4 +1,4 @@
-import type { Budget, Category, Debt, RecurringRule, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, RecurringRule, SavingsGoal, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
 
 /**
  * Фабрики валидных сущностей для тестов синхронизации.
@@ -6,7 +6,7 @@ import type { Budget, Category, Debt, RecurringRule, Settings, ShoppingItem, Tra
  * Метки по умолчанию лежат в прошлом; тесты, которым важны «часы сервера», задают метки сами.
  */
 
-const counters = { user: 0, wallet: 0, category: 0, transaction: 0, budget: 0, debt: 0, rule: 0, shop: 0 };
+const counters = { user: 0, wallet: 0, category: 0, transaction: 0, budget: 0, debt: 0, rule: 0, shop: 0, goal: 0 };
 
 /** Детерминированный UUID версии 4: PPPPPPPP-0000-4000-8000-NNNNNNNNNNNN (префикс отличает вид сущности). */
 function uuid(prefix: number, n: number): string {
@@ -58,6 +58,7 @@ export function makeCategory(overrides: Partial<Category> = {}): Category {
     icon: 'tag',
     sortOrder: n,
     archivedAt: null,
+    essential: 0,
     ...overrides,
   };
 }
@@ -130,6 +131,7 @@ export function makeDebt(overrides: Partial<Debt> = {}): Debt {
     interestRateBp: null,
     termMonths: null,
     mergedIntoId: null,
+    category: '',
     currency: 'TJS',
     openedOn: '2026-09-01',
     dueOn: null,
@@ -189,6 +191,25 @@ export function makeShoppingItem(overrides: Partial<ShoppingItem> = {}): Shoppin
     checkedAt: null,
     purchasedAt: null,
     transactionId: null,
+    ...overrides,
+  };
+}
+
+/** Цель накопления «Отпуск»: 5000 сомони к концу года, кошелёк не привязан. */
+export function makeSavingsGoal(overrides: Partial<SavingsGoal> = {}): SavingsGoal {
+  const n = ++counters.goal;
+  return {
+    id: uuid(13, n),
+    createdAt: STAMP,
+    clientUpdatedAt: STAMP,
+    deviceId: DEVICE,
+    deletedAt: null,
+    name: `Цель ${n}`,
+    targetMinor: 500_000,
+    currency: 'TJS',
+    dueOn: '2026-12-31',
+    walletId: null,
+    archivedAt: null,
     ...overrides,
   };
 }

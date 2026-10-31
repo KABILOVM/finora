@@ -372,8 +372,8 @@ describe('обновление базы с версии 5 до 6: кошельк
         // метка держит повтор, даже если вкладка со старым кодом запишет курсор поверх сброса
         expect(await store.sync.needsResync(t), t).toBe(true);
       }
-      // остальные таблицы не забираются заново
-      expect(await store.sync.needsResync('categories')).toBe(false);
+      // остальные таблицы (бюджеты, платежи) не забираются заново; категории и долги сбросила версия 9 (отдельный тест ниже)
+      expect(await store.sync.needsResync('budgets')).toBe(false);
       expect(await store.sync.getMeta('initialPullDone')).toBe(true);
       expect(await store.db.transactions.get(TX_SEEN)).toMatchObject({ dirty: 0, serverSeq: 0 });
       expect(await store.db.transactions.get(TX_LOCAL)).toMatchObject({ dirty: 1, serverSeq: null });
@@ -513,6 +513,100 @@ describe('обновление базы с версии 7 до 8: объедин
   });
 });
 
+describe('обновление базы с версии 8 до 9: обязательные категории, категории долгов, цели накопления', () => {
+  const stores8 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions: 'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const C_SEEN = '0a3a28c0-5fdc-4385-8fca-7c24d9aacc41';
+  const C_NEW = '0a3a28c0-5fdc-4385-8fca-7c24d9aacc42';
+  const D_SEEN = '0a3a28c0-5fdc-4385-8fca-7c24d9aacc51';
+  const D_EDITED = '0a3a28c0-5fdc-4385-8fca-7c24d9aacc52';
+  const category = (id: string, local: object) => ({
+    ...sync, id, name: 'Жильё', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, syncError: null, ...local,
+  });
+  const debt = (id: string, local: object) => ({
+    ...sync, id, direction: 'borrowed', counterparty: 'Банк', principalMinor: 1_000_000, interestMinor: null, interestRateBp: null, termMonths: null,
+    mergedIntoId: null, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null, syncError: null, ...local,
+  });
+
+  it('старым категориям essential = 0, старым долгам category = \'\' (а не undefined); обе таблицы забираются заново; правки и память о них на месте', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(8).stores(stores8);
+    await old.open();
+    const memory = { dirtyGroups: ['note'], dirtyBase: { note: { b: { note: '' }, at: '2026-10-02T00:00:00.000Z' } } };
+    await old.table('categories').bulkAdd([category(C_SEEN, { dirty: 0, serverSeq: 3 }), category(C_NEW, { dirty: 1, serverSeq: null })]);
+    await old.table('debts').bulkAdd([
+      debt(D_SEEN, { dirty: 0, serverSeq: 4 }),
+      debt(D_EDITED, { dirty: 1, serverSeq: 5, note: 'договор', ...memory }), // заметка правлена, ещё не отправлена
+    ]);
+    await old.table('meta').bulkPut([
+      { key: 'cursor:categories', value: 3 },
+      { key: 'cursor:debts', value: 5 },
+      { key: 'cursor:wallets', value: 9 },
+      { key: 'initialPullDone', value: true },
+    ]);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      for (const t of ['categories', 'debts'] as const) {
+        expect(await store.db.meta.get(`cursor:${t}`), t).toBeUndefined();
+        expect(await store.sync.getCursor(t), t).toBe(0);
+        expect(await store.sync.needsResync(t), t).toBe(true); // метка держит повтор, даже если вкладка со старым кодом запишет курсор
+      }
+      expect(await store.sync.getCursor('wallets')).toBe(9); // остальные таблицы не забираются заново
+      expect(await store.sync.needsResync('wallets')).toBe(false);
+      expect(await store.sync.getMeta('initialPullDone')).toBe(true);
+
+      const seenCat = await store.db.categories.get(C_SEEN);
+      expect(seenCat).toMatchObject({ dirty: 0, serverSeq: 0, essential: 0 });
+      expect('essential' in seenCat!).toBe(true);
+      expect(await store.db.categories.get(C_NEW)).toMatchObject({ dirty: 1, serverSeq: null, essential: 0 });
+
+      const seenDebt = await store.db.debts.get(D_SEEN);
+      expect(seenDebt).toMatchObject({ dirty: 0, serverSeq: 0, category: '' });
+      expect('category' in seenDebt!).toBe(true);
+      expect(await store.db.debts.get(D_EDITED)).toMatchObject({ dirty: 1, serverSeq: 0, note: 'договор', category: '', ...memory });
+      expect(await store.sync.hasMergeableEdits()).toBe(true);
+
+      // новая таблица целей есть, пуста и работает; курсор целей = 0
+      expect(await store.db.savings_goals.count()).toBe(0);
+      expect(await store.sync.getCursor('savings_goals')).toBe(0);
+
+      // старая категория и старый долг правятся новыми полями
+      expect(await store.categories.setEssential(C_SEEN, true)).toMatchObject({ essential: 1, dirty: 1, dirtyGroups: ['essential'] });
+      expect(await store.debts.update(D_SEEN, { category: 'Кредит' })).toMatchObject({ category: 'Кредит', dirty: 1 });
+    } finally {
+      store.close();
+    }
+  });
+
+  it('пустая правка старой строки (без ключей essential / category) не помечает её изменённой', async () => {
+    const factory = new IDBFactory();
+    const store = await open(factory);
+    try {
+      // как вкладка со старым кодом: новых полей в строке нет совсем
+      await store.db.categories.add(category(C_SEEN, { dirty: 0, serverSeq: 3 }) as never);
+      await store.db.debts.add(debt(D_SEEN, { dirty: 0, serverSeq: 4 }) as never);
+      expect((await store.db.categories.get(C_SEEN))!.essential).toBeUndefined();
+      expect((await store.categories.update(C_SEEN, { name: 'Жильё' })).dirty).toBe(0);
+      expect((await store.categories.setEssential(C_SEEN, false)).dirty).toBe(0);
+      expect((await store.debts.update(D_SEEN, { category: '' })).dirty).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+});
+
 /**
  * Страж. Версия приложения, ещё не знающая новой колонки, получает строки без неё (select('*') + отбор по TABLE_SPECS) и
  * запоминает их серверную версию и курсор. После обновления строка выглядит «без значения», с сервера она больше не придёт,
@@ -520,21 +614,21 @@ describe('обновление базы с версии 7 до 8: объедин
  * в src/db/database.ts). Поэтому колонка в TABLE_SPECS добавляется ВМЕСТЕ с версией базы, которая заново забирает её таблицу.
  */
 describe('новая колонка договора требует версии базы, которая заново забирает таблицу', () => {
-  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции), версии 7 и 8 (долги). */
+  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции), версии 7 и 8 (долги), версия 9 (категории, долги). */
   const SNAPSHOT: Record<SyncTableName, string[]> = {
     settings: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather'],
     wallets: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'currency', 'kind', 'openingBalanceMinor', 'color', 'icon',
       'sortOrder', 'archivedAt', 'goalMinor', 'goalOn',
     ],
-    categories: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'kind', 'parentId', 'color', 'icon', 'sortOrder', 'archivedAt'],
+    categories: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'kind', 'parentId', 'color', 'icon', 'sortOrder', 'archivedAt', 'essential'],
     transactions: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor',
       'categoryId', 'occurredOn', 'note', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource', 'debtId', 'recurringRuleId',
     ],
     debts: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'direction', 'counterparty', 'principalMinor', 'interestMinor',
-      'interestRateBp', 'termMonths', 'mergedIntoId', 'currency', 'openedOn', 'dueOn', 'note', 'closedAt', 'archivedAt',
+      'interestRateBp', 'termMonths', 'mergedIntoId', 'category', 'currency', 'openedOn', 'dueOn', 'note', 'closedAt', 'archivedAt',
     ],
     budgets: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'categoryId', 'amountMinor', 'currency', 'period', 'archivedAt'],
     recurring_rules: [
@@ -545,6 +639,7 @@ describe('новая колонка договора требует версии
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'qtyMilli', 'unit', 'priceMinor', 'checkedAt', 'purchasedAt',
       'transactionId',
     ],
+    savings_goals: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'targetMinor', 'currency', 'dueOn', 'walletId', 'archivedAt'],
   };
 
   it.each([...SYNC_TABLES])('%s: поля TABLE_SPECS совпадают со снимком', (table) => {

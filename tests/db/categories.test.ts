@@ -95,3 +95,49 @@ describe('CategoriesRepo', () => {
     expect(u.syncError).toBeNull();
   });
 });
+
+describe('CategoriesRepo: «обязательная» категория (essential)', () => {
+  it('по умолчанию 0; создаётся обязательной; только у расходных', async () => {
+    const store = await makeStore();
+    const plain = await store.categories.create(base);
+    expect(plain.essential).toBe(0);
+    const rent = await store.categories.create({ ...base, name: 'Аренда', essential: true });
+    expect(rent).toMatchObject({ essential: 1, dirty: 1 });
+    await expect(store.categories.create({ name: 'Зарплата', kind: 'income', color: '#16a34a', icon: '💼', essential: true })).rejects.toThrow(/только категорию расходов/);
+    const income = await store.categories.create({ name: 'Зарплата', kind: 'income', color: '#16a34a', icon: '💼', essential: false });
+    expect(income.essential).toBe(0);
+  });
+
+  it('setEssential: ставит и снимает, повтор безопасен, у доходной — отказ; группа слияния отдельная', async () => {
+    const store = await makeStore();
+    const c = await store.categories.create(base);
+    const on = await store.categories.setEssential(c.id, true);
+    expect(on).toMatchObject({ essential: 1, dirtyGroups: ['essential'] });
+    expect((await store.categories.setEssential(c.id, true)).clientUpdatedAt).toBe(on.clientUpdatedAt);
+    const off = await store.categories.setEssential(c.id, false);
+    expect(off).toMatchObject({ essential: 0, dirtyGroups: [] }); // поставили и сняли до отправки = ничего не менялось
+    const income = await store.categories.create({ name: 'Подарки', kind: 'income', color: '#f43f5e', icon: '🎁' });
+    await expect(store.categories.setEssential(income.id, true)).rejects.toThrow(/только категорию расходов/);
+    await expect(store.categories.setEssential(c.id, 1 as never)).rejects.toThrow(ValidationError);
+  });
+
+  it('update: меняет отметку вместе с другими полями; смена вида на доходный снимает отметку; true у доходной — отказ', async () => {
+    const store = await makeStore();
+    const c = await store.categories.create({ ...base, essential: true });
+    expect((await store.categories.update(c.id, { name: 'Кофе' })).essential).toBe(1); // отметка при правке имени сохраняется
+    expect((await store.categories.update(c.id, { essential: false })).essential).toBe(0);
+    const again = await store.categories.update(c.id, { essential: true });
+    expect(again.essential).toBe(1);
+    expect(await store.categories.update(c.id, { kind: 'income' })).toMatchObject({ kind: 'income', essential: 0 });
+    await expect(store.categories.update(c.id, { essential: true })).rejects.toThrow(/только категорию расходов/);
+  });
+
+  it('стартовый набор: жильё, связь и долги обязательные, остальное нет', async () => {
+    const store = await makeStore();
+    const { ensureSeeded } = await import('@/db');
+    await ensureSeeded(store);
+    const essential = (await store.db.categories.toArray()).filter((c) => c.essential === 1).map((c) => c.name).sort();
+    expect(essential).toEqual(['Долги', 'Жильё', 'Связь']);
+    expect((await store.db.categories.toArray()).every((c) => c.kind === 'expense' || c.essential === 0)).toBe(true);
+  });
+});

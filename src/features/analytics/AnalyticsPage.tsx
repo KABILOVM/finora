@@ -1,6 +1,8 @@
 import { useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { FilterBar } from '@/components/filters/FilterBar';
+import type { FilterField } from '@/components/filters/filterState';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { Segmented } from '@/components/Segmented';
@@ -13,6 +15,7 @@ import { monthKey, monthTitle } from '@/lib/dates';
 import { useToday } from '@/recurring/useToday';
 import { MIN_MONTH, MONTH_PARAM } from '@/features/transactions/txFilters';
 import { AnomaliesCard } from './AnomaliesCard';
+import { categoryFilterOptions } from './categoryFilter';
 import { CashCalendarView } from './CashCalendarView';
 import { CategoryCompare } from './CategoryCompare';
 import { MonthlyBars } from './charts/MonthlyBars';
@@ -96,6 +99,9 @@ function Summary({ data }: { data: AnalyticsData }) {
   );
 }
 
+/** id категории в адресе: буквы, цифры, «-» и «_» (как у фильтров списка операций). */
+const CATEGORY_PARAM = /^[0-9A-Za-z_-]{1,64}$/;
+
 type Tab = 'overview' | 'calendar' | 'periods';
 const TABS = [
   { value: 'overview', label: 'Обзор' },
@@ -132,16 +138,21 @@ export default function AnalyticsPage() {
   const tab: Tab = tabParam === 'calendar' || tabParam === 'periods' ? tabParam : 'overview';
   const asked = params.get('month');
   const month = asked !== null && MONTH_PARAM.test(asked) && asked >= MIN_MONTH && asked <= currentMonth ? asked : currentMonth;
+  // Фильтр по категории лежит в адресе (?cat=<id>) рядом с месяцем: «Назад» из списка операций и ссылка его не сбрасывают.
+  const catAsked = params.get('cat');
+  const catParam = catAsked !== null && CATEGORY_PARAM.test(catAsked) ? catAsked : null;
   // По умолчанию (обзор, идущий месяц) адрес чистый; запись истории заменяем: листание месяцев не засоряет «Назад».
-  const setView = (next: { tab?: Tab; month?: string }) => {
+  const setView = (next: { tab?: Tab; month?: string; cat?: string | null }) => {
     const t = next.tab ?? tab;
     const m = next.month ?? month;
+    const c = next.cat === undefined ? catParam : next.cat;
     const q = new URLSearchParams();
     if (t !== 'overview') q.set('tab', t);
     if (m !== currentMonth) q.set('month', m);
+    if (t === 'overview' && c !== null) q.set('cat', c);
     setParams(q, { replace: true });
   };
-  const data = useAnalyticsData(month, today);
+  const data = useAnalyticsData(month, today, catParam);
   const categories = useCategoryIndex();
   const netWorth = useNetWorth(today);
 
@@ -212,6 +223,19 @@ export default function AnalyticsPage() {
   }
 
   const empty = data.series.every((p) => p.incomeMinor === 0 && p.expenseMinor === 0);
+  // Фильтр по категории сужает только два списка ниже; сводка, темп, графики и аномалии остаются по всем расходам
+  const filterOptions = categoryFilterOptions([...data.current.byCategory, ...data.previous.byCategory], data.categories, data.categoryFilter);
+  const filterFields: FilterField[] =
+    filterOptions.length > 1
+      ? [{ key: 'category', label: 'Категория', type: 'select', anyLabel: 'Все категории', options: filterOptions, hint: 'С подкатегориями.' }]
+      : [];
+  const filterName = data.categoryFilter === null ? null : (data.categories.get(data.categoryFilter)?.name ?? 'Категория удалена');
+  const filterNote =
+    filterName === null ? null : (
+      <p className="mb-2 text-sm text-muted" data-testid="analytics-filter-note">
+        Только «{filterName}». Доли — от всех расходов месяца.
+      </p>
+    );
   return (
     <>
       {header}
@@ -224,10 +248,23 @@ export default function AnalyticsPage() {
           <Summary data={data} />
           {hasPaceContent(data) && <PaceCard data={data} />}
           <AnomaliesCard anomalies={data.anomalies} categories={data.categories} base={data.base} month={month} today={today} />
+          {filterFields.length > 0 && (
+            <FilterBar
+              title="Фильтр по категории"
+              fields={filterFields}
+              values={{ category: data.categoryFilter ?? '' }}
+              onChange={(v) => setView({ cat: v['category'] === undefined || v['category'] === '' ? null : v['category'] })}
+            />
+          )}
           <Section id="analytics-categories" title="Категории: сравнение с прошлым месяцем">
+            {filterNote}
             {data.deltas.length === 0 ? (
               <p className="text-muted">
-                {data.compareDays === null ? 'Расходов по категориям в этом и прошлом месяце нет.' : 'В этом месяце расходов пока нет.'}
+                {filterName !== null
+                  ? `По категории «${filterName}» расходов в этом и прошлом месяце нет.`
+                  : data.compareDays === null
+                    ? 'Расходов по категориям в этом и прошлом месяце нет.'
+                    : 'В этом месяце расходов пока нет.'}
               </p>
             ) : (
               <CategoryCompare
@@ -242,8 +279,9 @@ export default function AnalyticsPage() {
             )}
           </Section>
           <Section id="analytics-top" title="Самые крупные расходы">
+            {filterNote}
             {data.top.length === 0 ? (
-              <p className="text-muted">Расходов в этом месяце пока нет.</p>
+              <p className="text-muted">{filterName !== null ? `По категории «${filterName}» расходов в этом месяце нет.` : 'Расходов в этом месяце пока нет.'}</p>
             ) : (
               <TopExpensesList items={data.top} categories={categories} base={data.base} today={today} />
             )}

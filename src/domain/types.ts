@@ -81,6 +81,11 @@ export interface Category extends SyncFields {
   icon: string;
   sortOrder: number;
   archivedAt: IsoDateTime | null;
+  /**
+   * 1 — обязательная категория (аренда, связь, кредит): цели накопления её не «урезают» (domain/savingsPlan.ts).
+   * Осмыслен только у расходных категорий; у доходных всегда 0.
+   */
+  essential: 0 | 1;
 }
 
 export type TxKind = 'expense' | 'income' | 'transfer';
@@ -134,6 +139,21 @@ export interface Budget extends SyncFields {
   archivedAt: IsoDateTime | null;
 }
 
+/**
+ * Цель накопления в «Бюджетах»: «накопить targetMinor к дате dueOn». Накоплено = остаток кошелька-накопления walletId
+ * (считается из операций, нигде не хранится); без кошелька накоплено 0. Валюта — основная на момент создания.
+ * Расчёт «сколько откладывать и сколько можно тратить» — чистые функции domain/savingsPlan.ts.
+ */
+export interface SavingsGoal extends SyncFields {
+  name: string;
+  targetMinor: Minor;
+  currency: CurrencyCode;
+  dueOn: IsoDate;
+  /** Кошелёк вида «Накопления», остаток которого считается накопленным; null — не привязан. */
+  walletId: UUID | null;
+  archivedAt: IsoDateTime | null;
+}
+
 export type DebtDirection = 'lent' | 'borrowed';
 
 /**
@@ -156,6 +176,11 @@ export interface Debt extends SyncFields {
    * Вложенности нет: главный долг сам ни в чей состав не входит.
    */
   mergedIntoId: UUID | null;
+  /**
+   * Категория долга — короткий свободный текст («Друзья», «Семья», «Кредит»), по нему список долгов фильтруется.
+   * '' — без категории. Не больше DEBT_CATEGORY_MAX символов, без пробелов по краям (domain/debtCategory.ts).
+   */
+  category: string;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn: IsoDate | null;
@@ -223,7 +248,7 @@ export interface Settings extends SyncFields {
 
 export type LocalRow<T> = T & LocalFields;
 
-export type Entity = Wallet | Category | Transaction | Settings | Budget | Debt | RecurringRule | ShoppingItem;
+export type Entity = Wallet | Category | Transaction | Settings | Budget | Debt | RecurringRule | ShoppingItem | SavingsGoal;
 
 /**
  * Таблица курсов относительно «опорной» валюты (pivot): 1 единица X стоит perUnit[X] единиц pivot.

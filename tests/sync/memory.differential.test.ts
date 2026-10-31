@@ -5,7 +5,7 @@ import type { TxKind } from '@/domain/types';
 import { createMemoryServer } from '@/sync/memoryServer';
 import { SYNC_TABLES, TABLE_SPECS, toWire, type SyncTableName, type WireRow } from '@/sync/tables';
 import { TransportError } from '@/sync/transport';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSavingsGoal, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type PgliteServer } from './pglite';
 
 /**
@@ -85,6 +85,8 @@ const specArb = (f: Focus): fc.Arbitrary<Spec> =>
       'recurring_rules' as const,
       'shopping_items' as const,
       'shopping_items' as const,
+      'savings_goals' as const,
+      'savings_goals' as const,
     ),
     user: fc.integer({ min: 0, max: 1 }),
     rows: fc.array(
@@ -136,6 +138,7 @@ async function compare(specs: Spec[]): Promise<void> {
   const budgetIds = Array.from({ length: 4 }, () => makeBudget().id);
   const ruleIds = Array.from({ length: 4 }, () => makeRecurringRule().id);
   const shopIds = Array.from({ length: 4 }, () => makeShoppingItem().id);
+  const goalIds = Array.from({ length: 4 }, () => makeSavingsGoal().id);
   const MAX = 1_000_000_000_000_000;
   const at = (i: number) => new Date(base + (OFFSETS[i] as number)).toISOString();
 
@@ -172,6 +175,8 @@ async function compare(specs: Spec[]): Promise<void> {
           kind: r.variant === 4 ? ('transfer' as 'expense') : r.kind % 2 === 0 ? 'expense' : 'income',
           color: r.variant === 5 ? 'c'.repeat(33) : r.variant === 8 ? '😀'.repeat(32) : '#f97316',
           icon: r.variant === 6 ? 'i'.repeat(33) : r.variant === 7 ? '😀'.repeat(33) : r.variant === 9 ? '😀'.repeat(32) : 'tag',
+          // «обязательная» категория: 0 и 1 можно, 2 — нельзя
+          essential: r.variant === 10 ? (2 as 0) : r.variant === 11 ? 1 : 0,
         });
       case 'settings':
         return toWire('settings', {
@@ -217,6 +222,8 @@ async function compare(specs: Spec[]): Promise<void> {
           dueOn: v === 9 ? '2100-01-02' : v === 13 ? '1999-12-31' : v === 15 ? '2100-01-01' : r.kind === 3 ? '2026-12-01' : null,
           note: v === 10 ? 'я'.repeat(501) : v === 14 ? '😀'.repeat(500) : '',
           closedAt: v === 11 ? '1999-01-01T00:00:00.000Z' : null,
+          // категория долга: до 40 символов (считаются символы, а не единицы UTF-16)
+          category: v === 16 ? 'я'.repeat(41) : v === 17 ? 'я'.repeat(40) : v === 18 ? '😀'.repeat(40) : v === 19 ? '😀'.repeat(41) : '',
         });
       }
       case 'budgets': {
@@ -274,6 +281,20 @@ async function compare(specs: Spec[]): Promise<void> {
           checkedAt: checked ? at : null,
           purchasedAt: v === 12 || v === 14 ? at : null,
           transactionId: v === 13 || v === 14 ? tx : null,
+        });
+      }
+      case 'savings_goals': {
+        const v = r.v2;
+        return toWire('savings_goals', {
+          ...makeSavingsGoal(sync),
+          id: goalIds[r.id] as string,
+          name: v === 1 ? '' : v === 2 ? 'я'.repeat(61) : v === 3 ? 'я'.repeat(60) : v === 14 ? '😀'.repeat(60) : v === 15 ? '😀'.repeat(61) : `ц${r.kind}`,
+          targetMinor: v === 4 ? 0 : v === 5 ? MAX + 1 : v === 6 ? MAX : v === 16 ? -1 : 10 + r.kind,
+          currency: v === 7 ? 'usd' : 'TJS',
+          dueOn: v === 8 ? '1999-12-31' : v === 9 ? '2100-01-02' : v === 10 ? '2100-01-01' : v === 17 ? '2000-01-01' : '2026-12-31',
+          // кошелёк: v 11 — свой из пула (может ещё не существовать у этого пользователя), 12 — чужой выдуманный
+          walletId: v === 11 ? (walletIds[r.ref % 4] as string) : v === 12 ? makeWallet().id : null,
+          archivedAt: v === 13 ? '1990-01-01T00:00:00.000Z' : null,
         });
       }
     }

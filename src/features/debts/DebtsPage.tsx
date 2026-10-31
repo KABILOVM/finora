@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { FilterBar } from '@/components/filters/FilterBar';
+import { countFilters, emptyFilters, pruneFilters, type FilterValues } from '@/components/filters/filterState';
 import { Icon } from '@/components/Icon';
 import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { MoneyText } from '@/components/MoneyText';
@@ -14,6 +16,7 @@ import type { DebtDirection } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
+import { applyDebtFilters, debtFilterFields } from './debtFilters';
 import { defaultDirection, groupDebts, overdueCount, remainingByCurrency, type DebtItem } from './debtSummary';
 import { DIRECTION_LABEL } from './debtText';
 import { DebtList, Fold, SettledSection } from './DebtLists';
@@ -42,7 +45,35 @@ const EMPTY: Record<DebtDirection, { title: string; text: string }> = {
   },
 };
 
-function Totals({ items, direction, base, today }: { items: readonly DebtItem[]; direction: DebtDirection; base: string | null; today: string }) {
+/**
+ * Пометка под итогом, когда включены фильтры: цифры считаны только по подошедшим долгам. Объединённый долг показывается и
+ * считается целиком, даже если под фильтры подошла лишь часть его долгов, — об этом тоже сказано, чтобы цифры не расходились с подписью.
+ */
+function FilteredNote({ partialGroups, className }: { partialGroups: number; className?: string }) {
+  return (
+    <p data-testid="debts-filtered-note" className={className ?? 'mt-2 text-sm text-muted'}>
+      С учётом фильтров.
+      {partialGroups > 0 &&
+        ` Объединённые долги, где подошла только часть, считаются целиком: ${partialGroups}.`}
+    </p>
+  );
+}
+
+function Totals({
+  items,
+  direction,
+  base,
+  today,
+  filtered,
+  partialGroups,
+}: {
+  items: readonly DebtItem[];
+  direction: DebtDirection;
+  base: string | null;
+  today: string;
+  filtered: boolean;
+  partialGroups: number;
+}) {
   const sums = remainingByCurrency(items, base ?? undefined);
   const late = overdueCount(items, today);
   if (sums.ok && sums.totals.length === 0 && late === 0) return null;
@@ -67,7 +98,24 @@ function Totals({ items, direction, base, today }: { items: readonly DebtItem[];
           Просрочено: {late} {pluralRu(late, 'долг', 'долга', 'долгов')}
         </p>
       )}
+      {filtered && <FilteredNote partialGroups={partialGroups} />}
     </Card>
+  );
+}
+
+/** Фильтры включены, а подходящих долгов нет: говорим об этом словами и даём сбросить, а не рисуем пустой экран «долгов нет». */
+function NoMatches({ onReset }: { onReset: () => void }) {
+  return (
+    <EmptyState
+      icon="banknote"
+      title="По этим фильтрам долгов нет"
+      text="Измените фильтры или сбросьте их, чтобы увидеть все долги."
+      action={
+        <Button size="lg" variant="secondary" onClick={onReset}>
+          Сбросить фильтры
+        </Button>
+      }
+    />
   );
 }
 
@@ -84,6 +132,7 @@ export default function DebtsPage() {
   const [sheet, setSheet] = useState(false);
   const [splitting, setSplitting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [rawFilters, setFilters] = useState<FilterValues>({});
   const today = useToday();
   // Адрес называет вкладку — берём её. Не называет («Ещё → Долги») — ту, где есть открытые долги: у кого только «Я должен», не видит пустоту.
   const view: View =
@@ -93,8 +142,15 @@ export default function DebtsPage() {
 
   // вкладку пишем в адрес всегда, и «Мне должны» тоже: иначе пустая вкладка «Мне должны» тут же переключалась бы сама
   const setView = (v: View) => setParams({ dir: v }, { replace: true });
-  const groups = useMemo(() => groupDebts(data?.items ?? [], direction), [data, direction]);
-  const people = useMemo(() => peopleWithOpenDebts(groupByPerson(data?.items ?? [], data?.base ?? undefined)), [data]);
+  // Фильтры живут в состоянии страницы. Поля собираются из долгов; выбранное, чего в списке уже нет (категорию стёрли, человека
+  // закрыли), считается «любым». Фильтр действует ДО группировки и итогов: «Вам должны всего» считается по подошедшим долгам.
+  const fields = useMemo(() => debtFilterFields(data?.items ?? [], data?.base), [data]);
+  const filters = useMemo(() => pruneFilters(fields, rawFilters), [fields, rawFilters]);
+  const filterCount = countFilters(fields, filters);
+  const filtered = useMemo(() => applyDebtFilters(data?.items ?? [], filters, today), [data, filters, today]);
+  const groups = useMemo(() => groupDebts(filtered.items, direction), [filtered, direction]);
+  const people = useMemo(() => peopleWithOpenDebts(groupByPerson(filtered.items, data?.base ?? undefined)), [filtered, data]);
+  const resetFilters = () => setFilters(emptyFilters(fields));
 
   const restore = async (it: DebtItem) => {
     if (busy) return;
@@ -182,20 +238,30 @@ export default function DebtsPage() {
     <>
       {header}
       <Segmented ariaLabel="Чьи долги" options={OPTIONS} value={view} onChange={setView} compact className="mb-2" />
+      {data.items.length > 0 && <FilterBar fields={fields} values={filters} onChange={setFilters} title="Фильтры долгов" className="mb-2" />}
       <Button variant="ghost" icon="transfer" disabled={base === null} onClick={() => setSplitting(true)} className="mb-3">
         Разделить счёт
       </Button>
       {view === 'people' ? (
         people.length === 0 ? (
-          <EmptyState icon="banknote" title="Открытых долгов нет" text="Здесь появятся люди, с которыми у вас есть долги: сколько они должны вам и сколько вы им." />
+          filterCount > 0 ? (
+            <NoMatches onReset={resetFilters} />
+          ) : (
+            <EmptyState icon="banknote" title="Открытых долгов нет" text="Здесь появятся люди, с которыми у вас есть долги: сколько они должны вам и сколько вы им." />
+          )
         ) : (
-          <PeopleList people={people} today={today} />
+          <>
+            {filterCount > 0 && <FilteredNote partialGroups={filtered.partialGroups} className="mb-2 px-1 text-sm text-muted" />}
+            <PeopleList people={people} today={today} />
+          </>
         )
       ) : (
         <>
-          <Totals items={groups.active} direction={direction} base={base} today={today} />
+          <Totals items={groups.active} direction={direction} base={base} today={today} filtered={filterCount > 0} partialGroups={filtered.partialGroups} />
 
-          {empty ? (
+          {empty && filterCount > 0 ? (
+            <NoMatches onReset={resetFilters} />
+          ) : empty ? (
             <EmptyState
               icon="banknote"
               title={EMPTY[direction].title}

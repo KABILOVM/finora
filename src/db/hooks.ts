@@ -12,6 +12,7 @@ import type {
   Minor,
   RecurringRule,
   Settings,
+  SavingsGoal,
   ShoppingItem,
   Transaction,
   UUID,
@@ -204,6 +205,25 @@ export function useRecurringRules(opts: { includeArchived?: boolean } = {}): Loc
       .filter((r) => r.deletedAt === null && (includeArchived || r.archivedAt === null))
       .sort((a, b) => {
         if (a.startOn !== b.startOn) return a.startOn < b.startOn ? -1 : 1;
+        if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+  }, [store, includeArchived]);
+}
+
+/**
+ * Цели накопления: по сроку (ближайший первым), затем по времени создания. Архивные — только с includeArchived.
+ * Удалённые не показываются. undefined — читается.
+ */
+export function useSavingsGoals(opts: { includeArchived?: boolean } = {}): LocalRow<SavingsGoal>[] | undefined {
+  const store = useStore();
+  const includeArchived = opts.includeArchived === true;
+  return useLiveQuery(async () => {
+    const rows = await store.db.savings_goals.toArray();
+    return rows
+      .filter((g) => g.deletedAt === null && (includeArchived || g.archivedAt === null))
+      .sort((a, b) => {
+        if (a.dueOn !== b.dueOn) return a.dueOn < b.dueOn ? -1 : 1;
         if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
         return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
       });

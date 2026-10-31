@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { FilterBar } from '@/components/filters/FilterBar';
+import { countFilters, emptyFilters, pruneFilters, type FilterValues } from '@/components/filters/filterState';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
 import { formatMinor } from '@/domain/money';
@@ -14,7 +16,9 @@ import { ItemSheet, type ItemFormValue } from './ItemSheet';
 import { listenToListWithAi, parseListWithAi } from './aiList';
 import { ListTextSheet } from './ListTextSheet';
 import { PriceSheet } from './PriceSheet';
+import { PurchasedList } from './PurchasedList';
 import { PurchaseSheet } from './PurchaseSheet';
+import { BOUGHT_MAX, boughtItems, filterBought, filterViews, shoppingFilterFields, showsBought } from './shoppingFilters';
 import { approxText, priceText } from './shoppingText';
 import { useShoppingData } from './useShoppingData';
 
@@ -34,6 +38,7 @@ export default function ShoppingPage() {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
   const busyRef = useRef(new Set<string>());
+  const [filters, setFilters] = useState<FilterValues>({});
 
   if (data === undefined) {
     return (
@@ -133,6 +138,16 @@ export default function ShoppingPage() {
     if (recent.length >= RECENT_MAX) break;
   }
 
+  // Фильтр сужает только список; «План» и «Итого в корзине» считаются по всему списку. «Куплено» показывает прошлые покупки вместо списка.
+  const purchased = boughtItems(data.all);
+  const filterFields = shoppingFilterFields(views, purchased);
+  const filterValues = pruneFilters(filterFields, filters);
+  const filtering = countFilters(filterFields, filterValues) > 0;
+  const boughtMode = showsBought(filterValues);
+  const shownViews = filterViews(views, filterValues);
+  const shownBought = filterBought(purchased, filterValues).slice(0, BOUGHT_MAX);
+  const resetFilters = () => setFilters(emptyFilters(filterFields));
+
   const editView = sheet?.kind === 'edit' ? current(sheet.id) : undefined;
   const priceView = sheet?.kind === 'price' ? current(sheet.id) : undefined;
   const cartCount = totals?.cartCount ?? 0;
@@ -191,36 +206,73 @@ export default function ShoppingPage() {
         />
       ) : (
         <>
-          {planLine}
-          <Card padding="none" className="mb-4">
-            <ul className="divide-y divide-border" aria-label="Список покупок">
-              {views.map((v) => (
-                <ItemRow
-                  key={v.item.id}
-                  view={v}
-                  currency={base}
-                  busy={busyIds.has(v.item.id)}
-                  onToggle={() => toggle(v)}
-                  onOpen={() => setSheet({ kind: 'edit', id: v.item.id })}
-                />
-              ))}
-            </ul>
-          </Card>
+          {filterFields.length > 0 && (
+            <FilterBar title="Фильтры покупок" fields={filterFields} values={filterValues} onChange={setFilters} className="mb-3" />
+          )}
+          {boughtMode ? (
+            <>
+              {shownBought.length === 0 ? (
+                <div data-testid="shopping-filter-empty" className="mb-4 flex flex-col items-start gap-2 px-1">
+                  <p className="text-muted">Нет покупок, подходящих под выбранные фильтры.</p>
+                  <Button variant="secondary" onClick={resetFilters}>
+                    Сбросить фильтры
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <PurchasedList items={shownBought} currency={base} />
+                  {purchased.length > BOUGHT_MAX && <p className="mb-4 px-1 text-sm text-muted">Показаны последние {BOUGHT_MAX} покупок.</p>}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {planLine}
+              {filtering && (
+                <p className="mb-3 px-1 text-sm text-muted" data-testid="shopping-filter-note">
+                  Фильтр действует на список. «План» и «Итого в корзине» считаются по всему списку.
+                </p>
+              )}
+              {shownViews.length === 0 ? (
+                <div data-testid="shopping-filter-empty" className="mb-4 flex flex-col items-start gap-2 px-1">
+                  <p className="text-muted">Нет позиций, подходящих под выбранные фильтры.</p>
+                  <Button variant="secondary" onClick={resetFilters}>
+                    Сбросить фильтры
+                  </Button>
+                </div>
+              ) : (
+                <Card padding="none" className="mb-4">
+                  <ul className="divide-y divide-border" aria-label="Список покупок">
+                    {shownViews.map((v) => (
+                      <ItemRow
+                        key={v.item.id}
+                        view={v}
+                        currency={base}
+                        busy={busyIds.has(v.item.id)}
+                        onToggle={() => toggle(v)}
+                        onOpen={() => setSheet({ kind: 'edit', id: v.item.id })}
+                      />
+                    ))}
+                  </ul>
+                </Card>
+              )}
 
-          <Card className="mb-4 flex items-center justify-between gap-3" data-testid="shopping-cart">
-            <span className="font-semibold">Итого в корзине</span>
-            <span className="money text-xl font-bold" aria-live="polite">
-              {totals === null ? '—' : priceText(totals.cartMinor, base)}
-            </span>
-          </Card>
+              <Card className="mb-4 flex items-center justify-between gap-3" data-testid="shopping-cart">
+                <span className="font-semibold">Итого в корзине</span>
+                <span className="money text-xl font-bold" aria-live="polite">
+                  {totals === null ? '—' : priceText(totals.cartMinor, base)}
+                </span>
+              </Card>
 
-          <Button size="lg" fullWidth disabled={cartCount === 0 || totals === null} onClick={() => setSheet({ kind: 'purchase' })}>
-            Подтвердить покупку
-          </Button>
-          {cartCount === 0 && <p className="mt-2 text-center text-sm text-muted">Отметьте купленное флажком и впишите цену с ценника.</p>}
-          <p className="mt-4 px-1 text-sm text-muted">
-            Единицы: {Object.values(UNIT_LABEL).join(', ')}. Цены считаются в {base}; прошлые цены берутся из купленных позиций.
-          </p>
+              <Button size="lg" fullWidth disabled={cartCount === 0 || totals === null} onClick={() => setSheet({ kind: 'purchase' })}>
+                Подтвердить покупку
+              </Button>
+              {cartCount === 0 && <p className="mt-2 text-center text-sm text-muted">Отметьте купленное флажком и впишите цену с ценника.</p>}
+              <p className="mt-4 px-1 text-sm text-muted">
+                Единицы: {Object.values(UNIT_LABEL).join(', ')}. Цены считаются в {base}; прошлые цены берутся из купленных позиций.
+              </p>
+            </>
+          )}
         </>
       )}
 

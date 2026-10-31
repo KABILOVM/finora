@@ -7,6 +7,7 @@ import { createDebtsRepo, type DebtsRepo } from './debtsRepo';
 import { getDeviceId } from './deviceId';
 import { ValidationError } from './errors';
 import { createRecurringRepo, type RecurringRepo } from './recurringRepo';
+import { createSavingsGoalsRepo, type SavingsGoalsRepo } from './savingsGoalsRepo';
 import type { RepoContext } from './repoContext';
 import { createShoppingRepo, type ShoppingRepo } from './shoppingRepo';
 import { createSettingsRepo, type SettingsRepo } from './settingsRepo';
@@ -25,6 +26,7 @@ export interface Store {
   readonly debts: DebtsRepo;
   readonly recurring: RecurringRepo;
   readonly shopping: ShoppingRepo;
+  readonly savingsGoals: SavingsGoalsRepo;
   readonly settings: SettingsRepo;
   readonly sync: SyncOps;
   /**
@@ -114,6 +116,7 @@ export async function openStore(userId: string, options: OpenStoreOptions = {}):
     debts: createDebtsRepo(ctx),
     recurring: createRecurringRepo(ctx),
     shopping: createShoppingRepo(ctx, transactions),
+    savingsGoals: createSavingsGoalsRepo(ctx),
     settings: createSettingsRepo(ctx),
     sync: createSyncOps(db, clock),
     onLocalChange(listener) {

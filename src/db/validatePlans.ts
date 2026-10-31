@@ -1,3 +1,4 @@
+import { DEBT_CATEGORY_MAX } from '@/domain/debtCategory';
 import { RATE_BP_MAX, RATE_BP_MIN, TERM_MONTHS_MAX, TERM_MONTHS_MIN } from '@/domain/interest';
 import { NAME_MAX as SHOPPING_NAME_MAX, QTY_MAX, QTY_MIN, SHOPPING_UNITS } from '@/domain/shopping';
 import type { CurrencyCode, DebtDirection, Frequency, IsoDate, IsoDateTime, Minor, ShoppingUnit, TxKind, UUID } from '@/domain/types';
@@ -29,6 +30,8 @@ export const FREQUENCIES: readonly Frequency[] = ['daily', 'weekly', 'monthly', 
 export const BUDGET_PERIODS: readonly 'month'[] = ['month'];
 /** debts.counterparty: от 1 до 80 символов (как wallets.name на сервере). */
 export const COUNTERPARTY_MAX = 80;
+/** savings_goals.name: от 1 до 60 символов. */
+export const GOAL_NAME_MAX = 60;
 /** recurring_rules.interval_n: от 1 до 1000. */
 export const INTERVAL_N_MIN = 1;
 export const INTERVAL_N_MAX = 1000;
@@ -63,6 +66,8 @@ export interface DebtData {
   termMonths: number | null;
   /** Долг, в состав которого входит этот (объединение); null — сам по себе или главный. */
   mergedIntoId: UUID | null;
+  /** Категория долга: короткий свободный текст, '' — без категории (domain/debtCategory.ts). */
+  category: string;
   currency: CurrencyCode;
   openedOn: IsoDate;
   dueOn: IsoDate | null;
@@ -71,12 +76,23 @@ export interface DebtData {
   archivedAt: IsoDateTime | null;
 }
 
+/**
+ * Категория долга: длина считается в символах (эмодзи — один символ), как char_length на сервере, а не в единицах UTF-16.
+ * Пробелы по краям убираются, внутри схлопываются; пусто — ''.
+ */
+function reqDebtCategory(v: unknown): string {
+  const collapsed = reqText(v, 'Категория долга', 10_000, 0).replace(/[\s\u00a0\u202f]+/g, ' ');
+  if (Array.from(collapsed).length > DEBT_CATEGORY_MAX) fail(`Категория долга: не длиннее ${DEBT_CATEGORY_MAX} символов`);
+  return collapsed;
+}
+
 /** Необязательное поле: нет значения или null — null; иначе проверка как у обязательного. */
 const optional = <T>(v: unknown, read: (x: unknown) => T): T | null => (v === null || v === undefined ? null : read(v));
 
 export function parseDebtData(raw: Record<string, unknown>): DebtData {
   const noteRaw = raw['note'];
   const dueRaw = raw['dueOn'];
+  const categoryRaw = raw['category'];
   // Резервные копии и устройства до появления процентов этих полей не знают: нет поля — нет процентов.
   const interestMinor = optional(raw['interestMinor'], (v) => reqMinorInRange(v, 'Проценты по долгу', 1, MINOR_LIMIT));
   const interestRateBp = optional(raw['interestRateBp'], (v) => reqSafeInt(v, 'Ставка по долгу', RATE_BP_MIN, RATE_BP_MAX));
@@ -93,6 +109,8 @@ export function parseDebtData(raw: Record<string, unknown>): DebtData {
     termMonths,
     // Копии и устройства до объединения с составляющими этого поля не знают: нет поля — долг сам по себе.
     mergedIntoId: optId(raw['mergedIntoId'], 'Долг, в состав которого входит этот'),
+    // Копии и устройства до категорий долгов этого поля не знают: нет поля — без категории. Пробелы схлопываются, длина — как у сервера.
+    category: categoryRaw === undefined || categoryRaw === null ? '' : reqDebtCategory(categoryRaw),
     currency: reqCurrency(raw['currency'], 'Валюта долга'),
     openedOn: reqDate(raw['openedOn'], 'Дата долга'),
     dueOn: dueRaw === null || dueRaw === undefined ? null : reqDate(dueRaw, 'Срок возврата'),
@@ -179,5 +197,30 @@ export function parseShoppingData(raw: Record<string, unknown>): ShoppingData {
     checkedAt,
     purchasedAt,
     transactionId,
+  };
+}
+
+export interface SavingsGoalData {
+  name: string;
+  targetMinor: Minor;
+  currency: CurrencyCode;
+  dueOn: IsoDate;
+  /** Кошелёк-накопление, остаток которого считается накопленным; null — не привязан. */
+  walletId: UUID | null;
+  archivedAt: IsoDateTime | null;
+}
+
+/**
+ * Проверка цели накопления без базы — те же границы, что у сервера (savings_goals): название 1…60 символов, сумма 1…1e15,
+ * срок — настоящая дата в границах схемы. Что кошелёк существует и подходит, проверяет репозиторий (нужна база).
+ */
+export function parseSavingsGoalData(raw: Record<string, unknown>): SavingsGoalData {
+  return {
+    name: reqText(raw['name'], 'Название цели', GOAL_NAME_MAX),
+    targetMinor: reqPositiveMinor(raw['targetMinor'], 'Сумма цели'),
+    currency: reqCurrency(raw['currency'], 'Валюта цели'),
+    dueOn: reqDate(raw['dueOn'], 'Срок цели'),
+    walletId: optId(raw['walletId'], 'Кошелёк цели'),
+    archivedAt: optStamp(raw['archivedAt'], 'Дата архивации цели'),
   };
 }

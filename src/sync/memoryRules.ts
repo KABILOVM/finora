@@ -90,6 +90,11 @@ export function coerceRow(table: SyncTableName, wire: WireRow): Rec {
   const out: Rec = {};
   for (const col of spec.columns) {
     const raw: unknown = wire[col.column];
+    // колонка не прислана: берётся значение по умолчанию (default в схеме); явный null для not null — отказ
+    if (raw === undefined && col.fallback !== undefined) {
+      out[col.column] = col.fallback;
+      continue;
+    }
     if (raw === undefined || raw === null) {
       if (!col.nullable) {
         throw rejected(`null value in column "${col.column}" of relation "${table}" violates not-null constraint`, '23502');
@@ -201,6 +206,8 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (!inBound(r['sort_order'] ?? null)) fail('sort_order');
       if (charLength(String(r['color'])) > SHORT_MAX) fail('color_len');
       if (charLength(String(r['icon'])) > SHORT_MAX) fail('icon_len');
+      // «обязательная» категория (раздел 16 supabase/schema.sql): 0 или 1
+      if (r['essential'] !== 0 && r['essential'] !== 1) fail('essential');
       break;
     }
     case 'transactions': {
@@ -248,6 +255,8 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (!dayOk(r['opened_on'] ?? null)) fail('opened_on');
       if (!dayOkOrNull(r['due_on'] ?? null)) fail('due_on');
       if (charLength(String(r['note'])) > 500) fail('note_len');
+      // категория долга (раздел 17 supabase/schema.sql): не длиннее 40 знаков
+      if (charLength(String(r['category'])) > 40) fail('category_len');
       break;
     }
     case 'budgets': {
@@ -297,6 +306,16 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if ((r['transaction_id'] ?? null) !== null && (r['purchased_at'] ?? null) === null) fail('purchase_shape');
       break;
     }
+    case 'savings_goals': {
+      // цель накопления (раздел 18 supabase/schema.sql): название 1…60, сумма от 1 до 1e15, срок — в границах дат схемы
+      if (!tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');
+      const n = charLength(String(r['name']));
+      if (n < 1 || n > 60) fail('name_len');
+      if (!inBound(r['target_minor'] ?? null, 1)) fail('target');
+      if (!CURRENCY_RE.test(String(r['currency']))) fail('currency_fmt');
+      if (!dayOk(r['due_on'] ?? null)) fail('due_on');
+      break;
+    }
   }
 }
 
@@ -319,6 +338,7 @@ const FOREIGN_KEYS: Partial<Record<SyncTableName, readonly FkRef[]>> = {
   ],
   debts: [['merged_into_id', 'debts', 'debts_merged_into_fk']],
   budgets: [['category_id', 'categories', 'budgets_category_fk']],
+  savings_goals: [['wallet_id', 'wallets', 'savings_goals_wallet_fk']],
   recurring_rules: [
     ['wallet_id', 'wallets', 'recurring_rules_wallet_fk'],
     ['to_wallet_id', 'wallets', 'recurring_rules_to_wallet_fk'],

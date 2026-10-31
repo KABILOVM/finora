@@ -8,6 +8,7 @@ import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { ValidationError, useSettings, useStore, useWallets, type DebtPatch } from '@/db';
 import { CURRENCIES, currencyInfo } from '@/domain/currency';
+import { debtCategoryOptions, normalizeDebtCategory } from '@/domain/debtCategory';
 import { annuityPlan, formatRateBp } from '@/domain/interest';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Debt, DebtDirection, LocalRow, Minor } from '@/domain/types';
@@ -17,6 +18,7 @@ import { addDays, todayLocal } from '@/lib/dates';
 import { freshPlanIds, saveDebtEdit, saveNewDebt, saveTopUp } from './debtActions';
 import { debtEntryLines, entryEditText } from './debtEditMoney';
 import { emptyDebtForm, isDebtFormDirty, patchDebtForm, validateDebtForm, type DebtFormErrors, type DebtFormState } from './debtForm';
+import { DebtCategoryField } from './DebtCategoryField';
 import { findMatchingDebts, normName } from './debtMatch';
 import type { DebtItem } from './debtSummary';
 import { DIRECTION_ACTION, DIRECTION_LABEL, DIRECTION_NAME_LABEL, ruDateShort, TOP_UP_AMOUNT_LABEL } from './debtText';
@@ -58,6 +60,7 @@ export function errorKey(message: string): keyof DebtFormErrors {
   if (/^Срок/.test(m)) return 'dueOn';
   if (/^Дата долга/.test(m)) return 'openedOn';
   if (/^Заметка/.test(m)) return 'note';
+  if (/^Категория/.test(m)) return 'category';
   if (/^Проценты/.test(m)) return 'interest';
   if (/^Ставка/.test(m)) return 'rate';
   if (/^Длительность/.test(m)) return 'term';
@@ -78,6 +81,7 @@ function formFromDebt(d: LocalRow<Debt>): DebtFormState {
     hasDue: d.dueOn !== null,
     dueOn: d.dueOn ?? addDays(d.openedOn, 30),
     note: d.note,
+    category: d.category ?? '',
     hasInterest: d.interestMinor !== null,
     rateText,
     termText,
@@ -143,6 +147,13 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
     }
   }, [store, orig?.id]);
 
+  // Какие категории предложить: у уже заведённых долгов + готовые названия. Пока читается — только готовые.
+  const usedCategories = useLiveQuery(
+    async () => (await store.db.debts.toArray()).filter((d) => d.deletedAt === null).map((d) => d.category ?? ''),
+    [store],
+  );
+  const categoryOptions = debtCategoryOptions(usedCategories ?? []);
+
   const pop = usePopularity();
   const candidates = (wallets ?? []).filter((w) => w.currency === form.currency);
   const defaultWalletId = settings?.defaultWalletId ?? null;
@@ -175,6 +186,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
       if ('openedOn' in patch) delete next.openedOn;
       if ('hasDue' in patch || 'dueOn' in patch) delete next.dueOn;
       if ('note' in patch) delete next.note;
+      if ('category' in patch) delete next.category;
       return next;
     });
   };
@@ -241,6 +253,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             openedOn: value.openedOn,
             dueOn: value.dueOn,
             note: value.note,
+            category: value.category,
           },
           movement:
             moneyOn && walletId !== null
@@ -261,6 +274,7 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
         if (value.openedOn !== orig.openedOn) patch.openedOn = value.openedOn;
         if (value.dueOn !== orig.dueOn) patch.dueOn = value.dueOn;
         if (value.note !== orig.note) patch.note = value.note;
+        if (value.category !== normalizeDebtCategory(orig.category ?? '')) patch.category = value.category;
         if (!locked && form.direction !== orig.direction) patch.direction = form.direction;
         if (!locked && form.currency !== orig.currency) patch.currency = form.currency;
         const res = await saveDebtEdit(store, {
@@ -457,6 +471,8 @@ export function DebtSheet({ debt, paidMinor = 0, defaultDirection = 'lent', base
             set(p);
           }}
         />
+
+        {!joined && <DebtCategoryField value={form.category} options={categoryOptions} onChange={(category) => set({ category })} error={errors.category} />}
 
         <TextInput
           label="Заметка"

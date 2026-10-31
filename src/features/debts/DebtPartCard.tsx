@@ -129,6 +129,7 @@ export function DebtPartCard({ item, rootName, today, rules, own = false, disabl
           )}
         </Line>
         <Line label="Дата долга">{ruDateShort(debt.openedOn)}</Line>
+        {(debt.category ?? '') !== '' && <Line label="Категория">{debt.category}</Line>}
         {plans.map((r) => (
           <Line key={r.id} label="План платежей">
             <span className="money">{formatMinor(r.amountMinor, cur)}</span>

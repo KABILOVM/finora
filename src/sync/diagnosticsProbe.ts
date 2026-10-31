@@ -202,6 +202,14 @@ export const WRITE_PROBES: readonly WriteProbe[] = [
       ...common(id, stamp), name: '', qty_milli: 1000, unit: 'pcs', price_minor: null, checked_at: null, purchased_at: null, transaction_id: null,
     }),
   },
+  // пустое название цели накопления (допустимо от 1 до 60 символов); кошелька нет, поэтому ключ не проверяется
+  {
+    table: 'savings_goals',
+    rule: 'savings_goals_name_len',
+    build: (id, stamp) => ({
+      ...common(id, stamp), name: '', target_minor: 1, currency: 'TJS', due_on: '2026-12-31', wallet_id: null, archived_at: null,
+    }),
+  },
   // сумма 0 (допустимы только от 1); кошелёк выдуман, но до ключей дело не доходит: правило суммы срабатывает раньше
   {
     table: 'transactions',

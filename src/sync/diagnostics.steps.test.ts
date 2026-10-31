@@ -33,7 +33,7 @@ describe('Шаг «Запись данных»: проверка без запи
 
   it('пробная строка уходит по одной в каждую из восьми таблиц (как пишет синхронизация), а лишние строки не удаляются', async () => {
     const { calls } = await check({ upsert: { data: null, error: null, status: 201 } });
-    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'shopping_items', 'transactions', 'wallets']);
+    expect(calls.upserts.map((u) => u.table).sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'savings_goals', 'settings', 'shopping_items', 'transactions', 'wallets']);
     expect(calls.upserts.every((u) => u.options?.onConflict === 'id')).toBe(true); // upsert по id, как у синхронизации
   });
 

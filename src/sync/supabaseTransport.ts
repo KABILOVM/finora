@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { BASE_SEQ_COLUMN, TABLE_SPECS, type PulledRow, type SyncTableName, type WireRow } from './tables';
+import { BASE_SEQ_COLUMN, TABLE_SPECS, hasLateValue, type PulledRow, type SyncTableName, type WireRow } from './tables';
 import type { SessionAwareTransport } from './session';
 import { TransportError } from './transport';
 
@@ -89,14 +89,17 @@ const isMissingBaseColumn = (error: unknown): boolean => {
 };
 
 /**
- * Колонки, появившиеся в схеме позже (разделы 11, 13, 14 и 15 supabase/schema.sql): цель накопления у кошельков, города для погоды в
- * настройках, проценты по долгам и объединение долгов. Сервер, у которого раздел ещё не выполнен, их не знает (PGRST204 «нет колонки в кэше схемы»).
+ * Колонки, появившиеся в схеме позже (разделы 11, 13, 14, 15, 16 и 17 supabase/schema.sql): цель накопления у кошельков, города для
+ * погоды в настройках, проценты по долгам, объединение долгов, «обязательная» категория и категория долга. Сервер, у которого раздел
+ * ещё не выполнен, их не знает (PGRST204 «нет колонки в кэше схемы»).
  */
 const LATE_COLUMN_SETS: readonly (readonly string[])[] = [
   ['goal_minor', 'goal_on'],
   ['weather'],
   ['interest_minor', 'interest_rate_bp', 'term_months'],
   ['merged_into_id'],
+  ['essential'],
+  ['category'],
 ];
 
 /** Строка без колонок набора (для сервера, у которого раздел схемы ещё не выполнен). */
@@ -106,9 +109,6 @@ const withoutColumns = (row: WireRow, columns: readonly string[]): WireRow => {
   for (const c of columns) delete copy[c];
   return copy;
 };
-
-/** В строке задано значение хотя бы в одной колонке набора: такую правку без этих колонок не отправить, не потеряв её. */
-const hasValue = (row: WireRow, columns: readonly string[]): boolean => columns.some((c) => row[c] !== null && row[c] !== undefined);
 
 /** PostgREST не нашёл колонку набора в кэше схемы: раздел схемы ещё не выполнен. */
 const isMissingColumnOf = (error: unknown, columns: readonly string[]): boolean => {
@@ -229,7 +229,7 @@ export function createSupabaseTransport(client: SupabaseClient, opts: SupabaseTr
       // Строки с заданным значением в поздней колонке без неё не отправить, не потеряв его: такая пачка всегда идёт с колонками (даже
       // если раньше они были отключены), а ошибка «нет колонки» для неё наружу видом 'schema' — правка остаётся на устройстве и уйдёт,
       // когда схему обновят, а остальные строки движок отправит без неё (см. pushPhase.ts).
-      const filled = LATE_COLUMN_SETS.map((cols) => wire.some((r) => hasValue(r, cols)));
+      const filled = LATE_COLUMN_SETS.map((cols) => wire.some((r) => hasLateValue(r, cols)));
       const prepare = (r: WireRow): WireRow => {
         let x = versionCheck ? r : withoutBase(r);
         LATE_COLUMN_SETS.forEach((cols, i) => {

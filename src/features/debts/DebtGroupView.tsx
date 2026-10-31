@@ -15,6 +15,7 @@ import { humanError, toastWithUndo, UNDO_MS } from '@/features/transactions/txAc
 import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
+import { debtCategoriesOf } from './debtFilters';
 import { mergeCandidates } from './debtMatch';
 import { DebtPartCard } from './DebtPartCard';
 import type { DebtItem } from './debtSummary';
@@ -151,7 +152,7 @@ export function DebtGroupView({ group, items, base }: DebtGroupViewProps) {
       )}
 
       {state !== null ? (
-        <DebtSummaryCard debt={debt} state={state} today={today} />
+        <DebtSummaryCard debt={debt} state={state} today={today} categories={debtCategoriesOf(group)} />
       ) : (
         <Callout tone="danger">{DEBT_OVERFLOW_MESSAGE}</Callout>
       )}
