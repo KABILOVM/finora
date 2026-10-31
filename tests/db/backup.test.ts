@@ -604,3 +604,36 @@ describe('резервная копия: города для погоды', () =
     }
   });
 });
+
+describe('резервная копия: «обязательные» категории', () => {
+  it('отметка essential едет в файле и возвращается; старый файл читается как «не обязательные»; доходная всегда 0', async () => {
+    const a = await makeStore({ deviceId: 'dev-a' });
+    await a.settings.ensure({ baseCurrency: 'TJS' });
+    const rent = await a.categories.create({ name: 'Аренда', kind: 'expense', color: '#a855f7', icon: '🏠', essential: true });
+    const file = JSON.parse(JSON.stringify(await exportBackup(a))) as { categories: Record<string, unknown>[] };
+    expect(file.categories.find((c) => c['id'] === rent.id)).toMatchObject({ essential: 1 });
+
+    const b = await makeStore({ deviceId: 'dev-b' });
+    await b.settings.ensure({ baseCurrency: 'TJS' });
+    await importBackup(b, file);
+    expect(await b.db.categories.get(rent.id)).toMatchObject({ essential: 1 });
+
+    const old = JSON.parse(JSON.stringify(file)) as typeof file;
+    for (const c of old.categories) delete c['essential'];
+    const c = await makeStore({ deviceId: 'dev-c' });
+    await c.settings.ensure({ baseCurrency: 'TJS' });
+    await importBackup(c, old);
+    expect(await c.db.categories.get(rent.id)).toMatchObject({ essential: 0 });
+
+    // «обязательная» доходная категория в чужом файле приводится к 0, а мусорное значение отвергается
+    const income = JSON.parse(JSON.stringify(file)) as typeof file;
+    income.categories[0] = { ...income.categories[0]!, kind: 'income', essential: 1 };
+    const d = await makeStore({ deviceId: 'dev-d' });
+    await d.settings.ensure({ baseCurrency: 'TJS' });
+    await importBackup(d, income);
+    expect((await d.db.categories.get(rent.id))?.essential).toBe(0);
+    const junk = JSON.parse(JSON.stringify(file)) as typeof file;
+    junk.categories[0] = { ...junk.categories[0]!, essential: 2 };
+    await expect(importBackup(d, junk)).rejects.toThrow(/Обязательная категория/);
+  });
+});

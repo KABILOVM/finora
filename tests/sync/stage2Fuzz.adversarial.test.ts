@@ -95,7 +95,7 @@ async function scenario(seed: number): Promise<string[]> {
   if (new Set(cats).size !== cats.length) problems.push('duplicate budgets');
   for (const t of SYNC_TABLES) {
     const n = server.dump(USER, t).length;
-    const local = t === 'settings' ? b.settings ? 1 : 0 : t === 'wallets' ? b.wallets.length : t === 'categories' ? b.categories.length : t === 'transactions' ? b.transactions.length : t === 'budgets' ? b.budgets.length : t === 'debts' ? b.debts.length : t === 'shopping_items' ? b.shoppingItems.length : b.recurringRules.length;
+    const local = t === 'settings' ? b.settings ? 1 : 0 : t === 'wallets' ? b.wallets.length : t === 'categories' ? b.categories.length : t === 'transactions' ? b.transactions.length : t === 'budgets' ? b.budgets.length : t === 'debts' ? b.debts.length : t === 'shopping_items' ? b.shoppingItems.length : t === 'savings_goals' ? b.savingsGoals.length : b.recurringRules.length;
     if (n !== local) problems.push(`server ${t} ${n} != local ${local}`);
   }
   if (process.env['ADV_VERBOSE']) console.log(`seed ${seed}: budgets=${b.budgets.length} debts=${b.debts.length} rules=${b.recurringRules.length} txs=${b.transactions.length} skipped=${b.transactions.filter((t) => t.deletedAt).length}`);

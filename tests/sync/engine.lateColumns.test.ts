@@ -54,6 +54,7 @@ async function oldDeviceDb(server: MemoryServer): Promise<IDBFactory> {
   old.version(3).stores(STORES_V3);
   await old.open();
   for (const table of SYNC_TABLES) {
+    if (!(table in STORES_V3)) continue; // таблицы, появившиеся позже (цели накопления), в базе версии 3 нет
     const rows = server.dump(USER, table);
     const local = rows.map((w) => {
       const { entity, serverSeq } = fromWire(table, w);

@@ -277,3 +277,69 @@ describe('проценты по долгу (кредит в банке)', () => 
     expect(await store.debts.increase(d.id, 500_000)).toMatchObject({ principalMinor: 1_500_000, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12 });
   });
 });
+
+describe('категория долга', () => {
+  it('по умолчанию пусто; создаётся с категорией: пробелы убираются и схлопываются', async () => {
+    const store = await makeStore();
+    expect((await store.debts.create(input)).category).toBe('');
+    const d = await store.debts.create({ ...input, category: '  Друзья   по   школе ' });
+    expect(d).toMatchObject({ category: 'Друзья по школе', dirty: 1 });
+    expect(await store.db.debts.get(d.id)).toMatchObject({ category: 'Друзья по школе' });
+  });
+
+  it('до 40 символов (эмодзи считаются как один), 41 — отказ; пустая строка и пробелы — без категории', async () => {
+    const store = await makeStore();
+    expect((await store.debts.create({ ...input, category: 'я'.repeat(40) })).category).toHaveLength(40);
+    expect((await store.debts.create({ ...input, category: '😀'.repeat(40) })).category).toBe('😀'.repeat(40));
+    await expect(store.debts.create({ ...input, category: 'я'.repeat(41) })).rejects.toThrow(/Категория долга/);
+    await expect(store.debts.create({ ...input, category: 5 as never })).rejects.toThrow(/Категория долга/);
+    expect((await store.debts.create({ ...input, category: '   ' })).category).toBe('');
+  });
+
+  it('update: ставит, меняет и снимает категорию; без изменений — ничего не пишет; своя группа слияния', async () => {
+    const store = await makeStore();
+    const d = await store.debts.create(input);
+    const set = await store.debts.update(d.id, { category: 'Кредит' });
+    expect(set).toMatchObject({ category: 'Кредит', dirtyGroups: ['category'] });
+    expect((await store.debts.update(d.id, { category: ' Кредит ' })).clientUpdatedAt).toBe(set.clientUpdatedAt);
+    const cleared = await store.debts.update(d.id, { category: '' });
+    expect(cleared).toMatchObject({ category: '', dirtyGroups: [] }); // поставили и сняли до отправки = ничего не менялось
+    const withNote = await store.debts.update(d.id, { category: 'Семья', note: 'до зарплаты' });
+    expect(withNote.dirtyGroups).toEqual(['category', 'note']);
+  });
+
+  it('при объединении у каждой составляющей остаётся своя категория; закрытие и архив её не трогают', async () => {
+    const store = await makeStore();
+    const a = await store.debts.create({ ...input, counterparty: 'Банк', category: 'Кредит' });
+    const b = await store.debts.create({ ...input, counterparty: 'Банк', category: 'Рассрочка' });
+    await store.debts.merge(a.id, [b.id]);
+    expect(await store.db.debts.get(a.id)).toMatchObject({ category: 'Кредит' });
+    expect(await store.db.debts.get(b.id)).toMatchObject({ category: 'Рассрочка', mergedIntoId: a.id });
+    await store.debts.close(a.id, { withParts: true });
+    await store.debts.archive(a.id, { withParts: true });
+    expect(await store.db.debts.get(b.id)).toMatchObject({ category: 'Рассрочка' });
+  });
+
+  it('резервная копия возвращает категорию; старый файл без неё читается как «без категории»', async () => {
+    const { exportBackup, importBackup } = await import('@/db');
+    const a = await makeStore({ deviceId: 'dev-a' });
+    await a.settings.ensure({ baseCurrency: 'TJS' });
+    const d = await a.debts.create({ ...input, category: 'Друзья' });
+    const file = JSON.parse(JSON.stringify(await exportBackup(a))) as { debts: Record<string, unknown>[] };
+    expect(file.debts[0]).toMatchObject({ category: 'Друзья' });
+    const b = await makeStore({ deviceId: 'dev-b' });
+    await b.settings.ensure({ baseCurrency: 'TJS' });
+    await importBackup(b, file);
+    expect(await b.db.debts.get(d.id)).toMatchObject({ category: 'Друзья' });
+    const old = JSON.parse(JSON.stringify(file)) as typeof file;
+    for (const x of old.debts) delete x['category'];
+    const c = await makeStore({ deviceId: 'dev-c' });
+    await c.settings.ensure({ baseCurrency: 'TJS' });
+    await importBackup(c, old);
+    expect(await c.db.debts.get(d.id)).toMatchObject({ category: '' });
+    // категория длиннее предела в чужом файле — отказ целиком
+    const bad = JSON.parse(JSON.stringify(file)) as typeof file;
+    bad.debts[0]!['category'] = 'я'.repeat(41);
+    await expect(importBackup(c, bad)).rejects.toThrow(/Категория долга/);
+  });
+});

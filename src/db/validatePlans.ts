@@ -1,4 +1,4 @@
-import { DEBT_CATEGORY_MAX, normalizeDebtCategory } from '@/domain/debtCategory';
+import { DEBT_CATEGORY_MAX } from '@/domain/debtCategory';
 import { RATE_BP_MAX, RATE_BP_MIN, TERM_MONTHS_MAX, TERM_MONTHS_MIN } from '@/domain/interest';
 import { NAME_MAX as SHOPPING_NAME_MAX, QTY_MAX, QTY_MIN, SHOPPING_UNITS } from '@/domain/shopping';
 import type { CurrencyCode, DebtDirection, Frequency, IsoDate, IsoDateTime, Minor, ShoppingUnit, TxKind, UUID } from '@/domain/types';
@@ -76,6 +76,16 @@ export interface DebtData {
   archivedAt: IsoDateTime | null;
 }
 
+/**
+ * Категория долга: длина считается в символах (эмодзи — один символ), как char_length на сервере, а не в единицах UTF-16.
+ * Пробелы по краям убираются, внутри схлопываются; пусто — ''.
+ */
+function reqDebtCategory(v: unknown): string {
+  const collapsed = reqText(v, 'Категория долга', 10_000, 0).replace(/[\s\u00a0\u202f]+/g, ' ');
+  if (Array.from(collapsed).length > DEBT_CATEGORY_MAX) fail(`Категория долга: не длиннее ${DEBT_CATEGORY_MAX} символов`);
+  return collapsed;
+}
+
 /** Необязательное поле: нет значения или null — null; иначе проверка как у обязательного. */
 const optional = <T>(v: unknown, read: (x: unknown) => T): T | null => (v === null || v === undefined ? null : read(v));
 
@@ -100,7 +110,7 @@ export function parseDebtData(raw: Record<string, unknown>): DebtData {
     // Копии и устройства до объединения с составляющими этого поля не знают: нет поля — долг сам по себе.
     mergedIntoId: optId(raw['mergedIntoId'], 'Долг, в состав которого входит этот'),
     // Копии и устройства до категорий долгов этого поля не знают: нет поля — без категории. Пробелы схлопываются, длина — как у сервера.
-    category: categoryRaw === undefined || categoryRaw === null ? '' : normalizeDebtCategory(reqText(categoryRaw, 'Категория долга', DEBT_CATEGORY_MAX, 0)),
+    category: categoryRaw === undefined || categoryRaw === null ? '' : reqDebtCategory(categoryRaw),
     currency: reqCurrency(raw['currency'], 'Валюта долга'),
     openedOn: reqDate(raw['openedOn'], 'Дата долга'),
     dueOn: dueRaw === null || dueRaw === undefined ? null : reqDate(dueRaw, 'Срок возврата'),
