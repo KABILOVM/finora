@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { bankById } from '@/features/wallets/banks';
 import { Icon } from './Icon';
 import { resolveGlyph } from './glyphs';
-import { serviceById, useServiceLogo } from './services';
+import { serviceById, serviceImageUrl, useServiceLogo } from './services';
 
 export interface GlyphProps {
   /** Значение поля icon категории или кошелька: «i:cup», «b:alif», «s:netflix» или эмодзи. */
@@ -22,6 +22,19 @@ function ServiceGlyph({ id, base, inner, className }: { id: string; base: CSSPro
   const service = serviceById(id);
   const logo = useServiceLogo(id);
   if (!service) return null;
+  const image = serviceImageUrl(service);
+  if (image) {
+    // Значок приложения (таджикские банки и сервисы): сама картинка заполняет плитку
+    return (
+      <span
+        aria-hidden="true"
+        className={`inline-flex items-center justify-center overflow-hidden ${className ?? ''}`}
+        style={{ ...base, backgroundColor: service.color, boxShadow: '0 0 0 1px rgb(128 128 128 / 0.25)' }}
+      >
+        <img src={image} alt="" width={base.width} height={base.height} draggable={false} className="h-full w-full object-cover" />
+      </span>
+    );
+  }
   return (
     <span
       aria-hidden="true"

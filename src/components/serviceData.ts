@@ -11,6 +11,8 @@ export interface ServiceMeta {
   dark?: true;
   /** Слова для подсказки значка по названию категории (целым словом, в нижнем регистре). */
   keys?: readonly string[];
+  /** Только у таджикских банков и сервисов (tjData.ts): значок приложения файлом, путь от корня сайта (tj/eskhata.png). Тогда логотипа-вектора нет. */
+  img?: string;
 }
 
 export const SERVICE_GROUPS: readonly { id: string; label: string }[] = [{"id":"media","label":"Видео и музыка"},{"id":"work","label":"ИИ и работа"},{"id":"cloud","label":"Облако и безопасность"},{"id":"pay","label":"Платежи и крипта"},{"id":"social","label":"Соцсети и связь"},{"id":"games","label":"Игры и приложения"},{"id":"shop","label":"Покупки и поездки"}];

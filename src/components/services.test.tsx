@@ -21,18 +21,27 @@ describe('каталог сервисов', () => {
     }
   });
 
-  it('у каждой группы есть сервисы и загрузчик логотипов, а у каждого сервиса — известная группа', () => {
+  it('у каждой группы есть сервисы, у каждого сервиса — известная группа, у векторных групп — загрузчик логотипов', () => {
     const groups = SERVICE_GROUPS.map((g) => g.id);
     expect(new Set(groups).size).toBe(groups.length);
-    expect([...LOGO_LOADERS.keys()].sort()).toEqual([...groups].sort());
     for (const g of groups) expect(SERVICES.some((s) => s.group === g), g).toBe(true);
     for (const s of SERVICES) expect(groups, s.id).toContain(s.group);
+    // загрузчики — ровно у групп векторных логотипов; значки-картинки (таджикские) ленивой загрузки не требуют
+    const vectorGroups = new Set(SERVICES.filter((s) => !s.img).map((s) => s.group));
+    expect([...LOGO_LOADERS.keys()].sort()).toEqual([...vectorGroups].sort());
+  });
+
+  it('значки-картинки: путь tj/<id>.png, белая плитка', () => {
+    for (const s of SERVICES.filter((x) => x.img)) {
+      expect(s.img, s.id).toBe(`tj/${s.id}.png`);
+      expect(s.color, s.id).toBe('#ffffff');
+    }
   });
 
   it('логотип есть у каждого сервиса, в файле группы нет чужих и лишних, путь не пустой', async () => {
-    for (const group of SERVICE_GROUPS.map((g) => g.id)) {
+    for (const group of LOGO_LOADERS.keys()) {
       const { LOGOS } = await LOGO_LOADERS.get(group)!();
-      const own = SERVICES.filter((s) => s.group === group).map((s) => s.id);
+      const own = SERVICES.filter((s) => s.group === group && !s.img).map((s) => s.id);
       expect(Object.keys(LOGOS).sort(), group).toEqual([...own].sort());
       for (const id of own) {
         const [viewBox, path] = LOGOS[id]!;
@@ -122,7 +131,7 @@ describe('GlyphPicker: вкладка «Сервисы»', () => {
     // все группы подписаны
     for (const g of SERVICE_GROUPS) expect(screen.getByRole('group', { name: g.label })).toBeInTheDocument();
     // дождаться логотипов, чтобы загрузка не закончилась уже после теста
-    await waitFor(() => expect(document.querySelectorAll('svg path').length).toBe(SERVICES.length));
+    await waitFor(() => expect(document.querySelectorAll('svg path').length).toBe(SERVICES.filter((s) => !s.img).length));
   });
 
   it('если сейчас выбран логотип — сразу открыта вкладка сервисов и он отмечен', async () => {
@@ -130,7 +139,7 @@ describe('GlyphPicker: вкладка «Сервисы»', () => {
     expect(screen.getByRole('radio', { name: 'Сервисы', checked: true })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'PayPal', pressed: true })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Visa', pressed: false })).toBeInTheDocument();
-    await waitFor(() => expect(document.querySelectorAll('svg path').length).toBe(SERVICES.length));
+    await waitFor(() => expect(document.querySelectorAll('svg path').length).toBe(SERVICES.filter((s) => !s.img).length));
   });
 
   it('services={false}: вкладок нет, только обычные значки', () => {

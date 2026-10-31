@@ -1,14 +1,27 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { SERVICES, SERVICE_GROUPS, type ServiceMeta } from './serviceData';
+import { SERVICES as VECTOR_SERVICES, SERVICE_GROUPS as VECTOR_GROUPS, type ServiceMeta } from './serviceData';
+import { TJ_GROUPS, TJ_SERVICES } from './tjData';
 
 /**
  * Логотипы популярных сервисов (Netflix, Spotify, Claude, PayPal…) для значков категорий и кошельков. В поле icon хранится «s:<id>»,
  * схема данных не меняется. Каталог (id, название, цвет плитки) маленький и лежит в основном файле; сами пути логотипов — в
  * serviceLogos/logos-<группа>.ts, их создаёт scripts/gen-services.cjs. Каждая группа грузится отдельным файлом и только тогда, когда
  * на экране появился её сервис (файлы лежат в офлайн-кэше приложения, как и всё остальное).
+ * Таджикские банки и сервисы — не векторы, а значки приложений файлами public/tj/<id>.png (поле img): их создаёт
+ * scripts/gen-tj-services.cjs, они идут в выборе первыми, и ленивой загрузки им не нужно.
  */
-export { SERVICES, SERVICE_GROUPS };
 export type { ServiceMeta };
+
+/** Все сервисы в порядке показа: сначала таджикские (только те, у кого есть файл), потом остальные. */
+export const SERVICES: readonly ServiceMeta[] = [...TJ_SERVICES, ...VECTOR_SERVICES];
+
+/** Группы в порядке показа; пустые (таджикские без единой иконки) не показываются. */
+export const SERVICE_GROUPS: readonly { id: string; label: string }[] = [...TJ_GROUPS, ...VECTOR_GROUPS].filter((g) =>
+  SERVICES.some((s) => s.group === g.id),
+);
+
+/** Адрес значка-картинки: относительный к корню приложения (работает и в подпапке хостинга). */
+export const serviceImageUrl = (s: Pick<ServiceMeta, 'img'>): string | null => (s.img ? `${import.meta.env.BASE_URL}${s.img}` : null);
 
 /** Логотип: [viewBox, путь]. Рисуется одним цветом. */
 export type Logo = readonly [viewBox: string, path: string];
