@@ -13,11 +13,11 @@ export type ThemePref = 'light' | 'dark' | 'system';
  * src/lib/palette.ts. Хранится так же, как тема, — на устройстве. Фиолетовый — прежняя палитра приложения; она действует,
  * пока ничего не выбрано.
  */
-const HAND_MADE = ['violet', 'blue', 'teal', 'green', 'orange', 'red', 'pink'] as const;
+type HandMadeAccentId = 'violet' | 'blue' | 'teal' | 'green' | 'orange' | 'red' | 'pink';
 
 export type GeneratedAccentId = (typeof GENERATED_ACCENTS)[number]['id'];
 /** Готовый акцент: у каждого есть блок в index.css. */
-export type PresetAccentId = (typeof HAND_MADE)[number] | GeneratedAccentId;
+export type PresetAccentId = HandMadeAccentId | GeneratedAccentId;
 /** «Свой цвет»: палитру строит приложение, блока в index.css нет; сам цвет лежит в finora-accent-custom. */
 export const CUSTOM_ACCENT = 'custom';
 export type AccentId = PresetAccentId | typeof CUSTOM_ACCENT;
