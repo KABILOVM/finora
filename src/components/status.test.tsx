@@ -5,7 +5,7 @@ import { SyncProvider } from '@/sync/syncContext';
 import type { SyncEngineApi, SyncStatus } from '@/sync/transport';
 import { INSTALL_HINT_KEY, InstallHint } from './InstallHint';
 import { OnlineBadge, useOnline } from './OnlineBadge';
-import { SyncBadge, syncBadgeText } from './SyncBadge';
+import { SyncBadge, syncBadgeHint, syncBadgeText } from './SyncBadge';
 import { UpdatePrompt } from './UpdatePrompt';
 import { act, render, screen, user } from './testUtils';
 
@@ -149,6 +149,33 @@ describe('SyncBadge: честный статус (пункт «Синхрони�
   it('после настоящей синхронизации — «Синхронизировано» с галочкой облака', () => {
     render(<SyncBadge phase="idle" pending={0} quarantined={0} lastSyncedAt={SYNCED_AT} />);
     expect(screen.getByRole('status')).toHaveTextContent(/^Синхронизировано$/);
+  });
+});
+
+describe('SyncBadge: причина ошибки в подсказке', () => {
+  it('при ошибке подсказка называет причину (lastError) и отправляет в Настройки; текст плашки остаётся коротким', () => {
+    const reason = 'Сервер временно недоступен (код PGRST002)';
+    const v = render(<SyncBadge phase="error" pending={1} lastSyncedAt={SYNCED_AT} lastError={reason} />);
+    const el = screen.getByRole('status');
+    expect(el).toHaveTextContent(/^Ошибка синхронизации · 1 запись в очереди$/);
+    expect(el.getAttribute('title')).toBe(`Ошибка синхронизации · 1 запись в очереди. Причина: ${reason}. Подробности — в Настройках.`);
+    // точка в конце причины не удваивается, пробелы по краям не мешают
+    v.rerender(<SyncBadge phase="error" pending={0} lastSyncedAt={SYNCED_AT} lastError="  Нет связи.  " />);
+    expect(screen.getByRole('status').getAttribute('title')).toBe('Ошибка синхронизации. Причина: Нет связи. Подробности — в Настройках.');
+  });
+
+  it('без причины (пусто, null, не передана) подсказка — просто текст плашки, как раньше', () => {
+    for (const lastError of [undefined, null, '', '   ']) {
+      expect(syncBadgeHint('error', 2, 0, SYNCED_AT, lastError)).toBe('Ошибка синхронизации · 2 записи в очереди');
+    }
+  });
+
+  it('причина показывается только при ошибке: устаревший lastError в других фазах подсказку не меняет', () => {
+    const stale = 'Сервер временно недоступен';
+    expect(syncBadgeHint('idle', 0, 0, SYNCED_AT, stale)).toBe('Синхронизировано');
+    expect(syncBadgeHint('syncing', 1, 0, SYNCED_AT, stale)).toBe('Синхронизация…');
+    expect(syncBadgeHint('offline', 1, 0, SYNCED_AT, stale)).toBe('Без сети · 1 запись в очереди');
+    expect(syncBadgeHint('auth-required', 0, 0, SYNCED_AT, stale)).toMatch(/^Нужен вход\. Войдите в аккаунт заново/);
   });
 });
 

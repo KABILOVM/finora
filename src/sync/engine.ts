@@ -1,5 +1,5 @@
 import { META_LAST_SYNCED_AT, type Store } from '@/db';
-import { BISECT_BUDGET, BisectBudgetError, describeSchemaWait, pushAll, type PushCtx } from './pushPhase';
+import { BISECT_BUDGET, BisectBudgetError, describeBrokenCloud, describeSchemaWait, isBrokenCloud, pushAll, type PushCtx } from './pushPhase';
 import { UNREADABLE_MESSAGE, pullAll } from './pullPhase';
 import { SESSION_MISMATCH_MESSAGE, SessionMismatchError, guardSession } from './session';
 import { TransportError, type SyncEngineApi, type SyncPhase, type SyncStatus, type SyncTransport } from './transport';
@@ -319,7 +319,12 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
 
   function describeFailure(e: unknown): { phase: SyncPhase; message: string } {
     if (e instanceof TransportError && e.kind === 'network') return { phase: 'offline', message: 'Нет связи с сервером' };
-    if (e instanceof TransportError && e.kind === 'server') return { phase: 'error', message: 'Сервер временно недоступен' };
+    if (e instanceof TransportError && e.kind === 'server') {
+      // Не хватает таблицы или колонки: это не «временно», повтор сам не поможет — говорим, что делать
+      if (isBrokenCloud(e)) return { phase: 'error', message: describeBrokenCloud(e) };
+      // Код отказа (если он есть) помогает понять причину по одному слову в статусе, например PGRST002 — «кэш схемы ещё грузится»
+      return { phase: 'error', message: e.code !== undefined && /^[A-Za-z0-9_]{1,12}$/.test(e.code) ? `Сервер временно недоступен (код ${e.code})` : 'Сервер временно недоступен' };
+    }
     if (e instanceof TransportError && e.kind === 'schema') return { phase: 'error', message: describeSchemaWait([]) };
     if (e instanceof UnreadableSignal) return { phase: 'error', message: UNREADABLE_MESSAGE };
     if (e instanceof BisectBudgetError || e instanceof ConflictLoopError) return { phase: 'error', message: e.message };
