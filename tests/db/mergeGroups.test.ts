@@ -23,8 +23,8 @@ import { SYNC_TABLES, TABLE_SPECS, type SyncTableName } from '@/sync/tables';
 /** (б) Тест-страж и (а) чистые таблицы слияния по каждой группе и сущности. */
 
 describe('страж: поля договора и группы слияния', () => {
-  it('страж покрывает все восемь таблиц договора: групп слияния ровно столько же, сколько синхронизируемых таблиц', () => {
-    expect([...SYNC_TABLES].sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'shopping_items', 'transactions', 'wallets']);
+  it('страж покрывает все девять таблиц договора: групп слияния ровно столько же, сколько синхронизируемых таблиц', () => {
+    expect([...SYNC_TABLES].sort()).toEqual(['budgets', 'categories', 'debts', 'recurring_rules', 'savings_goals', 'settings', 'shopping_items', 'transactions', 'wallets']);
     expect(Object.keys(MERGE_GROUPS).sort()).toEqual([...SYNC_TABLES].sort());
     expect(Object.keys(TABLE_SPECS).sort()).toEqual([...SYNC_TABLES].sort());
   });
@@ -89,6 +89,7 @@ describe('состав групп (как в договоре задачи)', ()
       amount: ['principalMinor', 'currency'],
       interest: ['interestMinor', 'interestRateBp', 'termMonths'],
       link: ['mergedIntoId'],
+      category: ['category'],
       dates: ['openedOn', 'dueOn'],
       note: ['note'],
       closed: ['closedAt'],
@@ -121,6 +122,17 @@ describe('состав групп (как в договоре задачи)', ()
       name: ['name'],
       kind: ['kind', 'parentId'],
       look: ['color', 'icon', 'sortOrder'],
+      essential: ['essential'],
+      archived: ['archivedAt'],
+      deleted: ['deletedAt'],
+    });
+  });
+  it('savings_goals', () => {
+    expect(MERGE_GROUPS.savings_goals).toEqual({
+      name: ['name'],
+      target: ['targetMinor', 'currency'],
+      due: ['dueOn'],
+      wallet: ['walletId'],
       archived: ['archivedAt'],
       deleted: ['deletedAt'],
     });
@@ -152,7 +164,7 @@ const BASE: Record<SyncTableName, Record<string, unknown>> = {
   },
   budgets: { categoryId: null, amountMinor: 100, currency: 'TJS', period: 'month', archivedAt: null, deletedAt: null },
   debts: {
-    direction: 'lent', counterparty: 'Али', principalMinor: 100, interestMinor: null, interestRateBp: null, termMonths: null, mergedIntoId: null, currency: 'TJS',
+    direction: 'lent', counterparty: 'Али', principalMinor: 100, interestMinor: null, interestRateBp: null, termMonths: null, mergedIntoId: null, category: '', currency: 'TJS',
     openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null, deletedAt: null,
   },
   recurring_rules: {
@@ -160,7 +172,8 @@ const BASE: Record<SyncTableName, Record<string, unknown>> = {
     frequency: 'monthly', intervalN: 1, startOn: '2026-10-01', endOn: null, autoPost: 0, archivedAt: null, deletedAt: null,
   },
   wallets: { name: 'N', currency: 'TJS', kind: 'cash', openingBalanceMinor: 0, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, goalMinor: null, goalOn: null, deletedAt: null },
-  categories: { name: 'N', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, deletedAt: null },
+  categories: { name: 'N', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, essential: 0, deletedAt: null },
+  savings_goals: { name: 'Отпуск', targetMinor: 500_000, currency: 'TJS', dueOn: '2026-12-31', walletId: null, archivedAt: null, deletedAt: null },
   settings: { baseCurrency: 'TJS', locale: 'ru', weekStartsOn: 1, defaultWalletId: null, weather: null, deletedAt: null },
   shopping_items: { name: 'Молоко', qtyMilli: 2000, unit: 'l', priceMinor: null, checkedAt: null, purchasedAt: null, transactionId: null, deletedAt: null },
 };

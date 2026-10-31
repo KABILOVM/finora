@@ -1,5 +1,5 @@
 import Dexie, { type DexieOptions, type EntityTable, type Table } from 'dexie';
-import type { Budget, Category, Debt, LocalRow, RecurringRule, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, LocalRow, RecurringRule, SavingsGoal, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
 import { SYNC_TABLES, type EntityOf, type SyncTableName } from '@/sync/tables';
 
 /** Служебное значение в таблице meta: курсоры синхронизации, lastSyncedAt, последняя метка часов. */
@@ -31,7 +31,7 @@ export function dbNameFor(userId: string): string {
  *  - transactions: occurredOn (периоды), walletId/toWalletId (история кошелька, проверки), categoryId,
  *    debtId (операции долга), recurringRuleId (операции по расписанию);
  *  - budgets: categoryId; debts: direction, closedAt, archivedAt; recurring_rules: startOn, archivedAt.
- *    shopping_items: purchasedAt (активные позиции), transactionId (чек расхода).
+ *    shopping_items: purchasedAt (активные позиции), transactionId (чек расхода); savings_goals: walletId (цели кошелька).
  *    (Пустые значения null в индекс IndexedDB не попадают — для запросов «по значению» это то, что нужно.)
  * Остатки кошельков и остатки долгов НЕ хранятся (считаются из операций, см. domain/balances.ts и domain/debts.ts).
  *
@@ -49,6 +49,8 @@ export function dbNameFor(userId: string): string {
  *  - 7: у долгов проценты (interestMinor, interestRateBp, termMonths — без индексов). Старым долгам в upgrade() проставляется null,
  *    а долги забираются с сервера заново (как в версии 6): прежняя версия получала их, отбрасывая незнакомые колонки.
  *  - 8: у долгов mergedIntoId (объединение с составляющими, без индекса). Старым долгам null, долги забираются с сервера заново.
+ *  - 9: + savings_goals (цели накопления в «Бюджетах»); у категорий essential («обязательная»: 0 старым), у долгов category
+ *    (категория долга: '' старым, без индексов). Категории и долги забираются с сервера заново (как в версии 8).
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -59,6 +61,7 @@ export class FinoraDB extends Dexie {
   declare budgets: EntityTable<LocalRow<Budget>, 'id'>;
   declare recurring_rules: EntityTable<LocalRow<RecurringRule>, 'id'>;
   declare shopping_items: EntityTable<LocalRow<ShoppingItem>, 'id'>;
+  declare savings_goals: EntityTable<LocalRow<SavingsGoal>, 'id'>;
   declare meta: EntityTable<MetaRow, 'key'>;
 
   constructor(userId: string, options?: DexieOptions) {
@@ -160,6 +163,32 @@ export class FinoraDB extends Dexie {
           .toCollection()
           .modify((d: Record<string, unknown>) => {
             if (d['mergedIntoId'] === undefined) d['mergedIntoId'] = null;
+            if (typeof d['serverSeq'] === 'number') d['serverSeq'] = 0;
+          });
+      });
+    // Цели накопления (новая таблица), «обязательные» категории и категории долгов: тот же порядок, что в версии 8. Прежняя версия
+    // получала категории и долги, отбрасывая незнакомые колонки essential и category, и без повторного получения первая же правка
+    // стёрла бы их значения на сервере.
+    this.version(9)
+      .stores({ savings_goals: 'id, dirty, walletId, [dirty+clientUpdatedAt]' })
+      .upgrade(async (tx) => {
+        await tx.table('meta').bulkDelete([cursorKey('categories'), cursorKey('debts')]);
+        await tx.table('meta').bulkPut([
+          { key: resyncKey('categories'), value: true },
+          { key: resyncKey('debts'), value: true },
+        ]);
+        await tx
+          .table('categories')
+          .toCollection()
+          .modify((c: Record<string, unknown>) => {
+            if (c['essential'] === undefined) c['essential'] = 0;
+            if (typeof c['serverSeq'] === 'number') c['serverSeq'] = 0;
+          });
+        await tx
+          .table('debts')
+          .toCollection()
+          .modify((d: Record<string, unknown>) => {
+            if (d['category'] === undefined) d['category'] = '';
             if (typeof d['serverSeq'] === 'number') d['serverSeq'] = 0;
           });
       });

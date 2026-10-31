@@ -17,6 +17,7 @@ export type { BudgetsRepo, BudgetInput } from './budgetsRepo';
 export type { DebtsRepo, DebtInput, DebtPatch, DebtDeleteMode, DebtDeletion, DebtMerge, DebtUnmerge, GroupOpts } from './debtsRepo';
 export type { RecurringRepo, RecurringInput, RecurringPatch } from './recurringRepo';
 export type { ShoppingRepo, ShoppingInput, ShoppingPatch, PurchaseInput, PurchaseResult, ReceiptInput, ReceiptLineInput } from './shoppingRepo';
+export type { SavingsGoalsRepo, SavingsGoalInput, SavingsGoalPatch } from './savingsGoalsRepo';
 export type { SettingsRepo, SettingsPatch } from './settingsRepo';
 export type { FromRuleOptions } from './transactionsRepo';
 export * from './validatePlans';
@@ -44,6 +45,7 @@ export {
   useDebts,
   useRecurringRules,
   useShoppingItems,
+  useSavingsGoals,
   useReceipt,
   useDebtState,
   useDebtView,

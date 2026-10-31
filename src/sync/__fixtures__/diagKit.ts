@@ -24,6 +24,7 @@ export const PROBE_RULE: Record<string, string> = {
   recurring_rules: 'recurring_rules_amount',
   transactions: 'transactions_amount',
   shopping_items: 'shopping_items_name_len',
+  savings_goals: 'savings_goals_name_len',
 };
 /** Так Postgres отклоняет пробную строку таблицы. */
 export const checkViolation = (table: string, rule: string = PROBE_RULE[table] ?? `${table}_x`): CloudQueryResult =>
@@ -91,6 +92,7 @@ export const HEALTHY: Record<string, Reply> = {
   recurring_rules: rows([]),
   transactions: rows([]),
   shopping_items: rows([]),
+  savings_goals: rows([]),
   exchange_rates: rows([
     { as_of: '2026-10-09', source: 'nbt', fetched_at: '2026-10-09T05:30:00Z' },
     { as_of: '2026-10-10', source: 'nbt', fetched_at: '2026-10-10T05:30:00Z' },

@@ -11,7 +11,7 @@ import { SEED_SLUGS } from './seed';
  * сервер отвергает навсегда (нет прав на чужую строку), и она висит «не принята сервером» без шанса уйти.
  * Поэтому каждый id из такого файла заменяется на производный от (этот пользователь + прежний id), а все ссылки
  * (родитель категории, кошелёк, категория, долг и регулярный платёж операции, кошельки/категория/долг правила,
- * категория бюджета, главный долг объединения) переписываются так же. Производный id не случаен: тот же файл второй раз даёт те же id, поэтому повторная
+ * категория бюджета, главный долг объединения, кошелёк цели накопления) переписываются так же. Производный id не случаен: тот же файл второй раз даёт те же id, поэтому повторная
  * загрузка ничего не плодит (записи сливаются по правилу «новее побеждает»), и два устройства одного аккаунта, загрузив один
  * файл, получают одни и те же записи. Ссылка на запись, которой нет в файле, остаётся как есть: её существование проверит импорт.
  *
@@ -50,12 +50,13 @@ export async function withAccountIds(file: BackupFile, userId: string, sourceUse
     for (const id of ids) out.set(id, seeded.get(id) ?? (await uuidV5(FINORA_NAMESPACE, `${userId}:import:${kind}:${id}`)));
     return out;
   };
-  const [w, c, d, r, sh] = await Promise.all([
+  const [w, c, d, r, sh, g] = await Promise.all([
     derive('wallet', file.wallets.map((x) => x.id)),
     derive('category', file.categories.map((x) => x.id)),
     derive('debt', file.debts.map((x) => x.id)),
     derive('rule', file.recurringRules.map((x) => x.id)),
     derive('shopping', file.shoppingItems.map((x) => x.id)),
+    derive('goal', file.savingsGoals.map((x) => x.id)),
   ]);
   const pick = (m: Map<string, string>, id: string | null): string | null => (id === null ? null : (m.get(id) ?? id));
 
@@ -97,6 +98,7 @@ export async function withAccountIds(file: BackupFile, userId: string, sourceUse
       debtId: pick(d, x.debtId),
     })),
     shoppingItems: file.shoppingItems.map((x) => ({ ...x, id: sh.get(x.id) ?? x.id, transactionId: pick(txIds, x.transactionId) })),
+    savingsGoals: file.savingsGoals.map((x) => ({ ...x, id: g.get(x.id) ?? x.id, walletId: pick(w, x.walletId) })),
     transactions: file.transactions.map((x) => ({
       ...x,
       id: txIds.get(x.id) ?? x.id,

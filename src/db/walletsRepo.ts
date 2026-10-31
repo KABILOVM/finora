@@ -84,10 +84,21 @@ export function createWalletsRepo(ctx: RepoContext): WalletsRepo {
   }
 
   async function save(id: UUID, change: (w: LocalRow<Wallet>) => WalletData): Promise<LocalRow<Wallet>> {
-    return writeTx(ctx, [db.wallets, db.transactions, db.recurring_rules], async () => {
+    return writeTx(ctx, [db.wallets, db.transactions, db.recurring_rules, db.savings_goals], async () => {
       const cur = await getLiveWallet(ctx, id);
       const next = change(cur);
       if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
+      // кошелёк, к которому привязана цель накопления («Бюджеты»), обязан остаться накоплением в той же валюте
+      if (next.kind !== cur.kind || next.currency !== cur.currency) {
+        const goal = await db.savings_goals
+          .where('walletId')
+          .equals(id)
+          .filter((g) => g.deletedAt === null && g.archivedAt === null)
+          .first();
+        if (goal && (next.kind !== 'savings' || next.currency !== goal.currency)) {
+          throw new ValidationError(`Кошелёк «${cur.name}» привязан к цели «${goal.name}»: нельзя менять его вид или валюту. Сначала отвяжите цель в «Бюджетах».`);
+        }
+      }
       if (next.currency !== cur.currency && (await currencyLocked(id))) {
         throw new ValidationError(
           `Нельзя менять валюту кошелька «${cur.name}»: по нему уже есть операции или регулярные платежи. Заведите новый кошелёк.`,

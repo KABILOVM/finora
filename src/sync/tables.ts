@@ -1,4 +1,4 @@
-import type { Budget, Category, Debt, Entity, RecurringRule, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
+import type { Budget, Category, Debt, Entity, RecurringRule, SavingsGoal, Settings, ShoppingItem, Transaction, Wallet } from '@/domain/types';
 
 /**
  * ДОГОВОР между клиентом и базой: какие таблицы синхронизируются и как поля сущностей
@@ -6,7 +6,10 @@ import type { Budget, Category, Debt, Entity, RecurringRule, Settings, ShoppingI
  * supabase/schema.sql ОБЯЗАН содержать ровно эти колонки (+ служебные user_id, server_seq, server_updated_at).
  */
 
-/** Порядок = порядок отправки (родители раньше детей). */
+/**
+ * Порядок = порядок отправки (родители раньше детей). Таблицы, появившиеся позже всех (shopping_items, savings_goals), идут в конце:
+ * облако, где раздел схемы ещё не выполнен, не останавливает синхронизацию остального раньше времени.
+ */
 export const SYNC_TABLES = [
   'settings',
   'wallets',
@@ -16,6 +19,7 @@ export const SYNC_TABLES = [
   'recurring_rules',
   'transactions',
   'shopping_items',
+  'savings_goals',
 ] as const;
 export type SyncTableName = (typeof SYNC_TABLES)[number];
 
@@ -38,6 +42,11 @@ interface Col {
   column: string;
   type: ColType;
   nullable?: boolean;
+  /**
+   * Значение колонки, добавленной в схему позже (not null default …): так читается строка от сервера, где колонки ещё нет, и так
+   * же сервер в памяти заполняет её, если клиент её не прислал. Пустое (null) значение этой колонки по-прежнему ошибка.
+   */
+  fallback?: string | number;
 }
 
 const COMMON: Col[] = [
@@ -93,6 +102,7 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'icon', column: 'icon', type: 'text' },
       { field: 'sortOrder', column: 'sort_order', type: 'int' },
       { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
+      { field: 'essential', column: 'essential', type: 'int', fallback: 0 },
     ],
   },
   transactions: {
@@ -126,6 +136,7 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'interestRateBp', column: 'interest_rate_bp', type: 'int', nullable: true },
       { field: 'termMonths', column: 'term_months', type: 'int', nullable: true },
       { field: 'mergedIntoId', column: 'merged_into_id', type: 'uuid', nullable: true },
+      { field: 'category', column: 'category', type: 'text', fallback: '' },
       { field: 'currency', column: 'currency', type: 'text' },
       { field: 'openedOn', column: 'opened_on', type: 'date' },
       { field: 'dueOn', column: 'due_on', type: 'date', nullable: true },
@@ -178,7 +189,35 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'transactionId', column: 'transaction_id', type: 'uuid', nullable: true },
     ],
   },
+  savings_goals: {
+    remote: 'savings_goals',
+    columns: [
+      ...COMMON,
+      { field: 'name', column: 'name', type: 'text' },
+      { field: 'targetMinor', column: 'target_minor', type: 'int' },
+      { field: 'currency', column: 'currency', type: 'text' },
+      { field: 'dueOn', column: 'due_on', type: 'date' },
+      { field: 'walletId', column: 'wallet_id', type: 'uuid', nullable: true },
+      { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
+    ],
+  },
 };
+
+/** Колонки поздней схемы со значением по умолчанию (essential, category): колонка → её значение по умолчанию. */
+const LATE_DEFAULTS: ReadonlyMap<string, string | number> = new Map(
+  Object.values(TABLE_SPECS).flatMap((spec) => spec.columns.flatMap((c) => (c.fallback !== undefined ? [[c.column, c.fallback] as const] : []))),
+);
+
+/**
+ * В строке задано значение хотя бы в одной из колонок: такую строку без этих колонок не отправить, не потеряв значение.
+ * Пустое значение и значение по умолчанию (essential = 0, category = '') не в счёт: сервер без колонки и так отдаёт его при чтении.
+ */
+export function hasLateValue(row: WireRow, columns: readonly string[]): boolean {
+  return columns.some((c) => {
+    const v = row[c];
+    return v !== null && v !== undefined && v !== LATE_DEFAULTS.get(c);
+  });
+}
 
 export type EntityOf<T extends SyncTableName> = T extends 'settings'
   ? Settings
@@ -194,7 +233,9 @@ export type EntityOf<T extends SyncTableName> = T extends 'settings'
             ? RecurringRule
             : T extends 'shopping_items'
               ? ShoppingItem
-              : Transaction;
+              : T extends 'savings_goals'
+                ? SavingsGoal
+                : Transaction;
 
 export class WireError extends Error {
   constructor(message: string) {
@@ -212,7 +253,7 @@ export function toWire(table: SyncTableName, entity: Entity, baseSeq?: number): 
   const src = entity as unknown as Record<string, unknown>;
   for (const c of TABLE_SPECS[table].columns) {
     const v = src[c.field];
-    row[c.column] = v === undefined ? null : (v as WireValue);
+    row[c.column] = v === undefined ? (c.fallback ?? null) : (v as WireValue);
   }
   if (baseSeq !== undefined) row[BASE_SEQ_COLUMN] = baseSeq;
   return row;
@@ -226,6 +267,11 @@ export function fromWire(table: SyncTableName, wire: Record<string, unknown>): {
   const out: Record<string, unknown> = {};
   for (const c of TABLE_SPECS[table].columns) {
     const raw = wire[c.column];
+    // колонки нет в ответе (облако без раздела схемы): берём значение по умолчанию; пустое значение в самой колонке — ошибка
+    if (raw === undefined && c.fallback !== undefined) {
+      out[c.field] = c.fallback;
+      continue;
+    }
     if (raw === null || raw === undefined) {
       if (!c.nullable) throw new WireError(`${table}.${c.column}: обязательное поле пустое`);
       out[c.field] = null;

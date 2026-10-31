@@ -1,6 +1,6 @@
 import type { Store } from '@/db';
 import type { LocalRow } from '@/domain/types';
-import { SYNC_TABLES, toWire, type SyncTableName } from './tables';
+import { SYNC_TABLES, hasLateValue, toWire, type SyncTableName } from './tables';
 import { TransportError, type SyncTransport } from './transport';
 
 /**
@@ -87,8 +87,9 @@ export function describeRejection(err: TransportError): string {
 /** Что ждёт обновления схемы (по таблице строк из PushCtx.waiting) и какой раздел supabase/schema.sql добавляет нужные колонки. */
 const SCHEMA_WAIT: ReadonlyArray<{ table: SyncTableName; section: string; what: string }> = [
   { table: 'wallets', section: 'раздел 11 — цели накопления', what: 'кошельки с целью и их операции' },
+  { table: 'categories', section: 'раздел 16 — обязательные категории', what: 'категории, помеченные обязательными, и их операции' },
   { table: 'settings', section: 'раздел 13 — города для погоды', what: 'настройки' },
-  { table: 'debts', section: 'раздел 14 — проценты по долгам; раздел 15 — объединение долгов', what: 'долги с процентами или объединённые и их операции' },
+  { table: 'debts', section: 'раздел 14 — проценты по долгам; раздел 15 — объединение долгов; раздел 17 — категории долгов', what: 'долги с процентами, объединённые или с категорией и их операции' },
 ];
 
 /** Понятное человеку объяснение, почему часть записей ждёт: схема в облаке устарела. Без точки в конце (её ставит текст статуса). */
@@ -164,7 +165,7 @@ async function pushBatch(ctx: PushCtx, table: SyncTableName, rows: readonly Row[
     if (e instanceof TransportError && e.kind === 'schema') {
       // Без колонки строку со значением не отправить, не потеряв его: ждёт на устройстве. Остальным колонка не нужна (пусто).
       const cols = e.columns ?? [];
-      const held = wire.map((w) => cols.some((c) => w[c] !== null && w[c] !== undefined));
+      const held = wire.map((w) => hasLateValue(w, cols));
       if (!held.includes(true)) throw e;
       const waiting = ctx.waiting.get(table) ?? new Set<string>();
       rows.forEach((r, i) => held[i] && waiting.add(r.id));
@@ -208,7 +209,8 @@ interface ParentRef {
 /**
  * Кто от кого зависит (составные внешние ключи в supabase/schema.sql):
  * операции — от кошельков, категорий, долгов и регулярных платежей; регулярные платежи — от кошельков, категорий и долгов;
- * бюджеты — от категорий; долги — от главного долга своего объединения (merged_into_id); кошельки, категории и настройки ни от кого.
+ * бюджеты — от категорий; цели накопления — от кошелька; долги — от главного долга своего объединения (merged_into_id);
+ * кошельки, категории и настройки ни от кого.
  */
 const PARENTS: Partial<Record<SyncTableName, readonly ParentRef[]>> = {
   transactions: [
@@ -227,6 +229,8 @@ const PARENTS: Partial<Record<SyncTableName, readonly ParentRef[]>> = {
     { field: 'debtId', parent: 'debts' },
   ],
   budgets: [{ field: 'categoryId', parent: 'categories' }],
+  // цель накопления ссылается на кошелёк-накопление
+  savings_goals: [{ field: 'walletId', parent: 'wallets' }],
 };
 
 /** Как назвать родителя человеку в сообщении «Не отправлена: …». */

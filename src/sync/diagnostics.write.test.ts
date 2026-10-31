@@ -4,7 +4,7 @@ import { DENIED, NETWORK, PROBE_RULE, checkViolation, check, fail, rows, type Re
 
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const jwt = (role: string) => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ iss: 'supabase', role })}.c2lnbmF0dXJl`;
-const TABLES = ['budgets', 'categories', 'debts', 'recurring_rules', 'settings', 'shopping_items', 'transactions', 'wallets'];
+const TABLES = ['budgets', 'categories', 'debts', 'recurring_rules', 'savings_goals', 'settings', 'shopping_items', 'transactions', 'wallets'];
 const created: Reply = { data: null, error: null, status: 201 };
 
 describe('Секретный ключ в сборке (service_role)', () => {
@@ -48,7 +48,7 @@ describe('Секретный ключ в сборке (service_role)', () => {
   });
 });
 
-describe('Шаг «Запись данных»: все восемь таблиц, как у настоящей синхронизации', () => {
+describe('Шаг «Запись данных»: все девять таблиц, как у настоящей синхронизации', () => {
   it('у пробной строки каждой таблицы своё правило, и сервер, отклонивший именно его, даёт «ok»', async () => {
     const { by } = await check({ upsert: checkViolation });
     expect(by.write.status).toBe('ok');
@@ -64,7 +64,7 @@ describe('Шаг «Запись данных»: все восемь таблиц
     expect(overallStatus(steps)).toBe('fail');
   });
 
-  it('нет права обновлять (42501 во всех таблицах): названы все восемь, одной фразой', async () => {
+  it('нет права обновлять (42501 во всех таблицах): названы все девять, одной фразой', async () => {
     const { by } = await check({ upsert: DENIED });
     expect(by.write.status).toBe('fail');
     const phrase = by.write.message.match(/Нет прав записи \(([^)]+)\)/);

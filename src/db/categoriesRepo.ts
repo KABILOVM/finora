@@ -19,6 +19,11 @@ export interface CategoryInput {
   color: string;
   icon: string;
   parentId?: UUID | null;
+  /**
+   * Обязательная категория (аренда, связь, кредит): цели накопления её не урезают. Не задано — нет (при правке — как было).
+   * Только для расходных: у доходной true — ошибка.
+   */
+  essential?: boolean;
 }
 
 export type CategoryPatch = Partial<CategoryInput & { sortOrder: number }>;
@@ -29,9 +34,11 @@ export interface CategoriesRepo {
   update(id: UUID, patch: CategoryPatch): Promise<LocalRow<Category>>;
   archive(id: UUID): Promise<LocalRow<Category>>;
   restore(id: UUID): Promise<LocalRow<Category>>;
+  /** Отметить категорию расходов обязательной (on = true) или снять отметку. У доходной категории — ошибка. Повтор безопасен. */
+  setEssential(id: UUID, on: boolean): Promise<LocalRow<Category>>;
 }
 
-const INPUT_KEYS = ['name', 'kind', 'color', 'icon', 'parentId'] as const;
+const INPUT_KEYS = ['name', 'kind', 'color', 'icon', 'parentId', 'essential'] as const;
 const PATCH_KEYS = [...INPUT_KEYS, 'sortOrder'] as const;
 const DATA_KEYS: readonly (keyof CategoryData)[] = [
   'name',
@@ -41,6 +48,7 @@ const DATA_KEYS: readonly (keyof CategoryData)[] = [
   'icon',
   'sortOrder',
   'archivedAt',
+  'essential',
 ];
 const MAX_DEPTH = 8;
 
@@ -53,8 +61,12 @@ function dataOf(c: Category): CategoryData {
     icon: c.icon,
     sortOrder: c.sortOrder,
     archivedAt: c.archivedAt,
+    // строки, записанные до появления отметки, хранят undefined: без ?? 0 пустая правка пометила бы категорию изменённой
+    essential: c.essential ?? 0,
   };
 }
+
+const INCOME_ESSENTIAL_TEXT = 'Обязательной можно сделать только категорию расходов';
 
 export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
   const { db } = ctx;
@@ -81,6 +93,7 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
     return writeTx(ctx, [db.categories, db.transactions, db.budgets, db.recurring_rules], async () => {
       const cur = await getLiveCategory(ctx, id);
       const next = change(cur);
+      if (next.essential === 1 && next.kind !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
       if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
       if (next.kind !== cur.kind) {
         const used = await db.transactions
@@ -116,6 +129,7 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
       const clean = cleanPatch(input, INPUT_KEYS, 'Категория');
       const id = opts?.id;
       if (id !== undefined) reqId(id, 'Категория: id');
+      if (clean.essential === true && clean.kind !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
       return writeTx(ctx, [db.categories], async () => {
         const data = parseCategoryData({
           parentId: null,
@@ -145,7 +159,19 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
 
     async update(id, patch) {
       const clean = cleanPatch(patch, PATCH_KEYS, 'Категория');
-      return save(id, (cur) => parseCategoryData({ ...dataOf(cur), ...clean }));
+      return save(id, (cur) => {
+        // при смене вида на доходный отметка «обязательная» снимается сама (parseEssential); явное true у доходной — ошибка
+        if (clean.essential === true && (clean.kind ?? cur.kind) !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
+        return parseCategoryData({ ...dataOf(cur), ...clean });
+      });
+    },
+
+    async setEssential(id, on) {
+      if (typeof on !== 'boolean') throw new ValidationError('Обязательная категория: ожидалось «да» или «нет»');
+      return save(id, (cur) => {
+        if (on && cur.kind !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
+        return { ...dataOf(cur), essential: on ? 1 : 0 };
+      });
     },
 
     async archive(id) {

@@ -7,6 +7,7 @@ import type {
   LocalFields,
   LocalRow,
   RecurringRule,
+  SavingsGoal,
   Settings,
   ShoppingItem,
   SyncFields,
@@ -34,14 +35,14 @@ export function toEntity<T extends Entity>(table: SyncTableName, row: LocalRow<T
 }
 
 /**
- * Полная резервная копия: настройки, кошельки, категории, бюджеты, долги, регулярные платежи и ВСЕ операции, включая удалённые.
+ * Полная резервная копия: настройки, кошельки, категории, бюджеты, долги, регулярные платежи, цели накопления и ВСЕ операции, включая удалённые.
  * Снимок читается одной транзакцией.
  */
 export async function exportBackup(store: Store): Promise<BackupFile> {
   const { db } = store;
-  const [settings, wallets, categories, transactions, budgets, debts, rules, shopping] = await db.transaction(
+  const [settings, wallets, categories, transactions, budgets, debts, rules, shopping, goals] = await db.transaction(
     'r',
-    [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules, db.shopping_items],
+    [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules, db.shopping_items, db.savings_goals],
     () =>
       Promise.all([
         db.settings.get(store.userId),
@@ -52,6 +53,7 @@ export async function exportBackup(store: Store): Promise<BackupFile> {
         db.debts.toArray(),
         db.recurring_rules.toArray(),
         db.shopping_items.toArray(),
+        db.savings_goals.toArray(),
       ]),
   );
   const byCreated = <T extends { createdAt: string; id: string }>(a: T, b: T) =>
@@ -68,6 +70,7 @@ export async function exportBackup(store: Store): Promise<BackupFile> {
     debts: debts.sort(byCreated).map((r) => toEntity<Debt>('debts', r)),
     recurringRules: rules.sort(byCreated).map((r) => toEntity<RecurringRule>('recurring_rules', r)),
     shoppingItems: shopping.sort(byCreated).map((r) => toEntity<ShoppingItem>('shopping_items', r)),
+    savingsGoals: goals.sort(byCreated).map((r) => toEntity<SavingsGoal>('savings_goals', r)),
   };
 }
 
@@ -149,7 +152,7 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
   const { db } = store;
   const tally: ImportResult = { added: 0, replaced: 0, keptLocal: 0 };
 
-  return writeTx(ctx, [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules, db.shopping_items], async () => {
+  return writeTx(ctx, [db.settings, db.wallets, db.categories, db.transactions, db.budgets, db.debts, db.recurring_rules, db.shopping_items, db.savings_goals], async () => {
     const wallets = index(await db.wallets.toArray());
     const categories = index(await db.categories.toArray());
     const transactions = index(await db.transactions.toArray());
@@ -157,6 +160,7 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     const debts = index(await db.debts.toArray());
     const rules = index(await db.recurring_rules.toArray());
     const shopping = index(await db.shopping_items.toArray());
+    const goals = index(await db.savings_goals.toArray());
     const settings = index(await db.settings.toArray());
 
     // До слияния: валюта кошельков (чтобы заметить, что импорт её меняет).
@@ -170,6 +174,7 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     const dbt = mergeTable<Debt, Row<Debt>>(debts, file.debts, tally);
     const rr = mergeTable<RecurringRule, Row<RecurringRule>>(rules, file.recurringRules, tally);
     const sh = mergeTable<ShoppingItem, Row<ShoppingItem>>(shopping, file.shoppingItems, tally);
+    const sg = mergeTable<SavingsGoal, Row<SavingsGoal>>(goals, file.savingsGoals, tally);
     const s = file.settings
       ? mergeTable<Settings, Row<Settings>>(settings, [file.settings], tally)
       : { written: [] as Row<Settings>[], winners: new Set<string>() };
@@ -228,6 +233,10 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     for (const d of file.debts) {
       if (d.mergedIntoId != null && !debts.has(d.mergedIntoId)) fail('Резервная копия: долг входит в состав несуществующего долга');
     }
+    // цель накопления ссылается на кошелёк: он обязан быть в базе или в файле (иначе ссылка повисла бы)
+    for (const g of file.savingsGoals) {
+      if (g.walletId !== null && !wallets.has(g.walletId)) fail(`Резервная копия: цель «${g.name}» ссылается на несуществующий кошелёк`);
+    }
     checkPlanRefs(file, { wallets, categories, debts, rules }, { debts: dbt.winners, rules: rr.winners, budgets: b.winners });
     checkDebtPins(debtsBefore, debts, dbt.winners, transactions, t.winners, rules, rr.winners);
     checkDebtCurrencies(transactions, t.winners, wallets, debts);
@@ -272,10 +281,11 @@ export async function importBackup(store: Store, data: unknown, options: ImportO
     await db.debts.bulkPut(dbt.written);
     await db.recurring_rules.bulkPut(rr.written);
     await db.shopping_items.bulkPut(sh.written);
+    await db.savings_goals.bulkPut(sg.written);
 
     // Следующие правки этого устройства должны быть новее всего, что мы только что записали.
     // (метки файла уже проверены: не дальше «сейчас + 5 минут», поэтому берём самую большую)
-    const written = [...w.written, ...c.written, ...t.written, ...s.written, ...b.written, ...dbt.written, ...rr.written, ...sh.written];
+    const written = [...w.written, ...c.written, ...t.written, ...s.written, ...b.written, ...dbt.written, ...rr.written, ...sh.written, ...sg.written];
     if (written.length > 0) ctx.clock.observe(written.reduce((m, r) => (r.clientUpdatedAt > m ? r.clientUpdatedAt : m), ''));
     return tally;
   });

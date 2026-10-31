@@ -38,7 +38,7 @@ afterEach(async () => {
   }
   await pg.applySchema();
   await pg.db.exec('delete from public.exchange_rates');
-  for (const t of ['transactions', 'shopping_items', 'recurring_rules', 'budgets', 'debts', 'categories', 'wallets', 'settings']) await pg.db.exec(`delete from public.${t}`);
+  for (const t of ['transactions', 'shopping_items', 'savings_goals', 'recurring_rules', 'budgets', 'debts', 'categories', 'wallets', 'settings']) await pg.db.exec(`delete from public.${t}`);
 });
 
 function asQuery(run: () => Promise<CloudQueryResult>): CloudQuery {
@@ -136,7 +136,7 @@ describe('diag: схема старше приложения — нет служ
 
 // Политику UPDATE (если её одну удалили, а права остались) без правки настоящих данных не проверить: подробности в README
 // («Что проверка не умеет»). Права на вставку и обновление (grant) проверка видит: она шлёт тот же upsert, что и синхронизация.
-describe('diag: шаг «Запись» повторяет настоящую отправку: upsert (insert ... on conflict do update) во все восемь таблиц', () => {
+describe('diag: шаг «Запись» повторяет настоящую отправку: upsert (insert ... on conflict do update) во все девять таблиц', () => {
   it('нет права UPDATE у authenticated: настоящая отправка отвергается (42501), а проверка пишет «Запись разрешена»', async () => {
     await addRates(3);
     await pg.db.exec('revoke update on public.categories, public.wallets, public.debts, public.budgets, public.recurring_rules, public.transactions, public.settings from authenticated');
@@ -175,7 +175,7 @@ describe('diag: «Чтение данных» и защита строк (RLS)',
   it('RLS выключена, в базе один пользователь: от здоровой базы не отличить — проверка не обещает защиту и говорит, как проверить', async () => {
     await addRates(3);
     await pg.transportFor(ME).push('wallets', [toWire('wallets', makeWallet())]);
-    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items']) await pg.db.exec(`alter table public.${t} disable row level security`);
+    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items', 'savings_goals']) await pg.db.exec(`alter table public.${t} disable row level security`);
     // доказательство, что защиты нет: второй пользователь видит чужое
     await pg.addUser(NEIGHBOUR);
     const seen = await pg.as({ role: 'authenticated', sub: NEIGHBOUR }, (tx) => tx.query('select id from public.wallets'));
@@ -189,7 +189,7 @@ describe('diag: «Чтение данных» и защита строк (RLS)',
   it('RLS выключена и у соседа есть данные: чужое видно, проверка поднимает тревогу', async () => {
     await addRates(3);
     await pg.transportFor(NEIGHBOUR).push('wallets', [toWire('wallets', makeWallet({ name: 'Чужой кошелёк' }))]);
-    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items']) await pg.db.exec(`alter table public.${t} disable row level security`);
+    for (const t of ['settings', 'wallets', 'categories', 'debts', 'budgets', 'recurring_rules', 'transactions', 'shopping_items', 'savings_goals']) await pg.db.exec(`alter table public.${t} disable row level security`);
     const { steps, by } = await run();
     expect(by.read.status).toBe('fail');
     expect(by.read.message).toContain('ОПАСНО');

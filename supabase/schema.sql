@@ -4,8 +4,10 @@
 -- ЧТО ЭТО
 --   Таблицы личного учёта денег: настройки, кошельки, категории, операции (этап 1) и долги, бюджеты,
 --   регулярные платежи (этап 2, раздел 8 в конце файла), список покупок (раздел 10), цели накопления (раздел 11: две колонки
---   у кошельков), напоминания о лимитах бюджета (раздел 12), города для погоды (раздел 13: одна колонка у настроек) плюс общие курсы валют. Итого 9 таблиц:
---   settings, wallets, categories, debts, budgets, recurring_rules, transactions, shopping_items, exchange_rates.
+--   у кошельков), напоминания о лимитах бюджета (раздел 12), города для погоды (раздел 13: одна колонка у настроек), «обязательные» категории (раздел 16: одна колонка у категорий),
+--   категории долгов (раздел 17: одна колонка у долгов), цели накопления в «Бюджетах» (раздел 18: отдельная таблица)
+--   плюс общие курсы валют. Итого 10 таблиц:
+--   settings, wallets, categories, debts, budgets, recurring_rules, transactions, shopping_items, savings_goals, exchange_rates.
 --   Правила доступа (у каждого пользователя видны и меняются только СВОИ данные)
 --   и защитный триггер, который решает конфликты между устройствами
 --   («побеждает самая поздняя правка») и выдаёт номера для синхронизации.
@@ -1079,3 +1081,124 @@ begin
   end if;
 end
 $$;
+
+
+-- 16. «Обязательные» категории ----------------------------------------------------------------
+-- Категория расходов (аренда, связь, кредит) может быть помечена обязательной: цели накопления в «Бюджетах» («сколько можно тратить,
+-- чтобы накопить к сроку») такие траты не урезают. essential — 0 (нет) или 1 (да); у категорий доходов клиент всегда пишет 0.
+-- Блок идемпотентен, как разделы 8, 11, 13, 14 и 15: колонка «add column if not exists», ограничение — только если его ещё нет.
+-- Данные не трогаются (у всех существующих категорий 0), триггер sync_guard, права и политики остаются прежними. Старые приложения
+-- колонку не знают: при записи они её не присылают, и сохранённая отметка не затирается (новые строки получают 0).
+-- Выполнять до выкладки приложения; повторный запуск безопасен.
+alter table public.categories add column if not exists essential bigint not null default 0;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'categories_essential' and conrelid = 'public.categories'::regclass) then
+    alter table public.categories add constraint categories_essential check (essential in (0, 1));
+  end if;
+end
+$$;
+
+
+-- 17. Категории долгов ---------------------------------------------------------------------
+-- У долга может быть категория — короткий свободный текст («Друзья», «Семья», «Кредит»): по ней фильтруется список долгов. Пусто ('') —
+-- без категории. Отдельной таблицы категорий долгов нет: список для выбора клиент собирает из уже заведённых долгов.
+-- Блок идемпотентен, как раздел 16: колонка «add column if not exists», ограничение — только если его ещё нет (старые строки, нарушающие
+-- его, не остановят файл: Postgres выдаст предупреждение, новые и изменяемые строки ограничение проверяет в любом случае).
+-- Старые приложения колонку не знают: при записи они её не присылают, и сохранённая категория не затирается (новые строки получают '').
+-- Выполнять до выкладки приложения; повторный запуск безопасен.
+alter table public.debts add column if not exists category text not null default '';
+
+do $$
+declare
+  r record;
+begin
+  for r in
+    select * from (values
+      ('debts', 'debts_category_len', 'char_length(category) <= 40')
+    ) as c (tbl, cname, expr)
+  loop
+    if not exists (
+      select 1 from pg_constraint
+       where conname = r.cname and conrelid = format('public.%I', r.tbl)::regclass
+    ) then
+      execute format('alter table public.%I add constraint %I check (%s) not valid', r.tbl, r.cname, r.expr);
+      begin
+        execute format('alter table public.%I validate constraint %I', r.tbl, r.cname);
+      exception when check_violation then
+        raise warning 'В таблице % есть старые строки, нарушающие ограничение %; новые и изменённые строки оно проверяет', r.tbl, r.cname;
+      end;
+    end if;
+  end loop;
+end
+$$;
+
+
+-- 18. Цели накопления в «Бюджетах» -----------------------------------------------------------
+-- Одна таблица savings_goals, как у остальных данных: user_id ставит сервер, правка принимается только если метка строго новее,
+-- удаления нет (deleted_at), курсор синхронизации — (user_id, server_seq), защита строк (RLS) — только свои.
+-- Цель — «накопить target_minor к дате due_on»: сумма в минимальных единицах основной валюты (1…1e15), срок — дата в границах схемы.
+-- wallet_id — кошелёк-накопление, остаток которого считается накопленным (пусто — не привязан); ссылка составным ключом
+-- (user_id, wallet_id) не даёт сослаться на чужой кошелёк. Что кошелёк подходит по виду и валюте и не занят другой целью, следит
+-- клиент (src/db/savingsGoalsRepo.ts): на сервере таких проверок нет, чтобы правки двух устройств не отвергали друг друга.
+-- Расчёт «сколько откладывать и сколько можно тратить» ведёт клиент (src/domain/savingsPlan.ts), в базе он не хранится.
+-- Каждое ограничение зеркалится в src/sync/memoryRules.ts под тем же именем.
+
+-- 18.1. Таблица.
+create table if not exists public.savings_goals (
+  id                uuid        not null,
+  created_at        timestamptz not null,
+  client_updated_at timestamptz not null,
+  device_id         text        not null,
+  deleted_at        timestamptz,
+  name              text        not null,
+  target_minor      bigint      not null,
+  currency          text        not null,
+  due_on            date        not null,
+  wallet_id         uuid,
+  archived_at       timestamptz,
+  user_id           uuid        not null,
+  server_seq        bigint      not null,
+  server_updated_at timestamptz not null,
+  constraint savings_goals_pkey primary key (id),
+  constraint savings_goals_user_fk foreign key (user_id) references auth.users (id) on delete cascade,
+  constraint savings_goals_wallet_fk foreign key (user_id, wallet_id) references public.wallets (user_id, id),
+  constraint savings_goals_name_len check (char_length(name) between 1 and 60),
+  constraint savings_goals_target check (target_minor between 1 and 1000000000000000),
+  constraint savings_goals_currency_fmt check (currency ~ '^[A-Z]{3}$'),
+  constraint savings_goals_due_on check (due_on between date '2000-01-01' and date '2100-01-01'),
+  constraint savings_goals_device_id_len check (char_length(device_id) between 1 and 64),
+  constraint savings_goals_ts_sane check (
+    created_at        between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and client_updated_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00'
+    and (deleted_at  is null or deleted_at  between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+    and (archived_at is null or archived_at between timestamptz '2000-01-01 00:00:00+00' and timestamptz '2100-01-01 00:00:00+00')
+  )
+);
+
+-- 18.2. Служебная колонка запроса base_seq (см. 2.5) и защитный триггер синхронизации (тот же, что у остальных таблиц).
+alter table public.savings_goals add column if not exists base_seq bigint;
+
+drop trigger if exists sync_guard on public.savings_goals;
+create trigger sync_guard before insert or update on public.savings_goals
+  for each row execute function private.sync_guard();
+
+-- 18.3. Индекс курсора синхронизации.
+create index if not exists savings_goals_user_seq_idx on public.savings_goals (user_id, server_seq);
+
+-- 18.4. Права и защита строк (RLS): только select / insert / update и только свои строки.
+revoke all on table public.savings_goals from public, anon, authenticated;
+grant select, insert, update on table public.savings_goals to authenticated;
+
+alter table public.savings_goals enable row level security;
+
+drop policy if exists savings_goals_select_own on public.savings_goals;
+create policy savings_goals_select_own on public.savings_goals for select to authenticated
+  using (user_id = (select auth.uid()));
+drop policy if exists savings_goals_insert_own on public.savings_goals;
+create policy savings_goals_insert_own on public.savings_goals for insert to authenticated
+  with check (user_id = (select auth.uid()));
+drop policy if exists savings_goals_update_own on public.savings_goals;
+create policy savings_goals_update_own on public.savings_goals for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

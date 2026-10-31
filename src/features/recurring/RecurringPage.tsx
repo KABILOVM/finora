@@ -2,6 +2,8 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { FilterBar } from '@/components/filters/FilterBar';
+import { countFilters, emptyFilters, pruneFilters, type FilterValues } from '@/components/filters/filterState';
 import { Icon } from '@/components/Icon';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
@@ -22,6 +24,7 @@ import { useSkipped } from '@/recurring/useSkipped';
 import { useToday } from '@/recurring/useToday';
 import { PostSheet } from './PostSheet';
 import { ArchivedRow, RuleRow } from './RulesList';
+import { matchesRuleFilter, ruleFilterFields } from './ruleFilters';
 import { RuleSheet } from './RuleSheet';
 import { SalaryCard, useSalaryCardDismissed } from './SalaryCard';
 import { SkipDialog } from './SkipDialog';
@@ -95,8 +98,9 @@ export default function RecurringPage() {
   const [overdueShown, setOverdueShown] = useState(OVERDUE_PAGE);
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
   const busyRef = useRef(new Set<string>());
+  const [filters, setFilters] = useState<FilterValues>({});
 
-  const groups = useMemo(() => groupUpcoming(upcoming), [upcoming]);
+  const allGroups = useMemo(() => groupUpcoming(upcoming), [upcoming]);
   // уже проведённые и пропущенные даты по правилам: «Следующий платёж» их не называет
   const doneDates = useMemo(() => {
     const out = new Map<string, Set<IsoDate>>();
@@ -132,20 +136,36 @@ export default function RecurringPage() {
     );
   }
 
+  const ruleById = new Map(rules.map((r) => [r.id, r]));
+
+  // Фильтр действует на все списки и на итог «В месяц»; выбранное, чего больше нет среди вариантов, считается «любым».
+  const filterFields = ruleFilterFields(rules, lookups.categories, lookups.wallets);
+  const filterValues = pruneFilters(filterFields, filters);
+  const filtering = countFilters(filterFields, filterValues) > 0;
+  const fits = (r: LocalRow<RecurringRule>) => !filtering || matchesRuleFilter(r, filterValues);
+  const groups = {
+    overdue: allGroups.overdue.filter((it) => fits(it.rule)),
+    due: allGroups.due.filter((it) => fits(it.rule)),
+    soon: allGroups.soon.filter((it) => fits(it.rule)),
+  };
+  const visibleRules = rules.filter(fits);
+  const active = visibleRules.filter((r) => r.archivedAt === null);
+  const archived = visibleRules.filter((r) => r.archivedAt !== null);
+  const visibleSkipped = skipped.filter((s) => {
+    const rule = s.tx.recurringRuleId === null ? undefined : ruleById.get(s.tx.recurringRuleId);
+    return rule !== undefined && fits(rule);
+  });
   // пока не известно, какие планы по долгам остановлены, итог не показываем: иначе он «прыгнул» бы, когда это выяснится
   const monthly =
     stoppedPlans === undefined
       ? undefined
       : monthlyTotals(
-          rules,
+          visibleRules,
           (walletId) => lookups.wallets.get(walletId)?.currency,
           today,
           lookups.base,
           (r) => stoppedPlans.has(r.id),
         );
-  const ruleById = new Map(rules.map((r) => [r.id, r]));
-  const active = rules.filter((r) => r.archivedAt === null);
-  const archived = rules.filter((r) => r.archivedAt !== null);
   const postingRule = posting ? ruleById.get(posting.ruleId) : undefined;
   const skippingRule = skipping ? ruleById.get(skipping.ruleId) : undefined;
   const editRule = sheet?.kind === 'edit' ? ruleById.get(sheet.id) : undefined;
@@ -266,6 +286,9 @@ export default function RecurringPage() {
         </>
       ) : (
         <>
+          {filterFields.length > 0 && (
+            <FilterBar title="Фильтры платежей" fields={filterFields} values={filterValues} onChange={setFilters} className="mb-3" />
+          )}
           {monthly === null ? (
             <Card className="mb-6 text-muted" role="status">
               Суммы платежей слишком велики, чтобы посчитать итог в месяц.
@@ -274,7 +297,7 @@ export default function RecurringPage() {
             monthly !== undefined &&
             monthly.length > 0 && (
               <Card className="mb-6" data-testid="recurring-monthly" role="group" aria-label="Платежи по расписанию в месяц">
-                <p className="text-sm font-semibold text-muted">В месяц, примерно</p>
+                <p className="text-sm font-semibold text-muted">{filtering ? 'В месяц по фильтрам, примерно' : 'В месяц, примерно'}</p>
                 <ul className="mt-1 flex flex-col gap-2">
                   {monthly.map((m) => (
                     <li key={m.currency} className="flex flex-wrap items-baseline justify-between gap-x-4">
@@ -324,21 +347,21 @@ export default function RecurringPage() {
           )}
           {empty && (
             <Card className="mb-6 text-muted" role="status">
-              На ближайшие {SOON_DAYS} дней платежей нет.
+              {filtering ? `По выбранным фильтрам на ближайшие ${SOON_DAYS} дней платежей нет.` : `На ближайшие ${SOON_DAYS} дней платежей нет.`}
             </Card>
           )}
 
           {salaryCard}
           {subsCard}
 
-          {skipped.length > 0 && (
-            <Collapsible title={`Пропущенные · ${skipped.length}`} open={showSkipped} onToggle={() => setShowSkipped((v) => !v)}>
+          {visibleSkipped.length > 0 && (
+            <Collapsible title={`Пропущенные · ${visibleSkipped.length}`} open={showSkipped} onToggle={() => setShowSkipped((v) => !v)}>
               <p className="mb-2 px-1 text-sm text-muted">
                 Эти платежи вы пропустили. «Вернуть» записывает платёж в операции.
               </p>
               <Card padding="none">
                 <ul className="divide-y divide-border">
-                  {skipped.map((s) => {
+                  {visibleSkipped.map((s) => {
                     const rule = s.tx.recurringRuleId === null ? undefined : ruleById.get(s.tx.recurringRuleId);
                     return rule ? (
                       <SkippedRow
@@ -359,7 +382,16 @@ export default function RecurringPage() {
 
           <Section id="rec-all" title="Все правила">
             {active.length === 0 ? (
-              <li className="px-4 py-4 text-muted">Все платежи в архиве.</li>
+              filtering ? (
+                <li data-testid="recurring-filter-empty" className="flex flex-col items-start gap-2 px-4 py-4">
+                  <p className="text-muted">Нет платежей, подходящих под выбранные фильтры.</p>
+                  <Button variant="secondary" onClick={() => setFilters(emptyFilters(filterFields))}>
+                    Сбросить фильтры
+                  </Button>
+                </li>
+              ) : (
+                <li className="px-4 py-4 text-muted">Все платежи в архиве.</li>
+              )
             ) : (
               active.map((r) => (
                 <RuleRow

@@ -14,6 +14,7 @@ import {
 import type { CurrencyCode, IsoDate, Minor, UUID } from '@/domain/types';
 import { shiftMonth } from '@/features/transactions/txFilters';
 import { findAnomalies, type Anomalies } from './anomalies';
+import { effectiveCategory, filterSpendRows, inCategoryFilter } from './categoryFilter';
 import {
   categoryDeltas,
   compareThroughDay,
@@ -80,6 +81,11 @@ export interface AnalyticsData {
   anomalies: Anomalies;
   /** Категории (все, включая архивные): названия в списках. */
   categories: ReadonlyMap<UUID, { name: string; icon: string; color: string }>;
+  /**
+   * Фильтр по категории (с подкатегориями), если он включён и такая категория есть; иначе null. Сужает только `deltas` и `top`;
+   * остальное (сводка, темп, графики, аномалии) считается по всем расходам.
+   */
+  categoryFilter: UUID | null;
 }
 
 /** undefined — читается; null — настроек ещё нет; { overflow } — суммы не помещаются в безопасное целое. */
@@ -89,7 +95,7 @@ export type AnalyticsState = AnalyticsData | { overflow: true } | null | undefin
  * Всё для экрана «Аналитика» одним чтением базы (по индексу даты, только нужные месяцы), дальше — чистые расчёты (analytics.ts).
  * Основная валюта читается вместе с операциями: на кадр после её смены суммы не подпишутся старой валютой.
  */
-export function useAnalyticsData(month: string, today: IsoDate): AnalyticsState {
+export function useAnalyticsData(month: string, today: IsoDate, categoryFilter: string | null = null): AnalyticsState {
   const store = useStore();
   const loaded = useLiveQuery(async () => {
     const settings = await store.settings.get();
@@ -108,6 +114,8 @@ export function useAnalyticsData(month: string, today: IsoDate): AnalyticsState 
   return useMemo((): AnalyticsState => {
     if (loaded === undefined || loaded === null) return loaded;
     const { base, rows, budgets, categoryRows } = loaded;
+    const parentOf = new Map(categoryRows.map((c) => [c.id, c.parentId] as const));
+    const filterId = effectiveCategory(categoryFilter, new Set(categoryRows.map((c) => c.id)));
     try {
       const current = summarizeMonth(rows, month, base);
       const previous = summarizeMonth(rows, shiftMonth(month, -1), base);
@@ -127,7 +135,7 @@ export function useAnalyticsData(month: string, today: IsoDate): AnalyticsState 
           budgets,
           byCategory: current.byCategory,
           expenseMinor: current.expenseMinor,
-          parentOf: new Map(categoryRows.map((c) => [c.id, c.parentId] as const)),
+          parentOf,
           base,
         });
         if (progress.ok) {
@@ -154,19 +162,24 @@ export function useAnalyticsData(month: string, today: IsoDate): AnalyticsState 
         compareDays,
         // в первые дни месяца сравнивать не с чем: только категории этого месяца, без «было/стало»
         deltas: isCompareReady(compareDays)
-          ? categoryDeltas(through.byCategory, compare.byCategory, previous.byCategory)
-          : categoryDeltas(through.byCategory, []),
+          ? categoryDeltas(
+              filterSpendRows(through.byCategory, filterId, parentOf),
+              filterSpendRows(compare.byCategory, filterId, parentOf),
+              filterSpendRows(previous.byCategory, filterId, parentOf),
+            )
+          : categoryDeltas(filterSpendRows(through.byCategory, filterId, parentOf), []),
         weekday: weekdayProfile(rows, month, today, base),
-        top: topExpenses(rows, month, base),
+        top: topExpenses(filterId === null ? rows : rows.filter((t) => inCategoryFilter(filterId, t.categoryId, parentOf)), month, base),
         pace,
         budgetPaces,
         unusual,
         anomalies: findAnomalies(rows, month, today, base),
         categories: new Map(categoryRows.map((c) => [c.id, { name: c.name, icon: c.icon, color: c.color }] as const)),
+        categoryFilter: filterId,
       };
     } catch (e) {
       if (e instanceof RangeError) return { overflow: true };
       throw e;
     }
-  }, [loaded, month, today]);
+  }, [loaded, month, today, categoryFilter]);
 }

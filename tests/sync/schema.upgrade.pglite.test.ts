@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SYNC_TABLES, toWire, type SyncTableName } from '@/sync/tables';
-import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
+import { makeBudget, makeCategory, makeDebt, makeRecurringRule, makeSavingsGoal, makeSettings, makeShoppingItem, makeTransaction, makeUserId, makeWallet } from './factories';
 import { createPgliteServer, type PgliteServer } from './pglite';
 
 /**
@@ -113,6 +113,8 @@ const asStage1 = (table: SyncTableName, row: Record<string, unknown>): Record<st
   const { debt_id: _d, recurring_rule_id: _r, ...rest } = row;
   const { goal_minor: _gm, goal_on: _go, ...withoutGoal } = row;
   const { weather: _w, ...withoutWeather } = row;
+  const { essential: _e, ...withoutEssential } = row;
+  if (table === 'categories') return withoutEssential; // «обязательная» категория — ещё позже (раздел 16 схемы)
   if (table === 'wallets') return withoutGoal; // цели накопления появились позже (раздел 11 схемы)
   if (table === 'settings') return withoutWeather; // города для погоды — ещё позже (раздел 13 схемы)
   return table === 'transactions' ? rest : row;
@@ -124,7 +126,7 @@ const dumpAll = async (s: PgliteServer, tables: readonly SyncTableName[]): Promi
 async function stage1WithData(): Promise<{ s: PgliteServer; userId: string; ids: { w1: string; w2: string; c: string; transfer: string; expense: string } }> {
   const s = await createPgliteServer({ schema: STAGE1 });
   server = s;
-  const hasNew = await s.db.query(`select 1 from pg_class where relnamespace = 'public'::regnamespace and relname in ('debts', 'budgets', 'recurring_rules', 'shopping_items')`);
+  const hasNew = await s.db.query(`select 1 from pg_class where relnamespace = 'public'::regnamespace and relname in ('debts', 'budgets', 'recurring_rules', 'shopping_items', 'savings_goals')`);
   expect(hasNew.rows, 'прежняя схема не должна знать о таблицах этапа 2').toEqual([]);
   const userId = makeUserId();
   await s.addUser(userId);
@@ -158,6 +160,8 @@ describe('схема: обновление с этапа 1 на этап 2 по�
         ...(t === 'transactions' ? { debt_id: null, recurring_rule_id: null } : {}),
         ...(t === 'wallets' ? { goal_minor: null, goal_on: null } : {}),
         ...(t === 'settings' ? { weather: null } : {}),
+        // существующие категории получают «не обязательная» (0), а не пустое значение
+        ...(t === 'categories' ? { essential: 0 } : {}),
       }));
       expect(after[t], t).toEqual(expected);
     }
@@ -172,7 +176,7 @@ describe('схема: обновление с этапа 1 на этап 2 по�
         )
       ).rows[0];
     const once = await count();
-    expect(once).toMatchObject({ policies: 31, triggers: 8 });
+    expect(once).toMatchObject({ policies: 34, triggers: 9 });
     await s.applySchema();
     await s.applySchema();
     expect(await count()).toEqual(once);
@@ -202,6 +206,7 @@ describe('схема: обновление с этапа 1 на этап 2 по�
     expect(fresh.find((r) => r.id === ids.transfer)).toMatchObject({ base_amount_minor: 150, debt_id: null });
     expect(fresh.find((r) => r.id === repay.id)).toMatchObject({ debt_id: debt.id, recurring_rule_id: rule.id });
     await t.push('shopping_items', [toWire('shopping_items', makeShoppingItem(stamps()))]);
+    await t.push('savings_goals', [toWire('savings_goals', makeSavingsGoal({ ...stamps(), walletId: ids.w1 }))]);
     for (const table of SYNC_TABLES) expect((await t.pull(table, 0, 100)).length, table).toBeGreaterThan(0);
   });
 

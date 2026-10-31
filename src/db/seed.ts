@@ -17,20 +17,22 @@ interface SeedCategory {
   name: string;
   icon: string;
   color: string;
+  /** Обязательная категория: цели накопления её не урезают (жильё, связь, долги). */
+  essential?: boolean;
 }
 
 const SEED_CATEGORIES: readonly SeedCategory[] = [
   { slug: 'category:food', kind: 'expense', name: 'Еда', icon: '🍽️', color: '#f97316' },
   { slug: 'category:groceries', kind: 'expense', name: 'Продукты', icon: '🛒', color: '#22c55e' },
   { slug: 'category:transport', kind: 'expense', name: 'Транспорт', icon: '🚌', color: '#3b82f6' },
-  { slug: 'category:housing', kind: 'expense', name: 'Жильё', icon: '🏠', color: '#a855f7' },
-  { slug: 'category:communication', kind: 'expense', name: 'Связь', icon: '📱', color: '#06b6d4' },
+  { slug: 'category:housing', kind: 'expense', name: 'Жильё', icon: '🏠', color: '#a855f7', essential: true },
+  { slug: 'category:communication', kind: 'expense', name: 'Связь', icon: '📱', color: '#06b6d4', essential: true },
   { slug: 'category:health', kind: 'expense', name: 'Здоровье', icon: '💊', color: '#ef4444' },
   { slug: 'category:shopping', kind: 'expense', name: 'Покупки', icon: '🛍️', color: '#ec4899' },
   { slug: 'category:entertainment', kind: 'expense', name: 'Развлечения', icon: '🎬', color: '#f59e0b' },
   { slug: 'category:subscriptions', kind: 'expense', name: 'Подписки', icon: '🔁', color: '#6366f1' },
   { slug: 'category:education', kind: 'expense', name: 'Образование', icon: '🎓', color: '#14b8a6' },
-  { slug: 'category:debts', kind: 'expense', name: 'Долги', icon: '🤝', color: '#64748b' },
+  { slug: 'category:debts', kind: 'expense', name: 'Долги', icon: '🤝', color: '#64748b', essential: true },
   { slug: 'category:other-expense', kind: 'expense', name: 'Прочее', icon: '📦', color: '#94a3b8' },
   { slug: 'category:salary', kind: 'income', name: 'Зарплата', icon: '💼', color: '#16a34a' },
   { slug: 'category:side-income', kind: 'income', name: 'Подработка', icon: '🧰', color: '#0ea5e9' },
@@ -67,7 +69,7 @@ export async function ensureSeeded(store: Store): Promise<boolean> {
     for (const [i, c] of SEED_CATEGORIES.entries()) {
       const id = categoryIds[i];
       if (id === undefined || (await db.categories.get(id))) continue;
-      await store.categories.create({ name: c.name, kind: c.kind, color: c.color, icon: c.icon }, { id });
+      await store.categories.create({ name: c.name, kind: c.kind, color: c.color, icon: c.icon, essential: c.essential === true }, { id });
     }
     const wallet = await db.wallets.get(walletId);
     const usable = wallet !== undefined && wallet.deletedAt === null && wallet.archivedAt === null;
