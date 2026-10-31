@@ -50,11 +50,14 @@ test.describe('64. Подкатегории', () => {
     await shot(page, '64-subcategories-list', testInfo);
 
     // Операция в подкатегорию «Вода»: в списке выбора она показана под родителем (мелкая подпись)
-    const add = await fillTx(page, { amount: '30', note: 'вода за октябрь' });
+    const add = await fillTx(page, { amount: '30' });
     const group = await openCategoryList(add);
     const water = group.getByRole('button', { name: /Вода/ });
     await expect(water).toContainText('Коммунальные услуги');
     await water.click();
+    // заметку — после категории, как в хелпере: иначе плитка категории уезжает под закреплённую кнопку «Сохранить»
+    await add.getByRole('button', { name: 'Заметка', exact: true }).click();
+    await add.getByRole('textbox', { name: 'Заметка' }).fill('вода за октябрь');
     await saveNewTx(add);
     await expect(add).toBeHidden();
     await dismissToasts(page);
