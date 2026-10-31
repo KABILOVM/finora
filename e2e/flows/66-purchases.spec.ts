@@ -28,7 +28,7 @@ test.describe('66. «Что куплено» в «Новой операции»'
     await buy.getByRole('searchbox', { name: 'Найти продукт' }).fill('молок');
     await buy.getByRole('button', { name: /^Молоко\s*Цены/ }).click();
     await buy.getByRole('textbox', { name: 'Сумма за всё' }).fill('13,50');
-    await expect(buy.getByText(/Итого · 2 продукта/)).toContainText('37,50');
+    await expect(buy.locator('p', { hasText: /Итого · 2 продукта/ })).toContainText('37,50');
     await shot(page, '66-purchases-sheet', testInfo);
     await buy.getByRole('button', { name: 'Готово', exact: true }).click();
     await expect(buy).toBeHidden();
