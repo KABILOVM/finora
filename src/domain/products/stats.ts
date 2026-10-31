@@ -1,7 +1,9 @@
 import { isMinor } from '../money';
 import { QTY_MIN, unitPrice } from '../shopping';
 import type { IsoDateTime, Minor, ShoppingItem, ShoppingUnit } from '../types';
-import { normName, productByName, type Product } from './catalog';
+import { productByName, productKeyOf, type Product } from './catalog';
+
+export { productKeyOf };
 
 /**
  * Цены продуктов — ЛИЧНЫЕ: считаются по купленным позициям самого человека (shopping_items с ценой), новой схемы данных не нужно.
@@ -10,12 +12,6 @@ import { normName, productByName, type Product } from './catalog';
  */
 export const AVG_WINDOW_DAYS = 90;
 export const AVG_FALLBACK_COUNT = 5;
-
-/** Ключ продукта в истории: продукт каталога («c:kartofel») или своё название («n:курт сушёный»). «Картошка» и «Картофель» — один ключ. */
-export function productKeyOf(name: string): string {
-  const p = productByName(name);
-  return p ? `c:${p.id}` : `n:${normName(name)}`;
-}
 
 export interface ProductStats {
   /** Ключ продукта (см. productKeyOf). */
@@ -119,6 +115,11 @@ export function statsForProduct(book: PriceBook, product: Pick<Product, 'id' | '
   let best: ProductStats | null = null;
   for (const s of book.values()) if (s.key === key && (best === null || s.lastAt > best.lastAt)) best = s;
   return best;
+}
+
+/** Средние цены за единицу из книги цен под ключами памяти цен (domain/shopping.ts, priceKey): «продукт|единица». */
+export function averageMemory(book: PriceBook): Map<string, Minor> {
+  return new Map([...book].map(([k, s]) => [k, s.avgUnitMinor]));
 }
 
 /** Свои продукты человека: названия из его покупок, которых нет в каталоге. Самые свежие первыми. */

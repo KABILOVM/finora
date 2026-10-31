@@ -160,6 +160,11 @@ export default function ShoppingPage() {
         <>
           План <span className="money font-semibold text-text">{approxText(totals.planMinor, base)}</span>
           {totals.unknownCount > 0 && ` (без цены: ${totals.unknownCount})`}
+          {data.planAvgMinor !== null && data.planAvgMinor !== totals.planMinor && (
+            <>
+              {' · '}по средним ценам <span className="money font-semibold text-text" data-testid="shopping-plan-avg">{approxText(data.planAvgMinor, base)}</span>
+            </>
+          )}
           {budget && (
             <>
               {' · '}
@@ -277,7 +282,7 @@ export default function ShoppingPage() {
       )}
 
       {sheet?.kind === 'new' && (
-        <ItemSheet view={null} currency={base} recent={recent} onSave={saveItem(null)} onClose={() => setSheet(null)} />
+        <ItemSheet view={null} currency={base} recent={recent} book={data.book} onSave={saveItem(null)} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'list' && (
         <ListTextSheet
@@ -300,6 +305,7 @@ export default function ShoppingPage() {
           view={editView}
           currency={base}
           recent={[]}
+          book={data.book}
           onSave={saveItem(editView)}
           onRemove={removeItem(editView)}
           onClose={() => setSheet(null)}
