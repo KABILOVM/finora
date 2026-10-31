@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
+  addMonths,
   computeSavingsPlan,
   distributeByWeight,
   monthSpan,
@@ -242,5 +243,75 @@ describe('usualSpendFromHistory', () => {
   it('трат не было вовсе — null', () => {
     expect(usualSpendFromHistory([], () => false)).toBeNull();
     expect(usualSpendFromHistory([{ byCategory: [], expenseMinor: 0 }], () => false)).toBeNull();
+  });
+});
+
+describe('addMonths', () => {
+  it('сдвигает на месяцы, день без пары уходит на конец месяца, год переходит', () => {
+    expect(addMonths('2026-10-15', 2)).toBe('2026-12-15');
+    expect(addMonths('2026-12-15', 1)).toBe('2027-01-15');
+    expect(addMonths('2026-10-31', 4)).toBe('2027-02-28');
+    expect(addMonths('2028-01-31', 1)).toBe('2028-02-29');
+    expect(addMonths('2026-10-15', 0)).toBe('2026-10-15');
+    expect(addMonths('2026-10-15', 14)).toBe('2027-12-15');
+  });
+});
+
+describe('computeSavingsPlan: когда реально успеть (catchUp)', () => {
+  it('без истории: темп — всё, что можно потратить до конца месяца; дата — когда накопится остаток', () => {
+    // можно потратить 85 000, цель 300 000: 85 000 в месяц → 4 месяца
+    const day = plan({ forecast: forecast({ perDayMinor: 5_000 }) }).day!;
+    expect(day.status).toBe('tight');
+    expect(day.catchUp).toEqual({ kind: 'date', date: '2027-02-15', months: 4, monthlyMinor: 85_000 });
+  });
+
+  it('с историей: из денег вычитаются обязательные траты, не вошедшие в прогноз', () => {
+    // 340 000 − 274 193 (аренда) = 65 807 в месяц → 300 000 накопятся за 5 месяцев
+    const day = plan({ usual, forecast: forecast({ perDayMinor: 20_000 }) }).day!;
+    expect(day.status).toBe('tight');
+    expect(day.catchUp).toEqual({ kind: 'date', date: '2027-03-15', months: 5, monthlyMinor: 65_807 });
+  });
+
+  it('после обязательных трат ничего не остаётся — «none»', () => {
+    const day = plan({ usual, forecast: forecast({ perDayMinor: 10_000 }) }).day!;
+    expect(day.status).toBe('tight');
+    expect(day.catchUp).toEqual({ kind: 'none' });
+  });
+
+  it('больше десяти лет — «far» без даты', () => {
+    const day = plan({ forecast: forecast({ perDayMinor: 100 }) }).day!; // 1 700 в месяц → 177 месяцев
+    expect(day.catchUp).toEqual({ kind: 'far', monthlyMinor: 1_700 });
+  });
+
+  it('остатки нескольких целей складываются, другая валюта и достигнутые не входят', () => {
+    const day = plan({
+      goals: [goal(), goal({ id: 'g2', targetMinor: 90_000, dueOn: '2026-10-31' }), goal({ id: 'g3', currency: 'USD' }), goal({ id: 'g4', savedMinor: 300_000 })],
+      forecast: forecast({ perDayMinor: 5_000 }),
+    }).day!;
+    // осталось 300 000 + 90 000 = 390 000 при 85 000 в месяц → 5 месяцев
+    expect(day.catchUp).toMatchObject({ kind: 'date', months: 5, monthlyMinor: 85_000 });
+  });
+
+  it('горизонт короче остатка месяца: темп пересчитывается на остаток месяца, как резерв', () => {
+    // 5 000 × 7 дней = 35 000 за горизонт → 35 000 × 17 ÷ 7 = 85 000 за остаток месяца
+    const day = plan({ forecast: forecast({ perDayMinor: 5_000, daysLeft: 7 }) }).day!;
+    expect(day.status).toBe('tight');
+    expect(day.catchUp).toMatchObject({ kind: 'date', months: 4, monthlyMinor: 85_000 });
+  });
+
+  it('когда укладываетесь или нужно лишь сократить, подсказки срока нет', () => {
+    expect(plan({ usual, forecast: forecast({ perDayMinor: 60_000 }) }).day?.catchUp).toBeNull(); // ok
+    expect(plan({ usual, forecast: forecast({ perDayMinor: 40_000 }) }).day?.catchUp).toBeNull(); // cut
+    expect(plan({ forecast: forecast({ perDayMinor: 40_000 }) }).day?.catchUp).toBeNull(); // cut без истории
+  });
+
+  it('свойство: дата всегда позже сегодня, а темп меньше месячной потребности (иначе «впритык» не было бы)', () => {
+    for (const perDay of [0, 1, 100, 1_000, 5_000, 8_000]) {
+      const p = plan({ forecast: forecast({ perDayMinor: perDay }) });
+      const day = p.day!;
+      if (day.status !== 'tight' || day.catchUp?.kind !== 'date') continue;
+      expect(day.catchUp.date > TODAY).toBe(true);
+      expect(day.catchUp.monthlyMinor).toBeLessThan(p.leftThisMonthMinor);
+    }
   });
 });

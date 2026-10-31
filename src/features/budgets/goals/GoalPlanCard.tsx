@@ -9,7 +9,7 @@ import type { CategoryAdvice, DayPlan } from '@/domain/savingsPlan';
 import type { Category, CurrencyCode, LocalRow, UUID } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { budgetLabel } from '../budgetText';
-import { NO_HISTORY_TEXT, adviceLine, horizonLabel, monthLeftLine, planStatusLine, withoutGoalLine } from './goalsText';
+import { NO_HISTORY_TEXT, adviceLine, catchUpLine, horizonLabel, monthLeftLine, planStatusLine, withoutGoalLine } from './goalsText';
 
 export interface GoalPlanCardProps {
   base: CurrencyCode;
@@ -17,6 +17,8 @@ export interface GoalPlanCardProps {
   day: DayPlan;
   /** Сколько ещё откладывать в этом месяце по всем целям. */
   leftThisMonthMinor: number;
+  /** Сколько целей ещё копится: при нескольких дата-подсказка относится ко всем вместе. */
+  activeGoals: number;
   categories: ReadonlyMap<UUID, LocalRow<Category>>;
   /** «Обязательные категории»: открыть выбор. */
   onEssential: () => void;
@@ -49,7 +51,7 @@ function AdviceRow({ c, base, categories }: { c: CategoryAdvice; base: CurrencyC
  * План накопления: сколько можно тратить в день с учётом целей и — по категориям — сколько можно, что сократить, а что лучше
  * не тратить, чтобы к сроку накопить. Основная цифра «Осталось на день» выше остаётся прежней: здесь отдельный расчёт «с целью».
  */
-export function GoalPlanCard({ base, forecast, day, leftThisMonthMinor, categories, onEssential }: GoalPlanCardProps) {
+export function GoalPlanCard({ base, forecast, day, leftThisMonthMinor, activeGoals, categories, onEssential }: GoalPlanCardProps) {
   const until = horizonLabel(forecast.horizonEnd, forecast.monthEnd);
   // Общий лимит месяца тоже ограничивает «в день»: с целью — меньшее из двух чисел
   const budgetPerDay = forecast.budget?.perDayMinor;
@@ -74,6 +76,11 @@ export function GoalPlanCard({ base, forecast, day, leftThisMonthMinor, categori
       <Notice tone={day.status === 'tight' ? 'danger' : day.status === 'ok' ? 'success' : 'info'} icon={day.status === 'ok' ? 'check' : 'info'} role="note" className={TONE[day.status]}>
         {planStatusLine(day, base, until)}
       </Notice>
+      {day.catchUp !== null && (
+        <p className="text-sm font-medium" data-testid="goal-catchup">
+          {catchUpLine(day.catchUp, base, activeGoals > 1, forecast.today)}
+        </p>
+      )}
 
       {day.categories.length === 0 ? (
         <p className="text-sm text-muted">{NO_HISTORY_TEXT}</p>

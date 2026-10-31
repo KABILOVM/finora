@@ -182,6 +182,7 @@ export function GoalsSection({ base, forecast }: GoalsSectionProps) {
             forecast={data.forecast}
             day={plan.day}
             leftThisMonthMinor={plan.leftThisMonthMinor}
+            activeGoals={plan.items.filter((i) => i.state === 'active').length}
             categories={data.categories}
             onEssential={() => setEssential(true)}
           />

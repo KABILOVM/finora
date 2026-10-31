@@ -206,4 +206,19 @@ describe('экран «Бюджеты»: цели накопления', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Вернуть цель: Отпуск' })).toBeNull());
     expect((await storeOf(td).db.savings_goals.toArray())[0]?.deletedAt).not.toBeNull();
   });
+
+  it('если «впритык», подсказывает самую раннюю реалистичную дату; когда укладываетесь — нет', async () => {
+    await openPage(WITH_HISTORY);
+    await createGoal('Отпуск', '3000');
+    await waitById('goal-plan');
+    expect(byId('goal-catchup')).toBeNull(); // по 1 500 в месяц укладываются в 9 000 на руках
+
+    // 30 000 к январю: нужно по 15 000 в месяц, а откладывать можно не больше ~9 000 — это «впритык»
+    await createGoal('Квартира', '30000');
+    const line = await waitById('goal-catchup');
+    expect(line.textContent).toContain('Все цели вместе');
+    expect(line.textContent).toContain('не раньше');
+    expect(line.textContent).toMatch(/\d{4} года/); // дата в следующем году — с годом
+    expect(byId('goal-plan')?.textContent).toContain('Сдвиньте срок или уменьшите сумму');
+  });
 });

@@ -1,5 +1,5 @@
 import { formatMinor } from '@/domain/money';
-import type { CategoryAdvice, DayPlan, GoalPlanItem } from '@/domain/savingsPlan';
+import type { CatchUp, CategoryAdvice, DayPlan, GoalPlanItem } from '@/domain/savingsPlan';
 import type { CurrencyCode, IsoDate, Minor } from '@/domain/types';
 import { longDate } from '../budgetText';
 
@@ -57,3 +57,21 @@ export function withoutGoalLine(perDayMinor: Minor, currency: CurrencyCode): str
 
 /** Подсказка, когда разбора по категориям нет: нужна история трат. */
 export const NO_HISTORY_TEXT = 'Разбор по категориям появится, когда накопится история трат за прошлые месяцы.';
+
+/** '2027-02-15' → '15 февраля 2027 года', если год не текущий, иначе '15 февраля'. */
+function catchUpDate(iso: IsoDate, today: IsoDate): string {
+  return iso.slice(0, 4) === today.slice(0, 4) ? longDate(iso) : `${longDate(iso)} ${iso.slice(0, 4)} года`;
+}
+
+/**
+ * Подсказка срока, когда «впритык»: самая ранняя дата, к которой накопится остаток. many — целей несколько, дата для всех вместе.
+ * Это нижняя граница (темп — всё, что остаётся после обязательных трат), поэтому слова «не раньше», а не «успеете».
+ */
+export function catchUpLine(c: CatchUp, currency: CurrencyCode, many: boolean, today: IsoDate): string {
+  const who = many ? 'Все цели вместе' : 'Цель';
+  if (c.kind === 'none') return 'После обязательных трат ничего не остаётся: цель не накопить, пока обязательные расходы не уменьшатся.';
+  if (c.kind === 'far') {
+    return `${who}: при таком темпе (около ${formatMinor(c.monthlyMinor, currency)} в месяц) накопление затянется больше чем на десять лет. Уменьшите сумму или пересмотрите обязательные траты.`;
+  }
+  return `${who}: не раньше ${catchUpDate(c.date, today)}. Даже если не тратить на необязательное, получается откладывать около ${formatMinor(c.monthlyMinor, currency)} в месяц.`;
+}
