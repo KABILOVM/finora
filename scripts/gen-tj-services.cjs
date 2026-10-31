@@ -1,5 +1,5 @@
 /*
- * Иконки таджикских банков и сервисов (Эсхата, Амонатбонк, Tcell, Alif Mobi…) для значков категорий и кошельков.
+ * Иконки таджикских банков и сервисов (Эсхата, Амонатбонк, Tcell, Somon…) для значков категорий и кошельков.
  * Иконки — готовые картинки (обычно значок приложения из Google Play), а не векторы, поэтому лежат файлами в public/tj/<id>.png:
  * они попадают в офлайн-кэш приложения вместе со всем остальным, без интернета работают.
  *
@@ -30,38 +30,41 @@ const MAX_BYTES = 40_000;
 // Группы — в том порядке, в каком они показаны в выборе значка (раньше остальных сервисов).
 const GROUPS = [
   ['tjbank', 'Банки Таджикистана'],
-  ['tjpay', 'Связь и платежи Таджикистана'],
+  ['tjpay', 'Сервисы Таджикистана'],
 ];
 
 /*
  * [id, название, группа, слова для подсказки значка по названию категории]
  * Слова — в нижнем регистре, целым словом или парой слов («душанбе сити»); id и название ищутся сами.
  * Список можно держать щедрым: сервисы без файла просто не показываются.
+ * Значки взяты у главных приложений в Google Play (название приложения — в комментарии справа).
  */
 const TJ = [
-  ['alifbank', 'Алиф Банк', 'tjbank', ['алиф', 'alif']],
-  ['dcbank', 'Душанбе Сити Банк', 'tjbank', ['dc', 'душанбе сити']],
-  ['eskhata', 'Эсхата', 'tjbank', ['eskhata', 'эсхата банк']],
-  ['amonatbonk', 'Амонатбонк', 'tjbank', ['амонатбанк', 'amonatbank']],
-  ['orienbank', 'Ориёнбанк', 'tjbank', ['ориенбанк', 'orienbank']],
-  ['spitamen', 'Спитамен Банк', 'tjbank', ['спитамен']],
-  ['sodirot', 'Таджиксодиротбанк', 'tjbank', ['таджсодиротбанк', 'тоджсодиротбонк', 'sodirotbonk']],
-  ['arvand', 'Банк Арванд', 'tjbank', ['арванд']],
-  ['imon', 'Имон Интернешнл', 'tjbank', []],
-  ['ibt', 'Международный банк Таджикистана', 'tjbank', ['ibt']],
-  ['matin', 'Матин', 'tjbank', []],
-  ['cbt', 'Коммерцбанк Таджикистана', 'tjbank', ['коммерцбанк']],
-  ['fmfb', 'Первый микрофинансовый банк', 'tjbank', ['пмфб', 'fmfb']],
-  ['humo', 'Хумо', 'tjbank', ['humo']],
-  ['kortimilli', 'Корти Милли', 'tjbank', ['korti milli']],
-  ['tcell', 'Tcell', 'tjpay', ['тселл', 'тсел']],
-  ['megafontj', 'МегаФон Таджикистан', 'tjpay', ['мегафон', 'megafon']],
-  ['babilon', 'Babilon-M', 'tjpay', ['вавилон', 'бабилон']],
-  ['zetmobile', 'Zet-Mobile', 'tjpay', ['zet', 'зет']],
-  ['tojiktelecom', 'Таджиктелеком', 'tjpay', ['tojiktelecom']],
-  ['alifmobi', 'Alif Mobi', 'tjpay', ['алиф моби']],
-  ['dcnext', 'DC Next', 'tjpay', []],
-  ['eskhataonline', 'Eskhata Online', 'tjpay', []],
+  ['alifbank', 'Алиф', 'tjbank', ['alif', 'алиф банк', 'alif mobi', 'алиф моби']], // Alif: платежи и переводы (tj.alif.mobi)
+  ['dcbank', 'Душанбе Сити Банк', 'tjbank', ['dc', 'dc next', 'душанбе сити']], // DC Next (tj.dc.next1)
+  ['eskhata', 'Эсхата', 'tjbank', ['eskhata', 'эсхата банк', 'эсхата онлайн']], // Эсхата Онлайн (com.eskhata.online)
+  ['amonatbonk', 'Амонатбонк', 'tjbank', ['амонатбанк', 'amonatbank', 'амонат']], // Амонат мобайл (tj.itservice.amonatbonk)
+  ['orienbank', 'Ориёнбонк', 'tjbank', ['ориёнбанк', 'ориенбанк', 'oriyonbonk', 'oriyon']], // Oriyon 24 (tj.oriyonbonk)
+  ['spitamen', 'Спитамен Банк', 'tjbank', ['спитамен']], // Spitamen Pay (com.bank.spitamen.pay.spitamenpay)
+  ['ssb', 'Саноатсодиротбонк', 'tjbank', ['ссб', 'ssb', 'sanoatsodirotbonk']], // ССБ Мобайл (tj.itservice.ssb)
+  ['arvand', 'Банк Арванд', 'tjbank', ['арванд']], // Арванд (tj.itservice.arvand)
+  ['imon', 'Имон Интернешнл', 'tjbank', []], // IMONLINE (tj.imcon.wallet.imon.prod)
+  ['ibt', 'Международный банк Таджикистана', 'tjbank', ['ibt']], // IBT 24 (tj.ibt.app)
+  ['matin', 'Матин', 'tjbank', []], // Матин (tj.itservice.matin)
+  ['cbt', 'Коммерцбанк Таджикистана', 'tjbank', ['коммерцбанк', 'favri']], // Favri (tj.itservice.cbt)
+  ['icb', 'Инвестиционно-кредитный банк Таджикистана', 'tjbank', ['icb', 'икб']], // ICB Mobile (tj.fmfb.mobile)
+  ['dbt', 'Бонки рушд', 'tjbank', ['банк развития']], // Бонки рушд, Банк развития Таджикистана (tj.dbt.pay)
+  ['freedom', 'Freedom Bank', 'tjbank', []], // Freedom Tajikistan (tj.freedombank.app)
+  ['humo', 'Хумо', 'tjbank', ['humo']], // Humo Online (tj.humo.online)
+  ['tcell', 'Tcell', 'tjpay', ['тселл', 'тсел']], // Мой Tcell (tj.tcell.odp)
+  ['megafontj', 'МегаФон Таджикистан', 'tjpay', ['мегафон', 'megafon']], // в Google Play для Таджикистана приложения нет: файл кладут вручную
+  ['babilon', 'Babilon-M', 'tjpay', ['вавилон', 'бабилон']], // MyBabilon (com.babilon.mybabilon)
+  ['zetmobile', 'Zet-Mobile', 'tjpay', ['zet', 'зет']], // ZET-MOBILE (com.zet.ZET_MOBILE_app)
+  ['tojiktelecom', 'Таджиктелеком', 'tjpay', ['tojiktelecom']], // Tojiktelecom (tj.ttl.mytelecom)
+  ['oson', 'OSON', 'tjpay', ['осон']], // OSON: Денежные переводы (com.intervale.ibt)
+  ['somon', 'Somon.tj', 'tjpay', ['somon', 'сомон']], // Somon Объявления (tj.somon.somontj)
+  ['somonair', 'Somon Air', 'tjpay', ['сомон эйр']], // Somon Air (com.somonair.app)
+  ['andozi', 'Андози ман', 'tjpay', ['andozi', 'андози']], // Андози ман, налоговая (tj.tax.my_tax)
 ];
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
