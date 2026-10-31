@@ -66,7 +66,14 @@ test.describe('46. Долги: страница долга с меню «⋯», 
     await pay(page, '200');
     await page.getByRole('button', { name: /^Открыть платёж: / }).click();
     await expect(page).toHaveURL(/#\/edit\//);
+    // Адрес меняется раньше, чем появляется шит: он грузится отдельным куском и ждёт данные. А Esc ловит обработчик, который шит
+    // вешает уже после показа — в том же эффекте, где переносит фокус внутрь. Esc, нажатый раньше, уходит в пустоту: шит потом
+    // открывается и остаётся, а заголовок страницы виден и из-под него. Поэтому ждём шит с фокусом внутри и проверяем, что он закрылся.
+    const edit = sheet(page, 'Правка операции');
+    await expect(edit.and(page.locator(':focus-within'))).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(edit).toBeHidden();
+    await expect(page).not.toHaveURL(/#\/edit\//);
     await expect(page.getByRole('heading', { level: 1, name: 'Бобур' })).toBeVisible();
 
     // выплатили всё — плашка «Закрыть долг» на виду, в меню этого пункта нет
