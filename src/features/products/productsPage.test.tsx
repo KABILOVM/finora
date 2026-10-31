@@ -98,6 +98,16 @@ describe('экран «Продукты»', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('удалили расход (или нажали «Отмена» после сохранения) — цены из его чека в историю не идут', async () => {
+    const td = await open(async (s) => {
+      await receipt(s, [{ name: 'Молоко', qtyMilli: 2000, unit: 'l', priceMinor: 2600 }]); // 13,00 за л
+    });
+    await waitFor(() => expect(row('Молоко')).toMatch(/Последняя 13,00 с\./));
+    const tx = (await td.stores[0]!.db.transactions.toArray()).find((t) => t.deletedAt === null)!;
+    await td.stores[0]!.transactions.softDelete(tx.id);
+    await waitFor(() => expect(row('Молоко')).toContain('Цены пока нет'));
+  });
+
   it('карточка продукта без покупок объясняет, откуда возьмётся цена', async () => {
     await open();
     await waitFor(() => expect(screen.getByText('Картофель')).toBeInTheDocument());
