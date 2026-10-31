@@ -57,7 +57,7 @@ const TJ = [
   ['freedom', 'Freedom Bank', 'tjbank', []], // Freedom Tajikistan (tj.freedombank.app)
   ['humo', 'Хумо', 'tjbank', ['humo']], // Humo Online (tj.humo.online)
   ['tcell', 'Tcell', 'tjpay', ['тселл', 'тсел']], // Мой Tcell (tj.tcell.odp)
-  ['megafontj', 'МегаФон Таджикистан', 'tjpay', ['мегафон', 'megafon']], // в Google Play для Таджикистана приложения нет: файл кладут вручную
+  ['megafontj', 'МегаФон Таджикистан', 'tjpay', ['мегафон', 'megafon']], // приложения для Таджикистана в Google Play нет: значок прислан вручную (чёрный фон вокруг заменён на фирменный зелёный)
   ['babilon', 'Babilon-M', 'tjpay', ['вавилон', 'бабилон']], // MyBabilon (com.babilon.mybabilon)
   ['zetmobile', 'Zet-Mobile', 'tjpay', ['zet', 'зет']], // ZET-MOBILE (com.zet.ZET_MOBILE_app)
   ['tojiktelecom', 'Таджиктелеком', 'tjpay', ['tojiktelecom']], // Tojiktelecom (tj.ttl.mytelecom)

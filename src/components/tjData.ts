@@ -22,6 +22,7 @@ export const TJ_SERVICES: readonly ServiceMeta[] = [
   {"id":"freedom","name":"Freedom Bank","group":"tjbank","color":"#ffffff","img":"tj/freedom.png"},
   {"id":"humo","name":"Хумо","group":"tjbank","color":"#ffffff","img":"tj/humo.png","keys":["humo"]},
   {"id":"tcell","name":"Tcell","group":"tjpay","color":"#ffffff","img":"tj/tcell.png","keys":["тселл","тсел"]},
+  {"id":"megafontj","name":"МегаФон Таджикистан","group":"tjpay","color":"#ffffff","img":"tj/megafontj.png","keys":["мегафон","megafon"]},
   {"id":"babilon","name":"Babilon-M","group":"tjpay","color":"#ffffff","img":"tj/babilon.png","keys":["вавилон","бабилон"]},
   {"id":"zetmobile","name":"Zet-Mobile","group":"tjpay","color":"#ffffff","img":"tj/zetmobile.png","keys":["zet","зет"]},
   {"id":"tojiktelecom","name":"Таджиктелеком","group":"tjpay","color":"#ffffff","img":"tj/tojiktelecom.png","keys":["tojiktelecom"]},
