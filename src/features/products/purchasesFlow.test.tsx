@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 const norm = (s: string | null | undefined) => (s ?? '').replace(/[\s  ]+/g, ' ').trim();
-const openPurchases = () => user.click(screen.getByRole('button', { name: /^Что куплено/ }));
+const openPurchases = () => user.click(screen.getByRole('button', { name: 'Что куплено' }));
 const purchasesDialog = () => screen.getByRole('dialog', { name: 'Что куплено' });
 const pick = async (query: string, title: RegExp | string) => {
   await user.type(screen.getByRole('textbox', { name: 'Найти продукт' }), query);
@@ -38,11 +38,11 @@ async function startGroceries(td: OpsDeps = opsDeps()) {
 describe('«Что куплено» в «Новой операции»', () => {
   it('блок есть у «Продуктов» и нет у других категорий', async () => {
     await openAddSheet();
-    expect(screen.queryByRole('button', { name: /^Что куплено/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Что куплено' })).toBeNull();
     await user.click(catBtn('Еда'));
-    expect(screen.queryByRole('button', { name: /^Что куплено/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Что куплено' })).toBeNull();
     await user.click(catBtn('Продукты'));
-    expect(screen.getByRole('button', { name: 'Что куплено: добавить продукты' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Что куплено' })).toBeInTheDocument();
   });
 
   it('продукты → сумма операции = сумма строк; расход и позиции пишутся одним чеком, цены видны в книге цен', async () => {
@@ -67,6 +67,9 @@ describe('«Что куплено» в «Новой операции»', () => {
     // сумма операции посчитана и заблокирована
     expect(amountField()).toHaveValue('37,5');
     expect(amountField()).toHaveAttribute('readonly');
+    // клавиатуры нет, на её месте — сводка по продуктам; комиссии нет
+    expect(screen.queryByRole('group', { name: 'Цифровая клавиатура' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Комиссия' })).toBeNull();
     expect(screen.getByRole('button', { name: /^Что куплено: 2 продукта/ })).toHaveTextContent('37,50 с.');
 
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
@@ -154,7 +157,7 @@ describe('«Что куплено» в «Новой операции»', () => {
     expect(field('Сумма за всё')).toHaveValue('30');
   });
 
-  it('кошелёк не в основной валюте: вместо блока пояснение, сумма вводится как обычно', async () => {
+  it('кошелёк не в основной валюте: окно не открывается, кнопка объясняет почему; сумма вводится как обычно', async () => {
     const td = opsDeps([], {
       setup: async (s) => {
         await s.wallets.create({ name: 'Доллары', currency: 'USD', kind: 'cash', openingBalanceMinor: 100_000, color: '#16a34a', icon: '💵' });
@@ -162,11 +165,12 @@ describe('«Что куплено» в «Новой операции»', () => {
     });
     await openAddSheet(td);
     await user.click(catBtn('Продукты'));
-    expect(screen.getByRole('button', { name: 'Что куплено: добавить продукты' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Кошелёк/ }));
     await user.click(await findByRole('button', { name: /Доллары/ }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: /^Что куплено/ })).toBeNull());
-    expect(screen.getByText(/вносятся в основной валюте \(TJS\)/)).toBeInTheDocument();
+    // кнопка на месте, но окно не открывается: объясняет, почему
+    await user.click(await findByRole('button', { name: 'Что куплено' }));
+    expect(await findByRole('status')).toHaveTextContent('вносится в основной валюте (TJS)');
+    expect(screen.queryByRole('dialog', { name: 'Что куплено' })).toBeNull();
     expect(amountField()).not.toHaveAttribute('readonly');
     expect((await cashWallet(td)).currency).toBe('TJS');
   });

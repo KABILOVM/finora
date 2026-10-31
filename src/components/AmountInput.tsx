@@ -61,6 +61,8 @@ export interface AmountInputProps {
   dense?: boolean;
   /** Сумма считается сама (например, по продуктам чека): набрать её нельзя, экранной клавиатуры нет. */
   locked?: boolean;
+  /** Две кнопки у края поля суммы вместо одной: боковые места шире (цифры всё равно по центру). */
+  wideSides?: boolean;
 }
 
 const TONE = { neutral: 'text-text', income: 'text-income', expense: 'text-expense' } as const;
@@ -98,6 +100,7 @@ export function AmountInput({
   compact = false,
   dense = false,
   locked = false,
+  wideSides = false,
 }: AmountInputProps) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -315,7 +318,7 @@ export function AmountInput({
           );
           if (bare) return amountRow;
           // Поле суммы: рамка с мягкой тенью; кнопки по краям занимают места поровну, чтобы цифры стояли по центру.
-          const side = start || end ? 'w-10 shrink-0' : null;
+          const side = start || end ? (wideSides ? 'w-[84px] shrink-0' : 'w-10 shrink-0') : null;
           return (
             <div
               data-amount-card=""

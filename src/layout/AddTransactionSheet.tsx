@@ -210,6 +210,17 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     if (c.form.amountMinor !== linesTotal) c.set({ amountMinor: linesTotal });
   }, [purchasesActive, linesTotal]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const openPurchases = () => {
+    if (!purchasesAvailable) {
+      // кошелёк не в основной валюте: цены продуктов записываются в основной
+      toast.show(`Что куплено вносится в основной валюте (${base}): выберите кошелёк в ${base}.`);
+      return;
+    }
+    setLineErrors(new Map());
+    setFocusRid(null);
+    setPurchasesOpen(true);
+  };
+
   const categoryOptions = useMemo(() => {
     if (kind === 'transfer') return [];
     return buildCategoryOptions(rankCategories(categories, kind, pop));
@@ -574,20 +585,9 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           noteSuggestions={quickChoice ? [quickChoice, ...noteMatches.map((m) => m.choice)] : noteMatches.map((m) => m.choice)}
           onPickNote={pickNote}
           amountLocked={purchasesActive}
-          purchases={
-            groceryNow ? (
-              <PurchasesRow
-                lines={lines}
-                currency={base}
-                onOpen={() => {
-                  setLineErrors(new Map());
-                  setFocusRid(null);
-                  setPurchasesOpen(true);
-                }}
-                {...(purchasesAvailable ? {} : { unavailable: `Продукты по строкам вносятся в основной валюте (${base}): выберите кошелёк в ${base}, если хотите записать, что куплено.` })}
-              />
-            ) : undefined
-          }
+          purchasesCount={purchasesActive ? lines.length : 0}
+          {...(groceryNow ? { onOpenPurchases: openPurchases } : {})}
+          purchasesSummary={purchasesActive ? <PurchasesRow lines={lines} currency={base} onOpen={openPurchases} /> : undefined}
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
             <span className="h-11 w-11 shrink-0">

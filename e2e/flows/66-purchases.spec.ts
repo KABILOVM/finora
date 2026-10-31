@@ -10,11 +10,11 @@ test.describe('66. «Что куплено» в «Новой операции»'
     // у других категорий блока нет
     const group = await openCategoryList(dlg);
     await group.getByRole('button', { name: 'Еда', exact: true }).click();
-    await expect(dlg.getByRole('button', { name: /^Что куплено/ })).toHaveCount(0);
+    await expect(dlg.getByRole('button', { name: 'Что куплено', exact: true })).toHaveCount(0);
 
     // у «Продуктов» — есть
     await (await openCategoryList(dlg)).getByRole('button', { name: 'Продукты', exact: true }).click();
-    await dlg.getByRole('button', { name: 'Что куплено: добавить продукты' }).click();
+    await dlg.getByRole('button', { name: 'Что куплено', exact: true }).click();
 
     const buy = sheet(page, 'Что куплено');
     await expect(buy).toBeVisible();
@@ -59,7 +59,7 @@ test.describe('66. «Что куплено» в «Новой операции»'
     await addLink(page).click();
     const dlg = sheet(page, 'Новая операция');
     await (await openCategoryList(dlg)).getByRole('button', { name: 'Продукты', exact: true }).click();
-    await dlg.getByRole('button', { name: 'Что куплено: добавить продукты' }).click();
+    await dlg.getByRole('button', { name: 'Что куплено', exact: true }).click();
     const buy = sheet(page, 'Что куплено');
     await buy.getByRole('searchbox', { name: 'Найти продукт' }).fill('хлеб');
     await buy.getByRole('button', { name: /^Хлеб\s*Цены/ }).click();
