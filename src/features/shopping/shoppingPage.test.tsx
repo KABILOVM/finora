@@ -170,7 +170,7 @@ describe('экран «Покупки»', () => {
       const td = await openNew();
       await user.type(nameField(), 'Курт сушёный');
       expect(screen.queryByRole('list', { name: 'Продукты из каталога' })).toBeNull();
-      await user.click(screen.getByRole('button', { name: 'Добавить', exact: true }));
+      await user.click(screen.getByRole('button', { name: 'Добавить' }));
       await waitFor(async () => expect((await td.stores[0]!.db.shopping_items.toArray()).map((i) => i.name)).toContain('Курт сушёный'));
     });
   });
