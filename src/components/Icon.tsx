@@ -63,3 +63,20 @@ export function Icon({ name, size = 24, label, strokeWidth = 2.2, ...rest }: Ico
     </svg>
   );
 }
+
+export interface DuoMarkupProps extends Omit<SVGProps<SVGSVGElement>, 'name' | 'children'> {
+  /** Ключ для кэша разбора: имя значка (не должно совпадать с именами из iconData.ts). */
+  cacheKey: string;
+  /** Разметка двухтонного значка (как в iconData.ts), например из ленивого файла дополнительных значков. */
+  markup: string;
+  size?: number;
+}
+
+/** Значок по готовой разметке, не из iconData.ts: дополнительные значки приходят из ленивых файлов (см. glyphExtras.ts). Рисуется так же, как Icon. */
+export function DuoMarkup({ cacheKey, markup, size = 24, ...rest }: DuoMarkupProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" {...rest}>
+      {shapes(`extra:${cacheKey}`, markup)}
+    </svg>
+  );
+}

@@ -179,9 +179,13 @@ describe('ChipPicker и GlyphPicker', () => {
     expect(onChange).toHaveBeenCalledWith('i:home');
   });
 
-  it('в наборе значков нет повторов, и все они известны Glyph', () => {
+  it('в наборе значков нет повторов, и все они известны Glyph (основные или дополнительные)', () => {
     expect(new Set(GLYPH_CHOICES).size).toBe(GLYPH_CHOICES.length);
-    for (const name of GLYPH_CHOICES) expect(resolveGlyph(`i:${name}`)).toEqual({ kind: 'icon', name });
+    for (const name of GLYPH_CHOICES) {
+      const g = resolveGlyph(`i:${name}`);
+      expect(['icon', 'extra'], name).toContain(g.kind);
+      expect(g, name).toMatchObject({ name });
+    }
   });
 
   it('Glyph: иконка, знак банка и незнакомое эмодзи', () => {

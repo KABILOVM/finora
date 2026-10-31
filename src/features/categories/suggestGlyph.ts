@@ -1,9 +1,25 @@
 import { glyphValue } from '@/components/glyphs';
-import type { IconName } from '@/components/Icon';
+import { findServiceByName, serviceValue } from '@/components/services';
 import { COLOR_CHOICES } from '@/features/wallets/walletUi';
 
 /** Слова из названия → значок. Проверяется по началу слова (корни), порядок важен: что выше, то приоритетнее. */
-const KEYWORDS: readonly (readonly [string, IconName])[] = [
+const KEYWORDS: readonly (readonly [string, string])[] = [
+  // семья и дети (раньше общих слов: «Детская одежда» — это дети, а не одежда)
+  ['жена', 'wife'], ['жену', 'wife'], ['жены', 'wife'], ['жене', 'wife'], ['женой', 'wife'], ['супруг', 'couple'],
+  ['дети', 'kids'], ['детей', 'kids'], ['детям', 'kids'], ['детск', 'kids'], ['ребен', 'kids'], ['ребён', 'kids'], ['сын', 'kids'], ['доч', 'kids'], ['внук', 'kids'],
+  ['малыш', 'baby'], ['памперс', 'baby'], ['подгузн', 'baby'], ['игрушк', 'toys'], ['школ', 'school'], ['семь', 'family'], ['родител', 'family'],
+  ['мама', 'family'], ['папа', 'family'], ['свадьб', 'wedding'], ['друзь', 'friends'],
+  // дом и коммунальные услуги
+  ['отоплен', 'heating'], ['мусор', 'trash'], ['уборк', 'cleaning'], ['клининг', 'cleaning'], ['гараж', 'garage'], ['окн', 'window'],
+  ['кондиционер', 'conditioner'], ['холодильник', 'fridge'],
+  // еда, транспорт, здоровье, покупки, отдых, работа
+  ['чай', 'tea'], ['выпечк', 'bakery'], ['пекарн', 'bakery'], ['хлеб', 'bakery'], ['коктейл', 'cocktail'],
+  ['велосипед', 'bike'], ['самокат', 'kickscooter'], ['автосервис', 'carservice'], ['шиномонтаж', 'tires'], ['паспорт', 'passport'], ['доставк', 'delivery'],
+  ['прививк', 'vaccine'], ['витамин', 'vitamins'], ['аптечк', 'medkit'], ['йог', 'yoga'], ['бассейн', 'swim'], ['парфюм', 'perfume'], ['космети', 'cosmetic'],
+  ['маникюр', 'cosmetic'], ['очки', 'glasses'], ['фото', 'camera'], ['рисован', 'art'], ['билет', 'tickets'],
+  ['почт', 'post'], ['документ', 'document'], ['юрист', 'law'], ['закон', 'law'], ['бизнес', 'business'], ['универ', 'university'], ['тетрад', 'notebook'],
+  ['библиотек', 'library'], ['евро', 'euro'], ['доллар', 'dollar'], ['рубл', 'ruble'],
+  ['религ', 'religion'], ['мечет', 'religion'], ['рамадан', 'religion'], ['рамазан', 'religion'], ['хадж', 'religion'],
   ['кофе', 'cup'], ['кафе', 'cup'], ['рестор', 'food'], ['еда', 'food'], ['обед', 'food'], ['пицц', 'food'], ['фастфуд', 'food'],
   ['продукт', 'cart'], ['магазин', 'cart'], ['базар', 'cart'], ['сладк', 'donut'], ['алкогол', 'wine'],
   ['такси', 'car'], ['машин', 'car'], ['авто', 'car'], ['бензин', 'fuel'], ['заправ', 'fuel'], ['транспорт', 'bus'], ['проезд', 'bus'],
@@ -22,8 +38,11 @@ const KEYWORDS: readonly (readonly [string, IconName])[] = [
   ['инвест', 'invest'], ['процент', 'invest'], ['дивиденд', 'invest'], ['долг', 'debt'], ['кредит', 'card'], ['налог', 'safe'],
 ];
 
-/** Значок по названию («Кофе» → чашка); если ничего не подошло — универсальная метка. */
+/** Значок по названию («Кофе» → чашка, «Netflix» → логотип Netflix); если ничего не подошло — универсальная метка. */
 export function suggestGlyph(name: string): string {
+  // название сервиса точнее общего слова: «Подписка Netflix» — это Netflix, а не просто «повтор»
+  const service = findServiceByName(name);
+  if (service) return serviceValue(service.id);
   const n = name.toLocaleLowerCase('ru');
   const hit = KEYWORDS.find(([root]) => n.split(/[^\p{L}]+/u).some((w) => w.startsWith(root)));
   return glyphValue(hit ? hit[1] : 'tag');

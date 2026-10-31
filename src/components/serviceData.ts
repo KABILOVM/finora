@@ -1,0 +1,112 @@
+/* Файл создан скриптом scripts/gen-services.cjs — руками не править.
+ * Каталог сервисов для значков категорий и кошельков («s:netflix»). Сами логотипы лежат в serviceLogos/logos-<группа>.ts и грузятся лениво. */
+export interface ServiceMeta {
+  /** Часть значения поля icon: «s:<id>». */
+  id: string;
+  name: string;
+  group: string;
+  /** Цвет плитки (фирменный). */
+  color: string;
+  /** Знак на плитке тёмный (иначе белый): плитка светлая. */
+  dark?: true;
+  /** Слова для подсказки значка по названию категории (целым словом, в нижнем регистре). */
+  keys?: readonly string[];
+  /** Только у таджикских банков и сервисов (tjData.ts): значок приложения файлом, путь от корня сайта (tj/eskhata.png). Тогда логотипа-вектора нет. */
+  img?: string;
+}
+
+export const SERVICE_GROUPS: readonly { id: string; label: string }[] = [{"id":"media","label":"Видео и музыка"},{"id":"work","label":"ИИ и работа"},{"id":"cloud","label":"Облако и безопасность"},{"id":"pay","label":"Платежи и крипта"},{"id":"social","label":"Соцсети и связь"},{"id":"games","label":"Игры и приложения"},{"id":"shop","label":"Покупки и поездки"}];
+
+export const SERVICES: readonly ServiceMeta[] = [
+  {"id":"netflix","name":"Netflix","group":"media","color":"#e50914","keys":["нетфликс"]},
+  {"id":"youtube","name":"YouTube","group":"media","color":"#ff0000","keys":["ютуб"]},
+  {"id":"youtubemusic","name":"YouTube Music","group":"media","color":"#ff0000"},
+  {"id":"spotify","name":"Spotify","group":"media","color":"#1ed760","dark":true,"keys":["спотифай"]},
+  {"id":"applemusic","name":"Apple Music","group":"media","color":"#fa243c"},
+  {"id":"appletv","name":"Apple TV","group":"media","color":"#000000"},
+  {"id":"hbomax","name":"HBO Max","group":"media","color":"#000000","keys":["hbo"]},
+  {"id":"twitch","name":"Twitch","group":"media","color":"#9146ff"},
+  {"id":"crunchyroll","name":"Crunchyroll","group":"media","color":"#ff5e00"},
+  {"id":"kinopoisk","name":"Кинопоиск","group":"media","color":"#ff5500","keys":["kinopoisk"]},
+  {"id":"soundcloud","name":"SoundCloud","group":"media","color":"#ff5500"},
+  {"id":"audible","name":"Audible","group":"media","color":"#f8991c"},
+  {"id":"patreon","name":"Patreon","group":"media","color":"#000000","keys":["патреон"]},
+  {"id":"claude","name":"Claude","group":"work","color":"#d97757","keys":["клод"]},
+  {"id":"openai","name":"ChatGPT","group":"work","color":"#10a37f","keys":["chatgpt","чатгпт","openai"]},
+  {"id":"gemini","name":"Gemini","group":"work","color":"#8e75b2","keys":["гемини"]},
+  {"id":"perplexity","name":"Perplexity","group":"work","color":"#1fb8cd"},
+  {"id":"deepseek","name":"DeepSeek","group":"work","color":"#5786fe"},
+  {"id":"github","name":"GitHub","group":"work","color":"#181717","keys":["гитхаб"]},
+  {"id":"notion","name":"Notion","group":"work","color":"#000000"},
+  {"id":"figma","name":"Figma","group":"work","color":"#f24e1e"},
+  {"id":"canva","name":"Canva","group":"work","color":"#00c4cc"},
+  {"id":"adobe","name":"Adobe","group":"work","color":"#fa0f00"},
+  {"id":"zoom","name":"Zoom","group":"work","color":"#0b5cff","keys":["зум"]},
+  {"id":"slack","name":"Slack","group":"work","color":"#4a154b"},
+  {"id":"grammarly","name":"Grammarly","group":"work","color":"#027e6f"},
+  {"id":"duolingo","name":"Duolingo","group":"work","color":"#58cc02","keys":["дуолинго"]},
+  {"id":"google","name":"Google","group":"cloud","color":"#4285f4","keys":["гугл"]},
+  {"id":"googledrive","name":"Google Drive","group":"cloud","color":"#4285f4"},
+  {"id":"googlecloud","name":"Google Cloud","group":"cloud","color":"#4285f4"},
+  {"id":"dropbox","name":"Dropbox","group":"cloud","color":"#0061ff","keys":["дропбокс"]},
+  {"id":"icloud","name":"iCloud","group":"cloud","color":"#3693f3","keys":["айклауд"]},
+  {"id":"apple","name":"Apple","group":"cloud","color":"#000000","keys":["эппл","эпл"]},
+  {"id":"microsoft","name":"Microsoft","group":"cloud","color":"#0078d4","keys":["майкрософт","microsoft365"]},
+  {"id":"aws","name":"AWS","group":"cloud","color":"#232f3e"},
+  {"id":"cloudflare","name":"Cloudflare","group":"cloud","color":"#f38020"},
+  {"id":"proton","name":"Proton","group":"cloud","color":"#6d4aff"},
+  {"id":"nordvpn","name":"NordVPN","group":"cloud","color":"#4687ff"},
+  {"id":"expressvpn","name":"ExpressVPN","group":"cloud","color":"#da3940"},
+  {"id":"onepassword","name":"1Password","group":"cloud","color":"#145fe4"},
+  {"id":"bitwarden","name":"Bitwarden","group":"cloud","color":"#175ddc"},
+  {"id":"paypal","name":"PayPal","group":"pay","color":"#002991","keys":["пейпал"]},
+  {"id":"visa","name":"Visa","group":"pay","color":"#1a1f71"},
+  {"id":"mastercard","name":"Mastercard","group":"pay","color":"#eb001b","keys":["мастеркард"]},
+  {"id":"amex","name":"American Express","group":"pay","color":"#2e77bc","keys":["amex"]},
+  {"id":"stripe","name":"Stripe","group":"pay","color":"#635bff"},
+  {"id":"wise","name":"Wise","group":"pay","color":"#9fe870","dark":true},
+  {"id":"revolut","name":"Revolut","group":"pay","color":"#191c1f"},
+  {"id":"payoneer","name":"Payoneer","group":"pay","color":"#ff4800","keys":["пайонир"]},
+  {"id":"westernunion","name":"Western Union","group":"pay","color":"#ffdd00","dark":true},
+  {"id":"applepay","name":"Apple Pay","group":"pay","color":"#000000"},
+  {"id":"googlepay","name":"Google Pay","group":"pay","color":"#4285f4"},
+  {"id":"samsungpay","name":"Samsung Pay","group":"pay","color":"#1428a0"},
+  {"id":"alipay","name":"Alipay","group":"pay","color":"#1677ff"},
+  {"id":"webmoney","name":"WebMoney","group":"pay","color":"#036cb5","keys":["вебмани"]},
+  {"id":"qiwi","name":"QIWI","group":"pay","color":"#ff8c00"},
+  {"id":"binance","name":"Binance","group":"pay","color":"#f0b90b","dark":true,"keys":["бинанс"]},
+  {"id":"bitcoin","name":"Bitcoin","group":"pay","color":"#f7931a","keys":["биткоин","btc"]},
+  {"id":"ethereum","name":"Ethereum","group":"pay","color":"#3c3c3d","keys":["eth"]},
+  {"id":"tether","name":"Tether","group":"pay","color":"#50af95","keys":["usdt"]},
+  {"id":"ton","name":"TON","group":"pay","color":"#0098ea"},
+  {"id":"coinbase","name":"Coinbase","group":"pay","color":"#0052ff"},
+  {"id":"telegram","name":"Telegram","group":"social","color":"#26a5e4","keys":["телеграм","телега"]},
+  {"id":"whatsapp","name":"WhatsApp","group":"social","color":"#25d366","keys":["ватсап","вотсап"]},
+  {"id":"instagram","name":"Instagram","group":"social","color":"#ff0069","keys":["инстаграм","инста"]},
+  {"id":"facebook","name":"Facebook","group":"social","color":"#0866ff","keys":["фейсбук"]},
+  {"id":"tiktok","name":"TikTok","group":"social","color":"#000000","keys":["тикток"]},
+  {"id":"x","name":"X (Twitter)","group":"social","color":"#000000","keys":["twitter","твиттер"]},
+  {"id":"vk","name":"VK","group":"social","color":"#0077ff","keys":["вк","вконтакте"]},
+  {"id":"discord","name":"Discord","group":"social","color":"#5865f2","keys":["дискорд"]},
+  {"id":"snapchat","name":"Snapchat","group":"social","color":"#fffc00","dark":true},
+  {"id":"linkedin","name":"LinkedIn","group":"social","color":"#0a66c2"},
+  {"id":"viber","name":"Viber","group":"social","color":"#7360f2","keys":["вайбер"]},
+  {"id":"reddit","name":"Reddit","group":"social","color":"#ff4500"},
+  {"id":"skype","name":"Skype","group":"social","color":"#00aff0","keys":["скайп"]},
+  {"id":"googleplay","name":"Google Play","group":"games","color":"#414141"},
+  {"id":"appstore","name":"App Store","group":"games","color":"#0d96f6"},
+  {"id":"steam","name":"Steam","group":"games","color":"#000000","keys":["стим"]},
+  {"id":"playstation","name":"PlayStation","group":"games","color":"#0070d1","keys":["плейстейшн"]},
+  {"id":"xbox","name":"Xbox","group":"games","color":"#107c10"},
+  {"id":"nintendo","name":"Nintendo","group":"games","color":"#e60012"},
+  {"id":"epicgames","name":"Epic Games","group":"games","color":"#313131"},
+  {"id":"roblox","name":"Roblox","group":"games","color":"#000000","keys":["роблокс"]},
+  {"id":"aliexpress","name":"AliExpress","group":"shop","color":"#ff4747","keys":["алиэкспресс","алиекспресс"]},
+  {"id":"ebay","name":"eBay","group":"shop","color":"#e53238"},
+  {"id":"amazon","name":"Amazon","group":"shop","color":"#ff9900","dark":true,"keys":["амазон"]},
+  {"id":"uber","name":"Uber","group":"shop","color":"#000000","keys":["убер"]},
+  {"id":"glovo","name":"Glovo","group":"shop","color":"#f2cc38","dark":true,"keys":["глово"]},
+  {"id":"airbnb","name":"Airbnb","group":"shop","color":"#ff5a5f"},
+  {"id":"booking","name":"Booking.com","group":"shop","color":"#003a9a","keys":["букинг","booking"]},
+  {"id":"yandex","name":"Яндекс","group":"shop","color":"#fc3f1d","keys":["yandex","яндекс"]},
+];
