@@ -6,10 +6,11 @@ import { Icon, type IconName } from './Icon';
 /**
  * quarantined — записи, которые сервер не принял: в очереди их уже нет, но и на сервере тоже.
  * lastSyncedAt — когда последний цикл дошёл до конца. Без него «Синхронизировано» не показывается никогда.
+ * lastError — причина ошибки: попадает в подсказку плашки (в самом тексте плашки её нет, он короткий).
  * Передавайте весь статус движка (`<SyncBadge {...status} />`), иначе эти сигналы потеряются.
  */
 export type SyncBadgeProps = Pick<SyncStatus, 'phase' | 'pending'> &
-  Partial<Pick<SyncStatus, 'quarantined' | 'lastSyncedAt'>> & { className?: string };
+  Partial<Pick<SyncStatus, 'quarantined' | 'lastSyncedAt' | 'lastError'>> & { className?: string };
 
 const queued = (n: number) => `${n} ${pluralRu(n, 'запись', 'записи', 'записей')} в очереди`;
 
@@ -54,14 +55,20 @@ export function syncBadgeText(
   }
 }
 
-/** Подсказка при наведении/долгом нажатии: то же, что в тексте, и понятное «что делать» там, где это нужно. */
+/**
+ * Подсказка при наведении/долгом нажатии: то же, что в тексте, и понятное «что делать» там, где это нужно.
+ * При ошибке — ещё и её причина (lastError движка): по одной плашке видно, сеть это, устаревшая схема в облаке или старая версия приложения.
+ */
 export function syncBadgeHint(
   phase: SyncStatus['phase'],
   pending: number,
   quarantined = 0,
   lastSyncedAt?: string | null,
+  lastError?: string | null,
 ): string {
   const text = syncBadgeText(phase, pending, quarantined, lastSyncedAt);
+  const reason = typeof lastError === 'string' ? lastError.trim().replace(/\.+$/, '') : '';
+  if (phase === 'error' && reason !== '') return `${text}. Причина: ${reason}. Подробности — в Настройках.`;
   if (phase === 'auth-required') {
     return `${text}. Войдите в аккаунт заново: пока вы не вошли, данные не отправляются в облако. Всё сохранено на устройстве.`;
   }
@@ -94,11 +101,11 @@ function look(
 }
 
 /** Индикатор синхронизации. Работает по пропсам (тот же SyncStatus, что отдаёт движок синхронизации). */
-export function SyncBadge({ phase, pending, quarantined = 0, lastSyncedAt, className }: SyncBadgeProps) {
+export function SyncBadge({ phase, pending, quarantined = 0, lastSyncedAt, lastError, className }: SyncBadgeProps) {
   const text = syncBadgeText(phase, pending, quarantined, lastSyncedAt);
   const { icon, tone, spin } = look(phase, count(pending), count(quarantined), hasSynced(lastSyncedAt));
   return (
-    <Badge tone={tone} role="status" title={syncBadgeHint(phase, pending, quarantined, lastSyncedAt)} className={className} data-phase={phase}>
+    <Badge tone={tone} role="status" title={syncBadgeHint(phase, pending, quarantined, lastSyncedAt, lastError)} className={className} data-phase={phase}>
       <Icon name={icon} size={14} className={spin ? 'animate-spin' : undefined} />
       <span>{text}</span>
     </Badge>

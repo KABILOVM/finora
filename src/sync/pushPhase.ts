@@ -101,6 +101,26 @@ export function describeSchemaWait(tables: Iterable<SyncTableName>): string {
   return `В облаке устарела схема: выполните supabase/schema.sql целиком${where}; пока ${what.join(', ')} остаются только на этом устройстве`;
 }
 
+/**
+ * Коды отказа сервера, при которых облако настроено не до конца: в нём нет таблицы, колонки или функции (Postgres 42P01 / 42703 /
+ * 42883; PostgREST PGRST202 / PGRST204 / PGRST205 — «нет в кэше схемы»). Повтор тех же данных не поможет, пока не выполнен
+ * supabase/schema.sql. Известные «поздние» колонки (цели, погода, проценты) сюда не попадают: их ловит транспорт и отдаёт видом 'schema'.
+ */
+const BROKEN_CLOUD_CODES: ReadonlySet<string> = new Set(['42P01', '42703', '42883', 'PGRST202', 'PGRST204', 'PGRST205']);
+
+/** Сервер ответил отказом из-за того, что в облаке чего-то не хватает (а не из-за временной недоступности). */
+export const isBrokenCloud = (e: TransportError): boolean => e.kind === 'server' && e.code !== undefined && BROKEN_CLOUD_CODES.has(e.code);
+
+/**
+ * Понятное человеку объяснение такого отказа. Подробность от сервера (она называет таблицу или колонку, данных пользователя в ней
+ * нет) обрезается. Без точки в конце (её ставит текст статуса).
+ */
+export function describeBrokenCloud(e: TransportError): string {
+  const detail = e.message.replace(/^Ошибка сервера(?: \(\d+\))?: /, '').replace(/\.+\s*$/, '').trim();
+  const tail = detail === '' ? '' : `: ${detail.length > 160 ? `${detail.slice(0, 157)}…` : detail}`;
+  return `В облаке не хватает таблицы или колонки (код ${e.code})${tail}. Выполните supabase/schema.sql целиком в SQL Editor`;
+}
+
 interface Versioned {
   id: string;
   clientUpdatedAt: string;
