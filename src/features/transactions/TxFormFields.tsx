@@ -58,6 +58,10 @@ export interface TxFormFieldsProps {
   /** Новая операция: похожие записи для набираемой заметки (под полем заметки) и что делать при нажатии. */
   noteSuggestions?: readonly NoteChoice[];
   onPickNote?: (key: string) => void;
+  /** Новая операция: строка «Что куплено» под категорией и кошельком (только у расхода в «Продуктах»). */
+  purchases?: ReactNode;
+  /** Сумма считается по продуктам «Что куплено»: набирать её нельзя, комиссии нет. */
+  amountLocked?: boolean;
 }
 
 /** Круглая кнопка у края суммы (комиссия слева, заметка справа). */
@@ -94,7 +98,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote, purchases, amountLocked = false }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -103,7 +107,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
   const showNote = noteOpen || !!errors.note;
   const [feePanel, setFeePanel] = useState(false);
   // Комиссия: у расхода (новый) и у перевода в одной валюте; у перевода между валютами сумма зачисления задаётся курсом
-  const feeAvailable = (form.kind === 'expense' && !c.editing) || (isTransfer && c.received?.mode === 'fee');
+  const feeAvailable = (form.kind === 'expense' && !c.editing && !amountLocked) || (isTransfer && c.received?.mode === 'fee');
   const feeShown = feeAvailable && ((feePanel && form.feeOpen) || !!errors.fee);
   const hasFee = feeAvailable && form.feeOpen && c.fee.minor !== null && c.fee.minor > 0;
 
@@ -190,6 +194,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           onRateText={(rateText) => c.set({ rateText })}
           error={errors.rate}
         />
+        {purchases}
       </div>
 
       {/* Комиссия и заметка — за кнопками по краям суммы и всплывают поверх формы */}
@@ -204,6 +209,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           className={COMPACT_KEYPAD}
           compact
           calculator
+          locked={amountLocked}
           autoFocus
           onSubmit={feeTyping ? undefined : onSubmit}
           start={

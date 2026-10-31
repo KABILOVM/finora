@@ -59,6 +59,8 @@ export interface AmountInputProps {
   compact?: boolean;
   /** Строка в списке полей (сверка всех кошельков): шрифт суммы не крупнее text-2xl, отступы меньше. */
   dense?: boolean;
+  /** Сумма считается сама (например, по продуктам чека): набрать её нельзя, экранной клавиатуры нет. */
+  locked?: boolean;
 }
 
 const TONE = { neutral: 'text-text', income: 'text-income', expense: 'text-expense' } as const;
@@ -95,6 +97,7 @@ export function AmountInput({
   onSubmit,
   compact = false,
   dense = false,
+  locked = false,
 }: AmountInputProps) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -285,6 +288,7 @@ export function AmountInput({
                   spellCheck={false}
                   enterKeyHint="done"
                   placeholder="0"
+                  readOnly={locked}
                   value={shown}
                   onChange={(e) => onType(e.target.value)}
                   onKeyDown={(e) => {
@@ -349,7 +353,7 @@ export function AmountInput({
           </p>
         )}
       </div>
-      {showKeypad && <Keypad ops={calculator} canEqual={calc?.kind === 'ok'} allowComma={exp > 0} onKey={onKey} />}
+      {showKeypad && !locked && <Keypad ops={calculator} canEqual={calc?.kind === 'ok'} allowComma={exp > 0} onKey={onKey} />}
     </div>
   );
 }

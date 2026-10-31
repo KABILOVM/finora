@@ -4,6 +4,9 @@ import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { IconButton } from '@/components/IconButton';
 import { DictateExpensesSheet } from '@/features/dictation/DictateExpensesSheet';
+import { PurchasesRow } from '@/features/products/PurchasesRow';
+import { PurchasesSheet } from '@/features/products/PurchasesSheet';
+import { checkLines, isGroceryCategory, totalOfLines, type PurchaseLine } from '@/features/products/purchase';
 import { parseReceiptWithAi, prepareReceiptImage } from '@/features/receipt/aiReceipt';
 import { ReceiptSheet } from '@/features/receipt/ReceiptSheet';
 import { saveReceipt, undoReceipt } from '@/features/receipt/saveReceipt';
@@ -33,7 +36,7 @@ import { suggestNotes, useNoteIndex } from '@/features/transactions/noteSuggest'
 import { parseQuickLine } from '@/features/transactions/quickLine';
 import type { NoteChoice } from '@/features/transactions/NoteSuggestions';
 import { formFromPrefill, prefillOfForm } from '@/features/transactions/prefill';
-import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, MIN_DATE, pickDefaultWallet, resolveDate, ruDate } from '@/features/transactions/txForm';
+import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, MIN_DATE, NO_FEE, pickDefaultWallet, resolveDate, ruDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
@@ -188,6 +191,25 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const [futureAsk, setFutureAsk] = useState<{ notice: string; again: boolean } | null>(null);
 
   const kind = c.form.kind;
+
+  // «Что куплено»: для расхода в «Продуктах» (и её подкатегориях) в кошельке основной валюты. Строки живут, пока открыт шит.
+  const [lines, setLines] = useState<PurchaseLine[]>([]);
+  const [purchasesOpen, setPurchasesOpen] = useState(false);
+  const [lineErrors, setLineErrors] = useState<ReadonlyMap<number, string>>(new Map());
+  const [focusRid, setFocusRid] = useState<number | null>(null);
+  const base = settings.baseCurrency;
+  const groceryNow = kind === 'expense' && isGroceryCategory(c.form.categoryId, categories);
+  const walletNow = wallets.find((w) => w.id === c.form.walletId);
+  const purchasesAvailable = groceryNow && walletNow !== undefined && walletNow.currency === base;
+  const purchasesActive = purchasesAvailable && lines.length > 0;
+  const linesTotal = purchasesActive ? totalOfLines(lines, base) : null;
+  // Сумма операции — сумма продуктов; комиссии у такой покупки нет
+  useEffect(() => {
+    if (!purchasesActive) return;
+    if (c.form.feeOpen) c.set({ ...NO_FEE });
+    if (c.form.amountMinor !== linesTotal) c.set({ amountMinor: linesTotal });
+  }, [purchasesActive, linesTotal]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const categoryOptions = useMemo(() => {
     if (kind === 'transfer') return [];
     return buildCategoryOptions(rankCategories(categories, kind, pop));
@@ -359,6 +381,17 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
 
   const save = async (again: boolean, dateConfirmed = false) => {
     if (savingRef.current) return; // второе нажатие, пока идёт сохранение
+    // Продукты проверяем раньше суммы: сумма берётся из них, и сказать надо про строку, а не про «Введите сумму»
+    let receiptLines: ReturnType<typeof checkLines> | null = null;
+    if (purchasesActive) {
+      receiptLines = checkLines(lines, base);
+      if (!receiptLines.ok) {
+        setLineErrors(receiptLines.rid === null ? new Map() : new Map([[receiptLines.rid, receiptLines.message]]));
+        setFocusRid(receiptLines.rid);
+        setPurchasesOpen(true);
+        return;
+      }
+    }
     const prepared = c.prepare();
     if (!prepared) return;
     const { input } = prepared;
@@ -383,12 +416,27 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     setSaving(again ? 'more' : 'close');
     try {
       const input = trip.tag === null ? prepared.input : { ...prepared.input, note: withTag(prepared.input.note ?? '', trip.tag) };
-      const row = await store.transactions.create(input, { id: idRef.current });
+      // С продуктами расход и позиции пишутся одним чеком (одна запись базы): цены потом видны в «Продуктах»
+      const row =
+        receiptLines?.ok === true
+          ? (
+              await store.shopping.recordReceipt({
+                walletId: input.walletId,
+                categoryId: input.categoryId ?? null,
+                occurredOn: input.occurredOn,
+                note: input.note ?? '',
+                txId: idRef.current,
+                lines: receiptLines.lines,
+              })
+            ).transaction
+          : await store.transactions.create(input, { id: idRef.current });
       prepared.rememberRate(); // курс, набранный руками, запоминаем только после успешного сохранения
       toastWithUndo(toast, trip.tag === null ? 'Сохранено' : `Сохранено · #${trip.tag}`, () => store.transactions.softDelete(row.id), 'Операция отменена');
       onSaved();
       if (again) {
         idRef.current = newId();
+        setLines([]);
+        setLineErrors(new Map());
         c.resetForNext();
         setCategoryState('untouched');
         focusAmount();
@@ -474,7 +522,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       open={!finished}
       onClose={onClose}
       history={false}
-      isDirty={isFormDirty(c.form, initial, false)}
+      isDirty={isFormDirty(c.form, initial, false) || lines.length > 0}
       dismissible={saving === null}
       title={TITLE}
       headerAction={<DateChip c={c} />}
@@ -525,6 +573,21 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
             : {})}
           noteSuggestions={quickChoice ? [quickChoice, ...noteMatches.map((m) => m.choice)] : noteMatches.map((m) => m.choice)}
           onPickNote={pickNote}
+          amountLocked={purchasesActive}
+          purchases={
+            groceryNow ? (
+              <PurchasesRow
+                lines={lines}
+                currency={base}
+                onOpen={() => {
+                  setLineErrors(new Map());
+                  setFocusRid(null);
+                  setPurchasesOpen(true);
+                }}
+                {...(purchasesAvailable ? {} : { unavailable: `Продукты по строкам вносятся в основной валюте (${base}): выберите кошелёк в ${base}, если хотите записать, что куплено.` })}
+              />
+            ) : undefined
+          }
           kindAction={
             // Место под кнопку держим при любом виде: иначе «Доход» и «Перевод» прыгали бы при переключении
             <span className="h-11 w-11 shrink-0">
@@ -537,6 +600,9 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
         />
       </div>
       {saveTemplate.dialog}
+      {purchasesOpen && purchasesAvailable && (
+        <PurchasesSheet lines={lines} onChange={setLines} currency={base} focusRid={focusRid} errors={lineErrors} onClose={() => setPurchasesOpen(false)} />
+      )}
       <ConfirmDialog
         open={futureAsk !== null}
         title="Дата в будущем"
