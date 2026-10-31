@@ -154,6 +154,70 @@ describe('planCatalog', () => {
   });
 });
 
+describe('планировщик на реальных названиях (список категорий владельца приложения)', () => {
+  const komm = cat('Коммуналка');
+  const kvart = cat('Квартплата');
+  const water = cat('Вода', { parentId: komm.id });
+  const heat = cat('Отопление', { parentId: komm.id });
+  const subs = ['ChatGPT', 'Claude', 'Dropbox', 'Google', 'iCloud', 'Telegram'].map((n) => cat(n));
+  const podpiski = cat('Подписки');
+  const net = cat('Интернет');
+  const homeNet = cat('Интернет домашный');
+  const comm = cat('Связь');
+  const rest = cat('Отдых и развлечения');
+  const fun = cat('Развлечения');
+  const edu = cat('Образование');
+  const learn = cat('Обучения');
+  const taxes = cat('Налоги');
+  const flight = cat('Перелет');
+  const junk = ['Еда, Кафе и рестораны', 'Одежда, Еда', 'Платежи, Личная гигиена', 'Вкусняшки , Еда / Продукты'].map((n) => cat(n));
+  const all = [komm, kvart, water, heat, ...subs, podpiski, net, homeNet, comm, rest, fun, edu, learn, taxes, flight, ...junk];
+  const plan = planCatalog(all);
+
+  it('из «Коммуналки» и «Квартплаты» родителем становится та, у которой уже есть подкатегории; «Вода» и «Отопление» остаются на месте', () => {
+    expect(group(plan, 'utilities').parent).toMatchObject({ action: 'present', id: komm.id });
+    expect(child(plan, 'utilities', 'water')).toMatchObject({ action: 'present', existing: { id: water.id } });
+    expect(child(plan, 'utilities', 'heating')).toMatchObject({ action: 'present', existing: { id: heat.id } });
+    expect(child(plan, 'utilities', 'electricity').action).toBe('create');
+  });
+
+  it('«ChatGPT» и «Claude» оба уходят в «ИИ-сервисы», «iCloud», «Dropbox» и «Google» — в «Облако», «Telegram» — в «Приложения»', () => {
+    const moved = (slug: string) =>
+      group(plan, 'subscriptions')
+        .children.filter((c) => c.child.slug === slug && c.action === 'move')
+        .map((c) => c.existing?.name)
+        .sort();
+    expect(moved('ai')).toEqual(['ChatGPT', 'Claude']);
+    expect(moved('cloud')).toEqual(['Dropbox', 'Google', 'iCloud']);
+    expect(moved('apps')).toEqual(['Telegram']);
+    expect(group(plan, 'subscriptions').parent).toMatchObject({ action: 'present', id: podpiski.id });
+    // у каждой записи свой ключ выбора, иначе галочка одной меняла бы другую
+    const keys = group(plan, 'subscriptions').children.map((c) => c.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('«Интернет» и «Интернет домашный» (порядок слов и опечатка в окончании не мешают) оба переходят под «Связь»', () => {
+    const moves = group(plan, 'communication').children.filter((c) => c.child.slug === 'internet' && c.action === 'move');
+    expect(moves.map((m) => m.existing?.id).sort()).toEqual([net.id, homeNet.id].sort());
+  });
+
+  it('«Отдых и развлечения» и «Развлечения»: набор берёт ту, что названа как набор; «Образование» и «Обучения» — так же', () => {
+    expect(group(plan, 'entertainment').parent).toMatchObject({ action: 'present', id: fun.id });
+    expect(group(plan, 'education').parent).toMatchObject({ action: 'present', id: edu.id });
+  });
+
+  it('«Налоги» и «Перелет» находят свои места; набор «Финансы и налоги» и «Путешествия» заводятся', () => {
+    expect(group(plan, 'finance').parent).toEqual({ action: 'create' });
+    expect(child(plan, 'finance', 'taxes')).toMatchObject({ action: 'move', existing: { id: taxes.id } });
+    expect(child(plan, 'travel', 'tickets')).toMatchObject({ action: 'move', existing: { id: flight.id } });
+  });
+
+  it('слепленные при переносе из другой программы названия («Еда, Кафе и рестораны») не трогаются', () => {
+    const touched = new Set(plan.groups.flatMap((g) => g.children).flatMap((c) => (c.existing ? [c.existing.id] : [])));
+    for (const j of junk) expect(touched.has(j.id), j.name).toBe(false);
+  });
+});
+
 describe('выбор', () => {
   const rows = [cat('Коммуналка'), cat('Свет'), cat('Продукты'), cat('Корм')];
   const plan = planCatalog(rows);

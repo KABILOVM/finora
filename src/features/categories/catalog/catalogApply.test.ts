@@ -79,6 +79,21 @@ describe('applyCatalog', () => {
     expect((await store.db.transactions.get(tx.id))!.categoryId).toBe(light.id);
   });
 
+  it('несколько ваших категорий одного смысла переезжают вместе: «ChatGPT» и «Claude» оба — под «Подписки»', async () => {
+    const store = await newStore();
+    await ensureSeeded(store);
+    const gpt = await store.categories.create({ name: 'ChatGPT', kind: 'expense', color: '#111111', icon: 's:chatgpt' });
+    const claude = await store.categories.create({ name: 'Claude', kind: 'expense', color: '#222222', icon: 's:claude' });
+    const plan = await planFor(store);
+    const result = await applyCatalog(store, plan, defaultSelection(plan));
+    const rows = await live(store);
+    const subs = byName(rows, 'Подписки')!;
+    expect(rows.find((c) => c.id === gpt.id)?.parentId).toBe(subs.id);
+    expect(rows.find((c) => c.id === claude.id)?.parentId).toBe(subs.id);
+    expect(result.moved).toBe(2);
+    expect(byName(rows, 'ИИ-сервисы')).toBeUndefined(); // свои категории есть — готовой копии не заводим
+  });
+
   it('повторный вызов ничего не дублирует', async () => {
     const store = await newStore();
     await ensureSeeded(store);

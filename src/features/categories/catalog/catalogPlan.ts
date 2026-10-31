@@ -27,7 +27,10 @@ function stem(word: string): string {
   return word.length >= 4 ? word.replace(ENDING, '') : word;
 }
 
-/** Ключ сравнения: слова без регистра, «ё», знаков и окончаний. «Коммунальные услуги» и «коммунальная услуга» дают один ключ. */
+/**
+ * Ключ сравнения: слова без регистра, «ё», знаков и окончаний, в алфавитном порядке (порядок слов не важен). «Коммунальные услуги» и
+ * «коммунальная услуга» дают один ключ; «Интернет домашний» и «домашний интернет» тоже.
+ */
 export function nameKey(name: string): string {
   return name
     .toLocaleLowerCase('ru')
@@ -35,6 +38,7 @@ export function nameKey(name: string): string {
     .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w !== '')
     .map(stem)
+    .sort()
     .join(' ');
 }
 
@@ -112,7 +116,9 @@ export function planCatalog(existing: readonly ExistingCategory[], catalog: read
       const keys = groupKeys(g);
       const byName = (list: readonly ExistingCategory[], top: boolean) =>
         list.filter((c) => keys.has(nameKey(c.name)) && (c.parentId === null) === top);
-      const exact = (list: ExistingCategory[]) => list.find((c) => nameKey(c.name) === nameKey(g.name)) ?? list[0];
+      // Если подходящих несколько («Коммуналка» и «Квартплата»), берём ту, у которой уже есть подкатегории, потом ту, что названа как набор, потом первую
+      const exact = (list: ExistingCategory[]) =>
+        [...list].sort((a, b) => Number(hasKids.has(b.id)) - Number(hasKids.has(a.id)) || Number(nameKey(b.name) === nameKey(g.name)) - Number(nameKey(a.name) === nameKey(g.name)))[0];
       const liveTop = exact(byName(live, true));
       if (liveTop) {
         parents.set(g.slug, { action: 'present', id: liveTop.id, name: liveTop.name, color: liveTop.color });
@@ -141,18 +147,17 @@ export function planCatalog(existing: readonly ExistingCategory[], catalog: read
         const keys = childKeys(c);
         const base = { key: childSlug(g, c), child: c };
         const matches = live.filter((x) => keys.has(nameKey(x.name)) && !taken.has(x.id) && !used.has(x.id));
-        const inPlace = matches.find((x) => parentId !== null && x.parentId === parentId);
-        if (inPlace) {
-          used.add(inPlace.id);
-          children.push({ ...base, action: 'present', existing: { id: inPlace.id, name: inPlace.name } });
-          continue;
+        // Подходящих может быть несколько («ChatGPT» и «Claude» — оба в «ИИ-сервисы»): уже стоящие на месте не трогаем, остальные переносим все
+        const placed = matches.filter((x) => parentId !== null && x.parentId === parentId);
+        const movable = matches.filter((x) => x.parentId === null && !hasKids.has(x.id));
+        for (const x of placed) used.add(x.id);
+        for (const x of movable) used.add(x.id);
+        const first = placed[0];
+        if (first) children.push({ ...base, action: 'present', existing: { id: first.id, name: first.name } });
+        for (const [i, x] of movable.entries()) {
+          children.push({ ...base, key: i === 0 && !first ? base.key : `${base.key}@${x.id}`, action: 'move', existing: { id: x.id, name: x.name } });
         }
-        const movable = matches.find((x) => x.parentId === null && !hasKids.has(x.id));
-        if (movable) {
-          used.add(movable.id);
-          children.push({ ...base, action: 'move', existing: { id: movable.id, name: movable.name } });
-          continue;
-        }
+        if (first || movable.length > 0) continue;
         // Уже есть под другим родителем, с подкатегориями у себя, в архиве или называется как чей-то родитель: свою копию не заводим.
         const anywhere = [...live, ...archived].some((x) => keys.has(nameKey(x.name)));
         if (anywhere) continue;
