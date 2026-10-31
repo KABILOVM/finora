@@ -14,7 +14,7 @@ export type { WalletsRepo, WalletInput, WalletPatch } from './walletsRepo';
 export type { CategoriesRepo, CategoryInput, CategoryPatch } from './categoriesRepo';
 export type { TransactionsRepo, TransactionInput, TransactionPatch, TransactionCreateOptions } from './transactionsRepo';
 export type { BudgetsRepo, BudgetInput } from './budgetsRepo';
-export type { DebtsRepo, DebtInput, DebtPatch, DebtDeleteMode, DebtDeletion, DebtMerge } from './debtsRepo';
+export type { DebtsRepo, DebtInput, DebtPatch, DebtDeleteMode, DebtDeletion, DebtMerge, DebtUnmerge, GroupOpts } from './debtsRepo';
 export type { RecurringRepo, RecurringInput, RecurringPatch } from './recurringRepo';
 export type { ShoppingRepo, ShoppingInput, ShoppingPatch, PurchaseInput, PurchaseResult, ReceiptInput, ReceiptLineInput } from './shoppingRepo';
 export type { SettingsRepo, SettingsPatch } from './settingsRepo';

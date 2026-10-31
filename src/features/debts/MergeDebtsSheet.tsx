@@ -5,39 +5,29 @@ import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { useRecurringRules, useStore } from '@/db';
 import { isLivePlanOf } from '@/domain/debts';
-import { addMinor, formatMinor } from '@/domain/money';
-import type { Minor } from '@/domain/types';
+import { formatMinor } from '@/domain/money';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { endSentence } from '@/features/transactions/txDisplay';
 import { pluralRu } from '@/lib/plural';
 import { mergeCandidates, mergePreview, normName } from './debtMatch';
 import type { DebtItem } from './debtSummary';
-import { ruDateShort } from './debtText';
+import { interestTermsLine, ruDateShort } from './debtText';
 
 export interface MergeDebtsSheetProps {
-  /** Долг, в который всё собирается (тот, что открыт на экране). */
+  /** Долг, в состав которого всё собирается (тот, что открыт на экране; у объединённого — он целиком). */
   target: DebtItem;
-  /** Все долги: из них выбираются подходящие. */
+  /** Долги списка (объединённый — одним элементом): из них выбираются подходящие. */
   items: readonly DebtItem[];
   onClose: () => void;
 }
 
-/** Общая переплата по долгам; null — сумма не помещается (предпросмотр сам скажет, что суммы слишком большие). */
-function overpaidTotal(items: readonly DebtItem[]): Minor | null {
-  let sum: Minor = 0;
-  try {
-    for (const it of items) if (it.state && it.state.overpaidMinor > 0) sum = addMinor(sum, it.state.overpaidMinor);
-  } catch {
-    return null;
-  }
-  return sum;
-}
+const partsWord = (n: number) => `${n} ${pluralRu(n, 'долг', 'долга', 'долгов')}`;
 
 /**
- * Объединение долгов: текущий долг + выбранные того же направления и валюты. Платежи, выдачи и регулярные платежи переходят
- * к текущему долгу, остальные уходят из списка. Деньги в кошельках не двигаются. После объединения — «Отменить».
- * Заранее отмечены только открытые долги того же человека. Долг с другим именем объединяется лишь после подтверждения:
- * имя пропадёт из списка (в заметке остаётся «Объединён с: …»).
+ * Объединение долгов: текущий долг + выбранные того же направления и валюты. Ничего не склеивается: у каждого долга остаются свои сумма,
+ * проценты, ставка, срок, даты, платежи и планы, а в списке они идут одним долгом с общим итогом. Деньги в кошельках не двигаются.
+ * После объединения — «Отменить». Заранее отмечены только открытые долги того же человека. Долг с другим именем объединяется лишь
+ * после подтверждения: в списке будет одно имя (своё имя долг сохраняет внутри объединения).
  */
 export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps) {
   const store = useStore();
@@ -52,21 +42,24 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
   const busy = useRef(false);
 
   const chosen = candidates.filter((c) => picked.has(c.item.debt.id)).map((c) => c.item);
-  // долги с другим именем и имена, которые после объединения пропадут (одно имя — один раз, как его видно в первом долге)
-  const lostDebts = candidates.filter((c) => !c.sameName && picked.has(c.item.debt.id)).map((c) => c.item.debt);
-  const lostNames = [...new Map(lostDebts.map((d) => [normName(d.counterparty), d.counterparty.trim()] as const)).values()];
-  const namesText = lostNames.map((n) => `«${n}»`).join(', ');
-  const many = lostDebts.length > 1;
+  // долги с другим именем: в списке останется имя основного долга
+  const otherNames = [
+    ...new Map(
+      candidates.filter((c) => !c.sameName && picked.has(c.item.debt.id)).map((c) => [normName(c.item.debt.counterparty), c.item.debt.counterparty.trim()] as const),
+    ).values(),
+  ];
+  const namesText = otherNames.map((n) => `«${n}»`).join(', ');
+  const otherCount = candidates.filter((c) => !c.sameName && picked.has(c.item.debt.id)).length; // долгов (а не имён) с другим именем
   const preview = chosen.length > 0 ? mergePreview([target, ...chosen]) : null;
   const cur = target.debt.currency;
 
-  // Переплата: сколько её (в предпросмотре «остаток меньше суммы остатков» без числа непонятно)
-  const overpaid = chosen.length > 0 ? overpaidTotal([target, ...chosen]) : null;
-
-  // Планы «Платить частями» выбранных долгов переходят к этому долгу и идут все вместе
+  // Планы «Платить частями» остаются у своих долгов и идут по своим датам
   const rules = useRecurringRules();
-  const plansFromOthers = chosen.length > 0 ? (rules ?? []).filter((r) => chosen.some((c) => isLivePlanOf(r, c.debt))).length : 0;
-  const plansTotal = plansFromOthers > 0 ? (rules ?? []).filter((r) => [target, ...chosen].some((c) => isLivePlanOf(r, c.debt))).length : 0;
+  const everyone = [target, ...chosen].flatMap((it) => (it.parts ?? [it]).map((p) => p.debt));
+  const chosenDebts = chosen.flatMap((it) => (it.parts ?? [it]).map((p) => p.debt));
+  const plansFromOthers = (rules ?? []).filter((r) => chosenDebts.some((d) => isLivePlanOf(r, d))).length;
+  const plansTotal = (rules ?? []).filter((r) => everyone.some((d) => isLivePlanOf(r, d))).length;
+  const partsTotal = [target, ...chosen].reduce((n, it) => n + (it.parts?.length ?? 1), 0);
 
   const toggle = (id: string) => {
     setError(null);
@@ -88,7 +81,7 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
         target.debt.id,
         chosen.map((c) => c.debt.id),
       );
-      toastWithUndo(toast, `Долги объединены: ${chosen.length + 1}`, () => store.debts.undoMerge(res), 'Объединение отменено');
+      toastWithUndo(toast, `Долги объединены: ${partsTotal}`, () => store.debts.undoMerge(res), 'Объединение отменено');
       onClose();
     } catch (e) {
       console.error('Не удалось объединить долги:', e);
@@ -117,17 +110,17 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
             fullWidth
             loading={saving}
             disabled={chosen.length === 0}
-            onClick={() => (lostNames.length > 0 ? setConfirming(true) : void save())}
+            onClick={() => (otherNames.length > 0 ? setConfirming(true) : void save())}
           >
-            {chosen.length === 0 ? 'Выберите долги' : `Объединить: ${chosen.length + 1} ${pluralRu(chosen.length + 1, 'долг', 'долга', 'долгов')}`}
+            {chosen.length === 0 ? 'Выберите долги' : `Объединить: ${partsTotal} ${pluralRu(partsTotal, 'долг', 'долга', 'долгов')}`}
           </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-4">
         <p className="text-muted">
-          Выбранные долги соберутся в «{target.debt.counterparty}»: суммы сложатся, платежи и выдачи перейдут сюда. Деньги в кошельках
-          не двигаются. Сразу после объединения его можно отменить.
+          Выбранные долги войдут в состав «{target.debt.counterparty}». Ничего не склеивается: у каждого остаются свои сумма, проценты, срок,
+          даты, платежи и планы, а сверху будет общий итог. Деньги в кошельках не двигаются. Сразу после объединения его можно отменить.
         </p>
 
         {candidates.length === 0 ? (
@@ -140,6 +133,7 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
             {candidates.map(({ item, sameName }) => {
               const d = item.debt;
               const on = picked.has(d.id);
+              const terms = (item.parts ?? [item]).map((p) => interestTermsLine(p.debt.interestRateBp, p.debt.termMonths)).filter((t) => t !== '');
               return (
                 <li key={d.id}>
                   <label className="flex min-h-[56px] cursor-pointer items-start gap-3 rounded-2xl border border-border p-3 has-[:checked]:border-brand has-[:checked]:bg-brand/5">
@@ -154,10 +148,11 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
                       <span className="block font-semibold">
                         {d.counterparty}
                         {sameName && <span className="ml-2 text-xs font-medium text-muted">тот же человек</span>}
+                        {item.parts && <span className="ml-2 text-xs font-medium text-muted">уже объединён: {partsWord(item.parts.length)}</span>}
                       </span>
                       {!sameName && (
                         <span className="block text-sm font-medium text-warning">
-                          Другое имя: после объединения останется «{target.debt.counterparty}»
+                          Другое имя: в списке останется «{target.debt.counterparty}», своё имя долг сохранит внутри
                         </span>
                       )}
                       <span className="block text-sm text-muted">
@@ -165,6 +160,7 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
                         {d.dueOn !== null && ` · срок ${ruDateShort(d.dueOn)}`}
                         {d.closedAt !== null && ' · закрыт'}
                       </span>
+                      {terms.length > 0 && <span className="block text-sm text-muted">Проценты: {terms.join('; ')}</span>}
                     </span>
                   </label>
                 </li>
@@ -187,27 +183,19 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
             <dd className="money text-right font-semibold">{formatMinor(preview.paidMinor, cur)}</dd>
             <dt className="text-muted">Остаток</dt>
             <dd className="money text-right font-semibold">{formatMinor(preview.remainingMinor, cur)}</dd>
-            <dt className="text-muted">Срок</dt>
+            <dt className="text-muted">Ближайший срок</dt>
             <dd className="text-right font-semibold">{preview.dueOn ? ruDateShort(preview.dueOn) : 'без срока'}</dd>
           </dl>
         )}
-        {preview?.netted && (
-          <p role="status" className="text-sm font-medium text-warning" data-testid="merge-netted">
-            У одного из долгов есть переплата{overpaid !== null && overpaid > 0 ? ` ${formatMinor(overpaid, cur)}` : ''}: она засчитается в остаток других, поэтому общий
-            остаток меньше суммы остатков.
+        {plansFromOthers > 0 && (
+          <p role="status" className="text-sm font-medium text-muted" data-testid="merge-plans">
+            {plansTotal === 1 ? 'План платежей остаётся у своего долга' : `Планов платежей: ${plansTotal}, каждый остаётся у своего долга`} и идёт по своему расписанию.
           </p>
         )}
-        {plansTotal > 0 && (
-          <p role="status" className="text-sm font-medium text-warning" data-testid="merge-plans">
-            {plansTotal === 1
-              ? `План платежей перейдёт к долгу «${target.debt.counterparty}».`
-              : `Планов платежей будет ${plansTotal}: все они пойдут по этому долгу, и платежи сложатся. Ненужные можно остановить на странице долга.`}
-          </p>
-        )}
-        {lostNames.length > 0 && (
+        {otherNames.length > 0 && (
           <p role="status" className="text-sm font-medium text-warning" data-testid="merge-names">
-            {lostNames.length === 1 ? 'Имя' : 'Имена'} {namesText} {lostNames.length === 1 ? 'пропадёт' : 'пропадут'} из списка: долг останется
-            на имя «{target.debt.counterparty}». В заметке долга сохранится, с кем он объединён.
+            {otherNames.length === 1 ? 'Имя' : 'Имена'} {namesText}: в списке останется только «{target.debt.counterparty}», а внутри объединённого долга{' '}
+            {otherNames.length === 1 ? 'это имя сохранится' : 'эти имена сохранятся'}.
           </p>
         )}
         {chosen.length > 0 && preview === null && (
@@ -219,7 +207,7 @@ export function MergeDebtsSheet({ target, items, onClose }: MergeDebtsSheetProps
       <ConfirmDialog
         open={confirming}
         title="Объединить разных людей?"
-        message={`${many ? 'Долги' : 'Долг'} ${namesText} ${many ? 'перейдут' : 'перейдёт'} к «${target.debt.counterparty}»: в списке останется только это имя. Сразу после объединения его можно отменить.`}
+        message={`${otherCount > 1 ? 'Долги' : 'Долг'} ${namesText} ${otherCount > 1 ? 'войдут' : 'войдёт'} в состав «${target.debt.counterparty}»: в списке останется только это имя, а внутри объединённого долга ${otherNames.length > 1 ? 'имена сохранятся' : 'имя сохранится'}. Сразу после объединения его можно отменить.`}
         confirmLabel="Объединить"
         loading={saving}
         onConfirm={() => void save()}

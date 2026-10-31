@@ -139,7 +139,7 @@ describe('страница человека', () => {
     expect(screen.getByRole('link', { name: 'К списку долгов' })).toBeTruthy();
   });
 
-  it('дубли: два открытых долга одного направления — кнопка «Объединить»; после объединения остаётся один долг', async () => {
+  it('дубли: два открытых долга одного направления — кнопка «Объединить»; после объединения они идут одним долгом, итог тот же', async () => {
     const td = await open(
       async (s) => {
         await lend(s, { principalMinor: 50_000 });
@@ -154,7 +154,10 @@ describe('страница человека', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Объединить долги' })).toBeNull());
     await waitFor(() => expect(totalRow('TJS', 'Вам должны')).toBe(fmt(70_000)));
     expect(screen.queryByRole('button', { name: /^Объединить: мне должны/ })).toBeNull();
-    expect((await td.stores[0]!.db.debts.toArray()).filter((d) => d.deletedAt === null)).toHaveLength(1);
+    // ничего не склеено: оба долга живы, второй входит в состав первого; в списке человека они идут одним долгом
+    const live = (await td.stores[0]!.db.debts.toArray()).filter((d) => d.deletedAt === null);
+    expect(live).toHaveLength(2);
+    expect(live.filter((d) => d.mergedIntoId !== null)).toHaveLength(1);
   });
 
   it('одиночные долги разных направлений — без кнопки «Объединить»', async () => {

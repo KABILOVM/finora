@@ -249,45 +249,48 @@ describe('«Объединить» на странице долга', () => {
     expect(previewRow('Сумма долга')).toBe(fmt(80_000));
     expect(previewRow('Оплачено')).toBe(fmt(5_000));
     expect(previewRow('Остаток')).toBe(fmt(75_000));
-    expect(previewRow('Срок')).toBe('01.11.2026');
+    expect(previewRow('Ближайший срок')).toBe('01.11.2026');
     await user.click(other);
     expect(previewRow('Сумма долга')).toBe(fmt(90_000));
     expect(button(/^Объединить: 3 долга$/)).toBeTruthy();
   });
 
-  it('объединение: один долг с общей суммой, второй исчез, платежи и кошелёк целы; «Отменить» возвращает всё', async () => {
+  it('объединение: страница показывает итог и составляющие, у каждой свои условия; платежи и кошелёк целы; «Отменить» возвращает всё', async () => {
     const { td, cash } = await showDetail(withOthers);
     const before = await balanceOf(td, cash());
     await openMerge();
     await user.click(button(/^Объединить: 2 долга$/));
     await gone('Объединить долги');
+    // страница стала страницей объединённого долга: итог 500 + (300 − 50) = 750, составляющих две
     await waitFor(() => expect(remaining()).toBe(fmt(75_000)));
+    expect(screen.getByRole('heading', { name: /Из чего состоит · 2/ })).toBeTruthy();
+    expect(document.querySelectorAll('[data-testid="debt-part"]')).toHaveLength(2);
     const s = storeOf(td);
+    // ничего не склеено: оба долга живы и при своих суммах, датах и сроках, второй входит в состав первого
     const live = (await s.db.debts.toArray()).filter((d) => d.deletedAt === null);
-    expect(live.map((d) => d.counterparty).sort()).toEqual(['Алишер', 'Бобур']);
-    expect(await debtOf(td)).toMatchObject({ principalMinor: 80_000, openedOn: '2026-10-01', dueOn: '2026-11-01' });
+    expect(live.map((d) => d.counterparty).sort()).toEqual(['Алишер', 'АЛИШЕР', 'Бобур'].sort());
+    expect(await debtOf(td)).toMatchObject({ principalMinor: 50_000, openedOn: '2026-10-01', dueOn: null, mergedIntoId: null });
+    expect(live.find((d) => d.counterparty === 'АЛИШЕР')).toMatchObject({ principalMinor: 30_000, openedOn: '2026-10-03', dueOn: '2026-11-01', mergedIntoId: DEBT_ID });
     expect(await balanceOf(td, cash())).toBe(before);
-    expect(screen.getByRole('list', { name: 'Платежи по долгу' })).toBeTruthy();
-    expect(screen.getByRole('list', { name: 'Выдачи и пополнения долга' }).querySelectorAll('li')).toHaveLength(2);
 
     await user.click(screen.getByRole('button', { name: 'Отменить' }));
     await waitFor(() => expect(remaining()).toBe(fmt(50_000)));
     expect((await s.db.debts.toArray()).filter((d) => d.deletedAt === null)).toHaveLength(3);
     expect(await debtOf(td)).toMatchObject({ principalMinor: 50_000, dueOn: null });
+    expect((await s.db.debts.toArray()).every((d) => d.mergedIntoId === null)).toBe(true);
   });
 
-  it('переплата одного долга засчитывается в остаток других — об этом предупреждено', async () => {
+  it('переплата одного долга другой долг не гасит: остатки частей складываются, как есть', async () => {
     await showDetail(async (s, { cash }) => {
       const d2 = await s.debts.create({ direction: 'lent', counterparty: 'Алишер', principalMinor: 10_000, currency: 'TJS', openedOn: '2026-10-03' });
       await s.transactions.create({ kind: 'income', walletId: cash, amountMinor: 15_000, occurredOn: '2026-10-08', debtId: d2.id }); // переплата 50
     });
     await openMerge();
-    expect(tid('merge-netted')).not.toBeNull();
-    expect(text(tid('merge-netted'))).toContain(`есть переплата ${fmt(5_000)}:`); // сумма названа
-    expect(previewRow('Остаток')).toBe(fmt(45_000));
+    expect(tid('merge-netted')).toBeNull(); // «засчитается» больше не говорим: у каждого долга свой остаток
+    expect(previewRow('Остаток')).toBe(fmt(50_000));
   });
 
-  describe('планы платежей переходят к объединённому долгу', () => {
+  describe('планы платежей остаются у своих долгов', () => {
     const withPlans = async (s: Store, cash: string, onTarget: boolean, onOther: boolean) => {
       const d2 = await s.debts.create({ direction: 'lent', counterparty: 'Алишер', principalMinor: 10_000, currency: 'TJS', openedOn: '2026-10-03' });
       const mk = (debtId: string) =>
@@ -296,16 +299,16 @@ describe('«Объединить» на странице долга', () => {
       if (onOther) await mk(d2.id);
     };
 
-    it('план есть только у присоединяемого долга — сказано, что он перейдёт', async () => {
+    it('план есть только у присоединяемого долга — сказано, что он остаётся у своего долга', async () => {
       await showDetail(async (s, { cash }) => withPlans(s, cash, false, true));
       await openMerge();
-      expect(text(await findTid('merge-plans'))).toBe('План платежей перейдёт к долгу «Алишер».');
+      expect(text(await findTid('merge-plans'))).toBe('План платежей остаётся у своего долга и идёт по своему расписанию.');
     });
 
-    it('планы у обоих долгов — сказано, сколько их будет и что платежи сложатся', async () => {
+    it('планы у обоих долгов — сказано, сколько их и что каждый остаётся у своего долга', async () => {
       await showDetail(async (s, { cash }) => withPlans(s, cash, true, true));
       await openMerge();
-      expect(text(await findTid('merge-plans'))).toContain('Планов платежей будет 2');
+      expect(text(await findTid('merge-plans'))).toContain('Планов платежей: 2, каждый остаётся у своего долга');
     });
 
     it('план только у текущего долга или планов нет — предупреждения нет', async () => {

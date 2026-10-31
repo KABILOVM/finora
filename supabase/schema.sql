@@ -1053,3 +1053,29 @@ begin
   end loop;
 end
 $$;
+
+
+-- 15. Объединение долгов -------------------------------------------------------------------
+-- Несколько долгов одного человека можно объединить: у каждого остаются свои сумма, проценты, ставка, срок, даты, платежи и
+-- планы, а в списке они идут одним долгом (сумма по составляющим; клиент, src/domain/debtGroups.ts). merged_into_id — id
+-- главного долга, в состав которого входит этот; пусто — долг сам по себе или он главный. Вложенности нет (главный сам ни в чей
+-- состав не входит): это следит клиент. Ссылка составным ключом (user_id, merged_into_id) не даёт сослаться на чужой долг, а
+-- проверка не даёт долгу войти в состав самого себя.
+-- Блок идемпотентен, как разделы 8, 11, 13 и 14: колонка «add column if not exists», ограничения — только если их ещё нет.
+-- Данные не трогаются, триггер sync_guard, права и политики остаются прежними. Старые приложения колонки не знают: при записи
+-- они её не присылают, и сохранённое объединение не затирается.
+-- Выполнять до выкладки приложения; повторный запуск безопасен.
+alter table public.debts add column if not exists merged_into_id uuid;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'debts_merged_into_fk' and conrelid = 'public.debts'::regclass) then
+    alter table public.debts
+      add constraint debts_merged_into_fk foreign key (user_id, merged_into_id) references public.debts (user_id, id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'debts_merged_into_self' and conrelid = 'public.debts'::regclass) then
+    alter table public.debts
+      add constraint debts_merged_into_self check (merged_into_id is null or merged_into_id <> id);
+  end if;
+end
+$$;

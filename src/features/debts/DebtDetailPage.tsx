@@ -19,6 +19,7 @@ import { humanError, toastWithUndo, UNDO_MS } from '@/features/transactions/txAc
 import { endSentence } from '@/features/transactions/txDisplay';
 import { useToday } from '@/recurring/useToday';
 import { mergeCandidates } from './debtMatch';
+import { DebtGroupView } from './DebtGroupView';
 import { DebtPlanCard } from './DebtPlanCard';
 import { DebtSheet } from './DebtSheet';
 import { DeleteDebtDialog } from './DeleteDebtDialog';
@@ -35,6 +36,9 @@ import { useDebtLines } from './useDebtLines';
 import { useDebtsData } from './useDebtsData';
 
 type Dialog = 'close' | 'payment' | 'topup' | 'merge' | 'edit' | 'delete' | 'remind' | 'parts' | null;
+
+/** `?own=1` у главного долга объединения: показать только его самого, а не весь объединённый долг. */
+const OWN_PARAM = 'own';
 
 const backTo = (dir?: string) => ({ to: dir ? `/debts?dir=${dir}` : '/debts', label: 'Долги' });
 
@@ -68,7 +72,7 @@ export default function DebtDetailPage() {
   const location = useLocation();
   const view = useDebtView(id);
   const lines = useDebtLines(id);
-  const all = useDebtsData(); // для «Объединить»: какие ещё долги подходят
+  const all = useDebtsData(); // для «Объединить» и для объединённого долга: какие ещё долги подходят и из чего он состоит
   const [dialog, setDialog] = useState<Dialog>(null);
   const [deleting, setDeleting] = useState<DebtPayment | null>(null);
   const [editingPlan, setEditingPlan] = useState<LocalRow<RecurringRule> | null>(null);
@@ -77,7 +81,7 @@ export default function DebtDetailPage() {
   const rules = useRecurringRules();
   const lookups = useRecurringLookups();
 
-  if (view === undefined || lines === undefined) {
+  if (view === undefined || lines === undefined || all === undefined) {
     return (
       <>
         <PageHeader title="Долг" back={backTo()} />
@@ -99,12 +103,20 @@ export default function DebtDetailPage() {
   const archived = debt.archivedAt !== null;
   const closed = debt.closedAt !== null;
   const base = lines.base ?? debt.currency;
-  const mergeTarget = all?.items.find((it) => it.debt.id === debt.id) ?? null;
-  const canMerge = !archived && mergeTarget !== null && mergeCandidates(all?.items ?? [], debt).length > 0;
+  // Объединённый долг: его страница — итог и составляющие со своими условиями. `?own=1` — только сам главный долг.
+  const own = new URLSearchParams(location.search).has(OWN_PARAM);
+  const groupItem = own ? undefined : all.items.find((it) => it.debt.id === debt.id && it.parts !== undefined);
+  if (groupItem) return <DebtGroupView group={groupItem} items={all.items} base={base} />;
+  // этот долг — составляющая чужого объединения (в списке её нет, она внутри главного долга) или главный долг, открытый «только сам»
+  const rootItem = all.items.find((it) => it.debt.id !== debt.id && it.parts?.some((p) => p.debt.id === debt.id)) ?? null;
+  const ownOfGroup = own ? (all.items.find((it) => it.debt.id === debt.id && it.parts !== undefined) ?? null) : null;
+  const mergeTarget = all.items.find((it) => it.debt.id === debt.id) ?? null;
+  const canMerge = !archived && mergeTarget !== null && mergeCandidates(all.items, debt).length > 0;
   // «Напомнить» — только по открытому долгу «мне должны»; «Все долги человека» — если у него есть и другие открытые долги
-  const remind = mergeTarget !== null && !archived && !closed ? reminderText({ name: debt.counterparty, open: [mergeTarget] }, today) : null;
+  const ownItem = all.every.find((it) => it.debt.id === debt.id) ?? null;
+  const remind = ownItem !== null && !archived && !closed ? reminderText({ name: debt.counterparty, open: [ownItem] }, today) : null;
   const key = personKey(debt.counterparty);
-  const person = all ? groupByPerson(all.items).find((p) => p.key === key) : undefined;
+  const person = groupByPerson(all.items).find((p) => p.key === key);
   const hasOthers = person !== undefined && person.open.some((it) => it.debt.id !== debt.id);
   const plans = (rules ?? []).filter((r) => isLivePlanOf(r, debt));
   // при закрытии остановятся планы, которые сейчас идут
@@ -163,6 +175,19 @@ export default function DebtDetailPage() {
       },
     );
 
+  const leaveGroup = async () => {
+    let res: { targetId: string; partIds: string[] } | null = null;
+    const ok = await run(
+      async () => {
+        res = await store.debts.unmerge(debt.id);
+      },
+      'Не удалось вывести долг из объединения. Ничего не изменилось — попробуйте ещё раз.',
+    );
+    if (!ok || res === null) return;
+    const done: { targetId: string; partIds: string[] } = res;
+    toastWithUndo(toast, 'Долг вышел из объединения', () => store.debts.merge(done.targetId, done.partIds), 'Объединение возвращено');
+  };
+
   const unarchive = () =>
     run(
       () => store.debts.restore(debt.id),
@@ -212,6 +237,7 @@ export default function DebtDetailPage() {
   if (!archived) {
     if (partsAvailable) menu.push({ key: 'parts', label: PARTS_ACTION[debt.direction], hint: 'Регулярные платежи до полного погашения', icon: 'repeat', onSelect: () => setDialog('parts') });
     if (canMerge) menu.push({ key: 'merge', label: 'Объединить…', hint: 'С другими долгами этого человека', icon: 'transfer', onSelect: () => setDialog('merge') });
+    if (rootItem !== null) menu.push({ key: 'leave', label: 'Вывести из объединения', hint: 'Станет отдельным долгом, платежи и планы сохранятся', icon: 'refresh', onSelect: () => void leaveGroup() });
     if (closed) menu.push({ key: 'reopen', label: 'Открыть снова', hint: 'Вернуть долг в открытые', icon: 'refresh', onSelect: () => void toggleClosed() });
     else if (!state.settled) menu.push({ key: 'close', label: 'Закрыть долг', hint: 'Убрать из открытых и из итогов', icon: 'check', onSelect: () => setDialog('close') });
     menu.push({ key: 'archive', label: 'В архив', hint: 'Скрыть из списков и итогов, платежи сохранятся', icon: 'box', onSelect: () => void archive() });
@@ -240,6 +266,34 @@ export default function DebtDetailPage() {
         </p>
       )}
 
+      {rootItem !== null && (
+        <Callout
+          tone="info"
+          icon="transfer"
+          className="mb-3"
+          action={
+            <Link to={`/debts/${rootItem.debt.id}`} className={buttonClasses('secondary')}>
+              Весь объединённый долг
+            </Link>
+          }
+        >
+          Входит в объединённый долг «{rootItem.debt.counterparty}»: у него свои проценты, срок, даты и платежи.
+        </Callout>
+      )}
+      {ownOfGroup !== null && (
+        <Callout
+          tone="info"
+          icon="transfer"
+          className="mb-3"
+          action={
+            <Link to={`/debts/${debt.id}`} className={buttonClasses('secondary')}>
+              Весь объединённый долг
+            </Link>
+          }
+        >
+          Это один из долгов объединения. Здесь только он сам: свои проценты, срок, даты и платежи.
+        </Callout>
+      )}
       <DebtSummaryCard debt={debt} state={state} today={today} />
       {!archived && !closed && state.settled && (
         <Callout
@@ -301,6 +355,7 @@ export default function DebtDetailPage() {
         wallets={lines.wallets}
         base={base}
         loading={busy}
+        partsCount={ownOfGroup?.parts ? ownOfGroup.parts.length - 1 : 0}
         onConfirm={(mode) => void deleteDebt(mode)}
         onCancel={() => setDialog(null)}
       />
@@ -336,7 +391,7 @@ export default function DebtDetailPage() {
       {dialog === 'topup' && <TopUpSheet debt={debt} state={state} base={base} onClose={() => setDialog(null)} />}
       {dialog === 'parts' && <PayInPartsSheet debt={debt} state={state} onClose={() => setDialog(null)} />}
       {dialog === 'remind' && remind !== null && <ReminderSheet name={debt.counterparty} text={remind} onClose={() => setDialog(null)} />}
-      {dialog === 'merge' && mergeTarget && <MergeDebtsSheet target={mergeTarget} items={all?.items ?? []} onClose={() => setDialog(null)} />}
+      {dialog === 'merge' && mergeTarget && <MergeDebtsSheet target={mergeTarget} items={all.items} onClose={() => setDialog(null)} />}
       {editingPlan && lookups && <RuleSheet rule={editingPlan} lookups={lookups} today={today} onClose={() => setEditingPlan(null)} />}
       {dialog === 'edit' && <DebtSheet debt={debt} paidMinor={state.paidMinor} base={base} onClose={() => setDialog(null)} />}
     </>

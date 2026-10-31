@@ -47,7 +47,7 @@ describe('новые таблицы принимаются с сервера', (
     const { store, cash, food } = await device();
     const base = { createdAt: stamp(T0 - 9_000), clientUpdatedAt: OLD, deviceId: REMOTE, deletedAt: null };
     const budget: Budget = { ...base, id: 'b-1', categoryId: food.id, amountMinor: 1_000, currency: 'TJS', period: 'month', archivedAt: null };
-    const debt: Debt = { ...base, id: 'd-1', direction: 'lent', counterparty: 'Али', principalMinor: 5_000, interestMinor: null, interestRateBp: null, termMonths: null, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null };
+    const debt: Debt = { ...base, id: 'd-1', direction: 'lent', counterparty: 'Али', principalMinor: 5_000, interestMinor: null, interestRateBp: null, termMonths: null, mergedIntoId: null, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null };
     const rule: RecurringRule = {
       ...base, id: 'r-1', kind: 'expense', walletId: cash.id, toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: null, debtId: 'd-1', note: '',
       frequency: 'monthly', intervalN: 1, startOn: '2026-10-15', endOn: null, autoPost: 0, archivedAt: null,
@@ -233,7 +233,7 @@ describe('примитивы синхронизации работают для 
   it('курсоры новых таблиц независимы и сбрасываются вместе с остальными', async () => {
     const { store } = await device();
     const base = { createdAt: stamp(T0 - 9_000), clientUpdatedAt: OLD, deviceId: REMOTE, deletedAt: null };
-    const debt: Debt = { ...base, id: 'd-9', direction: 'lent', counterparty: 'Али', principalMinor: 5, interestMinor: null, interestRateBp: null, termMonths: null, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null };
+    const debt: Debt = { ...base, id: 'd-9', direction: 'lent', counterparty: 'Али', principalMinor: 5, interestMinor: null, interestRateBp: null, termMonths: null, mergedIntoId: null, currency: 'TJS', openedOn: '2026-10-01', dueOn: null, note: '', closedAt: null, archivedAt: null };
     await store.sync.applyRemotePage('debts', [{ entity: debt, serverSeq: 5 }], 5);
     expect(await store.sync.getCursor('debts')).toBe(5);
     expect(await store.sync.getCursor('budgets')).toBe(0);

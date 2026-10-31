@@ -116,45 +116,34 @@ describe('mergePreview', () => {
       remainingMinor: 50_000,
       overpaidMinor: 0,
       dueOn: '2026-11-10',
-      netted: false,
     });
   });
-  it('проценты складываются, остаток считается от «сумма + проценты»', () => {
+  it('проценты складываются, остаток считается от «сумма + проценты» у каждого долга', () => {
     const a = item({ principalMinor: 40_000, interestMinor: 4_000 }, [10_000]);
     const b = item({ principalMinor: 30_000, interestMinor: 6_000 }, [5_000]);
-    expect(mergePreview([a, b])).toMatchObject({ principalMinor: 70_000, interestMinor: 10_000, paidMinor: 15_000, remainingMinor: 65_000, overpaidMinor: 0, netted: false });
+    expect(mergePreview([a, b])).toMatchObject({ principalMinor: 70_000, interestMinor: 10_000, paidMinor: 15_000, remainingMinor: 65_000, overpaidMinor: 0 });
   });
   it('сроков нет — null; срок есть у одного — он', () => {
     expect(mergePreview([item(), item()])!.dueOn).toBeNull();
     expect(mergePreview([item(), item({ dueOn: '2026-12-01' })])!.dueOn).toBe('2026-12-01');
   });
-  it('переплата одного долга засчитывается в остаток другого, и об этом сказано (netted)', () => {
+  it('срок — ближайший среди тех, что ещё должны: погашенный долг с ранним сроком его не задаёт', () => {
+    const paidOff = item({ principalMinor: 10_000, dueOn: '2026-10-15' }, [10_000]);
+    const owing = item({ principalMinor: 10_000, dueOn: '2026-12-01' }, []);
+    expect(mergePreview([paidOff, owing])!.dueOn).toBe('2026-12-01');
+    expect(mergePreview([paidOff, item({ principalMinor: 5_000, dueOn: '2026-11-01' }, [5_000])])!.dueOn).toBe('2026-10-15'); // должны уже не должны — срок среди всех
+  });
+  it('переплата одного долга другой не гасит: у каждого свой остаток, переплата видна отдельно', () => {
     const a = item({ principalMinor: 50_000 }, []);
     const b = item({ principalMinor: 10_000 }, [15_000]); // переплата 50
-    expect(mergePreview([a, b])).toMatchObject({ principalMinor: 60_000, paidMinor: 15_000, remainingMinor: 45_000, overpaidMinor: 0, netted: true });
+    expect(mergePreview([a, b])).toMatchObject({ principalMinor: 60_000, paidMinor: 15_000, remainingMinor: 50_000, overpaidMinor: 5_000 });
   });
-  it('переплата больше остатка остальных — общая переплата, остаток 0', () => {
-    const a = item({ principalMinor: 5_000 }, []);
-    const b = item({ principalMinor: 10_000 }, [30_000]);
-    expect(mergePreview([a, b])).toMatchObject({ remainingMinor: 0, overpaidMinor: 15_000, netted: true });
-  });
-  it('совпадает с computeDebtState по общему набору операций', () => {
-    const a = item({ principalMinor: 40_000 }, [10_000, 2_000]);
-    const b = item({ principalMinor: 30_000 }, [7_000]);
-    const txs = ['a', 'b'].flatMap((k, i) =>
-      [[10_000, 2_000], [7_000]][i]!.map((amountMinor, j) => ({
-        id: `${k}${j}`,
-        kind: 'income' as const,
-        walletId: 'w',
-        amountMinor,
-        occurredOn: '2026-10-05',
-        createdAt: '2026-10-05T10:00:00.000Z',
-        deletedAt: null,
-        debtId: 'merged',
-      })),
-    );
-    const whole = computeDebtState({ id: 'merged', direction: 'lent', principalMinor: 70_000, currency: 'TJS' }, txs, wallets);
-    expect(mergePreview([a, b])).toMatchObject({ paidMinor: whole.paidMinor, remainingMinor: whole.remainingMinor, overpaidMinor: whole.overpaidMinor });
+  it('закрытый долг в остаток не входит, если есть открытый; закрыты все — остаток всех', () => {
+    const open = item({ principalMinor: 20_000 }, []);
+    const closed = item({ principalMinor: 30_000, closedAt: '2026-10-20T00:00:00.000Z' }, []);
+    expect(mergePreview([open, closed])).toMatchObject({ principalMinor: 50_000, remainingMinor: 20_000 });
+    const closed2 = item({ principalMinor: 5_000, closedAt: '2026-10-20T00:00:00.000Z' }, []);
+    expect(mergePreview([closed, closed2])).toMatchObject({ remainingMinor: 35_000 });
   });
   it('суммы не помещаются в безопасное целое — null, а не неверное число', () => {
     const big = { ...item(), state: { ...item().state!, principalMinor: Number.MAX_SAFE_INTEGER } };

@@ -15,6 +15,8 @@ export interface DebtMatchQuery {
 
 /** Долг можно пополнять или объединять: живой, не в архиве, и сумму по нему удалось посчитать. */
 const usable = (it: DebtItem): boolean => it.debt.deletedAt === null && it.debt.archivedAt === null && it.state !== null;
+/** Пополнять можно только отдельный долг: у объединённого непонятно, к какой части добавлять (части пополняются на своих страницах). */
+const topUpable = (it: DebtItem): boolean => usable(it) && it.parts === undefined;
 
 /**
  * Долги того же человека, того же направления и той же валюты — те, к которым можно «добавить ещё».
@@ -24,7 +26,7 @@ export function findMatchingDebts(items: readonly DebtItem[], q: DebtMatchQuery)
   const name = normName(q.counterparty);
   if (name === '') return [];
   return items.filter(
-    (it) => usable(it) && it.debt.direction === q.direction && it.debt.currency === q.currency && normName(it.debt.counterparty) === name,
+    (it) => topUpable(it) && it.debt.direction === q.direction && it.debt.currency === q.currency && normName(it.debt.counterparty) === name,
   );
 }
 
@@ -50,35 +52,39 @@ export interface MergePreview {
   paidMinor: Minor;
   remainingMinor: Minor;
   overpaidMinor: Minor;
-  /** Ближайший срок; null — сроков нет. */
+  /** Ближайший срок среди тех, что ещё должны (нет таких — среди всех); null — сроков нет. */
   dueOn: IsoDate | null;
-  /** Переплата одного долга погасила часть другого: общий остаток меньше суммы остатков. */
-  netted: boolean;
 }
 
 /**
- * Что получится после объединения (в точности как посчитает computeDebtState по общему набору операций):
- * сумма = Σ сумм, проценты = Σ процентов, оплачено = Σ платежей, остаток = сумма + проценты − оплачено, но не меньше 0.
+ * Что получится после объединения: суммы, проценты и платежи складываются; остаток — сумма остатков частей (у каждой части свой
+ * остаток, переплата одной другую не гасит). Закрытые части в остаток не входят, если есть хоть одна незакрытая. Срок — ближайший.
  * null — суммы не помещаются в расчёт.
  */
 export function mergePreview(items: readonly DebtItem[]): MergePreview | null {
   try {
+    const anyOpen = items.some((it) => it.debt.closedAt === null);
     let principal: Minor = 0;
     let interest: Minor = 0;
     let paid: Minor = 0;
-    let remainingSum: Minor = 0;
-    let dueOn: IsoDate | null = null;
+    let overpaid: Minor = 0;
+    let remaining: Minor = 0;
+    let dueOwing: IsoDate | null = null;
+    let dueAny: IsoDate | null = null;
     for (const it of items) {
       if (it.state === null) return null;
       principal = addMinor(principal, it.state.principalMinor);
       interest = addMinor(interest, it.state.interestMinor);
       paid = addMinor(paid, it.state.paidMinor);
-      remainingSum = addMinor(remainingSum, it.state.remainingMinor);
-      if (it.debt.dueOn !== null && (dueOn === null || it.debt.dueOn < dueOn)) dueOn = it.debt.dueOn;
+      overpaid = addMinor(overpaid, it.state.overpaidMinor);
+      if (!anyOpen || it.debt.closedAt === null) remaining = addMinor(remaining, it.state.remainingMinor);
+      const due = it.debt.dueOn;
+      if (due !== null) {
+        if (dueAny === null || due < dueAny) dueAny = due;
+        if (it.debt.closedAt === null && it.state.remainingMinor > 0 && (dueOwing === null || due < dueOwing)) dueOwing = due;
+      }
     }
-    const left = addMinor(principal, interest) - paid;
-    const remaining = left > 0 ? left : 0;
-    return { principalMinor: principal, interestMinor: interest, paidMinor: paid, remainingMinor: remaining, overpaidMinor: left < 0 ? -left : 0, dueOn, netted: remaining < remainingSum };
+    return { principalMinor: principal, interestMinor: interest, paidMinor: paid, remainingMinor: remaining, overpaidMinor: overpaid, dueOn: dueOwing ?? dueAny };
   } catch (e) {
     if (e instanceof RangeError) return null;
     throw e;

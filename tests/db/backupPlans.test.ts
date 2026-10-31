@@ -449,3 +449,47 @@ describe('копия с процентами по долгам', () => {
     expect(d).toMatchObject({ principalMinor: 50_000, interestMinor: null, interestRateBp: null, termMonths: null });
   });
 });
+
+
+describe('копия с объединёнными долгами', () => {
+  it('составляющие и их главный долг попадают в копию и возвращаются целыми: у каждого свои проценты, срок и даты; повторный импорт ничего не меняет', async () => {
+    const src = await fresh();
+    const base = { direction: 'borrowed', counterparty: 'Банк', currency: 'TJS' } as const;
+    const main = await src.debts.create({ ...base, principalMinor: 1_000_000, interestMinor: 134_715, interestRateBp: 2400, termMonths: 12, openedOn: '2026-10-01', dueOn: '2027-10-01' });
+    const part = await src.debts.create({ ...base, principalMinor: 500_000, interestMinor: 30_000, interestRateBp: 1200, termMonths: 6, openedOn: '2026-10-10', dueOn: '2027-04-10' });
+    await src.debts.merge(main.id, [part.id]);
+    const file = await exportBackup(src);
+    expect(file.debts.find((d) => d.id === part.id)).toMatchObject({ mergedIntoId: main.id, interestRateBp: 1200, termMonths: 6 });
+    expect(file.debts.find((d) => d.id === main.id)).toMatchObject({ mergedIntoId: null, interestRateBp: 2400, termMonths: 12 });
+
+    const dst = await fresh();
+    await importBackup(dst, clone(file) as BackupFile);
+    const loaded = await dst.db.debts.toArray();
+    const loadedMain = loaded.find((d) => d.principalMinor === 1_000_000)!;
+    const loadedPart = loaded.find((d) => d.principalMinor === 500_000)!;
+    expect(loadedPart).toMatchObject({ mergedIntoId: loadedMain.id, interestMinor: 30_000, interestRateBp: 1200, termMonths: 6, dueOn: '2027-04-10' });
+    expect(loadedMain).toMatchObject({ mergedIntoId: null, interestMinor: 134_715, dueOn: '2027-10-01' });
+    expect(await importBackup(dst, clone(file) as BackupFile)).toMatchObject({ added: 0, replaced: 0 });
+    expect(await dst.db.debts.count()).toBe(2);
+  });
+
+  it('копия, сделанная до объединения (в долгах нет поля): mergedIntoId = null', async () => {
+    const src = await fresh();
+    await src.debts.create({ direction: 'lent', counterparty: 'Али', principalMinor: 50_000, currency: 'TJS', openedOn: '2026-10-01' });
+    const file = clone(await exportBackup(src));
+    for (const d of file['debts']) delete d['mergedIntoId'];
+    const dst = await fresh();
+    await importBackup(dst, file as BackupFile);
+    expect(await dst.db.debts.toArray()).toEqual([expect.objectContaining({ counterparty: 'Али', mergedIntoId: null })]);
+  });
+
+  it('ссылка на долг, которого нет ни в копии, ни в базе: копия отвергается целиком, ничего не загружается', async () => {
+    const src = await fresh();
+    const a = await src.debts.create({ direction: 'lent', counterparty: 'Али', principalMinor: 50_000, currency: 'TJS', openedOn: '2026-10-01' });
+    const file = clone(await exportBackup(src));
+    file['debts'].find((d: { id: string }) => d.id === a.id)!['mergedIntoId'] = '00000000-0000-4000-8000-00000000dead';
+    const dst = await fresh();
+    await expect(importBackup(dst, file as BackupFile)).rejects.toThrow(/входит в состав несуществующего долга/);
+    expect(await dst.db.debts.count()).toBe(0);
+  });
+});

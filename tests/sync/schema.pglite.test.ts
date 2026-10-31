@@ -158,6 +158,7 @@ describe('схема: структура', () => {
     const got = Object.fromEntries(fks.rows.map((r) => [r.name, r.def]));
     expect(got).toEqual({
       budgets_category_fk: 'FOREIGN KEY (user_id, category_id) REFERENCES categories(user_id, id)',
+      debts_merged_into_fk: 'FOREIGN KEY (user_id, merged_into_id) REFERENCES debts(user_id, id)',
       recurring_rules_category_fk: 'FOREIGN KEY (user_id, category_id) REFERENCES categories(user_id, id)',
       recurring_rules_debt_fk: 'FOREIGN KEY (user_id, debt_id) REFERENCES debts(user_id, id)',
       recurring_rules_to_wallet_fk: 'FOREIGN KEY (user_id, to_wallet_id) REFERENCES wallets(user_id, id)',

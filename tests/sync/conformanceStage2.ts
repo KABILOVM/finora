@@ -101,6 +101,10 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         ['долг: срок больше 600 месяцев', 'debts', () => deb({ interestMinor: 5, termMonths: 601 })],
         ['долг: ставка без процентов', 'debts', () => deb({ interestMinor: null, interestRateBp: 2400 })],
         ['долг: срок без процентов', 'debts', () => deb({ interestMinor: null, termMonths: 12 })],
+        // объединение долгов (раздел 15 схемы)
+        ['долг: в составе самого себя', 'debts', () => { const id = newId(); return deb({ id, mergedIntoId: id }); }],
+        ['долг: в составе долга другого пользователя', 'debts', () => deb({ mergedIntoId: ctx.foreignDebtId })],
+        ['долг: в составе несуществующего долга', 'debts', () => deb({ mergedIntoId: newId() })],
         // бюджеты
         ['бюджет: сумма 0', 'budgets', () => bud({ amountMinor: 0 })],
         ['бюджет: отрицательная сумма', 'budgets', () => bud({ amountMinor: -100 })],
@@ -169,6 +173,8 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         makeDebt({ ...sync, interestMinor: MAX, interestRateBp: 100_000, termMonths: 600 }),
         makeDebt({ ...sync, interestMinor: 12_345 }),
       ];
+      // составляющая объединения: ссылается на главный долг (он уже на сервере)
+      const parts = [makeDebt({ ...sync, mergedIntoId: debts[0]!.id, interestMinor: 7_000, interestRateBp: 1800, termMonths: 6 })];
       const budgets = [makeBudget({ ...sync, amountMinor: 1 }), makeBudget({ ...sync, amountMinor: MAX })];
       const rules = [
         makeRecurringRule({ ...sync, walletId: w1.id, amountMinor: 1, intervalN: 1, startOn: '2000-01-01', endOn: '2000-01-01', note: 'я'.repeat(500), autoPost: 1 }),
@@ -181,10 +187,11 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         makeTransaction({ ...sync, kind: 'transfer', walletId: w2.id, toWalletId: w1.id, baseAmountMinor: 1 }),
       ];
       await t.push('debts', debts.map((e) => toWire('debts', e)));
+      await t.push('debts', parts.map((e) => toWire('debts', e)));
       await t.push('budgets', budgets.map((e) => toWire('budgets', e)));
       await t.push('recurring_rules', rules.map((e) => toWire('recurring_rules', e)));
       await t.push('transactions', fees.map((e) => toWire('transactions', e)));
-      const sent: Array<[SyncTableName, Entity[]]> = [['debts', debts], ['budgets', budgets], ['recurring_rules', rules], ['transactions', fees]];
+      const sent: Array<[SyncTableName, Entity[]]> = [['debts', [...debts, ...parts]], ['budgets', budgets], ['recurring_rules', rules], ['transactions', fees]];
       for (const [table, list] of sent) {
         const got = new Map((await pullAll(t, table)).map((r) => [r.id as string, fromWire(table, r).entity]));
         for (const e of list) expect(got.get(e.id), `${table}/${e.id}`).toEqual(e);
