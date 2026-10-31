@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import fc from 'fast-check';
+import { GENERATED_ACCENTS } from './lib/accentSpecs';
+import { buildPalette, generatedAccentsCss, GENERATED_BEGIN, GENERATED_END, normalizeHex, paletteFromHex, paletteProblems, PALETTE_KEYS, specFromHex } from './lib/palette';
 import { ACCENTS, DEFAULT_ACCENT } from './theme';
 
 /**
@@ -252,7 +255,9 @@ describe('цвета денег и состояний (доход, расход,
   /**
    * Главный цвет акцента не должен сливаться с цветом денег или состояния: иначе кнопка выглядит как «ошибка», а ссылка — как
    * «расход». Совпадения, которые есть сейчас, закреплены здесь явно (акцент выбрал человек, он остаётся): красный ≈ ошибка и расход,
-   * оранжевый ≈ предупреждение и ошибка, зелёный и бирюзовый ≈ доход (в светлой теме). Суммы всегда подписаны знаком («+», «−»)
+   * оранжевый ≈ предупреждение и ошибка, зелёный и бирюзовый ≈ доход (в светлой теме). Новые готовые акценты, у которых по оттенку
+   * сближение неизбежно (малиновый и коралловый ≈ расход и ошибка, персиковый, янтарный и коричневый ≈ предупреждение, изумрудный
+   * и мятный ≈ доход), внесены сюда так же. Суммы всегда подписаны знаком («+», «−»)
    * и значком, цвет — не единственный признак. Новый акцент или правка палитры с таким же сближением не пройдут, пока его не
    * внесут сюда; убранное сближение тоже придётся убрать из списка.
    */
@@ -261,6 +266,13 @@ describe('цвета денег и состояний (доход, расход,
     orange: ['danger', 'warning'],
     green: ['income'],
     teal: ['income'],
+    crimson: ['danger', 'expense'],
+    coral: ['danger', 'expense'],
+    peach: ['warning'],
+    amber: ['warning'],
+    brown: ['warning'],
+    emerald: ['income'],
+    mint: ['income'],
   };
   const NEAR_DISTANCE = 0.07;
 
@@ -275,5 +287,102 @@ describe('цвета денег и состояний (доход, расход,
       if (near.size > 0) found[id] = [...near].sort();
     }
     expect(found).toEqual(Object.fromEntries(Object.entries(KNOWN_NEAR).map(([id, ks]) => [id, [...ks].sort()])));
+  });
+});
+
+describe('готовые акценты, выпущенные генератором (src/lib/palette.ts)', () => {
+  const css = read('./index.css');
+
+  it('блоки между отметками в index.css совпадают с тем, что выпускает генератор (иначе: `npm run gen:accents`)', () => {
+    const begin = css.indexOf(GENERATED_BEGIN);
+    const end = css.indexOf(GENERATED_END);
+    expect(begin, 'нет начальной отметки').toBeGreaterThan(0);
+    expect(end, 'нет конечной отметки').toBeGreaterThan(begin);
+    expect(css.slice(begin, end + GENERATED_END.length)).toBe(generatedAccentsCss(GENERATED_ACCENTS));
+  });
+
+  it('все описанные генератором акценты есть в ACCENTS (и ни один не описан дважды)', () => {
+    const ids = GENERATED_ACCENTS.map((a) => a.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(ACCENTS.map((a) => a.id), id).toContain(id);
+  });
+
+  it('готовых акцентов много: больше двадцати', () => {
+    expect(ACCENTS.length).toBeGreaterThan(20);
+  });
+});
+
+describe('генератор палитры', () => {
+  it('любой оттенок и любая яркость дают читаемую тему: все контрасты из этого файла выполнены', () => {
+    fc.assert(
+      fc.property(fc.double({ min: 0, max: 360, noNaN: true }), fc.double({ min: 0, max: 1, noNaN: true }), (hue, vivid) => {
+        expect(paletteProblems(buildPalette({ hue, vivid }))).toEqual([]);
+      }),
+      { numRuns: 400 },
+    );
+  });
+
+  it('любой выбранный человеком цвет (#rrggbb) даёт читаемую тему, в том числе чёрный, белый, серый и жёлтый', () => {
+    for (const hex of ['#000000', '#ffffff', '#808080', '#ffff00', '#00ff00', '#ff0000', '#0000ff', '#ff00ff', '#00ffff', '#fde047', '#1e3a8a']) {
+      const palette = paletteFromHex(hex);
+      expect(palette, hex).not.toBeNull();
+      expect(paletteProblems(palette!), hex).toEqual([]);
+    }
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 0xffffff }), (n) => {
+        const hex = `#${n.toString(16).padStart(6, '0')}`;
+        expect(paletteProblems(paletteFromHex(hex)!), hex).toEqual([]);
+      }),
+      { numRuns: 400 },
+    );
+  });
+
+  it('палитра задаёт ровно те же переменные, что ручные блоки, и все значения — «R G B» в пределах 0–255', () => {
+    const palette = buildPalette({ hue: 200, vivid: 1 });
+    expect(Object.keys(palette)).toEqual([...PALETTE_KEYS]);
+    expect([...PALETTE_KEYS].sort()).toEqual(Object.keys(BLOCKS.get('violet') ?? {}).map((k) => k.replace(/^ac-/, '')).sort());
+    for (const key of PALETTE_KEYS) for (const c of palette[key]) expect(Number.isInteger(c) && c >= 0 && c <= 255, key).toBe(true);
+  });
+
+  it('детерминирован: одинаковый вход — одинаковая палитра', () => {
+    expect(buildPalette({ hue: 33, vivid: 0.7 })).toEqual(buildPalette({ hue: 33, vivid: 0.7 }));
+  });
+
+  it('мусор на входе не ломает: NaN, бесконечность, выход за границы', () => {
+    for (const spec of [{ hue: Number.NaN, vivid: Number.NaN }, { hue: Number.POSITIVE_INFINITY, vivid: 5 }, { hue: -720.5, vivid: -3 }]) {
+      expect(paletteProblems(buildPalette(spec))).toEqual([]);
+    }
+  });
+
+  it('серый цвет даёт спокойную палитру, а сочный — яркую: яркость берётся из насыщенности выбранного цвета', () => {
+    expect(specFromHex('#808080')?.vivid).toBeLessThan(0.05);
+    expect(specFromHex('#ff0000')?.vivid).toBe(1);
+    expect(specFromHex('#4f46e5')?.hue).toBeGreaterThan(260);
+    expect(specFromHex('#4f46e5')?.hue).toBeLessThan(290);
+  });
+
+  it('палитра по фиолетовому цвету близка к ручной фиолетовой палитре приложения (таблица снята с неё)', () => {
+    const hand = BLOCKS.get('violet') ?? {};
+    const mine = paletteFromHex('#4f46e5')!;
+    const parse = (k: string) => (hand[`ac-${k}`] ?? '').split(' ').map(Number);
+    for (const key of ['bg-l', 'text-l', 'bg-d', 'surface-d', 'text-d'] as const) {
+      const [a, b] = [parse(key), mine[key]];
+      for (let i = 0; i < 3; i++) expect(Math.abs((a[i] ?? 0) - (b[i] ?? 0)), `${key}[${i}]`).toBeLessThanOrEqual(12);
+    }
+  });
+
+  describe('normalizeHex', () => {
+    it('принимает #rrggbb, rrggbb и #rgb в любом регистре, с пробелами', () => {
+      expect(normalizeHex('#4F46E5')).toBe('#4f46e5');
+      expect(normalizeHex(' 4f46e5 ')).toBe('#4f46e5');
+      expect(normalizeHex('#f0a')).toBe('#ff00aa');
+    });
+
+    it('всё остальное — не цвет', () => {
+      for (const bad of ['', '#', '#12', '#12345', '#1234567', 'red', '#gggggg', 'rgb(1,2,3)', '#ff00aa; color: red']) {
+        expect(normalizeHex(bad), JSON.stringify(bad)).toBeNull();
+        expect(paletteFromHex(bad), JSON.stringify(bad)).toBeNull();
+      }
+    });
   });
 });
