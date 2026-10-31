@@ -1,5 +1,6 @@
 import { glyphValue } from '@/components/glyphs';
 import type { IconName } from '@/components/Icon';
+import { findServiceByName, serviceValue } from '@/components/services';
 import { COLOR_CHOICES } from '@/features/wallets/walletUi';
 
 /** Слова из названия → значок. Проверяется по началу слова (корни), порядок важен: что выше, то приоритетнее. */
@@ -22,8 +23,11 @@ const KEYWORDS: readonly (readonly [string, IconName])[] = [
   ['инвест', 'invest'], ['процент', 'invest'], ['дивиденд', 'invest'], ['долг', 'debt'], ['кредит', 'card'], ['налог', 'safe'],
 ];
 
-/** Значок по названию («Кофе» → чашка); если ничего не подошло — универсальная метка. */
+/** Значок по названию («Кофе» → чашка, «Netflix» → логотип Netflix); если ничего не подошло — универсальная метка. */
 export function suggestGlyph(name: string): string {
+  // название сервиса точнее общего слова: «Подписка Netflix» — это Netflix, а не просто «повтор»
+  const service = findServiceByName(name);
+  if (service) return serviceValue(service.id);
   const n = name.toLocaleLowerCase('ru');
   const hit = KEYWORDS.find(([root]) => n.split(/[^\p{L}]+/u).some((w) => w.startsWith(root)));
   return glyphValue(hit ? hit[1] : 'tag');

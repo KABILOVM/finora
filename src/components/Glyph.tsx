@@ -1,9 +1,11 @@
+import type { CSSProperties } from 'react';
 import { bankById } from '@/features/wallets/banks';
 import { Icon } from './Icon';
 import { resolveGlyph } from './glyphs';
+import { serviceById, useServiceLogo } from './services';
 
 export interface GlyphProps {
-  /** Значение поля icon категории или кошелька: «i:cup», «b:alif» или эмодзи. */
+  /** Значение поля icon категории или кошелька: «i:cup», «b:alif», «s:netflix» или эмодзи. */
   value: string;
   /** Цвет категории или кошелька (#rrggbb): плитка подкрашивается им. Без цвета — нейтральная. */
   color?: string;
@@ -12,8 +14,34 @@ export interface GlyphProps {
   className?: string;
 }
 
-/** Плитка со значком: иконка на подкрашенном фоне, знак банка на градиенте или (для незнакомого эмодзи) сам эмодзи. */
+/** Плитка со значком: иконка на подкрашенном фоне, знак банка на градиенте, логотип сервиса на его цвете или (для незнакомого эмодзи) сам эмодзи. */
 const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Логотип сервиса на плитке его фирменного цвета (цвет категории не нужен). Пока файл логотипов грузится, видна пустая плитка. */
+function ServiceGlyph({ id, base, inner, className }: { id: string; base: CSSProperties; inner: number; className?: string }) {
+  const service = serviceById(id);
+  const logo = useServiceLogo(id);
+  if (!service) return null;
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex items-center justify-center ${className ?? ''}`}
+      style={{
+        ...base,
+        backgroundColor: service.color,
+        color: service.dark ? '#111827' : '#ffffff',
+        // тонкая светлая кайма: чёрные плитки (Apple, X, TikTok) не сливаются с тёмной темой
+        boxShadow: 'inset 0 0 0 1px rgb(255 255 255 / 0.14)',
+      }}
+    >
+      {logo && (
+        <svg width={inner} height={inner} viewBox={logo[0]} fill="currentColor" focusable="false" aria-hidden="true">
+          <path d={logo[1]} />
+        </svg>
+      )}
+    </span>
+  );
+}
 
 export function Glyph({ value, color: rawColor, size = 40, className }: GlyphProps) {
   const g = resolveGlyph(value);
@@ -35,6 +63,10 @@ export function Glyph({ value, color: rawColor, size = 40, className }: GlyphPro
         </span>
       );
     }
+  }
+
+  if (g.kind === 'service') {
+    return <ServiceGlyph id={g.id} base={base} inner={Math.round(size * 0.6)} className={className} />;
   }
 
   if (g.kind === 'icon') {

@@ -1,9 +1,11 @@
 import type { IconName } from './Icon';
 import { DUO } from './iconData';
+import { serviceById } from './services';
 
 /**
- * Значок категории или кошелька (поле icon) бывает трёх видов:
- *   «i:cup»  — встроенная иконка;  «b:alif» — знак банка;  эмодзи — старые записи и то, что ввели раньше.
+ * Значок категории или кошелька (поле icon) бывает четырёх видов:
+ *   «i:cup»  — встроенная иконка;  «b:alif» — знак банка;  «s:netflix» — логотип сервиса (см. services.ts);
+ *   эмодзи — старые записи и то, что ввели раньше.
  * Для известных эмодзи ниже подбирается иконка (данные не меняются, подмена только при показе); неизвестные остаются эмодзи.
  */
 const EMOJI_TO_GLYPH: Record<string, IconName> = {
@@ -21,6 +23,7 @@ const EMOJI_TO_GLYPH: Record<string, IconName> = {
 export type GlyphKind =
   | { kind: 'icon'; name: IconName }
   | { kind: 'bank'; id: string }
+  | { kind: 'service'; id: string }
   | { kind: 'text'; text: string };
 
 const stripVariation = (s: string): string => s.replace(/️/g, '');
@@ -28,6 +31,12 @@ const stripVariation = (s: string): string => s.replace(/️/g, '');
 /** Что нарисовать для значения поля icon. */
 export function resolveGlyph(value: string): GlyphKind {
   if (value.startsWith('b:')) return { kind: 'bank', id: value.slice(2) };
+  if (value.startsWith('s:')) {
+    const id = value.slice(2);
+    if (serviceById(id)) return { kind: 'service', id };
+    // сервис, которого нет в этой версии (запись с другого устройства): вместо «s:abc» показываем первую букву
+    return { kind: 'text', text: id.slice(0, 1).toLocaleUpperCase('ru') || '?' };
+  }
   if (value.startsWith('i:')) {
     const name = value.slice(2);
     if (name in DUO) return { kind: 'icon', name: name as IconName };
