@@ -90,6 +90,13 @@ export default defineConfig({
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        // Ярлыки при долгом нажатии на иконку установленного приложения (Android, Chrome и Edge; iPhone их не показывает).
+        // Адреса относительные, как start_url: приложение может лежать не в корне домена. Вид операции читает AddTransactionSheet.
+        shortcuts: [
+          { name: 'Новый расход', short_name: 'Расход', description: 'Внести расход', url: './#/add', icons: [{ src: 'pwa-192.png', sizes: '192x192', type: 'image/png' }] },
+          { name: 'Новый доход', short_name: 'Доход', description: 'Внести доход', url: './#/add?kind=income', icons: [{ src: 'pwa-192.png', sizes: '192x192', type: 'image/png' }] },
+          { name: 'Перевод между кошельками', short_name: 'Перевод', description: 'Перевести деньги между кошельками', url: './#/add?kind=transfer', icons: [{ src: 'pwa-192.png', sizes: '192x192', type: 'image/png' }] },
+        ],
       },
       workbox: {
         // Только файлы самого приложения. Запросы к Supabase НЕ кэшируем никогда (приватные данные).

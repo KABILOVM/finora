@@ -146,8 +146,11 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const formRef = useRef<HTMLDivElement>(null);
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
-  const preset = useLocation().state as { kind?: string; walletId?: string; prefill?: unknown; date?: unknown } | null;
-  const presetKind = preset?.kind;
+  const location = useLocation();
+  const preset = location.state as { kind?: string; walletId?: string; prefill?: unknown; date?: unknown } | null;
+  // Ярлыки на иконке приложения (манифест) открывают `#/add?kind=income`: у такого перехода состояния нет, вид берём из адреса.
+  // Состояние главнее адреса; непонятный вид в адресе — обычный расход.
+  const presetKind = preset?.kind ?? new URLSearchParams(location.search).get('kind') ?? undefined;
   // Кнопки на экране кошелька открывают шит сразу с этим кошельком (если он ещё есть)
   const presetWallet = preset?.walletId && wallets.some((w) => w.id === preset.walletId) ? preset.walletId : null;
   const [initial] = useState(() => {

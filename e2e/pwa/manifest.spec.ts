@@ -46,6 +46,43 @@ for (const prefix of ['/', '/finora-app/v2/']) {
       }
     });
 
+    test('ярлыки на иконке (shortcuts): расход, доход, перевод; адреса относительные, внутри scope, ведут на форму операции', async ({ request }) => {
+      const manifestUrl = `${srv.url}manifest.webmanifest`;
+      const m = await (await request.get(manifestUrl)).json();
+      const list = m.shortcuts as Array<{ name: string; short_name?: string; url: string; icons?: Array<{ src: string; sizes: string; type: string }> }>;
+      expect(Array.isArray(list)).toBe(true);
+      // Android показывает не больше четырёх; у нас три
+      expect(list.length).toBeGreaterThanOrEqual(2);
+      expect(list.length).toBeLessThanOrEqual(4);
+      const scope = new URL(m.scope, manifestUrl);
+      const kinds = new Set<string>();
+      for (const sc of list) {
+        expect(sc.name, 'у ярлыка есть название').toBeTruthy();
+        expect((sc.short_name ?? sc.name).length, `${sc.name}: короткое название`).toBeLessThanOrEqual(12);
+        // Как start_url: без «/» в начале и без схемы, иначе в подпапке ярлык увёл бы на чужой корень домена
+        expect(sc.url.startsWith('/'), `${sc.url}: без «/» в начале`).toBe(false);
+        expect(sc.url, sc.url).not.toMatch(/^[a-z]+:/i);
+        const target = new URL(sc.url, manifestUrl);
+        expect(target.href.startsWith(scope.href), `${sc.url} внутри scope`).toBe(true);
+        // страница отвечает (хэш на сервер не уходит), а маршрут внутри приложения — форма «Новая операция»
+        const res = await request.get(target.href.split('#')[0]!);
+        expect(res.status(), sc.url).toBe(200);
+        expect(res.headers()['content-type']).toMatch(/text\/html/);
+        expect(target.hash.startsWith('#/add'), `${sc.url}: ведёт на форму операции`).toBe(true);
+        const kind = new URLSearchParams(target.hash.split('?')[1] ?? '').get('kind');
+        expect([null, 'income', 'transfer']).toContain(kind);
+        kinds.add(kind ?? 'expense');
+        for (const ic of sc.icons ?? []) {
+          expect(ic.src.startsWith('/'), `иконка ярлыка ${ic.src}`).toBe(false);
+          const r = await request.get(new URL(ic.src, manifestUrl).href);
+          expect(r.status(), ic.src).toBe(200);
+          expect(r.headers()['content-type'], ic.src).toBe('image/png');
+        }
+      }
+      expect([...kinds], 'ярлыки: и расход, и доход').toEqual(expect.arrayContaining(['expense', 'income']));
+      expect(new Set(list.map((x) => x.url)).size, 'адреса ярлыков разные').toBe(list.length);
+    });
+
     test('иконки 192/512/maskable отдаются как PNG нужного размера', async ({ request }) => {
       const m = await (await request.get(`${srv.url}manifest.webmanifest`)).json();
       const found = new Set<string>();
