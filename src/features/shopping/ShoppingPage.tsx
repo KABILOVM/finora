@@ -5,9 +5,11 @@ import { EmptyState } from '@/components/EmptyState';
 import { FilterBar } from '@/components/filters/FilterBar';
 import { countFilters, emptyFilters, pruneFilters, type FilterValues } from '@/components/filters/filterState';
 import { PageHeader } from '@/components/PageHeader';
+import { SearchField } from '@/components/SearchField';
 import { useToast } from '@/components/Toast';
 import { formatMinor } from '@/domain/money';
 import { priceKey, UNIT_LABEL, type ItemView } from '@/domain/shopping';
+import { isSearching, matchesQuery, showsSearch } from '@/lib/search';
 import { buildCatalog } from '@/domain/shoppingCatalog';
 import type { Minor, ShoppingUnit } from '@/domain/types';
 import { useStore, ValidationError } from '@/db';
@@ -39,6 +41,7 @@ export default function ShoppingPage() {
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
   const busyRef = useRef(new Set<string>());
   const [filters, setFilters] = useState<FilterValues>({});
+  const [query, setQuery] = useState('');
 
   if (data === undefined) {
     return (
@@ -142,11 +145,18 @@ export default function ShoppingPage() {
   const purchased = boughtItems(data.all);
   const filterFields = shoppingFilterFields(views, purchased);
   const filterValues = pruneFilters(filterFields, filters);
-  const filtering = countFilters(filterFields, filterValues) > 0;
+  // поиск по названию — тоже сужение списка: «План» и «Итого в корзине» при нём считаются по всему списку, как и при фильтрах
+  const searching = isSearching(query);
+  const filtering = countFilters(filterFields, filterValues) > 0 || searching;
   const boughtMode = showsBought(filterValues);
-  const shownViews = filterViews(views, filterValues);
-  const shownBought = filterBought(purchased, filterValues).slice(0, BOUGHT_MAX);
-  const resetFilters = () => setFilters(emptyFilters(filterFields));
+  const shownViews = filterViews(views, filterValues).filter((v) => matchesQuery(v.item.name, query));
+  const shownBought = filterBought(purchased, filterValues).filter((b) => matchesQuery(b.name, query)).slice(0, BOUGHT_MAX);
+  const resetFilters = () => {
+    setFilters(emptyFilters(filterFields));
+    setQuery('');
+  };
+  const resetLabel = searching ? 'Сбросить поиск и фильтры' : 'Сбросить фильтры';
+  const underFilters = searching ? 'под поиск и фильтры' : 'под выбранные фильтры';
 
   const editView = sheet?.kind === 'edit' ? current(sheet.id) : undefined;
   const priceView = sheet?.kind === 'price' ? current(sheet.id) : undefined;
@@ -211,6 +221,9 @@ export default function ShoppingPage() {
         />
       ) : (
         <>
+          {showsSearch(views.length + purchased.length, query) && (
+            <SearchField label="Поиск по покупкам" placeholder="Найти в списке покупок" value={query} onChange={setQuery} className="mb-3" />
+          )}
           {filterFields.length > 0 && (
             <FilterBar title="Фильтры покупок" fields={filterFields} values={filterValues} onChange={setFilters} className="mb-3" />
           )}
@@ -218,9 +231,9 @@ export default function ShoppingPage() {
             <>
               {shownBought.length === 0 ? (
                 <div data-testid="shopping-filter-empty" className="mb-4 flex flex-col items-start gap-2 px-1">
-                  <p className="text-muted">Нет покупок, подходящих под выбранные фильтры.</p>
+                  <p className="text-muted">Нет покупок, подходящих {underFilters}.</p>
                   <Button variant="secondary" onClick={resetFilters}>
-                    Сбросить фильтры
+                    {resetLabel}
                   </Button>
                 </div>
               ) : (
@@ -240,9 +253,9 @@ export default function ShoppingPage() {
               )}
               {shownViews.length === 0 ? (
                 <div data-testid="shopping-filter-empty" className="mb-4 flex flex-col items-start gap-2 px-1">
-                  <p className="text-muted">Нет позиций, подходящих под выбранные фильтры.</p>
+                  <p className="text-muted">Нет позиций, подходящих {underFilters}.</p>
                   <Button variant="secondary" onClick={resetFilters}>
-                    Сбросить фильтры
+                    {resetLabel}
                   </Button>
                 </div>
               ) : (
