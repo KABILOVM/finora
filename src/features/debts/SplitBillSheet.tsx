@@ -10,6 +10,7 @@ import { useToast } from '@/components/Toast';
 import { useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode } from '@/domain/types';
+import { groupUnderParents, pathLabel } from '@/features/categories/categoryTree';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { todayLocal } from '@/lib/dates';
 import { freshSplitIds, MAX_FRIENDS, saveSplitBill, splitEven, undoSplitBill, validateSplit, type SplitErrors, type SplitIds } from './splitBill';
@@ -30,6 +31,7 @@ export function SplitBillSheet({ base, onClose }: SplitBillSheetProps) {
   const settings = useSettings();
   const wallets = useWallets();
   const categories = useCategories('expense');
+  const categoryById = useMemo(() => new Map((categories ?? []).map((c) => [c.id, c] as const)), [categories]);
   const people = useLiveQuery(
     async () => [...new Set((await store.db.debts.toArray()).filter((d) => d.deletedAt === null && d.direction === 'lent').map((d) => d.counterparty))].sort((a, b) => a.localeCompare(b, 'ru')),
     [store],
@@ -135,9 +137,9 @@ export function SplitBillSheet({ base, onClose }: SplitBillSheetProps) {
         <Field id="split-category" label="Категория вашей доли">
           <select id="split-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputClasses(false)} min-h-[48px]`}>
             <option value="">Без категории</option>
-            {(categories ?? []).map((c) => (
+            {groupUnderParents(categories ?? []).map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {pathLabel(c, categoryById)}
               </option>
             ))}
           </select>

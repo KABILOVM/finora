@@ -33,6 +33,8 @@ export interface TxFilter {
   walletId?: UUID;
   /** UUID — только эта категория; null — только операции «без категории» (расходы/доходы); не задано — любые. */
   categoryId?: UUID | null;
+  /** Любая из этих категорий (родитель вместе с подкатегориями). Если задан, categoryId не нужен; пустой список — ничего не подходит. */
+  categoryIds?: readonly UUID[];
   kind?: TxKind;
   /** Подстрока заметки без учёта регистра. */
   search?: string;
@@ -62,6 +64,7 @@ export function filterTransactions<T extends TxLike>(txs: readonly T[], filter: 
       if (filter.categoryId === null && t.kind === 'transfer') return false;
       if (t.categoryId !== filter.categoryId) return false;
     }
+    if (filter.categoryIds !== undefined && (t.categoryId === null || !filter.categoryIds.includes(t.categoryId))) return false;
     if (needle !== '' && !t.note.toLocaleLowerCase('ru').includes(needle)) return false;
     return true;
   });

@@ -39,6 +39,15 @@ describe('filterTransactions', () => {
     expect(filterTransactions(rows, {})).toHaveLength(5);
   });
 
+  it('несколько категорий (родитель с подкатегориями): подходит любая из них; без категории и переводы не подходят; пустой список — ничего', () => {
+    expect(ids(filterTransactions(rows, { categoryIds: ['food', 'taxi'] }))).toEqual(['b', 'a']);
+    expect(ids(filterTransactions(rows, { categoryIds: ['food'] }))).toEqual(['a']);
+    expect(filterTransactions(rows, { categoryIds: [] })).toEqual([]);
+    expect(ids(filterTransactions(rows, { categoryIds: ['nope'] }))).toEqual([]);
+    // вместе с другими условиями — по «и»
+    expect(ids(filterTransactions(rows, { categoryIds: ['food', 'taxi'], walletId: 'w2' }))).toEqual(['b']);
+  });
+
   it('вид операции', () => {
     expect(ids(filterTransactions(rows, { kind: 'income' }))).toEqual(['c']);
     expect(ids(filterTransactions(rows, { kind: 'transfer' }))).toEqual(['d']);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { TxFilter } from '@/db';
+import { hasChildren, withDescendants, type TreeNode } from '@/features/categories/categoryTree';
 import { addMinor, minorToInputString, parseAmountToMinor } from '@/domain/money';
 import type { CurrencyCode, IsoDate, Minor, Transaction, TxKind } from '@/domain/types';
 import { monthKey } from '@/lib/dates';
@@ -154,11 +155,15 @@ export function periodRange(period: PeriodKind, month: string, today: IsoDate): 
 }
 
 /** Фильтры экрана → фильтр запроса к базе. search приходит уже «успокоенным» (после паузы в наборе). */
-export function toTxFilter(f: ListFilters, search: string, today: IsoDate): TxFilter {
+export function toTxFilter(f: ListFilters, search: string, today: IsoDate, categories: readonly TreeNode[] = []): TxFilter {
   const out: TxFilter = { ...periodRange(f.period, f.month, today) };
   if (f.walletId !== '') out.walletId = f.walletId;
   if (f.categoryId === NO_CATEGORY) out.categoryId = null;
-  else if (f.categoryId !== '') out.categoryId = f.categoryId;
+  else if (f.categoryId !== '') {
+    // родитель показывает и операции своих подкатегорий; у категории без подкатегорий — только её собственные
+    if (hasChildren(f.categoryId, categories)) out.categoryIds = [...withDescendants(f.categoryId, categories)];
+    else out.categoryId = f.categoryId;
+  }
   if (f.kind !== '') out.kind = f.kind;
   if (search.trim() !== '') out.search = search;
   return out;

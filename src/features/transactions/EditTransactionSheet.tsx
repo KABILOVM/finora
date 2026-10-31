@@ -25,6 +25,7 @@ import { endSentence } from './txDisplay';
 import { changedFields, formFromTx, GENERIC_SAVE_ERROR, isFormDirty } from './txForm';
 import { TxFormFields } from './TxFormFields';
 import { useCloseDuplicateEntry } from './useCloseDuplicateEntry';
+import { buildCategoryOptions } from '@/features/categories/categoryTree';
 import { useScrollToError } from './useScrollToError';
 import { useTxFormController } from './useTxFormController';
 
@@ -137,11 +138,14 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
   const kind = c.form.kind;
   const categoryOptions = useMemo(() => {
     if (kind === 'transfer') return [];
-    return rankCategories(
-      categories.filter((x) => x.archivedAt === null || x.id === orig.categoryId),
-      kind,
-      pop,
-    ).map((x) => ({ value: x.id, label: x.archivedAt === null ? x.name : `${x.name} (в архиве)`, icon: x.icon, color: x.color }));
+    return buildCategoryOptions(
+      rankCategories(
+        categories.filter((x) => x.archivedAt === null || x.id === orig.categoryId),
+        kind,
+        pop,
+      ),
+      (x) => (x.archivedAt === null ? x.name : `${x.name} (в архиве)`),
+    );
   }, [categories, kind, orig.categoryId, pop]);
   const selectableRanked = useMemo(() => rankWallets(selectable, pop), [selectable, pop]);
 

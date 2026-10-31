@@ -4,6 +4,7 @@ import { ChipPicker } from "@/components/ChipPicker";
 import { Field, inputClasses } from "@/components/Field";
 import { Sheet } from "@/components/Sheet";
 import type { Category, LocalRow, TxKind, Wallet } from "@/domain/types";
+import { groupUnderParents, pathLabel } from "@/features/categories/categoryTree";
 import { FieldGroup } from "./FieldGroup";
 import { rankByPopularity, usePopularity } from "./popularity";
 import {
@@ -45,21 +46,27 @@ export function FiltersSheet({
   const [draft, setDraft] = useState<SheetFilters>(initial);
   // Порядок — по популярности, посчитан один раз при открытии шита
   const pop = usePopularity();
-  const expense = pop
-    ? rankByPopularity(
-        categories.filter((c) => c.kind === "expense"),
-        pop.categories.expense,
-      )
-    : categories.filter((c) => c.kind === "expense");
-  const income = pop
-    ? rankByPopularity(
-        categories.filter((c) => c.kind === "income"),
-        pop.categories.income,
-      )
-    : categories.filter((c) => c.kind === "income");
+  // «Родитель, затем его подкатегории»; группа стоит там, где встретился её самый частый член
+  const expense = groupUnderParents(
+    pop
+      ? rankByPopularity(
+          categories.filter((c) => c.kind === "expense"),
+          pop.categories.expense,
+        )
+      : categories.filter((c) => c.kind === "expense"),
+  );
+  const income = groupUnderParents(
+    pop
+      ? rankByPopularity(
+          categories.filter((c) => c.kind === "income"),
+          pop.categories.income,
+        )
+      : categories.filter((c) => c.kind === "income"),
+  );
+  const byId = new Map(categories.map((c) => [c.id, c] as const));
   const walletList = pop ? rankByPopularity(wallets, pop.wallets) : wallets;
   const nameOf = (c: LocalRow<Category>) =>
-    c.archivedAt === null ? c.name : `${c.name} (в архиве)`;
+    c.archivedAt === null ? pathLabel(c, byId) : `${pathLabel(c, byId)} (в архиве)`;
   const transfers = draft.kind === "transfer";
 
   const onKind = (value: string) => {

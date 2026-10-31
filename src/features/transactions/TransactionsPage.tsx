@@ -42,7 +42,7 @@ export default function TransactionsPage() {
   const { filters, search, change, showAll } = useListFilters(today);
   const [limit, setLimit] = useState(PAGE_SIZE);
   // Поиск (заметка, категория, кошелёк, сумма) считаем здесь, а не в запросе к базе: названия лежат в справочниках, не в операции.
-  const filter = useMemo(() => toTxFilter(filters, '', today), [filters, today]);
+  const filter = useMemo(() => toTxFilter(filters, '', today, categories ?? []), [filters, today, categories]);
   const found = useTransactions(filter);
   const anyRow = useHasTransactions();
   const rows = useMemo(() => {

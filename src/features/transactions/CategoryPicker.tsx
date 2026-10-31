@@ -79,7 +79,10 @@ export function CategoryPicker({ options, value, onChange, error, kind, expanded
             className={chipClass(selected)}
           >
             {opt.icon && <Glyph value={opt.icon} color={opt.color} size={26} />}
-            <span className="whitespace-nowrap">{opt.label}</span>
+            <span className="whitespace-nowrap">
+              {opt.sub && <span className="font-normal text-muted">{opt.sub} › </span>}
+              {opt.label}
+            </span>
           </button>
         );
       })}

@@ -11,6 +11,7 @@ import type { CurrencyCode, IsoDate, Minor } from '@/domain/types';
 import { DayField } from '@/features/debts/DebtDates';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
 import { rankCategories, rankWallets, usePopularity } from '@/features/transactions/popularity';
+import { buildCategoryOptions } from '@/features/categories/categoryTree';
 import { NOTE_MAX } from '@/features/transactions/txForm';
 import { priceText } from './shoppingText';
 
@@ -111,7 +112,7 @@ export function PurchaseSheet({ totalMinor, count, currency, defaultCategoryId, 
         </FieldGroup>
 
         <FieldGroup label="Категория">
-          <ChipPicker ariaLabel="Категория" value={categoryId} onChange={setCategoryPick} options={categoryChips.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }))} />
+          <ChipPicker ariaLabel="Категория" value={categoryId} onChange={setCategoryPick} options={buildCategoryOptions(categoryChips)} />
         </FieldGroup>
 
         <DayField label="Дата покупки" value={date} onChange={setDate} />

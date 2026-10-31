@@ -139,3 +139,155 @@ describe('экран «Категории»', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });
+
+describe('подкатегории', () => {
+  const food = async (td: TestDeps) => {
+    const c = (await store(td).db.categories.toArray()).find((x) => x.name === 'Еда');
+    if (!c) throw new Error('нет «Еды»');
+    return c;
+  };
+  const addChild = async (td: TestDeps, name: string, parentId: string) => {
+    const parent = await store(td).db.categories.get(parentId);
+    return write(() => store(td).categories.create({ name, kind: 'expense', color: parent?.color ?? '#16a34a', icon: 'i:water', parentId }));
+  };
+  const rowTexts = () => [...document.querySelectorAll('ul > li')].map((li) => li.textContent ?? '');
+
+  it('«Входит в…»: подкатегория создаётся под выбранным родителем, цвет берётся от родителя, в списке она сразу под ним и с отступом', async () => {
+    const td = await openPage();
+    const parent = await food(td);
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await findByRole('dialog', { name: 'Новая категория расходов' });
+    await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Кафе');
+    await user.click(screen.getByRole('button', { name: /^Входит в: / }));
+    await user.click(screen.getByRole('option', { name: 'Еда' }));
+    // название окна от выбора родителя не меняется
+    expect(screen.getByRole('dialog', { name: 'Новая категория расходов' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await eventually(async () => {
+      const created = (await store(td).db.categories.toArray()).find((c) => c.name === 'Кафе');
+      expect(created).toMatchObject({ parentId: parent.id, kind: 'expense', color: parent.color });
+    });
+    await waitFor(() => expect(rowTexts()).toContain('Кафе'));
+    const texts = rowTexts();
+    expect(texts.indexOf('Кафе')).toBe(texts.indexOf('Еда') + 1);
+    expect(screen.getByText('Кафе').closest('button')?.className).toContain('pl-10');
+    expect(screen.getByText('Еда').closest('button')?.className).not.toContain('pl-10');
+  });
+
+  it('свой цвет не затирается выбором родителя', async () => {
+    const td = await openPage();
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await findByRole('dialog');
+    await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Кафе');
+    await user.click(screen.getByRole('button', { name: 'Розовый' }));
+    await user.click(screen.getByRole('button', { name: /^Входит в: / }));
+    await user.click(screen.getByRole('option', { name: 'Еда' }));
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await eventually(async () => {
+      expect((await store(td).db.categories.toArray()).find((c) => c.name === 'Кафе')?.color).toBe('#db2777');
+    });
+  });
+
+  it('«Добавить подкатегорию» в окне родителя: новая подкатегория уже «входит в» него', async () => {
+    const td = await openPage();
+    const parent = await food(td);
+    await user.click(screen.getByText('Еда'));
+    await findByRole('dialog', { name: 'Правка категории' });
+    await user.click(screen.getByRole('button', { name: 'Добавить подкатегорию' }));
+    await findByRole('dialog', { name: 'Новая подкатегория' });
+    expect(screen.getByRole('button', { name: 'Входит в: Еда' })).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: 'Название' }), 'Обеды');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await eventually(async () => {
+      expect((await store(td).db.categories.toArray()).find((c) => c.name === 'Обеды')?.parentId).toBe(parent.id);
+    });
+  });
+
+  it('у подкатегории нет кнопки «Добавить подкатегорию» (один уровень); окно называется «Правка подкатегории»', async () => {
+    const td = await openPage();
+    await addChild(td, 'Обеды', (await food(td)).id);
+    await waitFor(() => expect(screen.getByText('Обеды')).toBeInTheDocument());
+    await user.click(screen.getByText('Обеды'));
+    await findByRole('dialog', { name: 'Правка подкатегории' });
+    expect(screen.queryByRole('button', { name: 'Добавить подкатегорию' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Входит в: Еда' })).toBeInTheDocument();
+  });
+
+  it('категория с подкатегориями сама ни в какую не входит: поля «Входит в» нет, есть пояснение', async () => {
+    const td = await openPage();
+    await addChild(td, 'Обеды', (await food(td)).id);
+    await waitFor(() => expect(screen.getByText('Обеды')).toBeInTheDocument());
+    await user.click(screen.getByText('Еда'));
+    await findByRole('dialog', { name: 'Правка категории' });
+    expect(screen.queryByRole('button', { name: /^Входит в: / })).toBeNull();
+    expect(screen.getByText(/есть подкатегории, поэтому она не может входить в другую/)).toBeInTheDocument();
+  });
+
+  it('в «Входит в…» только верхние категории: подкатегории и сама категория не предлагаются', async () => {
+    const td = await openPage();
+    await addChild(td, 'Обеды', (await food(td)).id);
+    await waitFor(() => expect(screen.getByText('Обеды')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: /^Входит в: / }));
+    const names = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names).toContain('Еда');
+    expect(names).not.toContain('Обеды');
+    expect(names[0]).toContain('Нет, отдельная категория');
+  });
+
+  it('подкатегорию можно вынести на верхний уровень', async () => {
+    const td = await openPage();
+    const child = await addChild(td, 'Обеды', (await food(td)).id);
+    await waitFor(() => expect(screen.getByText('Обеды')).toBeInTheDocument());
+    await user.click(screen.getByText('Обеды'));
+    await findByRole('dialog', { name: 'Правка подкатегории' });
+    await user.click(screen.getByRole('button', { name: 'Входит в: Еда' }));
+    await user.click(screen.getByRole('option', { name: 'Нет, отдельная категория' }));
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await eventually(async () => {
+      expect((await store(td).db.categories.get(child.id))?.parentId).toBeNull();
+    });
+    await waitFor(() => expect(screen.getByText('Обеды').closest('button')?.className).not.toContain('pl-10'));
+  });
+
+  it('архив родителя уводит и подкатегории (подтверждение называет их); возвращаются по одной, подкатегория без родителя в списке — обычная', async () => {
+    const td = await openPage();
+    const parent = await food(td);
+    await addChild(td, 'Обеды', parent.id);
+    await addChild(td, 'Кофе', parent.id);
+    await waitFor(() => expect(screen.getByText('Кофе')).toBeInTheDocument());
+    await user.click(screen.getByText('Еда'));
+    await findByRole('dialog', { name: 'Правка категории' });
+    await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
+    const ask = await findByRole('alertdialog');
+    expect(ask).toHaveTextContent('Вместе с ней в архив уйдут подкатегории (2): Обеды, Кофе');
+    await user.click(screen.getByRole('button', { name: 'В архив' }));
+    await waitFor(() => expect(screen.queryByText('Обеды')).toBeNull());
+    await eventually(async () => {
+      const rows = await store(td).db.categories.toArray();
+      expect(rows.filter((c) => ['Еда', 'Обеды', 'Кофе'].includes(c.name)).every((c) => c.archivedAt !== null)).toBe(true);
+    });
+
+    await user.click(screen.getByRole('button', { name: /Архив · 3 категории/ }));
+    // в архиве у подкатегории подпись с названием родителя
+    expect(screen.getByText('Обеды').closest('li')).toHaveTextContent('Еда');
+    await user.click(screen.getByRole('button', { name: 'Вернуть: Обеды' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Архив · 2 категории/ })).toBeInTheDocument());
+    // родитель ещё в архиве: «Обеды» в основном списке — обычная категория, не теряется и без отступа
+    const back = (await waitFor(() => screen.getAllByText('Обеды'))).map((el) => el.closest('button')).find((b) => b !== null);
+    expect(back?.className).not.toContain('pl-10');
+  });
+
+  it('архив категории без подкатегорий — прежний текст подтверждения', async () => {
+    await openPage();
+    await user.click(screen.getByText('Еда'));
+    await findByRole('dialog', { name: 'Правка категории' });
+    await user.click(screen.getByRole('button', { name: 'Убрать в архив' }));
+    const ask = await findByRole('alertdialog');
+    expect(ask).toHaveTextContent('Категория пропадёт из выбора');
+    expect(ask).not.toHaveTextContent('подкатегории');
+  });
+});

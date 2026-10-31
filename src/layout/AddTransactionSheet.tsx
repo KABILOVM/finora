@@ -37,6 +37,7 @@ import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, MIN_DATE,
 import type { CategoryState } from '@/features/transactions/ContextRow';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
+import { buildCategoryOptions } from '@/features/categories/categoryTree';
 import { useCloseDuplicateEntry } from '@/features/transactions/useCloseDuplicateEntry';
 import { useScrollToError } from '@/features/transactions/useScrollToError';
 import { useTxFormController } from '@/features/transactions/useTxFormController';
@@ -189,7 +190,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const kind = c.form.kind;
   const categoryOptions = useMemo(() => {
     if (kind === 'transfer') return [];
-    return rankCategories(categories, kind, pop).map((x) => ({ value: x.id, label: x.name, icon: x.icon, color: x.color }));
+    return buildCategoryOptions(rankCategories(categories, kind, pop));
   }, [categories, kind, pop]);
   const walletsRanked = useMemo(() => rankWallets(wallets, pop), [wallets, pop]);
 
