@@ -9,6 +9,7 @@ const MORE: ReadonlyArray<readonly [string, string, string]> = [
   ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
   ['Поездки', 'Поездки', '#/trips'],
   ['Покупки', 'Покупки', '#/shopping'],
+  ['Продукты', 'Продукты', '#/products'],
   ['Курсы валют', 'Курсы валют', '#/rates'],
   ['Погода', 'Погода', '#/weather'],
   ['Категории', 'Категории', '#/settings/categories'],

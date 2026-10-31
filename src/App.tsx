@@ -43,6 +43,7 @@ const BudgetsPage = lazy(() => import('@/features/budgets/BudgetsPage'));
 const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'));
 const RecurringPage = lazy(() => import('@/features/recurring/RecurringPage'));
 const ShoppingPage = lazy(() => import('@/features/shopping/ShoppingPage'));
+const ProductsPage = lazy(() => import('@/features/products/ProductsPage'));
 const DebtsPage = lazy(() => import('@/features/debts/DebtsPage'));
 const DebtDetailPage = lazy(() => import('@/features/debts/DebtDetailPage'));
 const PersonDebtsPage = lazy(() => import('@/features/debts/PersonDebtsPage'));
@@ -140,6 +141,7 @@ export function AppRoutes() {
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
             <Route path="/shopping" element={<ShoppingPage />} />
+            <Route path="/products" element={<ProductsPage />} />
             <Route path="/debts" element={<DebtsPage />} />
             <Route path="/debts/people/:key" element={<PersonDebtsPage />} />
             <Route path="/debts/:id" element={<DebtDetailPage />} />
