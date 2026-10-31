@@ -53,10 +53,10 @@ export function RecentOps({ wallets, categories, today, base }: RecentOpsProps) 
     <section aria-labelledby="home-recent">
       <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
         <h2 id="home-recent" className="text-base font-semibold text-muted">
-          Операции за сегодня и вчера
+          Последние операции
         </h2>
         {anyRow && (
-          <Link to="/transactions" className="press min-h-[44px] content-center text-base font-semibold text-brand">
+          <Link to="/transactions" className="press min-h-[44px] shrink-0 content-center whitespace-nowrap text-base font-semibold text-brand">
             Все операции
           </Link>
         )}
