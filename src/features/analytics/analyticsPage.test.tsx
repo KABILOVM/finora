@@ -614,3 +614,123 @@ describe('экран «Аналитика»: график по месяцам и
     for (let i = 0; i < order.length - 1; i++) expect(follows(order[i]!, order[i + 1]!), `блок ${i} раньше блока ${i + 1}`).toBe(true);
   });
 });
+
+describe('экран «Аналитика»: куда уходят деньги', () => {
+  /** Данные октября 2026: «такси» трижды (одно с меткой), «базар» дважды, «кино» один раз; кошельки «Наличные» и «Карта». */
+  async function seedWhere(s: Store) {
+    const wallets = await s.db.wallets.toArray();
+    const cash = wallets.find((w) => w.name === 'Наличные')!.id;
+    const card = (await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' })).id;
+    const food = (await s.db.categories.toArray()).find((c) => c.name === 'Еда' && c.kind === 'expense')!.id;
+    const add = (walletId: string, amountMinor: number, note: string, occurredOn = '2026-10-12') =>
+      s.transactions.create({ kind: 'expense', walletId, amountMinor, categoryId: food, occurredOn, note });
+    await add(cash, 3000, 'Такси');
+    await add(card, 2000, 'такси');
+    await add(card, 5000, 'такси #Самарканд', '2026-10-13');
+    await add(cash, 4000, 'базар');
+    await add(cash, 6000, 'Базар');
+    await add(card, 9000, 'кино #Самарканд', '2026-10-14');
+    await add(cash, 1000, 'кофе #работа', '2026-10-14');
+  }
+  const section = () => document.getElementById('analytics-where')?.parentElement ?? null;
+  const rows = (name: string) => Array.from(section()?.querySelectorAll(`ul[aria-label="${name}"] > li`) ?? []).map((li) => text(li));
+  const tab = (name: string) => screen.getByRole('radio', { name });
+
+  it('«Заметки» — первая вкладка: одинаковые заметки вместе (без регистра и меток), суммы, число операций и доля', async () => {
+    await openPage({ setup: seedWhere });
+    expect(tab('Заметки')).toBeChecked();
+    const list = rows('Расходы: заметки');
+    // базар 40+60 = 100 (2), такси 30+20+50 = 100 (3); при равных суммах — у кого больше операций; «кино» одно — не в списке
+    expect(list).toHaveLength(2);
+    expect(list[0]).toContain('такси');
+    expect(list[0]).toContain('3 операции');
+    expect(list[0]).toContain(fmt(10_000));
+    expect(list[1]).toContain('2 операции');
+    expect(list[1]).toContain(fmt(10_000));
+    expect(text(section())).not.toContain('кино');
+    // расходы месяца: 100 + 100 + 90 + 10 = 300 → по 33% (100 из 300)
+    expect(text(tid('where-share-note'))).toBe('33%');
+  });
+
+  it('«Кошельки»: сколько ушло с каждого; строка — ссылка на расходы кошелька за месяц', async () => {
+    const td = await openPage({ setup: seedWhere });
+    await user.click(tab('Кошельки'));
+    const list = rows('Расходы: кошельки');
+    // Наличные 30+40+60+10 = 140; Карта 20+50+90 = 160
+    expect(list[0]).toContain('Карта');
+    expect(list[0]).toContain(fmt(16_000));
+    expect(list[1]).toContain('Наличные');
+    expect(list[1]).toContain(fmt(14_000));
+    const card = (await td.stores[0]!.db.wallets.toArray()).find((w) => w.name === 'Карта')!.id;
+    const link = section()?.querySelector<HTMLAnchorElement>('ul[aria-label="Расходы: кошельки"] a');
+    expect(link?.getAttribute('href')).toBe(`/transactions?month=2026-10&wallet=${card}&kind=expense`);
+    // доли — от всех расходов месяца (300): 160 → 53%
+    expect(text(tid('where-share-wallet'))).toBe('53%');
+  });
+
+  it('нажатие на кошелёк открывает «Операции» с его расходами за месяц', async () => {
+    await openPage({ setup: seedWhere });
+    await user.click(tab('Кошельки'));
+    await user.click(section()!.querySelector('ul[aria-label="Расходы: кошельки"] a')!);
+    await waitFor(() => expect(currentPath()).toBe('/transactions'));
+  });
+
+  it('«Метки»: траты разных заметок под одной меткой; пояснение про пересечение меток', async () => {
+    await openPage({ setup: seedWhere });
+    await user.click(tab('Метки'));
+    const list = rows('Расходы: метки');
+    expect(list).toHaveLength(2);
+    expect(list[0]).toContain('#Самарканд');
+    expect(list[0]).toContain('2 операции');
+    expect(list[0]).toContain(fmt(14_000)); // такси 50 + кино 90
+    expect(list[1]).toContain('#работа');
+    expect(text(section())).toContain('Метки могут пересекаться');
+  });
+
+  it('одна метка — без пояснения про пересечение', async () => {
+    await openPage({
+      setup: async (s) => {
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 3000, occurredOn: '2026-10-12', note: 'такси #Самарканд' });
+      },
+    });
+    await user.click(tab('Метки'));
+    expect(rows('Расходы: метки')).toHaveLength(1);
+    expect(text(section())).not.toContain('Метки могут пересекаться');
+  });
+
+  it('нет повторяющихся заметок — первой открывается «Кошельки»; на «Заметках» подсказка, что нужно для групп', async () => {
+    await openPage(); // seedHistory: все заметки разные
+    expect(tab('Кошельки')).toBeChecked();
+    expect(rows('Расходы: кошельки').length).toBeGreaterThan(0);
+    await user.click(tab('Заметки'));
+    expect(text(tid('where-empty'))).toContain('Здесь появятся повторяющиеся траты');
+    await user.click(tab('Метки'));
+    expect(text(tid('where-empty'))).toContain('Меток пока нет');
+  });
+
+  it('выбранная вкладка остаётся, а «Показать ещё» раскрывает остальное: больше восьми строк', async () => {
+    await openPage({
+      setup: async (s) => {
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        for (let i = 1; i <= 10; i++) {
+          for (let k = 0; k < 2; k++) await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 100 * i, occurredOn: '2026-10-12', note: `товар ${i}` });
+        }
+      },
+    });
+    expect(rows('Расходы: заметки')).toHaveLength(8);
+    const more = screen.getByRole('button', { name: 'Показать ещё 2' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    await user.click(more);
+    expect(rows('Расходы: заметки')).toHaveLength(10);
+    await user.click(screen.getByRole('button', { name: 'Свернуть' }));
+    expect(rows('Расходы: заметки')).toHaveLength(8);
+  });
+
+  it('другой месяц — его группы; в месяце без расходов блока нет', async () => {
+    await openPage({ setup: seedWhere });
+    expect(section()).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
+    await waitFor(() => expect(section()).toBeNull()); // в сентябре у этих данных расходов нет
+  });
+});

@@ -28,6 +28,7 @@ import { Section } from './Section';
 import { TopExpensesList } from './TopExpensesList';
 import { isCompareReady, MIN_COMPARE_DAYS, previousPhrase } from './analytics';
 import { useAnalyticsData, type AnalyticsData } from './useAnalyticsData';
+import { WhereMoneyGoes } from './WhereMoneyGoes';
 import { useNetWorth } from './useNetWorth';
 
 /**
@@ -278,6 +279,11 @@ export default function AnalyticsPage() {
               />
             )}
           </Section>
+          {data.where.wallet.length > 0 && (
+            <Section id="analytics-where" title="Куда уходят деньги">
+              <WhereMoneyGoes key={month} where={data.where} wallets={data.wallets} base={data.base} month={month} />
+            </Section>
+          )}
           <Section id="analytics-top" title="Самые крупные расходы">
             {filterNote}
             {data.top.length === 0 ? (
