@@ -9,6 +9,7 @@ import { Segmented } from '@/components/Segmented';
 import { draftToMinor } from '@/components/amountText';
 import type { ChipOption } from '@/components/ChipPicker';
 import type { DictCategory } from '@/domain/expensesAi';
+import { normName, searchCatalog } from '@/domain/products/catalog';
 import type { ReceiptLineDraft } from '@/features/receipt/receiptAi';
 import { itemTitle, NAME_MAX, parseQty, UNIT_LABEL } from '@/domain/shopping';
 import type { CurrencyCode, ShoppingUnit } from '@/domain/types';
@@ -31,13 +32,15 @@ export interface ReceiptLinesEditorProps {
   /** Какую строку раскрыть сразу (только что добавленную). */
   openRid?: number | null;
   onOpenChange?: (rid: number | null) => void;
+  /** Название — не из каталога и не из ваших покупок: строка помечается «Новый продукт». Нет — пометок нет. */
+  isNewProduct?: (name: string) => boolean;
 }
 
 /**
  * Позиции чека: строка — значок категории, название, количество и категория, справа цена. Нажатие раскрывает правку (название,
  * количество и единица шт/кг/л, цена за всю позицию, категория значками, «Новая категория»); крестик убирает позицию.
  */
-export function ReceiptLinesEditor({ lines, onChange, categories, currency, errors, openRid = null, onOpenChange }: ReceiptLinesEditorProps) {
+export function ReceiptLinesEditor({ lines, onChange, categories, currency, errors, openRid = null, onOpenChange, isNewProduct }: ReceiptLinesEditorProps) {
   const [openState, setOpenState] = useState<number | null>(null);
   const open = onOpenChange ? openRid : openState;
   const setOpen = onOpenChange ?? setOpenState;
@@ -54,6 +57,9 @@ export function ReceiptLinesEditor({ lines, onChange, categories, currency, erro
         const fresh = !category && l.newCategory ? l.newCategory : null;
         const label = l.name.trim() || 'Без названия';
         const error = errors?.get(l.rid) ?? null;
+        const isNew = l.name.trim() !== '' && isNewProduct?.(l.name) === true;
+        // подсказки каталога под названием: пока набранное не совпало с продуктом целиком
+        const hints = isOpen && normName(l.name).length >= 2 ? searchCatalog(l.name, { limit: 4 }).filter((p) => normName(p.name) !== normName(l.name)) : [];
         return (
           <li key={l.rid} data-testid="receipt-line" className="py-0.5">
             <div className="flex items-center gap-1">
@@ -67,7 +73,17 @@ export function ReceiptLinesEditor({ lines, onChange, categories, currency, erro
                 <Glyph value={category?.icon ?? (fresh ? suggestGlyph(fresh) : TAG)} color={category?.color} size={36} className={fresh ? 'opacity-80' : undefined} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{qty !== null && !(l.unit === 'pcs' && qty === 1000) ? itemTitle(label, qty, l.unit) : label}</span>
-                  <span className="block truncate text-xs text-muted">{category?.name ?? (fresh ? `${fresh} · новая` : 'Без категории')}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {category?.name ?? (fresh ? `${fresh} · новая` : 'Без категории')}
+                    {isNew && (
+                      <>
+                        {' · '}
+                        <span className="font-semibold text-brand" data-testid="new-product">
+                          Новый продукт
+                        </span>
+                      </>
+                    )}
+                  </span>
                   {error && <span className="block text-xs font-semibold text-danger">{error}</span>}
                 </span>
                 <span className="shrink-0 text-right font-semibold">
@@ -80,6 +96,20 @@ export function ReceiptLinesEditor({ lines, onChange, categories, currency, erro
             {isOpen && (
               <div className="flex flex-col gap-2 px-2 pb-3 pt-1">
                 <TextInput label="Название" value={l.name} maxLength={NAME_MAX} onChange={(e) => patch(l.rid, { name: e.target.value })} />
+                {hints.length > 0 && (
+                  <div role="group" aria-label="Из каталога" className="flex flex-wrap gap-1.5">
+                    {hints.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => patch(l.rid, { name: p.name })}
+                        className="min-h-[44px] rounded-full border border-border bg-surface px-3 text-sm font-medium active:bg-border/50"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <TextInput label="Количество" inputMode="decimal" value={l.qtyText} onChange={(e) => patch(l.rid, { qtyText: e.target.value.replace('.', ',') })} />
                   <div className="flex flex-col gap-1.5">

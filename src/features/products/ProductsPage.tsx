@@ -8,6 +8,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { CATALOG, PRODUCT_GROUPS, normName, searchCatalog, type ProductGroupId } from '@/domain/products/catalog';
 import { ownProducts, statsForProduct, type PriceBook, type ProductStats } from '@/domain/products/stats';
 import type { CurrencyCode } from '@/domain/types';
+import { useToast } from '@/components/Toast';
+import { useStore, ValidationError } from '@/db';
 import { pluralRu } from '@/lib/plural';
 import { priceLine } from './productText';
 import { ProductSheet, viewOfCatalog, type ProductView } from './ProductSheet';
@@ -44,12 +46,26 @@ function catalogViews(book: PriceBook, group?: ProductGroupId): ProductView[] {
  * покупок, которых нет в каталоге. Цен на старте нет: они появляются из покупок (список «Покупки», чек).
  */
 export default function ProductsPage() {
+  const store = useStore();
+  const toast = useToast();
   const data = useProductsData();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [open, setOpen] = useState<ProductView | null>(null);
 
   const own = useMemo(() => (data ? ownProducts(data.book) : []), [data]);
+
+  /** «В список покупок»: 1 в единице продукта (в какой его обычно покупают). */
+  const addToList = async (v: ProductView) => {
+    try {
+      await store.shopping.add({ name: v.name, qtyMilli: 1000, unit: v.unit });
+      toast.success(`В списке покупок: ${v.name}`);
+      setOpen(null);
+    } catch (e) {
+      if (!(e instanceof ValidationError)) console.error('Не удалось добавить в список покупок:', e);
+      toast.error(e instanceof ValidationError ? e.message : 'Не удалось добавить в список покупок. Попробуйте ещё раз.');
+    }
+  };
 
   if (data === undefined) {
     return (
@@ -149,7 +165,7 @@ export default function ProductsPage() {
         {!searching && <ChipPicker ariaLabel="Раздел" layout="scroll" options={options} value={filter} onChange={(v) => setFilter(v as Filter)} />}
       </div>
       {body}
-      {open && <ProductSheet product={open} items={items} currency={base} book={book} onClose={() => setOpen(null)} />}
+      {open && <ProductSheet product={open} items={items} currency={base} book={book} onAddToList={() => addToList(open)} onClose={() => setOpen(null)} />}
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATALOG, PRODUCT_GROUPS, defaultUnitFor, normName, productById, productByName, searchCatalog } from './catalog';
+import { CATALOG, PRODUCT_GROUPS, defaultUnitFor, groceryCategoryFor, isFoodProduct, isStapleProduct, matchProduct, normName, productById, productByName, searchCatalog } from './catalog';
 import { RAW_PRODUCTS } from './data';
 
 describe('встроенный каталог продуктов: данные', () => {
@@ -129,5 +129,66 @@ describe('поиск по id и названию', () => {
     expect(defaultUnitFor('молоко')).toBe('l');
     expect(defaultUnitFor('картошка')).toBe('kg');
     expect(defaultUnitFor('что-то своё')).toBeNull();
+  });
+});
+
+describe('matchProduct: уверенное сопоставление названий из речи и чеков', () => {
+  const name = (q: string) => matchProduct(q)?.name ?? null;
+
+  it('падежи и числа: «картошки», «помидоров», «яблок», «муки», «сыра», «хлеба», «морковку», «воды»', () => {
+    expect(name('картошки')).toBe('Картофель');
+    expect(name('помидоров')).toBe('Помидоры');
+    expect(name('яблок')).toBe('Яблоки');
+    expect(name('муки')).toBe('Мука');
+    expect(name('сыра')).toBe('Сыр');
+    expect(name('хлеба')).toBe('Хлеб');
+    expect(name('морковку')).toBe('Морковь');
+    expect(name('воды')).toBe('Вода питьевая');
+    expect(name('масла сливочного')).toBe('Масло сливочное');
+  });
+
+  it('числа, проценты и граммовки на чеке названия не меняют: «Молоко 3,2% 1л», «Яйца С1 10шт»', () => {
+    expect(name('Молоко 3,2% 1л')).toBe('Молоко');
+    expect(name('ЯЙЦА С1 10ШТ')).toBe('Яйца');
+  });
+
+  it('неоднозначное и неизвестное — null: «масло», «печенья» (печенье или печень), «кар», «Сыр Российский Брест», своё название', () => {
+    for (const q of ['масло', 'печенья', 'кар', 'Сыр Российский Брест', 'Курт сушёный', '', '   ', '123', '5%']) expect(matchProduct(q), q).toBeNull();
+  });
+
+  it('один и тот же продукт под названием и синонимом: «картошка» и «Картофель»', () => {
+    expect(matchProduct('картошка')?.id).toBe(matchProduct('Картофель')?.id);
+  });
+
+  it('у каждого продукта находится он сам по своему названию и по каждому синониму (основы не склеивают разные продукты)', () => {
+    for (const p of CATALOG) for (const k of p.keys) expect(matchProduct(k)?.id, `${k} → ${p.id}`).toBe(p.id);
+  });
+});
+
+describe('isFoodProduct и groceryCategoryFor: «автораспределение» по продуктам', () => {
+  const cats = [
+    { id: 'g', name: 'Продукты' },
+    { id: 't', name: 'Транспорт' },
+  ];
+  it('продукт питания без категории → «Продукты» человека; «Дом и гигиена», неизвестное и нет такой категории → null', () => {
+    expect(isFoodProduct(productByName('Хлеб')!)).toBe(true);
+    expect(isFoodProduct(productByName('Мыло')!)).toBe(false);
+    expect(groceryCategoryFor('хлеба', cats)).toBe('g');
+    expect(groceryCategoryFor('Молоко 3,2%', cats)).toBe('g');
+    expect(groceryCategoryFor('мыло', cats)).toBeNull();
+    expect(groceryCategoryFor('такси', cats)).toBeNull();
+    expect(groceryCategoryFor('хлеб', [{ id: 't', name: 'Транспорт' }])).toBeNull();
+    expect(groceryCategoryFor('хлеб', [{ id: 'g', name: ' ПРОДУКТЫ ' }])).toBe('g');
+  });
+
+  it('в речи — только бесспорные продукты: «кофе», «чай», «мороженое» чаще кафе; на чеке из магазина они тоже «Продукты»', () => {
+    expect(isStapleProduct(productByName('Хлеб')!)).toBe(true);
+    expect(isStapleProduct(productByName('Кофе')!)).toBe(false);
+    expect(isStapleProduct(productByName('Конфеты')!)).toBe(false);
+    expect(groceryCategoryFor('кофе', cats, { staplesOnly: true })).toBeNull();
+    expect(groceryCategoryFor('конфеты', cats, { staplesOnly: true })).toBeNull();
+    expect(groceryCategoryFor('картошки', cats, { staplesOnly: true })).toBe('g');
+    expect(groceryCategoryFor('кофе', cats)).toBe('g');
+    expect(groceryCategoryFor('конфеты', cats)).toBe('g');
   });
 });

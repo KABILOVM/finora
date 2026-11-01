@@ -108,6 +108,19 @@ describe('экран «Продукты»', () => {
     await waitFor(() => expect(row('Молоко')).toContain('Цены пока нет'));
   });
 
+  it('«В список покупок» в карточке: продукт попадает в «Покупки» (1 в его единице), карточка закрывается', async () => {
+    const td = await open();
+    await waitFor(() => expect(screen.getByText('Молоко')).toBeInTheDocument());
+    await user.click(screen.getByText('Молоко'));
+    await findByRole('dialog', { name: 'Молоко' });
+    await user.click(screen.getByRole('button', { name: 'В список покупок' }));
+    await waitFor(async () => {
+      const items = (await td.stores[0]!.db.shopping_items.toArray()).filter((i) => i.deletedAt === null);
+      expect(items.map((i) => [i.name, i.qtyMilli, i.unit])).toEqual([['Молоко', 1000, 'l']]);
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('карточка продукта без покупок объясняет, откуда возьмётся цена', async () => {
     await open();
     await waitFor(() => expect(screen.getByText('Картофель')).toBeInTheDocument());

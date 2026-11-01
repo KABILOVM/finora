@@ -294,3 +294,82 @@ describe('подкатегории', () => {
     expect(ask).not.toHaveTextContent('подкатегории');
   });
 });
+
+describe('экран «Категории»: поиск', () => {
+  const search = () => screen.getByRole('textbox', { name: 'Поиск по категориям' }) as HTMLInputElement;
+  const visible = (name: string) => screen.queryByText(name) !== null;
+
+  it('поле поиска есть, когда категорий много; находит по части названия без учёта регистра', async () => {
+    await openPage();
+    expect(search()).toBeInTheDocument();
+    await user.type(search(), 'ПРО');
+    await waitFor(() => expect(visible('Еда')).toBe(false));
+    expect(visible('Продукты')).toBe(true);
+    expect(visible('Прочее')).toBe(true);
+    expect(visible('Транспорт')).toBe(false);
+  });
+
+  it('«Очистить поиск» (крестик) возвращает все категории', async () => {
+    await openPage();
+    await user.type(search(), 'еда');
+    await waitFor(() => expect(visible('Транспорт')).toBe(false));
+    await user.click(screen.getByRole('button', { name: 'Очистить поиск' }));
+    await waitFor(() => expect(visible('Транспорт')).toBe(true));
+    expect(search().value).toBe('');
+  });
+
+  it('ничего не нашлось: «Ничего не найдено» и кнопка «Очистить поиск»', async () => {
+    await openPage();
+    await user.type(search(), 'космос');
+    await waitFor(() => expect(screen.getByText('Ничего не найдено')).toBeInTheDocument());
+    expect(visible('Еда')).toBe(false);
+    // кнопка в самом экране пустого результата (крестик в поле — отдельная кнопка с тем же именем)
+    const empty = screen.getByText('Ничего не найдено').closest('div')?.parentElement as HTMLElement;
+    await user.click(Array.from(empty.querySelectorAll('button')).find((b) => b.textContent === 'Очистить поиск') as HTMLElement);
+    await waitFor(() => expect(visible('Еда')).toBe(true));
+  });
+
+  it('подкатегория находится вместе с родителем; родитель — со всеми подкатегориями', async () => {
+    const td = await openPage();
+    const housing = (await store(td).db.categories.toArray()).find((c) => c.name === 'Жильё' && c.kind === 'expense');
+    await write(() => store(td).categories.create({ name: 'Вода', kind: 'expense', icon: 'i:water', color: '#0891b2', parentId: housing?.id ?? null }));
+    await write(() => store(td).categories.create({ name: 'Свет', kind: 'expense', icon: 'i:bolt', color: '#ca8a04', parentId: housing?.id ?? null }));
+    await waitFor(() => expect(visible('Вода')).toBe(true));
+
+    await user.type(search(), 'вода');
+    await waitFor(() => expect(visible('Еда')).toBe(false));
+    expect(visible('Вода')).toBe(true);
+    expect(visible('Жильё')).toBe(true); // родитель — для контекста
+    expect(visible('Свет')).toBe(false);
+
+    await user.clear(search());
+    await user.type(search(), 'жильё');
+    await waitFor(() => expect(visible('Свет')).toBe(true));
+    expect(visible('Вода')).toBe(true);
+    expect(visible('Еда')).toBe(false);
+  });
+
+  it('смена вкладки сбрасывает поиск; на «Доходах» поле скрыто, пока категорий меньше шести', async () => {
+    await openPage();
+    await user.type(search(), 'еда');
+    await waitFor(() => expect(visible('Транспорт')).toBe(false));
+    await user.click(screen.getByRole('radio', { name: 'Доходы' }));
+    await waitFor(() => expect(visible('Зарплата')).toBe(true));
+    expect(screen.queryByRole('textbox', { name: 'Поиск по категориям' })).toBeNull(); // доходных категорий мало
+    await user.click(screen.getByRole('radio', { name: 'Расходы' }));
+    await waitFor(() => expect(visible('Транспорт')).toBe(true)); // запрос не «прилип»
+    expect(search().value).toBe('');
+  });
+
+  it('архивные ищутся тоже: в архиве показаны только совпавшие', async () => {
+    const td = await openPage();
+    const taxi = await write(() => store(td).categories.create({ name: 'Такси', kind: 'expense', icon: 'i:car', color: '#ca8a04', parentId: null }));
+    const old = await write(() => store(td).categories.create({ name: 'Старая', kind: 'expense', icon: 'i:tag', color: '#64748b', parentId: null }));
+    await write(() => store(td).categories.archive(taxi.id));
+    await write(() => store(td).categories.archive(old.id));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Архив · 2/ })).toBeInTheDocument());
+
+    await user.type(search(), 'такс');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Архив · 1/ })).toBeInTheDocument());
+  });
+});

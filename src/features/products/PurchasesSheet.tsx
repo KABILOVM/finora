@@ -6,50 +6,32 @@ import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { Segmented } from '@/components/Segmented';
 import { Sheet } from '@/components/Sheet';
-import { normName, searchCatalog } from '@/domain/products/catalog';
-import { ownProducts, statsForProduct, type PriceBook, type ProductStats } from '@/domain/products/stats';
+import { normName } from '@/domain/products/catalog';
+import type { PriceBook } from '@/domain/products/stats';
 import { expectedPrice, formatQty, itemTitle, NAME_MAX, SHOPPING_UNITS, UNIT_LABEL } from '@/domain/shopping';
 import type { CurrencyCode, ShoppingUnit } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
 import { moneyText, priceLine } from './productText';
 import { checkLines, statsOfName, totalOfLines, viewLine, type PurchaseLine } from './purchase';
+import { searchProducts, type Choice } from './suggest';
 import { useProductsData } from './useProductsData';
 
 const UNITS = SHOPPING_UNITS.map((u) => ({ value: u, label: UNIT_LABEL[u] }));
 /** Сколько подсказок показываем под строкой поиска. */
 const SUGGEST_MAX = 8;
 
-/** Что можно выбрать в поиске: продукт каталога, свой продукт из истории или новое название, которого нигде нет. */
-interface Choice {
-  key: string;
-  name: string;
-  unit: ShoppingUnit;
-  stats: ProductStats | null;
-  /** Новое название: в каталоге и истории такого нет. */
-  fresh?: boolean;
-}
-
 function picksFor(query: string, book: PriceBook): Choice[] {
-  const q = normName(query);
-  if (q === '') {
+  if (normName(query) === '') {
     // Пока ничего не набрано — то, что покупали недавно: чаще всего это и нужно
     return [...book.values()]
       .sort((a, b) => (a.lastAt !== b.lastAt ? (a.lastAt < b.lastAt ? 1 : -1) : a.name < b.name ? -1 : 1))
       .slice(0, SUGGEST_MAX)
       .map((s) => ({ key: `h:${s.key}|${s.unit}`, name: s.name, unit: s.unit, stats: s }));
   }
-  const found: Choice[] = searchCatalog(query, { limit: SUGGEST_MAX }).map((p) => {
-    const stats = statsForProduct(book, p);
-    return { key: `c:${p.id}`, name: p.name, unit: stats?.unit ?? p.unit, stats };
-  });
-  const own = ownProducts(book)
-    .filter((s) => normName(s.name).includes(q))
-    .slice(0, SUGGEST_MAX)
-    .map((s): Choice => ({ key: `n:${s.key}|${s.unit}`, name: s.name, unit: s.unit, stats: s }));
-  const all = [...found, ...own].slice(0, SUGGEST_MAX);
+  const all = searchProducts(query, book, SUGGEST_MAX);
   // Своё название, которого нет в подсказках: его можно добавить как есть (потом оно появится в «Мои продукты»)
-  if (!all.some((p) => normName(p.name) === q)) all.push({ key: 'new', name: query.trim().replace(/\s+/g, ' ').slice(0, NAME_MAX), unit: 'pcs', stats: null, fresh: true });
+  if (!all.some((p) => normName(p.name) === normName(query))) all.push({ key: 'new', name: query.trim().replace(/\s+/g, ' ').slice(0, NAME_MAX), unit: 'pcs', stats: null, fresh: true });
   return all;
 }
 

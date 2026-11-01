@@ -2,6 +2,7 @@ import { draftToMinor, minorToDraft } from '@/components/amountText';
 import { isValidIsoDate } from '@/lib/dates';
 import { factorOf } from '@/domain/currency';
 import { CATEGORY_NAME_MAX, matchByName, type DictCategory } from '@/domain/expensesAi';
+import { groceryCategoryFor, matchProduct, productByName } from '@/domain/products/catalog';
 import { addMinor } from '@/domain/money';
 import { formatQty, NAME_MAX, parseQty, SHOPPING_UNITS } from '@/domain/shopping';
 import type { CurrencyCode, IsoDate, Minor, ShoppingUnit } from '@/domain/types';
@@ -69,7 +70,11 @@ export function normalizeAiReceipt(raw: unknown, ctx: ReceiptContext, firstRid =
     if (lines.length >= MAX_RECEIPT_LINES) break;
     if (typeof r !== 'object' || r === null) continue;
     const it = r as Record<string, unknown>;
-    const name = capitalize(clean(it.name, NAME_MAX));
+    const rawName = capitalize(clean(it.name, NAME_MAX));
+    // «картошки» → «Картофель»: цены одного продукта складываются в одну историю. Название уже каталожное или с цифрами
+    // («Молоко 2,5%», «Яйца С1») оставляем как напечатано: подробности чека не теряем
+    const product = productByName(rawName) === undefined && !/\d/.test(rawName) ? matchProduct(rawName) : null;
+    const name = product?.name ?? rawName;
     const price = num(it.price);
     if (name === '' && (price === null || price === 0)) continue;
     const unitRaw = clean(it.unit, 6);
@@ -81,13 +86,15 @@ export function normalizeAiReceipt(raw: unknown, ctx: ReceiptContext, firstRid =
     if (!Number.isSafeInteger(qtyMilli) || qtyMilli < 1 || qtyMilli > 1_000_000_000) qtyMilli = 1000;
     const catName = clean(it.category, CATEGORY_NAME_MAX);
     const cat = matchByName(catName, ctx.categories);
+    // ИИ категорию не назвал, а позиция — продукт питания из каталога: кладём в «Продукты»
+    const groceryId = cat === null && catName === '' ? groceryCategoryFor(name, ctx.categories) : null;
     lines.push({
       rid: firstRid + lines.length,
       name,
       qtyText: formatQty(qtyMilli),
       unit,
       priceText: toText(price),
-      categoryId: cat?.id ?? '',
+      categoryId: cat?.id ?? groceryId ?? '',
       newCategory: cat || catName === '' ? '' : capitalize(catName),
     });
   }
