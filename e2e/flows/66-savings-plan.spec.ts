@@ -59,6 +59,8 @@ test.describe('66. Бюджеты: цель накопления и план т�
     await expect(essential).toBeHidden();
     await expect.poll(async () => norm(await plan.innerText())).toContain('Даже без необязательных трат не хватает');
     await expect(plan.getByTestId('goal-advice-row').filter({ hasText: 'Еда' })).toHaveAttribute('data-advice', 'essential');
+    // и подсказка срока: самая ранняя реалистичная дата, а не просто «не хватает»
+    await expect(plan.getByTestId('goal-catchup')).toContainText('не раньше');
     await shot(page, '66-goal-plan-tight', testInfo);
 
     // цель можно убрать в архив и вернуть

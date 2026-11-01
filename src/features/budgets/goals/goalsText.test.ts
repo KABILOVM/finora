@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatMinor } from '@/domain/money';
 import type { CategoryAdvice, DayPlan, GoalPlanItem } from '@/domain/savingsPlan';
-import { NO_HISTORY_TEXT, adviceLine, goalMonthLine, horizonLabel, monthLeftLine, planStatusLine, withoutGoalLine } from './goalsText';
+import { NO_HISTORY_TEXT, adviceLine, catchUpLine, goalMonthLine, horizonLabel, monthLeftLine, planStatusLine, withoutGoalLine } from './goalsText';
 
 const CUR = 'TJS';
 const money = (n: number) => formatMinor(n, CUR);
@@ -26,12 +26,14 @@ const day = (over: Partial<DayPlan> = {}): DayPlan => ({
   cutTotalMinor: 182_902,
   uncoveredMinor: 0,
   categories: [],
+  catchUp: null,
   ...over,
 });
 
 const advice = (over: Partial<CategoryAdvice>): CategoryAdvice => ({
   categoryId: 'c',
   essential: false,
+  usualMonthlyMinor: 300_000,
   usualRestMinor: 100_000,
   cutMinor: 0,
   allowedMinor: 100_000,
@@ -103,5 +105,24 @@ describe('прочее', () => {
   it('«без цели» и подсказка про историю', () => {
     expect(withoutGoalLine(40_000, CUR)).toBe(`Без цели — ${money(40_000)} в день`);
     expect(NO_HISTORY_TEXT).toContain('история трат');
+  });
+});
+
+describe('catchUpLine', () => {
+  const TODAY = '2026-10-15';
+
+  it('дата: «не раньше», год — только если он не текущий; для нескольких целей — «Все цели вместе»', () => {
+    const near = catchUpLine({ kind: 'date', date: '2026-12-15', months: 2, monthlyMinor: 85_000 }, CUR, false, TODAY);
+    expect(near).toContain('не раньше 15 декабря.');
+    expect(near).toContain(`около ${money(85_000)} в месяц`);
+    expect(near.startsWith('Цель:')).toBe(true);
+    const far = catchUpLine({ kind: 'date', date: '2027-02-15', months: 4, monthlyMinor: 85_000 }, CUR, true, TODAY);
+    expect(far).toContain('не раньше 15 февраля 2027 года.');
+    expect(far.startsWith('Все цели вместе:')).toBe(true);
+  });
+
+  it('больше десяти лет и «ничего не остаётся» названы словами', () => {
+    expect(catchUpLine({ kind: 'far', monthlyMinor: 1_700 }, CUR, false, TODAY)).toContain('больше чем на десять лет');
+    expect(catchUpLine({ kind: 'none' }, CUR, false, TODAY)).toContain('ничего не остаётся');
   });
 });

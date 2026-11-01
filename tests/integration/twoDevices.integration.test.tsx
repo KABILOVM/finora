@@ -83,13 +83,15 @@ const dirtyCount = async (s: Store) => {
 };
 const badge = () => document.body.textContent ?? '';
 
+// «Сегодня» закреплено на 15 октября 2026: операции в тесте внесены с датами октября, а экран по умолчанию показывает «Этот месяц» —
+// без закрепления тест краснел бы с первого числа следующего месяца.
 beforeEach(() => {
   localStorage.clear();
-  pinToday(); // даты в тесте — октябрь 2026: без этого список «Операции» (текущий месяц) с 1 ноября их не показывал
+  pinToday();
 });
 afterEach(() => {
-  localStorage.clear();
   unpinToday();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 

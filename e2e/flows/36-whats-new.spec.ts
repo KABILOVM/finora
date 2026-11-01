@@ -21,13 +21,13 @@ test.describe('36. «Что нового» после обновления', () 
 
     await addTx(page, { amount: '25', category: 'Еда' });
     await dismissToasts(page);
-    await pretendUpdated(page, '0.4.0'); // предыдущая версия: показывается запись текущей
+    await pretendUpdated(page, '0.5.0'); // предыдущая версия: показывается запись текущей
     await page.reload();
 
     const news = NEWS(page);
     await expect(news).toBeVisible({ timeout: 10_000 });
-    await expect(news).toContainText('Цели накопления в «Бюджетах»');
-    await expect(news).toContainText('Кнопка «Фильтры»');
+    await expect(news).toContainText('Отложить сейчас');
+    await expect(news).toContainText('Что если сократить');
     await shot(page, '36-whats-new', testInfo);
     const o = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
     expect(o.scroll, 'страница шире экрана').toBeLessThanOrEqual(o.client);

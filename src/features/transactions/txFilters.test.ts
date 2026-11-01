@@ -2,46 +2,155 @@ import { describe, expect, it } from 'vitest';
 import {
   activeFilterCount,
   activeFilterLabels,
+  boundMinor,
   dayTotal,
   defaultFilters,
   filtersFromParams,
   filtersToParams,
+  EMPTY_SHEET_FILTERS,
+  matchesAmountRange,
   matchesSearch,
+  matchesSource,
   NO_CATEGORY,
+  normalizeAmountText,
+  periodRange,
   toTxFilter,
   totalsByCurrency,
   transactionsQuery,
   transferFeeMinor,
   walletOpsQuery,
   withKind,
+  withPeriod,
+  withRangeDate,
   type ListFilters,
   type SearchLookups,
+  type SheetFilters,
 } from './txFilters';
 
+/** Фильтры шита: всё пусто, кроме указанного. */
+const sf = (over: Partial<SheetFilters> = {}): SheetFilters => ({ ...EMPTY_SHEET_FILTERS, ...over });
+
 describe('фильтры из шита «Фильтры»: чистая логика', () => {
-  it('activeFilterCount: считает только то, что лежит в шите (кошелёк, вид, категория)', () => {
-    expect(activeFilterCount({ walletId: '', kind: '', categoryId: '' })).toBe(0);
-    expect(activeFilterCount({ walletId: 'w1', kind: '', categoryId: '' })).toBe(1);
-    expect(activeFilterCount({ walletId: 'w1', kind: 'expense', categoryId: '' })).toBe(2);
-    expect(activeFilterCount({ walletId: 'w1', kind: 'income', categoryId: '__none__' })).toBe(3); // «Без категории» — тоже фильтр
+  it('activeFilterCount: считает только то, что лежит в шите (кошелёк, вид, категория, сумма, «откуда»)', () => {
+    expect(activeFilterCount(sf())).toBe(0);
+    expect(activeFilterCount(sf({ walletId: 'w1' }))).toBe(1);
+    expect(activeFilterCount(sf({ walletId: 'w1', kind: 'expense' }))).toBe(2);
+    expect(activeFilterCount(sf({ walletId: 'w1', kind: 'income', categoryId: '__none__' }))).toBe(3); // «Без категории» — тоже фильтр
+    // обе границы суммы — один фильтр
+    expect(activeFilterCount(sf({ amountFrom: '100' }))).toBe(1);
+    expect(activeFilterCount(sf({ amountFrom: '100', amountTo: '500' }))).toBe(1);
+    expect(activeFilterCount(sf({ source: 'recurring' }))).toBe(1);
+    expect(activeFilterCount(sf({ walletId: 'w1', kind: 'expense', categoryId: 'c1', amountTo: '5', source: 'debt' }))).toBe(5);
   });
 
   it('withKind: категория другого вида и любая при «Переводы» сбрасывается, подходящая остаётся', () => {
-    const base = { walletId: 'w1', kind: '' as const, categoryId: 'c1' };
-    expect(withKind(base, 'income', 'expense')).toEqual({ walletId: 'w1', kind: 'income', categoryId: '' });
-    expect(withKind(base, 'expense', 'expense')).toEqual({ walletId: 'w1', kind: 'expense', categoryId: 'c1' });
-    expect(withKind(base, 'transfer', 'expense')).toEqual({ walletId: 'w1', kind: 'transfer', categoryId: '' });
-    expect(withKind(base, '', 'expense')).toEqual({ walletId: 'w1', kind: '', categoryId: 'c1' });
+    const base = sf({ walletId: 'w1', categoryId: 'c1' });
+    expect(withKind(base, 'income', 'expense')).toEqual(sf({ walletId: 'w1', kind: 'income' }));
+    expect(withKind(base, 'expense', 'expense')).toEqual(sf({ walletId: 'w1', kind: 'expense', categoryId: 'c1' }));
+    expect(withKind(base, 'transfer', 'expense')).toEqual(sf({ walletId: 'w1', kind: 'transfer' }));
+    expect(withKind(base, '', 'expense')).toEqual(sf({ walletId: 'w1', categoryId: 'c1' }));
     // «Без категории» (вида нет) к расходам и доходам подходит
     expect(withKind({ ...base, categoryId: '__none__' }, 'income', undefined).categoryId).toBe('__none__');
+    // сумма и «откуда» смена вида не трогает
+    expect(withKind(sf({ amountFrom: '5', source: 'debt' }), 'transfer', undefined)).toMatchObject({ amountFrom: '5', source: 'debt' });
   });
 
   it('activeFilterLabels: названия включённых фильтров по порядку', () => {
     const wallets = [{ id: 'w1', name: 'Карта' }];
     const categories = [{ id: 'c1', name: 'Еда' }];
-    expect(activeFilterLabels({ walletId: '', kind: '', categoryId: '' }, wallets, categories)).toEqual([]);
-    expect(activeFilterLabels({ walletId: 'w1', kind: 'expense', categoryId: 'c1' }, wallets, categories)).toEqual(['Карта', 'Расходы', 'Еда']);
-    expect(activeFilterLabels({ walletId: '', kind: '', categoryId: '__none__' }, wallets, categories)).toEqual(['Без категории']);
+    expect(activeFilterLabels(sf(), wallets, categories)).toEqual([]);
+    expect(activeFilterLabels(sf({ walletId: 'w1', kind: 'expense', categoryId: 'c1' }), wallets, categories)).toEqual(['Карта', 'Расходы', 'Еда']);
+    expect(activeFilterLabels(sf({ categoryId: '__none__' }), wallets, categories)).toEqual(['Без категории']);
+  });
+
+  it('activeFilterLabels: сумма и «откуда» — после категории; сумма с запятой, как её пишет человек', () => {
+    const none = { wallets: [], categories: [] };
+    const labels = (f: SheetFilters) => activeFilterLabels(f, none.wallets, none.categories);
+    expect(labels(sf({ amountFrom: '100' }))).toEqual(['Сумма от 100']);
+    expect(labels(sf({ amountTo: '12.5' }))).toEqual(['Сумма до 12,5']);
+    expect(labels(sf({ amountFrom: '100', amountTo: '500' }))).toEqual(['Сумма 100–500']);
+    expect(labels(sf({ source: 'recurring' }))).toEqual(['Регулярные платежи']);
+    expect(labels(sf({ source: 'debt', kind: 'expense', amountFrom: '1' }))).toEqual(['Расходы', 'Сумма от 1', 'По долгам']);
+  });
+});
+
+describe('нормализация и границы суммы', () => {
+  it.each([
+    ['', ''],
+    ['1500', '1500'],
+    ['1 500', '1500'],
+    ['1\u00a0500', '1500'],
+    ['12,5', '12.5'],
+    ['12.50', '12.5'],
+    ['12,0', '12'],
+    ['007', '7'],
+    ['0', '0'],
+    ['.5', '0.5'],
+    [',5', '0.5'],
+    ['5.', '5'],
+  ])('normalizeAmountText(%j) → %j', (input, out) => {
+    expect(normalizeAmountText(input)).toBe(out);
+  });
+
+  it.each(['abc', '-5', '1e3', '1.2.3', '1,2,3', '12.34567', '1234567890123', '.', ',', '5 р'])('normalizeAmountText(%j) → null: это не сумма', (input) => {
+    expect(normalizeAmountText(input)).toBeNull();
+  });
+
+  it('boundMinor: «от» округляется вверх, «до» — вниз по знакам валюты', () => {
+    expect(boundMinor('12,5', 'TJS', 'up')).toBe(1250);
+    expect(boundMinor('12,5', 'TJS', 'down')).toBe(1250);
+    expect(boundMinor('12,345', 'TJS', 'up')).toBe(1235);
+    expect(boundMinor('12,345', 'TJS', 'down')).toBe(1234);
+    expect(boundMinor('12,340', 'TJS', 'up')).toBe(1234); // нули в хвосте границу не двигают
+    expect(boundMinor('100', 'JPY', 'up')).toBe(100); // у иены знаков нет
+    expect(boundMinor('100,5', 'JPY', 'up')).toBe(101);
+    expect(boundMinor('100,5', 'JPY', 'down')).toBe(100);
+    expect(boundMinor('abc', 'TJS', 'up')).toBeNull();
+    expect(boundMinor('', 'TJS', 'up')).toBeNull();
+  });
+});
+
+describe('matchesAmountRange и matchesSource', () => {
+  const cur = (id: string) => ({ a: 'TJS', b: 'USD' })[id as 'a' | 'b'];
+  const tx = (walletId: string, amountMinor: number) => ({ walletId, amountMinor });
+
+  it('границы включительно; без границ подходит всё', () => {
+    expect(matchesAmountRange(tx('a', 5000), '', '', cur)).toBe(true);
+    expect(matchesAmountRange(tx('a', 5000), '50', '', cur)).toBe(true);
+    expect(matchesAmountRange(tx('a', 4999), '50', '', cur)).toBe(false);
+    expect(matchesAmountRange(tx('a', 5000), '', '50', cur)).toBe(true);
+    expect(matchesAmountRange(tx('a', 5001), '', '50', cur)).toBe(false);
+    expect(matchesAmountRange(tx('a', 5000), '50', '50', cur)).toBe(true);
+  });
+
+  it('сумма сравнивается в валюте кошелька операции, а не одним числом на всех', () => {
+    // 100 с. (10000 дирамов) и 100 $ (10000 центов) — оба «100»
+    expect(matchesAmountRange(tx('a', 10_000), '100', '100', cur)).toBe(true);
+    expect(matchesAmountRange(tx('b', 10_000), '100', '100', cur)).toBe(true);
+    expect(matchesAmountRange(tx('b', 10_000), '101', '', cur)).toBe(false);
+  });
+
+  it('границы с лишними знаками: «от 12,345» не пропускает 12,34 и пропускает 12,35', () => {
+    expect(matchesAmountRange(tx('a', 1234), '12,345', '', cur)).toBe(false);
+    expect(matchesAmountRange(tx('a', 1235), '12,345', '', cur)).toBe(true);
+    expect(matchesAmountRange(tx('a', 1234), '', '12,345', cur)).toBe(true);
+    expect(matchesAmountRange(tx('a', 1235), '', '12,345', cur)).toBe(false);
+  });
+
+  it('кошелёк неизвестен — под границы не подходит; ноль и крупные суммы', () => {
+    expect(matchesAmountRange(tx('zzz', 100), '1', '', cur)).toBe(false);
+    expect(matchesAmountRange(tx('a', 0), '0', '0', cur)).toBe(true);
+    expect(matchesAmountRange(tx('a', 999_999_999_999), '', '9999999999,99', cur)).toBe(true);
+  });
+
+  it('matchesSource: регулярные — рождены правилом, «по долгам» — с debtId; «все» — любые', () => {
+    const rule = { recurringRuleId: 'r1', debtId: null };
+    const debt = { recurringRuleId: null, debtId: 'd1' };
+    const plain = { recurringRuleId: null, debtId: null };
+    expect([rule, debt, plain].map((t) => matchesSource(t, 'recurring'))).toEqual([true, false, false]);
+    expect([rule, debt, plain].map((t) => matchesSource(t, 'debt'))).toEqual([false, true, false]);
+    expect([rule, debt, plain].map((t) => matchesSource(t, ''))).toEqual([true, true, true]);
+    expect(matchesSource({}, 'recurring')).toBe(false); // поля нет совсем (старая запись)
   });
 });
 
@@ -170,6 +279,10 @@ describe('фильтры в адресе: filtersToParams ↔ filtersFromParams'
     ['…и при обычном периоде «Этот месяц»', { period: 'this', month: '2026-07' }],
     ['кошелёк, вид, категория', { walletId: 'w-1', kind: 'expense', categoryId: 'c-1' }],
     ['без категории', { categoryId: NO_CATEGORY, kind: 'income' }],
+    ['сумма от и до', { amountFrom: '100', amountTo: '12.5' }],
+    ['только «от»', { amountFrom: '0.5' }],
+    ['регулярные платежи', { source: 'recurring' }],
+    ['по долгам вместе с кошельком', { source: 'debt', walletId: 'w-1' }],
   ])('туда и обратно: %s', (_, patch) => {
     const f = { ...defaultFilters(today), ...patch };
     expect(back(f)).toEqual(f);
@@ -271,5 +384,132 @@ describe('toTxFilter: фильтр по категории и подкатего
   it('без списка категорий (по умолчанию) и «Без категории» — прежнее поведение', () => {
     expect(toTxFilter(f('comm'), '', '2026-10-31')).toMatchObject({ categoryId: 'comm' });
     expect(toTxFilter({ ...defaultFilters('2026-10-31'), categoryId: NO_CATEGORY }, '', '2026-10-31', cats)).toMatchObject({ categoryId: null });
+  });
+});
+
+describe('периоды «7 дней», «30 дней» и «Свои даты»', () => {
+  const today = '2026-10-15';
+
+  it('periodRange: 7 и 30 дней — вместе с сегодняшним, через границу месяца и года', () => {
+    expect(periodRange('7d', '', today)).toEqual({ from: '2026-10-09', to: '2026-10-15' });
+    expect(periodRange('30d', '', today)).toEqual({ from: '2026-09-16', to: '2026-10-15' });
+    expect(periodRange('7d', '', '2026-01-03')).toEqual({ from: '2025-12-28', to: '2026-01-03' });
+    expect(periodRange('30d', '', '2024-03-10')).toEqual({ from: '2024-02-10', to: '2024-03-10' }); // високосный год
+  });
+
+  it('periodRange: свои даты берутся как заданы; не заданная граница ничего не ограничивает', () => {
+    expect(periodRange('range', '', today, { from: '2026-09-01', to: '2026-09-10' })).toEqual({ from: '2026-09-01', to: '2026-09-10' });
+    expect(periodRange('range', '', today, { from: '2026-09-01', to: '' })).toEqual({ from: '2026-09-01' });
+    expect(periodRange('range', '', today)).toEqual({});
+  });
+
+  it('toTxFilter: даты своего периода попадают в запрос, у других периодов from/to игнорируются', () => {
+    const base = { ...defaultFilters(today), from: '2026-09-01' as const, to: '2026-09-10' as const };
+    expect(toTxFilter({ ...base, period: 'range' }, '', today)).toEqual({ from: '2026-09-01', to: '2026-09-10' });
+    expect(toTxFilter({ ...base, period: 'all' }, '', today)).toEqual({});
+    expect(toTxFilter({ ...base, period: '7d' }, '', today)).toEqual({ from: '2026-10-09', to: today });
+  });
+
+  it('в адресе: туда и обратно, адрес читаемый', () => {
+    const back = (f: ListFilters) => ({ ...defaultFilters(today), ...filtersFromParams(filtersToParams(f, today), today) });
+    for (const period of ['7d', '30d'] as const) {
+      const f = { ...defaultFilters(today), period };
+      expect(filtersToParams(f, today).toString()).toBe(`period=${period}`);
+      expect(back(f)).toEqual(f);
+    }
+    const range = { ...defaultFilters(today), period: 'range' as const, from: '2026-09-01' as const, to: '2026-09-10' as const };
+    expect(filtersToParams(range, today).toString()).toBe('period=range&from=2026-09-01&to=2026-09-10');
+    expect(back(range)).toEqual(range);
+    // даты запоминаются и при других периодах: они в адрес не пишутся, но и не мешают
+    expect(filtersToParams({ ...range, period: 'all' }, today).toString()).toBe('period=all');
+  });
+
+  it('«Свои даты» без годных дат в адрес не пишутся (иначе адрес прочёлся бы как обычный список)', () => {
+    expect(filtersToParams({ ...defaultFilters(today), period: 'range' }, today).toString()).toBe('');
+    expect(filtersToParams({ ...defaultFilters(today), period: 'range', from: '2026-09-10', to: '2026-09-01' }, today).toString()).toBe('');
+    expect(filtersToParams({ ...defaultFilters(today), period: 'range', month: '2026-07' }, today).toString()).toBe('period=this&month=2026-07');
+  });
+
+  it.each([
+    ['нет границ', 'period=range'],
+    ['нет конца', 'period=range&from=2026-09-01'],
+    ['начало позже конца', 'period=range&from=2026-09-10&to=2026-09-01'],
+    ['не дата', 'period=range&from=вчера&to=сегодня'],
+    ['30 февраля', 'period=range&from=2026-02-30&to=2026-03-05'],
+    ['год вне границ', 'period=range&from=1999-12-31&to=2026-03-05'],
+    ['год вне границ (конец)', 'period=range&from=2026-03-05&to=2101-01-01'],
+  ])('из адреса: %s — период пропускается', (_, query) => {
+    expect(filtersFromParams(new URLSearchParams(query), today)).toEqual({});
+  });
+
+  it('из адреса: from и to без period=range ничего не меняют; граничные даты допустимы', () => {
+    expect(filtersFromParams(new URLSearchParams('from=2026-09-01&to=2026-09-10'), today)).toEqual({});
+    expect(filtersFromParams(new URLSearchParams('period=range&from=2000-01-01&to=2100-12-31'), today)).toEqual({
+      period: 'range',
+      from: '2000-01-01',
+      to: '2100-12-31',
+    });
+    expect(filtersFromParams(new URLSearchParams('period=range&from=2026-09-05&to=2026-09-05'), today)).toMatchObject({ period: 'range' });
+  });
+
+  it('из адреса: «свои даты» вместе с кошельком и видом', () => {
+    expect(filtersFromParams(new URLSearchParams('period=range&from=2026-09-01&to=2026-09-10&wallet=w-1&kind=expense'), today)).toEqual({
+      period: 'range',
+      from: '2026-09-01',
+      to: '2026-09-10',
+      walletId: 'w-1',
+      kind: 'expense',
+    });
+  });
+
+  it('withPeriod: «Свои даты» впервые открываются с начала месяца по сегодня, выбранные даты сохраняются', () => {
+    const none = defaultFilters(today);
+    expect(withPeriod(none, 'range', today)).toEqual({ period: 'range', from: '2026-10-01', to: today });
+    expect(withPeriod({ from: '2026-09-01', to: '2026-09-10' }, 'range', today)).toEqual({ period: 'range' });
+    expect(withPeriod({ from: '2026-09-10', to: '2026-09-01' }, 'range', today)).toEqual({ period: 'range', from: '2026-10-01', to: today });
+    expect(withPeriod(none, '7d', today)).toEqual({ period: '7d' });
+  });
+
+  it('withRangeDate: начало позже конца и конец раньше начала подтягивают вторую границу', () => {
+    const cur = { from: '2026-09-01' as const, to: '2026-09-10' as const };
+    expect(withRangeDate(cur, 'from', '2026-09-05')).toEqual({ from: '2026-09-05' });
+    expect(withRangeDate(cur, 'from', '2026-09-10')).toEqual({ from: '2026-09-10' });
+    expect(withRangeDate(cur, 'from', '2026-09-20')).toEqual({ from: '2026-09-20', to: '2026-09-20' });
+    expect(withRangeDate(cur, 'to', '2026-09-05')).toEqual({ to: '2026-09-05' });
+    expect(withRangeDate(cur, 'to', '2026-08-20')).toEqual({ from: '2026-08-20', to: '2026-08-20' });
+  });
+
+  it('withRangeDate: пусто, не дата и год вне границ — без правки', () => {
+    const cur = { from: '2026-09-01' as const, to: '2026-09-10' as const };
+    for (const bad of ['', '2026-02-30', '0001-01-01', '2101-01-01', 'abc']) expect(withRangeDate(cur, 'from', bad)).toBeNull();
+  });
+});
+
+describe('сумма и «откуда» в адресе', () => {
+  const today = '2026-10-15';
+  const q = (s: string) => new URLSearchParams(s);
+
+  it('читаемый адрес: min, max, src', () => {
+    const f = { ...defaultFilters(today), amountFrom: '100', amountTo: '12.5', source: 'recurring' as const };
+    expect(filtersToParams(f, today).toString()).toBe('min=100&max=12.5&src=recurring');
+  });
+
+  it('из адреса: сумма и «откуда» принимаются', () => {
+    expect(filtersFromParams(q('min=100&max=500&src=debt'), today)).toEqual({ amountFrom: '100', amountTo: '500', source: 'debt' });
+    expect(filtersFromParams(q('min=0'), today)).toEqual({ amountFrom: '0' });
+  });
+
+  it.each([
+    'min=abc',
+    'min=-5',
+    'min=1,5', // запятая в адресе не «чистая»: границы в адресе пишутся только через filtersToParams
+    'min=1e3',
+    'min=1234567890123',
+    'max=5.12345',
+    'src=чужое',
+    'src=',
+    'min=&max=',
+  ])('из адреса: %s — пропускается', (query) => {
+    expect(filtersFromParams(q(query), today)).toEqual({});
   });
 });

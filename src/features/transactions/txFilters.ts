@@ -1,38 +1,70 @@
 import { useEffect, useState } from 'react';
 import type { TxFilter } from '@/db';
 import { hasChildren, withDescendants, type TreeNode } from '@/features/categories/categoryTree';
+import { exponentOf } from '@/domain/currency';
 import { addMinor, minorToInputString, parseAmountToMinor } from '@/domain/money';
 import type { CurrencyCode, IsoDate, Minor, Transaction, TxKind } from '@/domain/types';
-import { monthKey } from '@/lib/dates';
+import { addDays, isValidIsoDate, monthKey } from '@/lib/dates';
 
 /** Чистая логика фильтров списка операций и итога дня. */
 
-export type PeriodKind = 'this' | 'prev' | 'all' | 'month';
+/**
+ * this/prev — этот и прошлый месяц; 7d/30d — последние 7 и 30 дней по сегодня включительно; all — всё время;
+ * month — выбранный месяц; range — свои даты (поля from и to).
+ */
+export type PeriodKind = 'this' | 'prev' | '7d' | '30d' | 'all' | 'month' | 'range';
 
 /** Особое значение фильтра по категории: операции без категории. */
 export const NO_CATEGORY = '__none__';
+
+/** Откуда операция: '' — любая; recurring — создана регулярным платежом; debt — движение денег по долгу. */
+export type SourceFilter = '' | 'recurring' | 'debt';
 
 export interface ListFilters {
   period: PeriodKind;
   /** 'ГГГГ-ММ' — для period = 'month'. */
   month: string;
+  /** Свои даты для period = 'range' (включительно); в остальных периодах не используются. '' — не задано. */
+  from: IsoDate | '';
+  to: IsoDate | '';
   /** '' — любой. */
   walletId: string;
   /** '' — любая, NO_CATEGORY — без категории. */
   categoryId: string;
   /** '' — любой. */
   kind: '' | TxKind;
+  /**
+   * Сумма операции «от» и «до» включительно, текстом без пробелов и с точкой ('1500', '12.5'); '' — граница не задана.
+   * Сумма — та, что видна в строке, в валюте кошелька операции (у перевода — списание).
+   */
+  amountFrom: string;
+  amountTo: string;
+  source: SourceFilter;
   search: string;
 }
 
 /** Часть фильтров, которая живёт в шите «Фильтры» (период и поиск видны на самом экране). */
-export type SheetFilters = Pick<ListFilters, 'walletId' | 'kind' | 'categoryId'>;
+export type SheetFilters = Pick<ListFilters, 'walletId' | 'kind' | 'categoryId' | 'amountFrom' | 'amountTo' | 'source'>;
 
-export const EMPTY_SHEET_FILTERS: SheetFilters = { walletId: '', kind: '', categoryId: '' };
+export const EMPTY_SHEET_FILTERS: SheetFilters = { walletId: '', kind: '', categoryId: '', amountFrom: '', amountTo: '', source: '' };
 
-/** Сколько фильтров из шита включено (0–3): это число показывает кнопка «Фильтры». */
+/** Включена ли сумма «от/до» (одним фильтром считаются обе границы). */
+const hasAmount = (f: Pick<SheetFilters, 'amountFrom' | 'amountTo'>): boolean => f.amountFrom !== '' || f.amountTo !== '';
+
+/** Сколько фильтров из шита включено (0–5): это число показывает кнопка «Фильтры». */
 export function activeFilterCount(f: SheetFilters): number {
-  return (f.walletId !== '' ? 1 : 0) + (f.kind !== '' ? 1 : 0) + (f.categoryId !== '' ? 1 : 0);
+  return (
+    (f.walletId !== '' ? 1 : 0) + (f.kind !== '' ? 1 : 0) + (f.categoryId !== '' ? 1 : 0) + (hasAmount(f) ? 1 : 0) + (f.source !== '' ? 1 : 0)
+  );
+}
+
+const SOURCE_NAMES: Record<Exclude<SourceFilter, ''>, string> = { recurring: 'Регулярные платежи', debt: 'По долгам' };
+
+/** «Сумма от 100», «до 500», «100–500» — коротко для строки включённых фильтров. */
+function amountLabel(f: Pick<SheetFilters, 'amountFrom' | 'amountTo'>): string {
+  const show = (t: string) => t.replace('.', ',');
+  if (f.amountFrom !== '' && f.amountTo !== '') return `Сумма ${show(f.amountFrom)}–${show(f.amountTo)}`;
+  return f.amountFrom !== '' ? `Сумма от ${show(f.amountFrom)}` : `Сумма до ${show(f.amountTo)}`;
 }
 
 /**
@@ -57,22 +89,68 @@ export function activeFilterLabels(
   if (f.kind !== '') out.push(KIND_NAMES[f.kind]);
   if (f.categoryId === NO_CATEGORY) out.push('Без категории');
   else if (f.categoryId !== '') out.push(categories.find((c) => c.id === f.categoryId)?.name ?? 'Категория');
+  if (hasAmount(f)) out.push(amountLabel(f));
+  if (f.source !== '') out.push(SOURCE_NAMES[f.source]);
   return out;
+}
+
+/**
+ * Граница суммы из того, что набрал человек: «1 500», «12,5», «.5» → '1500', '12.5', '0.5'; null — это не сумма.
+ * Пусто → ''. Не больше 12 цифр до запятой и 4 после: дальше сумма всё равно не поместится в целое.
+ */
+export function normalizeAmountText(input: string): string | null {
+  const t = input.replace(/[\s\u00a0\u202f']/g, '').replace(',', '.');
+  if (t === '') return '';
+  const m = /^(\d{0,12})(?:\.(\d{0,4}))?$/.exec(t);
+  if (!m || (m[1] === '' && (m[2] ?? '') === '')) return null;
+  const int = (m[1] ?? '') === '' ? '0' : (m[1] as string).replace(/^0+(?=\d)/, '');
+  return m[2] ? `${int}.${m[2].replace(/0+$/, '')}`.replace(/\.$/, '') : int;
+}
+
+/**
+ * Граница суммы в минорных единицах валюты. Нижняя («от») округляется вверх, верхняя («до») — вниз: «от 12,345» в TJS (два знака)
+ * — это от 12,35, «до 12,345» — до 12,34; граница всегда «вместе» с теми суммами, что действительно можно встретить.
+ * null — не число или не помещается в целое.
+ */
+export function boundMinor(text: string, currency: CurrencyCode, round: 'up' | 'down'): Minor | null {
+  const norm = normalizeAmountText(text);
+  if (norm === null || norm === '') return null;
+  const [int = '0', frac = ''] = norm.split('.');
+  const exp = exponentOf(currency);
+  let n = Number(int + frac.slice(0, exp).padEnd(exp, '0'));
+  if (round === 'up' && /[1-9]/.test(frac.slice(exp))) n += 1;
+  return Number.isSafeInteger(n) ? n : null;
 }
 
 export const MIN_MONTH = '2000-01';
 export const MAX_MONTH = '2100-12';
+/** Границы «своих дат»: те же годы, что у месяцев. */
+export const MIN_DATE = `${MIN_MONTH}-01`;
+export const MAX_DATE = `${MAX_MONTH}-31`;
+
+/** Годится ли дата для «своих дат»: настоящая и в пределах MIN_DATE…MAX_DATE (в поле даты браузер пропустит и год 0001). */
+export const isRangeDate = (s: unknown): s is IsoDate => isValidIsoDate(s) && s >= MIN_DATE && s <= MAX_DATE;
+
+/** «Свои даты» годятся целиком: обе настоящие и начало не позже конца. */
+const isRange = (from: string, to: string): boolean => isRangeDate(from) && isRangeDate(to) && from <= to;
 
 export const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ID_PARAM = /^[0-9A-Za-z_-]{1,64}$/;
+/** Сумма в адресе: уже «чистая» (см. normalizeAmountText), без запятой и пробелов. */
+const AMOUNT_PARAM = /^\d{1,12}(?:\.\d{1,4})?$/;
 
 /** Фильтры «по умолчанию»: этот месяц, всё остальное выключено. */
 export const defaultFilters = (today: IsoDate): ListFilters => ({
   period: 'this',
   month: monthKey(today),
+  from: '',
+  to: '',
   walletId: '',
   categoryId: '',
   kind: '',
+  amountFrom: '',
+  amountTo: '',
+  source: '',
   search: '',
 });
 
@@ -88,8 +166,14 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
   const validMonth = month !== null && MONTH_PARAM.test(month) && month >= MIN_MONTH && month <= MAX_MONTH;
   if (validMonth) out.month = month;
   const period = params.get('period');
-  if (period === 'this' || period === 'prev' || period === 'all') out.period = period;
-  else if (validMonth) out.period = period === 'month' || month !== monthKey(today) ? 'month' : 'this';
+  const from = params.get('from') ?? '';
+  const to = params.get('to') ?? '';
+  if (period === 'this' || period === 'prev' || period === '7d' || period === '30d' || period === 'all') out.period = period;
+  else if (period === 'range' && isRange(from, to)) {
+    out.period = 'range';
+    out.from = from as IsoDate;
+    out.to = to as IsoDate;
+  } else if (validMonth) out.period = period === 'month' || month !== monthKey(today) ? 'month' : 'this';
   const wallet = params.get('wallet');
   if (wallet !== null && ID_PARAM.test(wallet)) out.walletId = wallet;
   const category = params.get('category');
@@ -97,6 +181,12 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
   else if (category !== null && ID_PARAM.test(category)) out.categoryId = category;
   const kind = params.get('kind');
   if (kind === 'expense' || kind === 'income' || kind === 'transfer') out.kind = kind;
+  const min = params.get('min');
+  if (min !== null && AMOUNT_PARAM.test(min)) out.amountFrom = min;
+  const max = params.get('max');
+  if (max !== null && AMOUNT_PARAM.test(max)) out.amountTo = max;
+  const src = params.get('src');
+  if (src === 'recurring' || src === 'debt') out.source = src;
   return out;
 }
 
@@ -108,12 +198,23 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
 export function filtersToParams(f: ListFilters, today: IsoDate): URLSearchParams {
   const q = new URLSearchParams();
   const rememberMonth = f.period === 'month' || f.month !== monthKey(today);
-  if (f.period !== 'this' || rememberMonth) q.set('period', f.period);
+  // «свои даты» без годных дат — это обычный «Этот месяц»: так их и пишем (как раз их и прочтёт filtersFromParams)
+  const period = f.period === 'range' && !isRange(f.from, f.to) ? 'this' : f.period;
+  if (period === 'range') {
+    q.set('period', 'range');
+    q.set('from', f.from);
+    q.set('to', f.to);
+  } else if (period !== 'this' || rememberMonth) {
+    q.set('period', period);
+  }
   if (rememberMonth) q.set('month', f.month);
   if (f.walletId !== '') q.set('wallet', f.walletId);
   if (f.categoryId === NO_CATEGORY) q.set('category', 'none');
   else if (f.categoryId !== '') q.set('category', f.categoryId);
   if (f.kind !== '') q.set('kind', f.kind);
+  if (f.amountFrom !== '') q.set('min', f.amountFrom);
+  if (f.amountTo !== '') q.set('max', f.amountTo);
+  if (f.source !== '') q.set('src', f.source);
   return q;
 }
 
@@ -147,16 +248,52 @@ export const canShiftMonth = (key: string, delta: number): boolean => {
   return next >= MIN_MONTH && next <= MAX_MONTH;
 };
 
-/** Даты периода (включительно). Весь месяц: с 1-го по «31-е» — сравнение строк, лишние числа ни на что не влияют. */
-export function periodRange(period: PeriodKind, month: string, today: IsoDate): { from?: IsoDate; to?: IsoDate } {
+/**
+ * Даты периода (включительно). Весь месяц: с 1-го по «31-е» — сравнение строк, лишние числа ни на что не влияют.
+ * 7 и 30 дней считаются вместе с сегодняшним: «7 дней» — это сегодня и шесть предыдущих.
+ * range — те свои даты, что заданы (не заданная граница не ограничивает).
+ */
+export function periodRange(
+  period: PeriodKind,
+  month: string,
+  today: IsoDate,
+  range: { from?: IsoDate | ''; to?: IsoDate | '' } = {},
+): { from?: IsoDate; to?: IsoDate } {
   if (period === 'all') return {};
+  if (period === '7d') return { from: addDays(today, -6), to: today };
+  if (period === '30d') return { from: addDays(today, -29), to: today };
+  if (period === 'range') {
+    const out: { from?: IsoDate; to?: IsoDate } = {};
+    if (range.from) out.from = range.from;
+    if (range.to) out.to = range.to;
+    return out;
+  }
   const key = period === 'this' ? monthKey(today) : period === 'prev' ? shiftMonth(monthKey(today), -1) : month;
   return { from: `${key}-01`, to: `${key}-31` };
 }
 
+/**
+ * Правка фильтров при выборе периода. «Свои даты» впервые открываются не пустыми: с начала этого месяца по сегодня
+ * (раньше выбранные даты запоминаются). Остальные периоды ничего, кроме себя, не меняют.
+ */
+export function withPeriod(f: Pick<ListFilters, 'from' | 'to'>, period: PeriodKind, today: IsoDate): Partial<ListFilters> {
+  if (period !== 'range') return { period };
+  return isRange(f.from, f.to) ? { period } : { period, from: `${monthKey(today)}-01`, to: today };
+}
+
+/**
+ * Правка «С»/«По» своих дат. Начало позже конца (и конец раньше начала) не оставляем: вторая граница подтягивается к новой,
+ * иначе список молча опустел бы. Дата не из диапазона MIN_DATE…MAX_DATE (в поле даты можно набрать и год 0001) — без правки (null).
+ */
+export function withRangeDate(f: Pick<ListFilters, 'from' | 'to'>, edge: 'from' | 'to', value: string): Partial<ListFilters> | null {
+  if (!isRangeDate(value)) return null;
+  if (edge === 'from') return f.to !== '' && value > f.to ? { from: value, to: value } : { from: value };
+  return f.from !== '' && value < f.from ? { from: value, to: value } : { to: value };
+}
+
 /** Фильтры экрана → фильтр запроса к базе. search приходит уже «успокоенным» (после паузы в наборе). */
 export function toTxFilter(f: ListFilters, search: string, today: IsoDate, categories: readonly TreeNode[] = []): TxFilter {
-  const out: TxFilter = { ...periodRange(f.period, f.month, today) };
+  const out: TxFilter = { ...periodRange(f.period, f.month, today, f) };
   if (f.walletId !== '') out.walletId = f.walletId;
   if (f.categoryId === NO_CATEGORY) out.categoryId = null;
   else if (f.categoryId !== '') {
@@ -333,6 +470,28 @@ export function matchesSearch(tx: SearchItem, query: string, look: SearchLookups
     const shown = minorToInputString(minor, currency).replace(',', '.');
     return shown.startsWith(plain) || parseAmountToMinor(plain, currency) === minor;
   });
+}
+
+/** Подходит ли операция под «Сумма от/до»: сравнение в валюте её кошелька, границы включительно. Без границ подходит всё. */
+export function matchesAmountRange(
+  tx: Pick<Transaction, 'walletId' | 'amountMinor'>,
+  from: string,
+  to: string,
+  currencyOf: (walletId: string) => CurrencyCode | undefined,
+): boolean {
+  if (from === '' && to === '') return true;
+  const currency = currencyOf(tx.walletId);
+  if (!currency) return false;
+  const lo = from === '' ? null : boundMinor(from, currency, 'up');
+  const hi = to === '' ? null : boundMinor(to, currency, 'down');
+  return (lo === null || tx.amountMinor >= lo) && (hi === null || tx.amountMinor <= hi);
+}
+
+/** Подходит ли операция под «Откуда»: регулярный платёж — рождена правилом, долг — движение денег по долгу. */
+export function matchesSource(tx: { debtId?: Transaction['debtId'] | undefined; recurringRuleId?: Transaction['recurringRuleId'] | undefined }, source: SourceFilter): boolean {
+  if (source === 'recurring') return (tx.recurringRuleId ?? null) !== null;
+  if (source === 'debt') return (tx.debtId ?? null) !== null;
+  return true;
 }
 
 /** Значение, которое «догоняет» входное с задержкой: поиск не гоняет запросы на каждую букву. */
