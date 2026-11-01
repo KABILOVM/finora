@@ -10,6 +10,7 @@ import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import { openStore, type Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
 import { clickSave, tapAmount } from '@/features/transactions/__fixtures__/opsKit';
+import { todayLocal } from '@/lib/dates';
 import { createSyncEngine, type SyncEngine } from '@/sync/engine';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
 import type { SessionAwareTransport } from '@/sync/session';
@@ -162,8 +163,10 @@ describe('атака 1: два устройства, полный путь', () 
     // --- B онлайн, пока A без сети: доход и расход, затем правка кошелька ---
     const cash = (await b.store.db.wallets.toArray())[0]!;
     const salary = (await b.store.db.categories.toArray()).find((c) => c.kind === 'income')!;
-    await b.store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 500_000, categoryId: salary.id, occurredOn: '2026-10-05', note: 'аванс' });
-    await b.store.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 7_000, occurredOn: '2026-10-06', note: 'такси' });
+    // сегодняшняя дата, а не жёсткая: экран A показывает «Этот месяц» по настоящим часам, и операция октября пропала бы из списка в ноябре
+    const today = todayLocal();
+    await b.store.transactions.create({ kind: 'income', walletId: cash.id, amountMinor: 500_000, categoryId: salary.id, occurredOn: today, note: 'аванс' });
+    await b.store.transactions.create({ kind: 'expense', walletId: cash.id, amountMinor: 7_000, occurredOn: today, note: 'такси' });
     await b.engine.syncNow();
     expect(server.dump(ALICE.id, 'transactions')).toHaveLength(2); // A ещё ничего не отправил
 
