@@ -136,6 +136,25 @@ export function planCatalog(existing: readonly ExistingCategory[], catalog: read
       parents.set(g.slug, clash ? 'blocked' : { action: 'create' });
     }
 
+    // 1б. Родитель, у которого уже лежит ваша «коммуналка»: если две и больше подкатегорий набора («Отопление», «Подъезд») уже стоят под вашей
+    // категорией с другим названием («Платежи»), новые подкатегории встают под неё, а не под пустую одноимённую («Квартплата»). Одну такую
+    // категорию усыновляет один набор (по порядку каталога): иначе «Платежи» стали бы родителем и коммуналки, и связи.
+    for (const g of kindGroups) {
+      const cur = parents.get(g.slug);
+      if (cur === undefined || cur === 'blocked' || cur.action === 'restore') continue;
+      const mine = new Set(g.children.flatMap((c) => [...childKeys(c)]));
+      const holds = (id: string) => live.filter((x) => x.parentId === id && mine.has(nameKey(x.name))).length;
+      const have = cur.action === 'present' ? holds(cur.id) : 0;
+      const best = live
+        .filter((x) => x.parentId === null && !taken.has(x.id))
+        .map((q) => ({ q, n: holds(q.id) }))
+        .sort((x, y) => y.n - x.n)[0];
+      if (best && best.n >= 2 && best.n > have) {
+        parents.set(g.slug, { action: 'present', id: best.q.id, name: best.q.name, color: best.q.color });
+        taken.add(best.q.id);
+      }
+    }
+
     // 2. Подкатегории.
     const used = new Set<string>();
     for (const g of kindGroups) {

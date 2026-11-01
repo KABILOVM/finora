@@ -224,11 +224,17 @@ describe('планировщик на полной раскладке реаль
   const movedNames = (slug: string) => group(plan, slug).children.filter((c) => c.action === 'move').map((c) => c.existing?.name);
   const kinds = (slug: string) => group(plan, slug).children.map((c) => `${c.action}:${c.child.slug}`);
 
-  it('«Квартплата» становится родителем коммунальных услуг; «Отопление» и «Подъезд» (они под «Платежи») не дублируются', () => {
+  it('коммунальные услуги встают под «Платежи»: там уже лежат «Отопление» и «Подъезд», а одноимённая «Квартплата» пуста', () => {
     const g = group(plan, 'utilities');
-    expect(g.parent).toMatchObject({ action: 'present', id: ownerId('expense', 'Квартплата') });
-    expect(g.children.map((c) => c.child.slug)).toEqual(['electricity', 'water', 'gas', 'trash']);
-    expect(g.children.every((c) => c.action === 'create')).toBe(true);
+    expect(g.parent).toMatchObject({ action: 'present', id: ownerId('expense', 'Платежи'), name: 'Платежи' });
+    expect(g.children.filter((c) => c.action === 'present').map((c) => c.child.slug).sort()).toEqual(['building', 'heating']);
+    expect(g.children.filter((c) => c.action === 'create').map((c) => c.child.slug)).toEqual(['electricity', 'water', 'gas', 'trash']);
+  });
+
+  it('«Платежи» усыновляет только один набор: «Связь» остаётся со своим родителем, «Вай-фай» и «Мобильная связь» стоят где стояли', () => {
+    const g = group(plan, 'communication');
+    expect(g.parent).toMatchObject({ action: 'present', id: ownerId('expense', 'Связь') });
+    expect(g.children.map((c) => `${c.action}:${c.child.slug}`)).toEqual(['create:tv']);
   });
 
   it('«Еда»: «Кафе и рестораны» переезжает внутрь, «Еда на улице» уже там', () => {
@@ -268,6 +274,47 @@ describe('планировщик на полной раскладке реаль
     for (const g of plan.groups) for (const c of g.children) if (c.action === 'present') expect(c.existing).toBeDefined();
     expect(kinds('health')).toEqual(expect.arrayContaining(['present:doctors', 'present:medicine']));
     expect(kinds('transport')).toEqual(expect.arrayContaining(['present:public', 'present:taxi']));
+  });
+});
+
+describe('усыновление: родитель, у которого уже лежат подкатегории набора', () => {
+  const group = (plan: ReturnType<typeof planCatalog>, slug: string) => plan.groups.find((x) => x.group.slug === slug)!;
+
+  it('нужны две подкатегории набора и больше, чем у одноимённой категории: одной «Отопления» мало', () => {
+    const pay = cat('Платежи');
+    const heat = cat('Отопление', { parentId: pay.id });
+    const komm = cat('Коммуналка');
+    expect(group(planCatalog([pay, heat, komm]), 'utilities').parent).toMatchObject({ id: komm.id });
+    const water = cat('Вода', { parentId: pay.id });
+    expect(group(planCatalog([pay, heat, water, komm]), 'utilities').parent).toMatchObject({ id: pay.id });
+  });
+
+  it('у одноимённой категории подкатегорий не меньше — остаётся она', () => {
+    const pay = cat('Платежи');
+    const komm = cat('Коммуналка');
+    const rows = [pay, cat('Отопление', { parentId: pay.id }), cat('Вода', { parentId: pay.id }), komm, cat('Свет', { parentId: komm.id }), cat('Газ', { parentId: komm.id })];
+    expect(group(planCatalog(rows), 'utilities').parent).toMatchObject({ id: komm.id });
+  });
+
+  it('если набора у человека нет совсем, он встаёт под «усыновлённую» категорию, а не создаётся новый', () => {
+    const pay = cat('Платежи');
+    const rows = [pay, cat('Отопление', { parentId: pay.id }), cat('Вода', { parentId: pay.id })];
+    const g = group(planCatalog(rows), 'utilities');
+    expect(g.parent).toMatchObject({ action: 'present', id: pay.id });
+  });
+
+  it('категории чужого вида и подкатегории подкатегорий не усыновляют', () => {
+    const pay = cat('Платежи', { kind: 'income' });
+    const rows = [pay, cat('Отопление', { parentId: pay.id, kind: 'income' }), cat('Вода', { parentId: pay.id, kind: 'income' })];
+    expect(group(planCatalog(rows), 'utilities').parent).toEqual({ action: 'create' });
+  });
+
+  it('категорию, которая уже названа как набор («Связь»), не усыновляет другой набор', () => {
+    const comm = cat('Связь');
+    const rows = [comm, cat('Отопление', { parentId: comm.id }), cat('Вода', { parentId: comm.id })];
+    const plan = planCatalog(rows);
+    expect(group(plan, 'communication').parent).toMatchObject({ id: comm.id });
+    expect(group(plan, 'utilities').parent).toEqual({ action: 'create' }); // «Связь» занята своим набором
   });
 });
 
