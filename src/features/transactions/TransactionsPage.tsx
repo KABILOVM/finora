@@ -19,7 +19,7 @@ import { DayHeader } from './DayHeader';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionRow } from './TransactionRow';
 import { useCategoryIndex, useWalletIndex } from './txData';
-import { dayTotal, matchesSearch, toTxFilter, totalsByCurrency } from './txFilters';
+import { dayTotal, matchesAmountRange, matchesSearch, matchesSource, toTxFilter, totalsByCurrency } from './txFilters';
 import { useListFilters } from './useListFilters';
 
 /** Сколько операций показываем сразу (целыми днями) и сколько добавляет «Показать ещё». */
@@ -46,20 +46,29 @@ export default function TransactionsPage() {
   const filter = useMemo(() => toTxFilter(filters, '', today, categories ?? []), [filters, today, categories]);
   const found = useTransactions(filter);
   const anyRow = useHasTransactions();
+  const { amountFrom, amountTo, source } = filters;
   const rows = useMemo(() => {
-    if (!found || search.trim() === '') return found;
-    if (!walletIndex || !categoryIndex) return undefined;
+    if (!found) return found;
+    const bySource = source === '' ? found : found.filter((t) => matchesSource(t, source));
+    const needSearch = search.trim() !== '';
+    const needAmount = amountFrom !== '' || amountTo !== '';
+    if (!needSearch && !needAmount) return bySource;
+    // сумма сравнивается в валюте кошелька операции, поиск смотрит и в названия: пока справочники не загрузились, списка нет
+    if (!walletIndex || (needSearch && !categoryIndex)) return undefined;
+    const currencyOf = (id: string) => walletIndex.get(id)?.currency;
     const look = {
       walletName: (id: string) => walletIndex.get(id)?.name,
-      categoryName: (id: string) => categoryIndex.get(id)?.name,
-      currencyOf: (id: string) => walletIndex.get(id)?.currency,
+      categoryName: (id: string) => categoryIndex?.get(id)?.name,
+      currencyOf,
     };
-    return found.filter((t) => matchesSearch(t, search, look));
-  }, [found, search, walletIndex, categoryIndex]);
+    return bySource.filter(
+      (t) => matchesAmountRange(t, amountFrom, amountTo, currencyOf) && (!needSearch || matchesSearch(t, search, look)),
+    );
+  }, [found, search, source, amountFrom, amountTo, walletIndex, categoryIndex]);
 
   // другой список (фильтр, поиск, вкладка «Операции», «Показать всё») — снова с первой страницы
   const filterKey = JSON.stringify(filter);
-  useEffect(() => setLimit(PAGE_SIZE), [filterKey, search]);
+  useEffect(() => setLimit(PAGE_SIZE), [filterKey, search, source, amountFrom, amountTo]);
 
   const { groups, shown } = useMemo(() => {
     const byDay = new Map<string, LocalRow<Transaction>[]>();

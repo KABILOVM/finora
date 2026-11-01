@@ -97,7 +97,14 @@ export interface TransactionFiltersProps {
  */
 export function TransactionFilters({ filters, onChange, wallets, categories, today }: TransactionFiltersProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const inSheet: SheetFilters = { walletId: filters.walletId, kind: filters.kind, categoryId: filters.categoryId };
+  const inSheet: SheetFilters = {
+    walletId: filters.walletId,
+    kind: filters.kind,
+    categoryId: filters.categoryId,
+    amountFrom: filters.amountFrom,
+    amountTo: filters.amountTo,
+    source: filters.source,
+  };
   const count = activeFilterCount(inSheet);
 
   return (

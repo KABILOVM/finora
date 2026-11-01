@@ -382,6 +382,118 @@ describe('поиск по категории, кошельку и сумме', (
   });
 });
 
+describe('фильтры: сумма и «откуда операция»', () => {
+  const amountField = (name: 'От' | 'До') => screen.getByRole('textbox', { name }) as HTMLInputElement;
+  const type = async (name: 'От' | 'До', value: string) => {
+    await user.clear(amountField(name));
+    if (value !== '') await user.type(amountField(name), value);
+  };
+  const activeLabels = () => document.querySelector('[data-testid="active-filters"]')?.textContent ?? '';
+
+  it('«от»: крупные операции за всё время; «от и до» — в валюте кошелька каждой операции (10 $ тоже «10»)', async () => {
+    await openList();
+    await period('Всё время');
+    await waitFor(() => expect(days()).toHaveLength(5));
+
+    await applySheet(() => type('От', '100'));
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    expect(has('аванс')).toBe(true); // 5 000 с.
+    expect(has('Наличные → Карта')).toBe(true); // перевод 100 с. — граница входит
+    expect(currentSearch()).toBe('?period=all&min=100');
+    expect(activeLabels()).toContain('Сумма от 100');
+
+    // от 10 до 70: обед 12,50, coffee 10 $, рынок 45, «Работа» 70 (граница входит); выше и ниже — нет
+    await applySheet(async () => {
+      await type('От', '10');
+      await type('До', '70');
+    });
+    await waitFor(() => expect(rowTexts()).toHaveLength(4));
+    for (const note of ['обед', 'coffee', 'рынок', 'Работа']) expect(has(note)).toBe(true);
+    expect(has('аванс')).toBe(false);
+    expect(has('такси')).toBe(false); // 3 с.
+    expect(currentSearch()).toBe('?period=all&min=10&max=70');
+    expect(activeLabels()).toContain('Сумма 10–70');
+  });
+
+  it('итог за период и счётчик на кнопке «Фильтры» учитывают отфильтрованное', async () => {
+    await openList({ path: '/transactions?period=all&min=100' });
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    expect(screen.getByRole('button', { name: /^Фильтры/ })).toHaveAccessibleName(/1/);
+    const totals = document.querySelector('[data-testid="period-totals"]')?.textContent ?? '';
+    expect(totals).toContain(money(500_000, 'TJS', 'always'));
+    expect(totals).not.toContain(money(-1250)); // обед в итог не попал
+  });
+
+  it('запятая и пробелы в границе понятны; в списке она показана с запятой', async () => {
+    await openList({ path: '/transactions?period=all' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    await applySheet(() => type('От', '12,5'));
+    await waitFor(() => expect(currentSearch()).toBe('?period=all&min=12.5')); // внутри и в адресе — «чистое» число
+    await waitFor(() => expect(has('обед')).toBe(true)); // 12,50 — граница входит
+    expect(has('такси')).toBe(false);
+    await openSheet();
+    expect(amountField('От').value).toBe('12,5');
+  });
+
+  it('не число или «до» меньше «от» — подсказка у поля, «Применить» недоступна', async () => {
+    await openList({ path: '/transactions?period=all' });
+    await openSheet();
+    await type('От', 'abc');
+    expect(screen.getByText('Введите сумму числом')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled();
+    await type('От', '100');
+    await type('До', '50');
+    expect(screen.getByText('«До» меньше «От»')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled();
+    await type('До', '500');
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeEnabled();
+    // закрытие без «Применить» ничего не меняет
+    await user.click(screen.getByRole('button', { name: 'Закрыть' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(currentSearch()).toBe('?period=all');
+  });
+
+  it('ссылка с суммой открывает фильтр; «Сбросить» убирает сумму; поиск работает вместе с суммой', async () => {
+    await openList({ path: '/transactions?period=all&min=100' });
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    await user.type(screen.getByRole('textbox', { name: 'Поиск по операциям' }), 'аванс');
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    await user.clear(screen.getByRole('textbox', { name: 'Поиск по операциям' }));
+    await user.click(screen.getByRole('button', { name: 'Сбросить' }));
+    await waitFor(() => expect(currentSearch()).toBe('?period=all'));
+    await waitFor(() => expect(days()).toHaveLength(5));
+  });
+
+  it('«Откуда»: регулярные платежи, по долгам, все', async () => {
+    const td = await openList({ path: '/transactions?period=all' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    // у одной операции — правило, у другой — долг (так их создают регулярный платёж и «Долги»)
+    await write(() => storeOf(td).db.transactions.update(hist.txs['taxi'] ?? '', { recurringRuleId: 'rule-1' }));
+    await write(() => storeOf(td).db.transactions.update(hist.txs['lunch'] ?? '', { debtId: 'debt-1' }));
+
+    await applySheet(() => user.click(screen.getByRole('button', { name: 'Регулярные платежи' })));
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(has('такси')).toBe(true);
+    expect(currentSearch()).toBe('?period=all&src=recurring');
+    expect(activeLabels()).toContain('Регулярные платежи');
+
+    await applySheet(() => user.click(screen.getByRole('button', { name: 'По долгам' })));
+    await waitFor(() => expect(has('такси')).toBe(false));
+    expect(rowTexts()).toHaveLength(1);
+    expect(currentSearch()).toBe('?period=all&src=debt');
+
+    await applySheet(() => user.click(screen.getByRole('button', { name: 'Все' })));
+    await waitFor(() => expect(days()).toHaveLength(5));
+    expect(currentSearch()).toBe('?period=all');
+  });
+
+  it('мусор в адресе (min=abc, src=чужое) — обычный список', async () => {
+    await openList({ path: '/transactions?period=all&min=abc&src=%D1%87%D1%83%D0%B6%D0%BE%D0%B5' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    expect(document.querySelector('[data-testid="active-filters"]')).toBeNull();
+  });
+});
+
 describe('период: «7 дней», «30 дней» и «Свои даты»', () => {
   // поля «С» и «По» — два календаря подряд (у календаря нет роли «textbox», поэтому ищем по типу)
   const dates = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="date"]'));
@@ -669,6 +781,9 @@ describe('чистые функции фильтров', () => {
     walletId: '',
     categoryId: '',
     kind: '',
+    amountFrom: '',
+    amountTo: '',
+    source: '',
     search: '',
     ...over,
   });
