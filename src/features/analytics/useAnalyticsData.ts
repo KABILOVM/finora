@@ -14,6 +14,7 @@ import {
 import type { CurrencyCode, IsoDate, Minor, UUID } from '@/domain/types';
 import { shiftMonth } from '@/features/transactions/txFilters';
 import { findAnomalies, type Anomalies } from './anomalies';
+import { spendByNote, spendByTag, spendByWallet, spendTotal, type SpendGroup } from './spendGroups';
 import { effectiveCategory, filterSpendRows, inCategoryFilter } from './categoryFilter';
 import {
   categoryDeltas,
@@ -52,6 +53,15 @@ export interface BudgetPaceItem {
   pace: Extract<BudgetPace, { status: 'will-exceed' }>;
 }
 
+/** «Куда уходят деньги»: расходы выбранного месяца по заметке, кошельку и метке (spendGroups.ts). */
+export interface WhereMoneyGoes {
+  /** Все расходы месяца: от них считаются доли. */
+  totalMinor: Minor;
+  note: SpendGroup[];
+  wallet: SpendGroup[];
+  tag: SpendGroup[];
+}
+
 export interface AnalyticsData {
   base: CurrencyCode;
   month: string;
@@ -81,6 +91,10 @@ export interface AnalyticsData {
   anomalies: Anomalies;
   /** Категории (все, включая архивные): названия в списках. */
   categories: ReadonlyMap<UUID, { name: string; icon: string; color: string }>;
+  /** Кошельки (все, включая архивные): значки и названия в «Куда уходят деньги». */
+  wallets: ReadonlyMap<UUID, { name: string; icon: string; color: string }>;
+  /** Куда уходят деньги: по заметке, кошельку и метке. Не зависит от фильтра по категории. */
+  where: WhereMoneyGoes;
   /**
    * Фильтр по категории (с подкатегориями), если он включён и такая категория есть; иначе null. Сужает только `deltas` и `top`;
    * остальное (сводка, темп, графики, аномалии) считается по всем расходам.
@@ -100,20 +114,22 @@ export function useAnalyticsData(month: string, today: IsoDate, categoryFilter: 
   const loaded = useLiveQuery(async () => {
     const settings = await store.settings.get();
     if (!settings) return null;
-    const [rows, budgets, categoryRows] = await Promise.all([
+    const [rows, budgets, categoryRows, walletRows] = await Promise.all([
       store.db.transactions
         .where('occurredOn')
         .between(`${shiftMonth(month, -(SERIES_MONTHS - 1))}-01`, `${month}-31`, true, true)
         .toArray(),
       store.db.budgets.toArray(),
       store.db.categories.toArray(),
+      store.db.wallets.toArray(),
     ]);
-    return { base: settings.baseCurrency, rows, budgets, categoryRows };
+    return { base: settings.baseCurrency, rows, budgets, categoryRows, walletRows };
   }, [store, month]);
 
   return useMemo((): AnalyticsState => {
     if (loaded === undefined || loaded === null) return loaded;
-    const { base, rows, budgets, categoryRows } = loaded;
+    const { base, rows, budgets, categoryRows, walletRows } = loaded;
+    const walletIndex = new Map(walletRows.map((w) => [w.id, { name: w.name, icon: w.icon, color: w.color }] as const));
     const parentOf = new Map(categoryRows.map((c) => [c.id, c.parentId] as const));
     const filterId = effectiveCategory(categoryFilter, new Set(categoryRows.map((c) => c.id)));
     try {
@@ -175,6 +191,13 @@ export function useAnalyticsData(month: string, today: IsoDate, categoryFilter: 
         unusual,
         anomalies: findAnomalies(rows, month, today, base),
         categories: new Map(categoryRows.map((c) => [c.id, { name: c.name, icon: c.icon, color: c.color }] as const)),
+        wallets: walletIndex,
+        where: {
+          totalMinor: spendTotal(rows, month, base),
+          note: spendByNote(rows, month, base),
+          wallet: spendByWallet(rows, month, base, (id) => walletIndex.get(id)?.name ?? 'Кошелёк удалён'),
+          tag: spendByTag(rows, month, base),
+        },
         categoryFilter: filterId,
       };
     } catch (e) {
