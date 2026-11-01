@@ -271,9 +271,12 @@ describe('подкатегории', () => {
       expect(rows.filter((c) => ['Еда', 'Обеды', 'Кофе'].includes(c.name)).every((c) => c.archivedAt !== null)).toBe(true);
     });
 
-    await user.click(screen.getByRole('button', { name: /Архив · 3 категории/ }));
+    // живой запрос экрана может отстать от проверки базы выше — ждём, пока кнопка архива появится, а не читаем её сразу
+    await user.click(await findByRole('button', { name: /Архив · 3 категории/ }));
     // в архиве у подкатегории подпись с названием родителя
-    expect(screen.getByText('Обеды').closest('li')).toHaveTextContent('Еда');
+    await waitFor(() => expect(screen.getByText('Обеды').closest('li')).toHaveTextContent('Еда'));
+    // «Вернуть» заблокирована, пока идёт архивация (busy); клик по заблокированной кнопке молча ничего не делает — ждём, пока она станет доступна
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Вернуть: Обеды' })).not.toBeDisabled());
     await user.click(screen.getByRole('button', { name: 'Вернуть: Обеды' }));
     await waitFor(() => expect(screen.getByRole('button', { name: /Архив · 2 категории/ })).toBeInTheDocument());
     // родитель ещё в архиве: «Обеды» в основном списке — обычная категория, не теряется и без отступа

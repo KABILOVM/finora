@@ -54,7 +54,8 @@ describe('экран кошелька', () => {
     await waitFor(() => expect(document.body.textContent).toContain('Карта'));
     await user.click(await findByRole('link', { name: /Карта/ }));
     await findByRole('heading', { name: 'Карта', level: 1 });
-    await user.click(screen.getByRole('link', { name: 'Расход' }));
+    // заголовок с именем кошелька появляется раньше кнопок: пока грузятся настройки и остатки, под ним только серый каркас — ждём саму ссылку
+    await user.click(await findByRole('link', { name: 'Расход' }));
     await findByRole('dialog');
     // в форме выбран кошелёк «Карта», а не «Наличные» по умолчанию
     expect(await findByRole('button', { name: 'Кошелёк: Карта' })).toBeTruthy();
