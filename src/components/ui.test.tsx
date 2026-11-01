@@ -192,9 +192,16 @@ describe('ChipPicker и GlyphPicker', () => {
     const icon = render(<Glyph value="i:cup" color="#f97316" />);
     expect(icon.container.querySelector('svg')).not.toBeNull();
     icon.unmount();
+    // банк — настоящий значок приложения (картинка), а не нарисованный знак; неизвестный банк — как эмодзи
     const bank = render(<Glyph value="b:alif" />);
-    expect(bank.container.querySelector('svg')).not.toBeNull();
+    expect(bank.container.querySelector('img')?.getAttribute('src')).toMatch(/tj\/alifbank\.png$/);
+    expect(bank.container.querySelector('svg')).toBeNull();
     bank.unmount();
+    for (const [id, file] of [['dc', 'dcbank'], ['humo', 'humo']] as const) {
+      const b = render(<Glyph value={`b:${id}`} />);
+      expect(b.container.querySelector('img')?.getAttribute('src'), id).toMatch(new RegExp(`tj/${file}\\.png$`));
+      b.unmount();
+    }
     const text = render(<Glyph value="🦄" />);
     expect(text.container.textContent).toBe('🦄');
   });

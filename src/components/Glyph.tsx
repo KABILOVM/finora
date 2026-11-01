@@ -15,7 +15,7 @@ export interface GlyphProps {
   className?: string;
 }
 
-/** Плитка со значком: иконка на подкрашенном фоне, знак банка на градиенте, логотип сервиса на его цвете или (для незнакомого эмодзи) сам эмодзи. */
+/** Плитка со значком: иконка на подкрашенном фоне, значок банка (картинка приложения), логотип сервиса на его цвете или (для незнакомого эмодзи) сам эмодзи. */
 const HEX = /^#[0-9a-f]{6}$/i;
 
 /** Оформление плитки значка: цвет на 18% прозрачности; сам значок — тот же цвет, смешанный с цветом текста (темнее на светлой теме, светлее на тёмной). */
@@ -85,18 +85,9 @@ export function Glyph({ value, color: rawColor, size = 40, className }: GlyphPro
   const inner = Math.round(size * 0.56);
 
   if (g.kind === 'bank') {
+    // знак банка — настоящий значок его приложения (как у сервисов каталога)
     const bank = bankById(g.id);
-    if (bank) {
-      return (
-        <span
-          aria-hidden="true"
-          className={`inline-flex items-center justify-center text-white ${className ?? ''}`}
-          style={{ ...base, background: `linear-gradient(225deg, ${bank.from}, ${bank.to})` }}
-        >
-          <Icon name={`bank-${bank.id}` as 'bank-alif'} size={inner} />
-        </span>
-      );
-    }
+    if (bank && serviceById(bank.service)) return <ServiceGlyph id={bank.service} base={base} inner={Math.round(size * 0.6)} className={className} />;
   }
 
   if (g.kind === 'service') {
