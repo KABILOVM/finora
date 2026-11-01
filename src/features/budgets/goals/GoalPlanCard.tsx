@@ -6,9 +6,13 @@ import { Notice } from '@/components/Notice';
 import { Button } from '@/components/Button';
 import type { DailyForecastOk } from '@/domain/forecast';
 import type { CategoryAdvice, DayPlan } from '@/domain/savingsPlan';
-import type { Category, CurrencyCode, LocalRow, UUID } from '@/domain/types';
+import type { Category, CurrencyCode, LocalRow, Minor, SavingsGoal, UUID } from '@/domain/types';
 import { cn } from '@/lib/cn';
 import { budgetLabel } from '../budgetText';
+import type { SeasonalHint } from '@/domain/seasonality';
+import { SeasonalNote } from './SeasonalNote';
+import { ShiftDueButton } from './ShiftDueButton';
+import { WhatIfList } from './WhatIfList';
 import { NO_HISTORY_TEXT, adviceLine, catchUpLine, horizonLabel, monthLeftLine, planStatusLine, withoutGoalLine } from './goalsText';
 
 export interface GoalPlanCardProps {
@@ -19,6 +23,14 @@ export interface GoalPlanCardProps {
   leftThisMonthMinor: number;
   /** Сколько целей ещё копится: при нескольких дата-подсказка относится ко всем вместе. */
   activeGoals: number;
+  /** Единственная копящаяся цель: только для неё предлагаем «Сдвинуть срок» (иначе непонятно, какую двигать). */
+  soleGoal: LocalRow<SavingsGoal> | null;
+  /** Сколько ещё накопить по всем копящимся целям. */
+  remainingMinor: Minor;
+  /** Сколько откладывать в месяц по плану (сумма по копящимся целям). */
+  monthlyNeedMinor: Minor;
+  /** Сезонные месяцы до срока (пусто — истории мало или таких месяцев нет). */
+  seasonal: readonly SeasonalHint[];
   categories: ReadonlyMap<UUID, LocalRow<Category>>;
   /** «Обязательные категории»: открыть выбор. */
   onEssential: () => void;
@@ -51,7 +63,7 @@ function AdviceRow({ c, base, categories }: { c: CategoryAdvice; base: CurrencyC
  * План накопления: сколько можно тратить в день с учётом целей и — по категориям — сколько можно, что сократить, а что лучше
  * не тратить, чтобы к сроку накопить. Основная цифра «Осталось на день» выше остаётся прежней: здесь отдельный расчёт «с целью».
  */
-export function GoalPlanCard({ base, forecast, day, leftThisMonthMinor, activeGoals, categories, onEssential }: GoalPlanCardProps) {
+export function GoalPlanCard({ base, forecast, day, leftThisMonthMinor, activeGoals, soleGoal, remainingMinor, monthlyNeedMinor, seasonal, categories, onEssential }: GoalPlanCardProps) {
   const until = horizonLabel(forecast.horizonEnd, forecast.monthEnd);
   // Общий лимит месяца тоже ограничивает «в день»: с целью — меньшее из двух чисел
   const budgetPerDay = forecast.budget?.perDayMinor;
@@ -81,6 +93,7 @@ export function GoalPlanCard({ base, forecast, day, leftThisMonthMinor, activeGo
           {catchUpLine(day.catchUp, base, activeGoals > 1, forecast.today)}
         </p>
       )}
+      {day.catchUp?.kind === 'date' && soleGoal !== null && <ShiftDueButton goal={soleGoal} date={day.catchUp.date} today={forecast.today} />}
 
       {day.categories.length === 0 ? (
         <p className="text-sm text-muted">{NO_HISTORY_TEXT}</p>
@@ -108,6 +121,10 @@ export function GoalPlanCard({ base, forecast, day, leftThisMonthMinor, activeGo
           )}
         </>
       )}
+
+      <SeasonalNote hints={seasonal} base={base} />
+
+      <WhatIfList base={base} categories={categories} advice={day.categories} remainingMinor={remainingMinor} monthlyNeedMinor={monthlyNeedMinor} />
 
       <Button variant="secondary" icon="settings" onClick={onEssential} className="self-start">
         Обязательные категории

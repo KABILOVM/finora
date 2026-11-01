@@ -1,5 +1,6 @@
+import { addDays } from '@/lib/dates';
 import { endOfMonth } from './forecast';
-import { ceilDiv, goalProgress, type GoalProgress } from './goals';
+import { ceilDiv, goalProgress, NUDGE_FROM_DAY, wholeMonthsBetween, type GoalProgress } from './goals';
 import { addMinor, isMinor } from './money';
 import type { CurrencyCode, IsoDate, Minor, UUID } from './types';
 
@@ -89,6 +90,8 @@ export type CategoryAdviceKind = 'keep' | 'trim' | 'skip';
 export interface CategoryAdvice {
   categoryId: UUID;
   essential: boolean;
+  /** Сколько на неё обычно уходит за месяц (среднее за прошлые месяцы). */
+  usualMonthlyMinor: Minor;
   /** Сколько на неё обычно ушло бы до конца горизонта. */
   usualRestMinor: Minor;
   /** На сколько сократить (0 — не нужно или нельзя). */
@@ -215,6 +218,16 @@ export function addMonths(date: IsoDate, n: number): IsoDate {
 }
 
 /**
+ * Дата, до которой от `today` проходит не меньше `months` ПОЛНЫХ месяцев (так срок считает goalProgress). Обычно это сегодня + months;
+ * если такого числа в месяце нет (31-е → февраль), addMonths даёт последний день месяца и полных месяцев на один меньше — берём следующий день.
+ */
+export function dateForWholeMonths(today: IsoDate, months: number): IsoDate {
+  let date = addMonths(today, months);
+  for (let i = 0; i < 3 && wholeMonthsBetween(today, date) < months; i++) date = addDays(date, 1);
+  return date;
+}
+
+/**
  * Самая ранняя реалистичная дата. fundable — сколько можно отложить за горизонт, если не тратить на необязательное; remaining — сколько
  * ещё накопить по всем активным целям. Деньги на горизонте — запас, а не ежемесячный доход, поэтому растягивать его на весь месяц нельзя:
  * темп в месяц = fundable, а если горизонт короче остатка месяца (близкая зарплата) — fundable, пересчитанный на остаток месяца, вниз
@@ -227,7 +240,7 @@ function catchUpPlan(fundable: Minor, horizon: number, today: IsoDate, remaining
   if (monthly <= 0) return { kind: 'none' };
   const months = Math.max(1, ceilDiv(remaining, monthly));
   if (months > MAX_CATCHUP_MONTHS) return { kind: 'far', monthlyMinor: monthly };
-  return { kind: 'date', date: addMonths(today, months), months, monthlyMinor: monthly };
+  return { kind: 'date', date: dateForWholeMonths(today, months), months, monthlyMinor: monthly };
 }
 
 function dayPlan(reserve: Minor, forecast: PlanForecast, usual: UsualSpend | null, today: IsoDate, remaining: Minor): DayPlan {
@@ -277,6 +290,7 @@ function dayPlan(reserve: Minor, forecast: PlanForecast, usual: UsualSpend | nul
       return {
         categoryId: r.categoryId,
         essential: r.essential,
+        usualMonthlyMinor: r.usualMonthlyMinor,
         usualRestMinor: r.rest,
         cutMinor: cut,
         allowedMinor: r.rest - cut,
@@ -361,4 +375,23 @@ export function usualSpendFromHistory(months: readonly HistoryMonth[], isEssenti
     .sort((a, b) => b.usualMonthlyMinor - a.usualMonthlyMinor || (a.categoryId < b.categoryId ? -1 : 1));
   const rest = expenses - attributed;
   return { categories, uncategorizedMonthlyMinor: rest > 0n ? toMinor(rest / n) : 0 };
+}
+
+// ───────────────────────── напоминание «пора отложить» ─────────────────────────
+
+export interface GoalNudge {
+  /** Сколько отложено в этом месяце. */
+  savedMinor: Minor;
+  /** Сколько нужно отложить за месяц. */
+  neededMinor: Minor;
+}
+
+/**
+ * «Пора отложить»: идёт вторая половина месяца (с NUDGE_FROM_DAY, как у целей кошельков), цель ещё копится, а за месяц отложено меньше
+ * нужного. Без привязанного кошелька приложение не видит, сколько отложено, — напоминать не о чем (null).
+ */
+export function goalNudge(item: GoalPlanItem, hasWallet: boolean, today: IsoDate): GoalNudge | null {
+  if (!hasWallet || item.state !== 'active' || item.leftThisMonthMinor <= 0) return null;
+  if (Number(today.slice(8, 10)) < NUDGE_FROM_DAY) return null;
+  return { savedMinor: item.savedThisMonthMinor, neededMinor: item.monthNeedMinor };
 }

@@ -83,6 +83,15 @@ describe('buildAttention: что требует внимания на «Глав
     expect(buildAttention(input({ savingNudges: ['А', 'Б', 'В', 'Г', 'Д'] }))[0]?.text).toBe('Пора отложить: 5 целей');
   });
 
+  it('цели накопления из «Бюджетов»: одна — по имени, несколько — числом; ведёт в «Бюджеты», жёлтым', () => {
+    expect(buildAttention(input({ goalNudges: ['Отпуск'] }))[0]).toMatchObject({ kind: 'saving', text: 'Пора отложить на цель «Отпуск»', to: '/budgets', tone: 'warning' });
+    expect(buildAttention(input({ goalNudges: ['А', 'Б'] }))[0]?.text).toBe('Пора отложить на 2 цели');
+    expect(buildAttention(input({ goalNudges: ['А', 'Б', 'В', 'Г', 'Д'] }))[0]?.text).toBe('Пора отложить на 5 целей');
+    // без целей строки нет, а кошельки-накопления и цели живут отдельными строками
+    expect(buildAttention(input({ goalNudges: [] }))).toEqual([]);
+    expect(buildAttention(input({ savingNudges: ['Кошелёк'], goalNudges: ['Отпуск'] })).map((i) => i.id)).toEqual(['saving', 'goal-saving']);
+  });
+
   it('порядок по важности: долги, платежи, лимиты, затем жёлтое «пора отложить»', () => {
     const r = buildAttention(
       input({ debts: [debt('d1', 'Р', '2026-10-01')], overduePayments: ['П'], overBudgets: ['Б'], savingNudges: ['Ц'] }),

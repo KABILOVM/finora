@@ -33,6 +33,7 @@ const day = (over: Partial<DayPlan> = {}): DayPlan => ({
 const advice = (over: Partial<CategoryAdvice>): CategoryAdvice => ({
   categoryId: 'c',
   essential: false,
+  usualMonthlyMinor: 300_000,
   usualRestMinor: 100_000,
   cutMinor: 0,
   allowedMinor: 100_000,

@@ -64,6 +64,21 @@ async function createGoal(name: string, amount: string) {
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 }
 
+/** Копилка: кошелёк «Накопления» без операций. */
+const WITH_BOX = async (s: Store) => {
+  await NO_HISTORY(s);
+  await s.wallets.create({ name: 'Копилка', currency: 'TJS', kind: 'savings', openingBalanceMinor: 0, color: '#2563eb', icon: '🐷' });
+};
+
+async function createLinkedGoal(name: string, amount: string, wallet: string) {
+  await user.click(addGoalButton());
+  await user.type(await findByRole('textbox', { name: 'Название' }), name);
+  await user.type(screen.getByRole('textbox', { name: /^Сколько накопить/ }), amount);
+  choose('Где копите', wallet);
+  await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+}
+
 describe('экран «Бюджеты»: цели накопления', () => {
   it('без целей — приглашение поставить первую', async () => {
     await openPage(NO_HISTORY);
@@ -220,5 +235,66 @@ describe('экран «Бюджеты»: цели накопления', () => {
     expect(line.textContent).toContain('не раньше');
     expect(line.textContent).toMatch(/\d{4} года/); // дата в следующем году — с годом
     expect(byId('goal-plan')?.textContent).toContain('Сдвиньте срок или уменьшите сумму');
+  });
+
+  it('«Пора отложить» в строке цели и «Отложить сейчас»: перевод на кошелёк цели закрывает напоминание', async () => {
+    const td = await openPage(WITH_BOX);
+    await createLinkedGoal('Ноутбук', '3000', 'Копилка');
+
+    // 15 октября — вторая половина месяца, ничего не отложено: напоминание; «Копилка из мелочи» тоже на месте
+    const nudge = await waitById('goal-row-nudge');
+    expect(nudge.textContent).toContain('Пора отложить');
+    expect(byId('round-up-card')).not.toBeNull();
+
+    await user.click(await findByRole('button', { name: 'Отложить сейчас на цель «Ноутбук»' }));
+    // предзаполнено «ещё отложить в этом месяце»: 3 000 за два месяца — 1 500
+    const amount = (await findByRole('textbox', { name: /^Сколько отложить/ })) as HTMLInputElement;
+    expect(amount.value.replace(/\s/g, '')).toBe('1500');
+    await user.click(screen.getByRole('button', { name: 'Отложить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    const transfer = (await storeOf(td).db.transactions.toArray()).find((t) => t.kind === 'transfer');
+    expect(transfer).toMatchObject({ amountMinor: 150_000, toAmountMinor: 150_000 });
+    await waitFor(() => expect(byId('goal-row-nudge')).toBeNull()); // отложено сколько нужно
+    expect(byId('goal-row')?.textContent).toMatch(/Накоплено .*1.?500/);
+  });
+
+  it('у цели без кошелька нет ни «Отложить сейчас», ни напоминания', async () => {
+    await openPage(NO_HISTORY);
+    await createGoal('Отпуск', '3000');
+    await waitById('goal-row');
+    expect(screen.queryByRole('button', { name: /^Отложить сейчас/ })).toBeNull();
+    expect(byId('goal-row-nudge')).toBeNull(); // не видим, сколько отложено, — напоминать не о чем
+    expect(byId('round-up-card')).toBeNull();
+  });
+
+  it('«Сдвинуть срок»: единственная цель не успевает — срок сдвигается на подсказанную дату, «впритык» уходит', async () => {
+    const td = await openPage(WITH_HISTORY);
+    await createGoal('Квартира', '30000'); // 15 000 в месяц при ~9 000 возможных — «впритык»
+    await user.click(await findByRole('button', { name: /^Сдвинуть срок на/ }));
+    await waitFor(async () => expect((await storeOf(td).db.savings_goals.toArray())[0]?.dueOn).toBe('2027-02-15'));
+    await waitFor(() => expect(byId('goal-catchup')).toBeNull());
+    expect(byId('goal-plan')?.textContent).not.toContain('Сдвиньте срок или уменьшите сумму');
+  });
+
+  it('при нескольких целях «Сдвинуть срок» не предлагается: непонятно, какую двигать', async () => {
+    await openPage(WITH_HISTORY);
+    await createGoal('Квартира', '30000');
+    await createGoal('Отпуск', '3000');
+    await waitById('goal-catchup');
+    expect(screen.queryByRole('button', { name: /^Сдвинуть срок на/ })).toBeNull();
+  });
+
+  it('«Что если сократить»: самая крупная необязательная категория первой, проценты переключаются', async () => {
+    await openPage(WITH_HISTORY);
+    await createGoal('Отпуск', '3000');
+    await waitById('goal-whatif');
+    const rows = () => allById('goal-whatif-row');
+    await waitFor(() => expect(rows().length).toBeGreaterThanOrEqual(2));
+    expect(rows()[0]?.textContent).toContain('Еда'); // 10 000 в месяц против 5 000 на развлечения
+    expect(rows()[0]?.textContent).toContain('раньше');
+    const before = rows()[0]?.textContent;
+    await user.click(screen.getByRole('button', { name: '−30%' }));
+    await waitFor(() => expect(rows()[0]?.textContent).not.toBe(before));
   });
 });

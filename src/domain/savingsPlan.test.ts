@@ -1,13 +1,18 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { daysBetween } from './forecast';
+import { wholeMonthsBetween } from './goals';
 import {
   addMonths,
   computeSavingsPlan,
+  dateForWholeMonths,
   distributeByWeight,
+  goalNudge,
   monthSpan,
   planGoal,
   usualSpendFromHistory,
   type PlanForecast,
+  type GoalPlanItem,
   type PlanGoal,
   type SavingsPlanInput,
   type UsualSpend,
@@ -313,5 +318,53 @@ describe('computeSavingsPlan: когда реально успеть (catchUp)',
       expect(day.catchUp.date > TODAY).toBe(true);
       expect(day.catchUp.monthlyMinor).toBeLessThan(p.leftThisMonthMinor);
     }
+  });
+});
+
+describe('dateForWholeMonths', () => {
+  it('обычный случай — сегодня плюс месяцы', () => {
+    expect(dateForWholeMonths('2026-10-15', 2)).toBe('2026-12-15');
+    expect(dateForWholeMonths('2026-10-15', 14)).toBe('2027-12-15');
+  });
+
+  it('31-е и месяц без 31-го: берём следующий день, чтобы полных месяцев хватало (срок считается по полным месяцам)', () => {
+    expect(dateForWholeMonths('2026-10-31', 4)).toBe('2027-03-01');
+    expect(wholeMonthsBetween('2026-10-31', dateForWholeMonths('2026-10-31', 4))).toBe(4);
+  });
+
+  it('свойство: полных месяцев до даты не меньше запрошенных, и дата не дальше трёх дней от «сегодня + месяцы»', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 2020, max: 2040 }), fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 31 }), fc.integer({ min: 1, max: 120 }), (y, m, d, months) => {
+        const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        const today = `${y}-${String(m).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+        const date = dateForWholeMonths(today, months);
+        expect(wholeMonthsBetween(today, date)).toBeGreaterThanOrEqual(months);
+        expect(daysBetween(addMonths(today, months), date)).toBeLessThanOrEqual(3);
+      }),
+    );
+  });
+});
+
+describe('goalNudge: «пора отложить»', () => {
+  const active = (over: Partial<GoalPlanItem> = {}): GoalPlanItem => ({
+    id: 'g',
+    state: 'active',
+    progress: null,
+    monthNeedMinor: 150_000,
+    savedThisMonthMinor: 40_000,
+    leftThisMonthMinor: 110_000,
+    ...over,
+  });
+
+  it('вторая половина месяца, отложено меньше нужного, кошелёк привязан — напоминание', () => {
+    expect(goalNudge(active(), true, '2026-10-15')).toEqual({ savedMinor: 40_000, neededMinor: 150_000 });
+    expect(goalNudge(active(), true, '2026-10-31')).not.toBeNull();
+  });
+
+  it('в первой половине месяца, без кошелька, при выполненном плане и у недействующих целей — нет', () => {
+    expect(goalNudge(active(), true, '2026-10-14')).toBeNull();
+    expect(goalNudge(active(), false, '2026-10-20')).toBeNull();
+    expect(goalNudge(active({ leftThisMonthMinor: 0 }), true, '2026-10-20')).toBeNull();
+    for (const state of ['reached', 'overdue', 'other-currency'] as const) expect(goalNudge(active({ state }), true, '2026-10-20')).toBeNull();
   });
 });
