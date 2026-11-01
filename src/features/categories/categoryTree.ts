@@ -1,5 +1,6 @@
 import type { ChipOption } from '@/components/ChipPicker';
 import type { Category, LocalRow } from '@/domain/types';
+import { isSearching, matchesQuery } from '@/lib/search';
 
 /**
  * Подкатегории («Коммунальные услуги → Вода, Свет»). Данные хранят родителя у каждой категории (поле parentId, проверки — в categoriesRepo:
@@ -46,6 +47,25 @@ export function groupUnderParents<T extends TreeNode>(rows: readonly T[]): T[] {
     else out.push(...members);
   }
   return out;
+}
+
+/**
+ * Категории под поиск по названию (порядок списка сохраняется). Подкатегория ищется по полному пути «Родитель Название»: «жильё вода» находит
+ * «Вода» в «Жильё», а запрос, совпавший с самим родителем, — все его подкатегории. У найденной подкатегории показывается и родитель
+ * (чтобы было видно, где она лежит). Пустой запрос возвращает всё.
+ */
+export function searchCategories<T extends TreeNode & { name: string }>(rows: readonly T[], query: string): T[] {
+  if (!isSearching(query)) return [...rows];
+  const byId = new Map(rows.map((r) => [r.id, r] as const));
+  const keep = new Set<string>();
+  for (const r of rows) {
+    const parent = parentIn(r, byId);
+    if (matchesQuery(parent === null ? r.name : `${parent.name} ${r.name}`, query)) {
+      keep.add(r.id);
+      if (parent !== null) keep.add(parent.id);
+    }
+  }
+  return rows.filter((r) => keep.has(r.id));
 }
 
 /** Родитель категории, если он есть в показываемом списке. */

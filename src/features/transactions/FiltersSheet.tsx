@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/Button";
 import { ChipPicker } from "@/components/ChipPicker";
-import { Field, inputClasses } from "@/components/Field";
+import { Field, inputClasses, TextInput } from "@/components/Field";
 import { Sheet } from "@/components/Sheet";
 import type { Category, LocalRow, TxKind, Wallet } from "@/domain/types";
 import { groupUnderParents, pathLabel } from "@/features/categories/categoryTree";
@@ -11,8 +11,10 @@ import {
   activeFilterCount,
   EMPTY_SHEET_FILTERS,
   NO_CATEGORY,
+  normalizeAmountText,
   withKind,
   type SheetFilters,
+  type SourceFilter,
 } from "./txFilters";
 
 const KIND_OPTIONS: readonly { value: "" | TxKind; label: string }[] = [
@@ -21,6 +23,30 @@ const KIND_OPTIONS: readonly { value: "" | TxKind; label: string }[] = [
   { value: "income", label: "Доходы" },
   { value: "transfer", label: "Переводы" },
 ];
+
+const SOURCE_OPTIONS: readonly { value: SourceFilter; label: string }[] = [
+  { value: "", label: "Все" },
+  { value: "recurring", label: "Регулярные платежи" },
+  { value: "debt", label: "По долгам" },
+];
+
+/** В списке сумма пишется с запятой, внутри лежит с точкой. */
+const shown = (t: string) => t.replace(".", ",");
+
+/** Ошибки полей суммы: не число; «До» меньше «От». Пусто — это не ошибка (граница не задана). */
+function amountErrors(f: Pick<SheetFilters, "amountFrom" | "amountTo">): { from: string | null; to: string | null } {
+  const from = normalizeAmountText(f.amountFrom);
+  const to = normalizeAmountText(f.amountTo);
+  return {
+    from: from === null ? "Введите сумму числом" : null,
+    to:
+      to === null
+        ? "Введите сумму числом"
+        : from !== null && from !== "" && to !== "" && Number(to) < Number(from)
+          ? "«До» меньше «От»"
+          : null,
+  };
+}
 
 export interface FiltersSheetProps {
   /** Что включено сейчас: с этого шит начинает. */
@@ -43,7 +69,18 @@ export function FiltersSheet({
   onApply,
   onClose,
 }: FiltersSheetProps) {
-  const [draft, setDraft] = useState<SheetFilters>(initial);
+  // суммы в шите — как набирает человек (с запятой); в список они уходят «чистыми» (normalizeAmountText)
+  const [draft, setDraft] = useState<SheetFilters>({ ...initial, amountFrom: shown(initial.amountFrom), amountTo: shown(initial.amountTo) });
+  const errors = amountErrors(draft);
+  // Поля суммы ниже первого экрана: ошибка («До меньше От») не должна прятаться под панелью кнопок, пока «Применить» неактивна
+  const amountRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (errors.from === null && errors.to === null) return;
+    // в тестовой среде (jsdom) scrollIntoView нет
+    amountRef.current?.querySelector('[role="alert"]')?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [errors.from, errors.to]);
+  const apply = () =>
+    onApply({ ...draft, amountFrom: normalizeAmountText(draft.amountFrom) ?? "", amountTo: normalizeAmountText(draft.amountTo) ?? "" });
   // Порядок — по популярности, посчитан один раз при открытии шита
   const pop = usePopularity();
   // «Родитель, затем его подкатегории»; группа стоит там, где встретился её самый частый член
@@ -92,7 +129,7 @@ export function FiltersSheet({
           >
             Сбросить
           </Button>
-          <Button size="lg" onClick={() => onApply(draft)}>
+          <Button size="lg" disabled={errors.from !== null || errors.to !== null} onClick={apply}>
             Применить
           </Button>
         </div>
@@ -162,6 +199,41 @@ export function FiltersSheet({
             )}
           </select>
         </Field>
+
+        <FieldGroup label="Сумма">
+          <div ref={amountRef} className="grid grid-cols-2 gap-2">
+            <TextInput
+              label="От"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0"
+              value={draft.amountFrom}
+              error={errors.from}
+              onChange={(e) => setDraft((cur) => ({ ...cur, amountFrom: e.target.value }))}
+              wrapperClassName="min-w-0"
+            />
+            <TextInput
+              label="До"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="без предела"
+              value={draft.amountTo}
+              error={errors.to}
+              onChange={(e) => setDraft((cur) => ({ ...cur, amountTo: e.target.value }))}
+              wrapperClassName="min-w-0"
+            />
+          </div>
+          <p className="mt-1 text-sm text-muted">В валюте кошелька операции, границы входят.</p>
+        </FieldGroup>
+
+        <FieldGroup label="Откуда операция">
+          <ChipPicker
+            ariaLabel="Откуда операция"
+            options={SOURCE_OPTIONS}
+            value={draft.source}
+            onChange={(value) => setDraft((cur) => ({ ...cur, source: value as SourceFilter }))}
+          />
+        </FieldGroup>
       </div>
     </Sheet>
   );

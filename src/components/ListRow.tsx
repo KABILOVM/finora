@@ -16,6 +16,8 @@ export interface ListRowProps {
   to?: string;
   /** Стрелка «›» справа (для строк-переходов). */
   chevron?: boolean;
+  /** Строка-переключатель (выделение в списке): состояние «нажата» читает и скринридер. Только вместе с onClick. */
+  pressed?: boolean;
   className?: string;
 }
 
@@ -24,7 +26,7 @@ export interface ListRowProps {
  * Значок и название идут одной группой с читаемой минимальной шириной (min-w-[9.5rem]): если рядом с ней не помещается
  * длинная сумма (узкий телефон, «1 234 567,89 $»), сумма переносится на вторую строку справа, а не съедает название.
  */
-export function ListRow({ leading, title, subtitle, trailing, onClick, to, chevron = false, className }: ListRowProps) {
+export function ListRow({ leading, title, subtitle, trailing, onClick, to, chevron = false, pressed, className }: ListRowProps) {
   const content = (
     <>
       <div className="flex min-w-[9.5rem] flex-1 items-center gap-3">
@@ -48,7 +50,12 @@ export function ListRow({ leading, title, subtitle, trailing, onClick, to, chevr
   }
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={cn(base, 'transition-colors hover:bg-surface-2 active:bg-border/60', className)}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={pressed}
+        className={cn(base, 'transition-colors hover:bg-surface-2 active:bg-border/60', className)}
+      >
         {content}
       </button>
     );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCategoryOptions, childrenOf, groupUnderParents, hasChildren, parentIn, pathLabel, withDescendants } from './categoryTree';
+import { buildCategoryOptions, childrenOf, groupUnderParents, hasChildren, parentIn, pathLabel, searchCategories, withDescendants } from './categoryTree';
 
 const row = (id: string, parentId: string | null = null, extra: Record<string, string> = {}) => ({
   id,
@@ -115,5 +115,53 @@ describe('варианты для выбора категории', () => {
     const byId = new Map(rows.map((r) => [r.id, r] as const));
     expect(pathLabel(rows[0]!, byId)).toBe('Коммунальные услуги › Вода');
     expect(pathLabel(rows[1]!, byId)).toBe('Еда');
+  });
+});
+
+describe('searchCategories: поиск по названию', () => {
+  const named = (id: string, name: string, parentId: string | null = null) => row(id, parentId, { name });
+  const rows = [
+    named('eda', 'Еда'),
+    named('zhile', 'Жильё'),
+    named('voda', 'Вода', 'zhile'),
+    named('svet', 'Свет', 'zhile'),
+    named('transport', 'Транспорт'),
+    named('taxi', 'Такси', 'transport'),
+  ];
+  const ids = (found: readonly { id: string }[]) => found.map((r) => r.id);
+
+  it('пустой запрос возвращает всё как есть', () => {
+    expect(ids(searchCategories(rows, ''))).toEqual(ids(rows));
+    expect(ids(searchCategories(rows, '   '))).toEqual(ids(rows));
+  });
+
+  it('совпала верхняя категория без подкатегорий — только она', () => {
+    expect(ids(searchCategories(rows, 'еда'))).toEqual(['eda']);
+  });
+
+  it('совпал родитель — и все его подкатегории', () => {
+    expect(ids(searchCategories(rows, 'жилье'))).toEqual(['zhile', 'voda', 'svet']); // «ё» и «е» не различаются
+  });
+
+  it('совпала подкатегория — и её родитель, но не соседние подкатегории', () => {
+    expect(ids(searchCategories(rows, 'вода'))).toEqual(['zhile', 'voda']);
+    expect(ids(searchCategories(rows, 'такси'))).toEqual(['transport', 'taxi']);
+  });
+
+  it('совпало и в родителе, и в подкатегории — каждая один раз, порядок списка сохранён', () => {
+    // «т» есть в «Свет», «Транспорт», «Такси»; «Жильё» вошло как родитель найденного «Свет»
+    expect(ids(searchCategories(rows, 'т'))).toEqual(['zhile', 'svet', 'transport', 'taxi']);
+  });
+
+  it('ничего не совпало — пусто; несколько слов — все должны найтись', () => {
+    expect(searchCategories(rows, 'космос')).toEqual([]);
+    // слова из пути «Жильё Вода»: «жил» есть у родителя, «вод» — у подкатегории; соседний «Свет» не подходит
+    expect(ids(searchCategories(rows, 'вод жил'))).toEqual(['zhile', 'voda']);
+    expect(ids(searchCategories(rows, 'вод еда'))).toEqual([]);
+  });
+
+  it('подкатегория с родителем не из списка (он в архиве) ищется как обычная и сама', () => {
+    const orphan = [named('a', 'Вода', 'gone'), named('b', 'Еда')];
+    expect(ids(searchCategories(orphan, 'вода'))).toEqual(['a']);
   });
 });

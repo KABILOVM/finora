@@ -488,6 +488,35 @@ describe('экран «Аналитика»: категории с долями'
     expect(rows.find((r) => r.startsWith('Еда'))).toContain('новая');
   });
 
+  it('«новая» не повторяется пояснением «трат не было» в каждой строке; у строк с прошлой суммой и у «без сравнения» пояснение остаётся', async () => {
+    await openPage({
+      setup: async (s) => {
+        await seedHistory(s); // «Продукты» в сентябре — 45 с. 20-го; «Без категории» — 2 с. 3-го
+        const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')!.id;
+        const cats = await s.db.categories.toArray();
+        const id = (name: string) => cats.find((c) => c.name === name && c.kind === 'expense')!.id;
+        // «Продукты»: в первых 15 днях сентября не было, но была 20-го — «без сравнения»
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 8_000, categoryId: id('Продукты'), occurredOn: '2026-10-14' });
+        // «Жильё»: в сентябре не было совсем — «новая»; «Связь» — тоже «новая»
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 9_000, categoryId: id('Жильё'), occurredOn: '2026-10-13' });
+        await s.transactions.create({ kind: 'expense', walletId: cash, amountMinor: 1_000, categoryId: id('Связь'), occurredOn: '2026-10-12' });
+      },
+    });
+    const rows = Array.from(screen.getByRole('list', { name: 'Расходы по категориям' }).querySelectorAll('li')).map((li) => text(li));
+    const row = (name: string) => rows.find((r) => r.includes(name))!;
+    for (const name of ['Жильё', 'Связь', 'Еда']) {
+      expect(row(name), name).toContain('новая');
+      expect(row(name), `${name}: без повтора`).not.toContain('трат не было');
+    }
+    // «без сравнения»: пояснение осталось, оно объясняет отсутствие процента
+    expect(row('Продукты')).toContain('без сравнения');
+    expect(row('Продукты')).toContain('За те же 15 дней прошлого месяца трат не было');
+    // категория с суммой в прошлом: пояснение — это сама прошлая сумма
+    expect(rows.some((r) => r.includes('Без категории') && r.includes(`За те же 15 дней прошлого месяца ${fmt(200)}`))).toBe(true);
+    // а «трат не было» во всём списке — ровно один раз (у «без сравнения»)
+    expect(rows.filter((r) => r.includes('трат не было'))).toHaveLength(1);
+  });
+
   it('идущий месяц без расходов, а в прошлом они были позже: «в этом месяце пока нет», а не «в этом и прошлом нет»', async () => {
     await openPage({
       setup: async (s) => {

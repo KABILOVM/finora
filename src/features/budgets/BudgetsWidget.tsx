@@ -13,6 +13,7 @@ import { useToday } from '@/recurring/useToday';
 import { BudgetBar, LEVEL_TEXT } from './BudgetBar';
 import { budgetLabel, fitFontSize, longDate, spentWord } from './budgetText';
 import { BUDGET_SCHEDULED_TEXT, perDayChars, spendBlocked } from './ForecastCard';
+import { HomeGoalLine } from './goals/HomeGoalLine';
 import { useBudgetsData, type BudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
 
@@ -137,6 +138,7 @@ export default function BudgetsWidget() {
         </span>
       </Link>
       <ForecastPart forecast={forecast} />
+      <HomeGoalLine forecast={forecast} />
       {budgetsData && <BudgetsPart data={budgetsData} />}
       {budgetsData && !hasBudgets && (
         <p className="mt-2 text-sm text-muted">
