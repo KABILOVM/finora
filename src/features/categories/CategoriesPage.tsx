@@ -1,5 +1,5 @@
 import { Glyph } from '@/components/Glyph';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -16,6 +16,9 @@ import { pluralRu } from '@/lib/plural';
 import { matchesQuery, showsSearch } from '@/lib/search';
 import { childrenOf, groupUnderParents, hasChildren, parentIn, searchCategories } from './categoryTree';
 import { CategorySheet } from './CategorySheet';
+
+// Готовых наборов много (около 150 записей): грузятся только когда окно открывают
+const CatalogSheet = lazy(() => import('./catalog/CatalogSheet'));
 
 type SheetState = { kind: 'new'; parentId?: string } | { kind: 'edit'; category: LocalRow<Category> };
 
@@ -41,6 +44,7 @@ export default function CategoriesPage() {
   const [archiving, setArchiving] = useState<LocalRow<Category> | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [catalog, setCatalog] = useState(false);
   const [query, setQuery] = useState('');
 
   const active = useMemo(() => (all ?? []).filter((c) => c.archivedAt === null), [all]);
@@ -107,8 +111,11 @@ export default function CategoriesPage() {
           setShowArchived(false);
           setQuery('');
         }}
-        className="mb-4"
+        className="mb-3"
       />
+      <Button variant="secondary" icon="stars" fullWidth disabled={all === undefined} onClick={() => setCatalog(true)} className="mb-3">
+        Готовые категории с подкатегориями
+      </Button>
       {all !== undefined && showsSearch(active.length, query) && (
         <SearchField label="Поиск по категориям" placeholder="Найти категорию" value={query} onChange={setQuery} className="mb-4" />
       )}
@@ -219,6 +226,12 @@ export default function CategoriesPage() {
               : undefined
           }
         />
+      )}
+
+      {catalog && (
+        <Suspense fallback={null}>
+          <CatalogSheet mode="manage" onClose={() => setCatalog(false)} />
+        </Suspense>
       )}
 
       <ConfirmDialog

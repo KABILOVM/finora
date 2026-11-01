@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -32,6 +32,9 @@ import { ForecastCard } from './ForecastCard';
 import { GoalsSection } from './goals/GoalsSection';
 import { useBudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
+
+// Шаблоны лимитов нужны редко: окно грузится, только когда его открывают
+const BudgetTemplateSheet = lazy(() => import('./templates/BudgetTemplateSheet'));
 
 const CHIP: Record<'ok' | 'warn' | 'over', { label: string; dot: string }> = {
   ok: { label: 'В норме', dot: 'bg-brand' },
@@ -90,6 +93,7 @@ export default function BudgetsPage() {
   const data = useBudgetsData(month);
   const expenseCategories = useCategories('expense');
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  const [templates, setTemplates] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [busy, setBusy] = useState(false);
   const [params, setParams] = useSearchParams();
@@ -181,6 +185,11 @@ export default function BudgetsPage() {
         )}
         <LevelChips items={progress.ok ? progress.items : []} />
         <BudgetFilters fields={filterFields} values={filterValues} onChange={setFilters} />
+        {active.length > 0 && (
+          <Button variant="secondary" icon="pie" fullWidth onClick={() => setTemplates(true)} className="mb-3">
+            Шаблоны лимитов
+          </Button>
+        )}
         {active.length === 0 ? (
           <EmptyState
             icon="pie"
@@ -188,9 +197,14 @@ export default function BudgetsPage() {
             text="Поставьте лимит на месяц: приложение покажет, сколько уже потрачено."
             className="py-6"
             action={
-              <Button size="lg" icon="plus" onClick={() => setSheet({ kind: 'new' })}>
-                Поставить первый лимит
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button size="lg" icon="plus" onClick={() => setSheet({ kind: 'new' })}>
+                  Поставить первый лимит
+                </Button>
+                <Button size="lg" variant="secondary" icon="pie" onClick={() => setTemplates(true)}>
+                  Начать с шаблона
+                </Button>
+              </div>
             }
           />
         ) : (
@@ -296,6 +310,12 @@ export default function BudgetsPage() {
           {content}
         </section>
       </div>
+
+      {templates && ready && (
+        <Suspense fallback={null}>
+          <BudgetTemplateSheet base={data.base} budgets={[...data.active, ...data.archived]} onClose={() => setTemplates(false)} />
+        </Suspense>
+      )}
 
       {sheet && ready && (
         <BudgetSheet

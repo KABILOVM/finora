@@ -7,6 +7,7 @@ import type { IsoDate } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 import { overdueCount } from './debtSummary';
 import { totalsLine, type Person } from './people';
+import { PersonAvatar } from './personAvatar';
 
 /** Список людей с открытыми долгами: имя, сколько долгов, итог по каждой валюте и просрочка. Строка — ссылка на страницу человека. */
 export function PeopleList({ people, today }: { people: readonly Person[]; today: IsoDate }) {
@@ -21,6 +22,7 @@ export function PeopleList({ people, today }: { people: readonly Person[]; today
                 to={`/debts/people/${encodeURIComponent(p.key)}`}
                 className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2 active:bg-border/60"
               >
+                <PersonAvatar name={p.name} />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-baseline gap-x-2">
                     <span className="line-clamp-2 min-w-0 break-words font-semibold">{p.name}</span>

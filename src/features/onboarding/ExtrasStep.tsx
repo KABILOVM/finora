@@ -62,7 +62,7 @@ export function ExtrasStep({ wants, onChange, onBack, onNext }: { wants: Wants; 
           icon="i:calendar"
           color="#ea580c"
           title="Напоминания"
-          text="О платежах и долгах"
+          text="О платежах, долгах и вечером — внести траты"
           control={<Switch checked={wants.reminders} onChange={(v) => onChange({ ...wants, reminders: v })} label="Напоминания" />}
         />
         <Row

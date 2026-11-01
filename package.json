@@ -1,7 +1,7 @@
 {
   "name": "finora",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "Finora — личный учёт денег: PWA, офлайн + синхронизация",
   "scripts": {
@@ -15,7 +15,8 @@
     "typecheck:app": "tsc --noEmit -p tsconfig.app.json",
     "check": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.json",
     "lint": "eslint src tests e2e scripts",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "gen:accents": "node scripts/gen-accents.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
