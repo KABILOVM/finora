@@ -1,9 +1,11 @@
 import { Glyph } from '@/components/Glyph';
+import { Icon } from '@/components/Icon';
 import { Badge } from '@/components/Badge';
 import { ListRow } from '@/components/ListRow';
 import { MoneyText } from '@/components/MoneyText';
 import type { Category, LocalRow, Transaction, Wallet } from '@/domain/types';
 import { TxTags } from '@/features/debts/TxTags';
+import { cn } from '@/lib/cn';
 import { describeTx } from './txDisplay';
 
 export interface TransactionRowProps {
@@ -15,13 +17,18 @@ export interface TransactionRowProps {
   onOpen: (id: string) => void;
   /** true — суммы скрыты (режим «скрыть суммы» на «Главной»). */
   maskAmounts?: boolean;
+  /**
+   * Режим выделения (список «Операции»): строка становится переключателем, на значке — отметка, выбранная строка подсвечена.
+   * Нажатие при этом вызывает onOpen — страница сама решает, что оно значит (открыть правку или переключить выделение).
+   */
+  selection?: { selected: boolean };
 }
 
 /**
  * Строка операции: значок категории, название, кошелёк и заметка, сумма цветом, метки синхронизации.
  * Операция по долгу несёт метку «Долг: <имя>», операция по расписанию — «Регулярный платёж».
  */
-export function TransactionRow({ tx, wallets, categories, syncEnabled, onOpen, maskAmounts = false }: TransactionRowProps) {
+export function TransactionRow({ tx, wallets, categories, syncEnabled, onOpen, maskAmounts = false, selection }: TransactionRowProps) {
   const v = describeTx(tx, wallets, categories);
   const rejected = tx.syncError !== null;
   const waiting = !rejected && syncEnabled && tx.dirty === 1;
@@ -31,8 +38,22 @@ export function TransactionRow({ tx, wallets, categories, syncEnabled, onOpen, m
   return (
     <ListRow
       onClick={() => onOpen(tx.id)}
+      {...(selection ? { pressed: selection.selected, className: selection.selected ? 'bg-brand/10' : '' } : {})}
       leading={
-        <Glyph value={v.icon} color={v.color ?? undefined} size={40} />
+        <span className="relative inline-flex">
+          <Glyph value={v.icon} color={v.color ?? undefined} size={40} />
+          {selection && (
+            <span
+              aria-hidden="true"
+              className={cn(
+                'absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-surface',
+                selection.selected ? 'bg-brand text-white' : 'bg-border',
+              )}
+            >
+              {selection.selected && <Icon name="check" size={12} />}
+            </span>
+          )}
+        </span>
       }
       title={title}
       subtitle={
