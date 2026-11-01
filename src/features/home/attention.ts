@@ -40,6 +40,8 @@ export interface AttentionInput {
   overBudgets: readonly string[];
   /** Названия кошельков-накоплений, в которые «пора отложить». */
   savingNudges: readonly string[];
+  /** Названия целей накопления из «Бюджетов», на которые «пора отложить» (необязательно: старые вызовы без целей работают как раньше). */
+  goalNudges?: readonly string[];
 }
 
 /** «Просрочен долг: Рустам» для одного; «Просрочено долгов: 3» для нескольких. */
@@ -105,6 +107,17 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       kind: 'saving',
       text: listed((n) => `Пора отложить: ${n}`, (n) => `Пора отложить: ${n} ${pluralRu(n, 'цель', 'цели', 'целей')}`, input.savingNudges),
       to: '/wallets',
+      tone: 'warning',
+    });
+  }
+
+  const goalNudges = input.goalNudges ?? [];
+  if (goalNudges.length > 0) {
+    out.push({
+      id: 'goal-saving',
+      kind: 'saving',
+      text: listed((n) => `Пора отложить на цель «${n}»`, (n) => `Пора отложить на ${n} ${pluralRu(n, 'цель', 'цели', 'целей')}`, goalNudges),
+      to: '/budgets',
       tone: 'warning',
     });
   }

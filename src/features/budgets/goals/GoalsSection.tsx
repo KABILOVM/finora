@@ -7,22 +7,26 @@ import { Notice } from '@/components/Notice';
 import { SectionHeader } from '@/components/SectionHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
-import { useStore } from '@/db';
+import { useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { DailyForecast } from '@/domain/forecast';
-import type { GoalPlanItem } from '@/domain/savingsPlan';
+import { goalNudge, type GoalNudge, type GoalPlanItem } from '@/domain/savingsPlan';
 import type { CurrencyCode, LocalRow, SavingsGoal, Wallet } from '@/domain/types';
 import { DebtBar } from '@/features/debts/DebtRow';
-import { goalBarLabel, goalDueLine, goalPaceLine, goalRemainingLine, goalSavedLine } from '@/features/wallets/goalText';
+import { goalBarLabel, goalDueLine, goalPaceLine, goalRemainingLine, goalSavedLine, nudgeLine } from '@/features/wallets/goalText';
 import { humanError } from '@/features/transactions/txActions';
 import { cn } from '@/lib/cn';
 import { pluralRu } from '@/lib/plural';
+import { useToday } from '@/recurring/useToday';
 import { DeleteGoalDialog } from './DeleteGoalDialog';
 import { EssentialSheet } from './EssentialSheet';
+import { RoundUpCard } from './RoundUpCard';
+import { SaveNowSheet } from './SaveNowSheet';
 import { GoalPlanCard } from './GoalPlanCard';
 import { GoalSheet } from './GoalSheet';
 import { goalMonthLine } from './goalsText';
 import { useGoalsPlan } from './useGoalsPlan';
+import { useSeasonality } from './useSeasonality';
 
 type SheetState = { kind: 'new' } | { kind: 'edit'; goal: LocalRow<SavingsGoal> } | null;
 
@@ -31,11 +35,15 @@ interface GoalRowProps {
   item: GoalPlanItem | undefined;
   wallet: LocalRow<Wallet> | undefined;
   base: CurrencyCode;
+  /** «Пора отложить»; null — напоминать не о чем. */
+  nudge: GoalNudge | null;
   onOpen: () => void;
+  /** «Отложить сейчас»: есть, только если цель копится и к ней привязан кошелёк. */
+  onSaveNow?: () => void;
 }
 
 /** Строка цели: название, полоса «накоплено», срок словами, сколько отложить в этом месяце. Вся строка — кнопка «править». */
-function GoalRow({ goal, item, wallet, base, onOpen }: GoalRowProps) {
+function GoalRow({ goal, item, wallet, base, nudge, onOpen, onSaveNow }: GoalRowProps) {
   const progress = item?.progress ?? null;
   const due = progress ? goalDueLine(goal.dueOn, progress) : '';
   const remaining = progress ? goalRemainingLine(progress, goal.currency) : '';
@@ -78,7 +86,20 @@ function GoalRow({ goal, item, wallet, base, onOpen }: GoalRowProps) {
         )}
         {item && <span className="mt-0.5 block text-sm text-muted">{goalMonthLine(item, base)}</span>}
         {pace && <span className="mt-0.5 block text-sm text-muted">{pace}</span>}
+        {nudge && (
+          <span role="note" className="mt-1.5 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm font-medium" data-testid="goal-row-nudge">
+            <Icon name="info" size={16} className="mt-0.5 shrink-0 text-warning" />
+            <span className="min-w-0 break-words">{nudgeLine(nudge, goal.currency)}</span>
+          </span>
+        )}
       </button>
+      {onSaveNow && (
+        <div className="px-4 pb-3">
+          <Button variant="secondary" icon="plus" aria-label={`Отложить сейчас на цель «${goal.name}»`} onClick={onSaveNow}>
+            Отложить сейчас
+          </Button>
+        </div>
+      )}
     </li>
   );
 }
@@ -94,15 +115,33 @@ export interface GoalsSectionProps {
  */
 export function GoalsSection({ base, forecast }: GoalsSectionProps) {
   const toast = useToast();
+  const today = useToday();
   const data = useGoalsPlan(base, forecast);
   const store = useStore();
   const [sheet, setSheet] = useState<SheetState>(null);
   const [essential, setEssential] = useState(false);
   const [deleting, setDeleting] = useState<LocalRow<SavingsGoal> | null>(null);
+  const [saveNow, setSaveNow] = useState<{ goal: LocalRow<SavingsGoal>; wallet: LocalRow<Wallet>; suggested: number } | null>(null);
+  const allWallets = useWallets(); // все кошельки не в архиве: откуда переводить в копилку
   const [showArchived, setShowArchived] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const items = useMemo(() => new Map(data && data.plan.ok ? data.plan.items.map((i) => [i.id, i] as const) : []), [data]);
+  // что ещё копится: для «что если» (остаток и месячная потребность) и для «Сдвинуть срок» (только если цель одна)
+  const active = useMemo(() => {
+    const live = (data?.goals ?? []).filter((g) => items.get(g.id)?.state === 'active');
+    let remaining = 0;
+    let monthly = 0;
+    for (const g of live) {
+      const it = items.get(g.id);
+      remaining += it?.progress?.remainingMinor ?? 0;
+      monthly += it?.monthNeedMinor ?? 0;
+    }
+    return { goals: live, remaining, monthly };
+  }, [data, items]);
+  // сезонные месяцы смотрим до самого дальнего срока среди копящихся целей
+  const lastDue = active.goals.reduce<string | null>((max, g) => (max === null || g.dueOn > max ? g.dueOn : max), null);
+  const seasonal = useSeasonality(base, lastDue);
   const walletById = useMemo(() => new Map((data?.savingsWallets ?? []).map((w) => [w.id, w] as const)), [data]);
   const expenseCategories = useMemo(() => [...(data?.categories.values() ?? [])].filter((c) => c.kind === 'expense' && c.archivedAt === null && c.deletedAt === null), [data]);
 
@@ -164,7 +203,18 @@ export function GoalsSection({ base, forecast }: GoalsSectionProps) {
                   item={items.get(g.id)}
                   wallet={g.walletId === null ? undefined : walletById.get(g.walletId)}
                   base={base}
+                  nudge={(() => {
+                    const it = items.get(g.id);
+                    return it ? goalNudge(it, g.walletId !== null, today) : null;
+                  })()}
                   onOpen={() => setSheet({ kind: 'edit', goal: g })}
+                  onSaveNow={(() => {
+                    const wallet = g.walletId === null ? undefined : walletById.get(g.walletId);
+                    const it = items.get(g.id);
+                    return wallet && it?.state === 'active'
+                      ? () => setSaveNow({ goal: g, wallet, suggested: it.leftThisMonthMinor })
+                      : undefined;
+                  })()}
                 />
               ))}
             </ul>
@@ -182,10 +232,16 @@ export function GoalsSection({ base, forecast }: GoalsSectionProps) {
             forecast={data.forecast}
             day={plan.day}
             leftThisMonthMinor={plan.leftThisMonthMinor}
+            activeGoals={active.goals.length}
+            soleGoal={active.goals.length === 1 ? (active.goals[0] ?? null) : null}
+            remainingMinor={active.remaining}
+            monthlyNeedMinor={active.monthly}
+            seasonal={seasonal ?? []}
             categories={data.categories}
             onEssential={() => setEssential(true)}
           />
         )}
+        {allWallets && <RoundUpCard base={base} goals={active.goals} wallets={allWallets} />}
         {plan.ok && plan.day === null && data.goals.length > 0 && (
           <Notice tone={plan.leftThisMonthMinor === 0 ? 'success' : 'info'} icon={plan.leftThisMonthMinor === 0 ? 'check' : 'info'} role="note">
             {plan.leftThisMonthMinor === 0
@@ -249,6 +305,9 @@ export function GoalsSection({ base, forecast }: GoalsSectionProps) {
           goals={data.goals}
           onClose={() => setSheet(null)}
         />
+      )}
+      {saveNow && allWallets && (
+        <SaveNowSheet goal={saveNow.goal} goalWallet={saveNow.wallet} wallets={allWallets} suggestedMinor={saveNow.suggested} onClose={() => setSaveNow(null)} />
       )}
       {deleting && <DeleteGoalDialog goal={deleting} onClose={() => setDeleting(null)} />}
       {essential && data && <EssentialSheet categories={expenseCategories} onClose={() => setEssential(false)} />}

@@ -9,7 +9,7 @@ import { ALICE, eventually, fakeAuthClient, makeTestDeps, renderAppRoot, type Te
 import { act, findByRole, screen, user, waitFor } from '@/components/testUtils';
 import { openStore, type Store } from '@/db';
 import { computeBalances } from '@/domain/balances';
-import { clickSave, tapAmount } from '@/features/transactions/__fixtures__/opsKit';
+import { clickSave, pinToday, tapAmount, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
 import { createSyncEngine, type SyncEngine } from '@/sync/engine';
 import { createMemoryServer, type MemoryServer } from '@/sync/memoryServer';
 import type { SessionAwareTransport } from '@/sync/session';
@@ -83,8 +83,14 @@ const dirtyCount = async (s: Store) => {
 };
 const badge = () => document.body.textContent ?? '';
 
-beforeEach(() => localStorage.clear());
+// «Сегодня» закреплено на 15 октября 2026: операции в тесте внесены с датами октября, а экран по умолчанию показывает «Этот месяц» —
+// без закрепления тест краснел бы с первого числа следующего месяца.
+beforeEach(() => {
+  localStorage.clear();
+  pinToday();
+});
 afterEach(() => {
+  unpinToday();
   localStorage.clear();
   vi.restoreAllMocks();
 });
