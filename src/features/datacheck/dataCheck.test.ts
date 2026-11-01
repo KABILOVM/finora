@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkData, DUPLICATE_DAYS, issueCount, MAX_ITEMS, OUTLIER_DAYS, UNCATEGORIZED_DAYS, type CheckTx } from './dataCheck';
+import { checkData, DUPLICATE_DAYS, issueCount, MAX_ITEMS, openCount, openFindings, openKinds, OUTLIER_DAYS, UNCATEGORIZED_DAYS, type CheckTx } from './dataCheck';
 
 const BASE = 'TJS';
 const TODAY = '2026-10-15';
@@ -106,6 +106,37 @@ describe('checkData: отрицательные остатки', () => {
   it('активные кошельки с минусом; архивные и нулевые — нет', () => {
     const c = check([], [['w1', -5_000], ['w2', 0], ['old', -9_999]]);
     expect(c.negative).toEqual([{ key: 'neg:w1', walletId: 'w1', name: 'Наличные', currency: 'TJS', balanceMinor: -5_000 }]);
+  });
+});
+
+describe('openFindings: без отмеченного «Это нормально»', () => {
+  const history = Array.from({ length: 5 }, (_, i) => tx({ occurredOn: `2026-0${5 + i}-10`, amountMinor: 1_000 }));
+  const rows = [
+    ...history,
+    tx({ occurredOn: '2026-10-10', amountMinor: 1_500, note: 'кофе', id: 'a' }),
+    tx({ occurredOn: '2026-10-10', amountMinor: 1_500, note: 'кофе', id: 'b' }),
+    tx({ occurredOn: '2026-10-12', amountMinor: 500, categoryId: null, note: 'киоск' }),
+    tx({ occurredOn: '2062-10-15', amountMinor: 700, id: 'typo' }),
+    tx({ occurredOn: '2026-10-11', amountMinor: 200_000, id: 'zero' }),
+  ];
+  const c = check(rows, [['w1', -5_000]]);
+
+  it('ничего не скрыто: считает все пять видов, как экран', () => {
+    const open = openFindings(c, new Set());
+    expect(openCount(open)).toBe(5);
+    expect(openKinds(open)).toEqual(['дубли', 'без категории', 'дата в будущем', 'крупные траты', 'остаток в минусе']);
+  });
+
+  it('скрытое по ключу не считается; «без категории» скрыть нельзя', () => {
+    const hidden = new Set([c.future.items[0]!.key, c.negative[0]!.key, c.dupes[0]!.key, 'out:zero']);
+    const open = openFindings(c, hidden);
+    expect(openCount(open)).toBe(1); // остались только «без категории»
+    expect(openKinds(open)).toEqual(['без категории']);
+  });
+
+  it('всё скрыто или чисто — ноль и пустой список видов', () => {
+    expect(openCount(openFindings(check([]), new Set()))).toBe(0);
+    expect(openKinds(openFindings(check([]), new Set()))).toEqual([]);
   });
 });
 

@@ -18,10 +18,9 @@ import { formatDayLabel } from '@/lib/dates';
 import { useDismissedKeys } from '@/lib/dismissedKeys';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
+import { DATACHECK_NAMESPACE } from './constants';
+import { openCount, openFindings } from './dataCheck';
 import { useDataCheck } from './useDataCheck';
-
-/** Вид подсказок для «Это нормально» (на этом устройстве). */
-export const DATACHECK_NAMESPACE = 'datacheck';
 
 function Block({ id, title, hint, children }: { id: string; title: string; hint?: string; children: ReactNode }) {
   return (
@@ -75,6 +74,7 @@ const NoteIcon = ({ kind }: { kind: keyof typeof NOTE_ICON }) => (
  * «Проверка данных»: что в операциях и кошельках похоже на ошибку внесения (dataCheck.ts) — возможные дубли, операции без категории,
  * даты в будущем, слишком крупные траты и отрицательные остатки. Ничего не правит само: у каждой находки «Открыть», где есть что исправить, и
  * «Это нормально» (помнится на этом устройстве). Дубль можно убрать кнопкой «Удалить лишнюю» (с «Отменить»).
+ * Лежит внутри «Операций» (DATACHECK_PATH): туда ведут плашка и значок в шапке списка, а «Назад» возвращает в список.
  */
 export default function DataCheckPage() {
   const store = useStore();
@@ -84,7 +84,7 @@ export default function DataCheckPage() {
   const state = useDataCheck(today);
   const categories = useCategoryIndex();
   const { hidden, dismiss } = useDismissedKeys(DATACHECK_NAMESPACE, store.userId);
-  const header = <PageHeader title="Проверка данных" subtitle="Ищем то, что похоже на ошибку внесения" back={{ to: '/settings', label: 'Настройки' }} />;
+  const header = <PageHeader title="Проверка данных" subtitle="Ищем то, что похоже на ошибку внесения" back={{ to: '/transactions', label: 'Операции' }} />;
 
   if (state === undefined || categories === undefined) {
     return (
@@ -120,12 +120,9 @@ export default function DataCheckPage() {
     </Button>
   );
 
-  const dupes = check.dupes.filter((d) => !hidden.has(d.key));
-  const future = check.future.items.filter((f) => !hidden.has(f.key));
-  const outliers = check.outliers.filter((o) => !hidden.has(o.key));
-  const negative = check.negative.filter((n) => !hidden.has(n.key));
-  const uncategorized = check.uncategorized;
-  const total = dupes.length + future.length + outliers.length + negative.length + uncategorized.total;
+  const found = openFindings(check, hidden);
+  const { dupes, future, outliers, negative, uncategorized } = found;
+  const total = openCount(found);
 
   const removeExtra = async (ids: readonly string[], label: string) => {
     try {

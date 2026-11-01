@@ -19,6 +19,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { ToastProvider } from '@/components/Toast';
 import BudgetAlerts from '@/features/budgets/BudgetAlerts';
+import { DATACHECK_PATH } from '@/features/datacheck/constants';
 import AutoPostRunner from '@/features/recurring/AutoPostRunner';
 import { WhatsNew } from '@/features/whatsnew/WhatsNew';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
@@ -134,6 +135,7 @@ export function AppRoutes() {
           <Route element={<PageNotices />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path={DATACHECK_PATH} element={<DataCheckPage />} />
             <Route path="/wallets" element={<WalletsPage />} />
             <Route path="/wallets/:id" element={<WalletPage />} />
             <Route path="/more" element={<MorePage />} />
@@ -151,7 +153,8 @@ export function AppRoutes() {
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/categories" element={<CategoriesPage />} />
-            <Route path="/settings/data-check" element={<DataCheckPage />} />
+            {/* «Проверка данных» переехала в «Операции»: старый адрес (закладка, ссылка) ведёт туда */}
+            <Route path="/settings/data-check" element={<Navigate to={DATACHECK_PATH} replace />} />
             <Route path="/settings/templates" element={<TemplatesPage />} />
           </Route>
         </Route>

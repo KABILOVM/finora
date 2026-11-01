@@ -87,9 +87,7 @@ export default function SettingsPage() {
       <Block id="data">
         <BackupSection />
         <Card padding="none" className="mb-6">
-          <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Дзен-мани" />
-          <NavRow to="/settings/data-check" icon="i:target" color="#d97706" title="Проверка данных" />
-        </Card>
+          <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Дзен-мани" />        </Card>
       </Block>
 
       <Block id="appearance">

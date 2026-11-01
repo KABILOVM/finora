@@ -157,3 +157,39 @@ export function checkData(i: { txs: readonly CheckTx[]; wallets: readonly Wallet
 
 /** Сколько находок всего (без «нормально» отмеченных: их отсекает экран). */
 export const issueCount = (c: DataCheck): number => c.dupes.length + c.uncategorized.total + c.future.total + c.outliers.length + c.negative.length;
+
+export interface OpenFindings {
+  dupes: DataCheck['dupes'];
+  uncategorized: DataCheck['uncategorized'];
+  future: FutureItem[];
+  outliers: Outlier[];
+  negative: NegativeWallet[];
+}
+
+/**
+ * Находки, которые человек ещё не отметил «Это нормально» (`hidden` — ключи с этого устройства). Один расчёт и для экрана «Проверка
+ * данных», и для плашки в «Операциях»: числа в них не могут разойтись. «Без категории» отметить нельзя — исправляется категорией.
+ */
+export function openFindings(c: DataCheck, hidden: ReadonlySet<string>): OpenFindings {
+  return {
+    dupes: c.dupes.filter((d) => !hidden.has(d.key)),
+    uncategorized: c.uncategorized,
+    future: c.future.items.filter((f) => !hidden.has(f.key)),
+    outliers: c.outliers.filter((o) => !hidden.has(o.key)),
+    negative: c.negative.filter((n) => !hidden.has(n.key)),
+  };
+}
+
+/** Сколько пунктов покажет экран «Проверка данных». */
+export const openCount = (f: OpenFindings): number => f.dupes.length + f.uncategorized.total + f.future.length + f.outliers.length + f.negative.length;
+
+/** Какие виды находок есть (для строки в плашке): «дубли, без категории, дата в будущем». */
+export function openKinds(f: OpenFindings): string[] {
+  const kinds: string[] = [];
+  if (f.dupes.length > 0) kinds.push('дубли');
+  if (f.uncategorized.total > 0) kinds.push('без категории');
+  if (f.future.length > 0) kinds.push('дата в будущем');
+  if (f.outliers.length > 0) kinds.push('крупные траты');
+  if (f.negative.length > 0) kinds.push('остаток в минусе');
+  return kinds;
+}

@@ -49,7 +49,7 @@ async function openPage(setup: (s: Store) => Promise<unknown> = seedProblems) {
       <LocationProbe />
     </>,
     td,
-    '/settings/data-check',
+    '/transactions/check',
   );
   await findByRole('heading', { name: 'Проверка данных', level: 1 });
   await waitFor(() => expect(screen.queryByText('Проверяем…')).toBeNull());
@@ -72,6 +72,14 @@ describe('«Проверка данных»', () => {
     expect(text('check-outliers')).toContain(fmt(200_000));
     expect(text('check-negative')).toContain('Кредитка');
     expect(text('check-negative')).toContain('−50');
+  });
+
+  it('«Назад» ведёт в «Операции»: экран лежит внутри этого раздела', async () => {
+    await openPage();
+    const back = screen.getByRole('link', { name: /Операции/ });
+    expect(back.getAttribute('href')).toBe('/transactions');
+    await user.click(back);
+    await waitFor(() => expect(currentPath()).toBe('/transactions'));
   });
 
   it('«Это нормально» убирает находку и помнит об этом на устройстве', async () => {

@@ -10,6 +10,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { exportTransactionsCsv, useCategories, useHasTransactions, useSettings, useStore, useTransactions, useWallets, ValidationError } from '@/db';
 import type { LocalRow, Transaction } from '@/domain/types';
 import { useToast } from '@/components/Toast';
+import { DATACHECK_PATH } from '@/features/datacheck/constants';
+import { DataCheckBanner } from '@/features/datacheck/DataCheckBanner';
 import { downloadTextFile } from '@/features/settings/download';
 import { useAddLink } from '@/layout/nav';
 import { formatMinor } from '@/domain/money';
@@ -209,6 +211,7 @@ export default function TransactionsPage() {
             </Button>
           ) : rows && rows.length > 0 ? (
             <>
+              <IconButton icon="shield" label="Проверка данных" onClick={() => navigate(DATACHECK_PATH)} />
               <IconButton icon="check" label="Выбрать операции" onClick={() => setSelecting(true)} />
               <IconButton icon="download" label="Выгрузить список в CSV" disabled={exporting} onClick={() => void exportList()} />
             </>
@@ -221,6 +224,7 @@ export default function TransactionsPage() {
         </p>
       ) : (
         <>
+          {anyRow && !selecting && <DataCheckBanner />}
           {anyRow && (
             <TransactionFilters
               filters={filters}
