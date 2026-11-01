@@ -12,7 +12,7 @@ import { useToast } from '@/components/Toast';
 import { downloadTextFile } from '@/features/settings/download';
 import { useAddLink } from '@/layout/nav';
 import { formatMinor } from '@/domain/money';
-import { formatDayLabel, monthKey, todayLocal } from '@/lib/dates';
+import { formatDayLabel, todayLocal } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { useSyncEnabled } from '@/sync/syncContext';
 import { DayHeader } from './DayHeader';
@@ -125,7 +125,7 @@ export default function TransactionsPage() {
               onChange={change}
               wallets={wallets}
               categories={categories}
-              currentMonth={monthKey(today)}
+              today={today}
             />
           )}
 

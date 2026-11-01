@@ -8,12 +8,15 @@ import {
   filtersToParams,
   matchesSearch,
   NO_CATEGORY,
+  periodRange,
   toTxFilter,
   totalsByCurrency,
   transactionsQuery,
   transferFeeMinor,
   walletOpsQuery,
   withKind,
+  withPeriod,
+  withRangeDate,
   type ListFilters,
   type SearchLookups,
 } from './txFilters';
@@ -271,5 +274,103 @@ describe('toTxFilter: фильтр по категории и подкатего
   it('без списка категорий (по умолчанию) и «Без категории» — прежнее поведение', () => {
     expect(toTxFilter(f('comm'), '', '2026-10-31')).toMatchObject({ categoryId: 'comm' });
     expect(toTxFilter({ ...defaultFilters('2026-10-31'), categoryId: NO_CATEGORY }, '', '2026-10-31', cats)).toMatchObject({ categoryId: null });
+  });
+});
+
+describe('периоды «7 дней», «30 дней» и «Свои даты»', () => {
+  const today = '2026-10-15';
+
+  it('periodRange: 7 и 30 дней — вместе с сегодняшним, через границу месяца и года', () => {
+    expect(periodRange('7d', '', today)).toEqual({ from: '2026-10-09', to: '2026-10-15' });
+    expect(periodRange('30d', '', today)).toEqual({ from: '2026-09-16', to: '2026-10-15' });
+    expect(periodRange('7d', '', '2026-01-03')).toEqual({ from: '2025-12-28', to: '2026-01-03' });
+    expect(periodRange('30d', '', '2024-03-10')).toEqual({ from: '2024-02-10', to: '2024-03-10' }); // високосный год
+  });
+
+  it('periodRange: свои даты берутся как заданы; не заданная граница ничего не ограничивает', () => {
+    expect(periodRange('range', '', today, { from: '2026-09-01', to: '2026-09-10' })).toEqual({ from: '2026-09-01', to: '2026-09-10' });
+    expect(periodRange('range', '', today, { from: '2026-09-01', to: '' })).toEqual({ from: '2026-09-01' });
+    expect(periodRange('range', '', today)).toEqual({});
+  });
+
+  it('toTxFilter: даты своего периода попадают в запрос, у других периодов from/to игнорируются', () => {
+    const base = { ...defaultFilters(today), from: '2026-09-01' as const, to: '2026-09-10' as const };
+    expect(toTxFilter({ ...base, period: 'range' }, '', today)).toEqual({ from: '2026-09-01', to: '2026-09-10' });
+    expect(toTxFilter({ ...base, period: 'all' }, '', today)).toEqual({});
+    expect(toTxFilter({ ...base, period: '7d' }, '', today)).toEqual({ from: '2026-10-09', to: today });
+  });
+
+  it('в адресе: туда и обратно, адрес читаемый', () => {
+    const back = (f: ListFilters) => ({ ...defaultFilters(today), ...filtersFromParams(filtersToParams(f, today), today) });
+    for (const period of ['7d', '30d'] as const) {
+      const f = { ...defaultFilters(today), period };
+      expect(filtersToParams(f, today).toString()).toBe(`period=${period}`);
+      expect(back(f)).toEqual(f);
+    }
+    const range = { ...defaultFilters(today), period: 'range' as const, from: '2026-09-01' as const, to: '2026-09-10' as const };
+    expect(filtersToParams(range, today).toString()).toBe('period=range&from=2026-09-01&to=2026-09-10');
+    expect(back(range)).toEqual(range);
+    // даты запоминаются и при других периодах: они в адрес не пишутся, но и не мешают
+    expect(filtersToParams({ ...range, period: 'all' }, today).toString()).toBe('period=all');
+  });
+
+  it('«Свои даты» без годных дат в адрес не пишутся (иначе адрес прочёлся бы как обычный список)', () => {
+    expect(filtersToParams({ ...defaultFilters(today), period: 'range' }, today).toString()).toBe('');
+    expect(filtersToParams({ ...defaultFilters(today), period: 'range', from: '2026-09-10', to: '2026-09-01' }, today).toString()).toBe('');
+    expect(filtersToParams({ ...defaultFilters(today), period: 'range', month: '2026-07' }, today).toString()).toBe('period=this&month=2026-07');
+  });
+
+  it.each([
+    ['нет границ', 'period=range'],
+    ['нет конца', 'period=range&from=2026-09-01'],
+    ['начало позже конца', 'period=range&from=2026-09-10&to=2026-09-01'],
+    ['не дата', 'period=range&from=вчера&to=сегодня'],
+    ['30 февраля', 'period=range&from=2026-02-30&to=2026-03-05'],
+    ['год вне границ', 'period=range&from=1999-12-31&to=2026-03-05'],
+    ['год вне границ (конец)', 'period=range&from=2026-03-05&to=2101-01-01'],
+  ])('из адреса: %s — период пропускается', (_, query) => {
+    expect(filtersFromParams(new URLSearchParams(query), today)).toEqual({});
+  });
+
+  it('из адреса: from и to без period=range ничего не меняют; граничные даты допустимы', () => {
+    expect(filtersFromParams(new URLSearchParams('from=2026-09-01&to=2026-09-10'), today)).toEqual({});
+    expect(filtersFromParams(new URLSearchParams('period=range&from=2000-01-01&to=2100-12-31'), today)).toEqual({
+      period: 'range',
+      from: '2000-01-01',
+      to: '2100-12-31',
+    });
+    expect(filtersFromParams(new URLSearchParams('period=range&from=2026-09-05&to=2026-09-05'), today)).toMatchObject({ period: 'range' });
+  });
+
+  it('из адреса: «свои даты» вместе с кошельком и видом', () => {
+    expect(filtersFromParams(new URLSearchParams('period=range&from=2026-09-01&to=2026-09-10&wallet=w-1&kind=expense'), today)).toEqual({
+      period: 'range',
+      from: '2026-09-01',
+      to: '2026-09-10',
+      walletId: 'w-1',
+      kind: 'expense',
+    });
+  });
+
+  it('withPeriod: «Свои даты» впервые открываются с начала месяца по сегодня, выбранные даты сохраняются', () => {
+    const none = defaultFilters(today);
+    expect(withPeriod(none, 'range', today)).toEqual({ period: 'range', from: '2026-10-01', to: today });
+    expect(withPeriod({ from: '2026-09-01', to: '2026-09-10' }, 'range', today)).toEqual({ period: 'range' });
+    expect(withPeriod({ from: '2026-09-10', to: '2026-09-01' }, 'range', today)).toEqual({ period: 'range', from: '2026-10-01', to: today });
+    expect(withPeriod(none, '7d', today)).toEqual({ period: '7d' });
+  });
+
+  it('withRangeDate: начало позже конца и конец раньше начала подтягивают вторую границу', () => {
+    const cur = { from: '2026-09-01' as const, to: '2026-09-10' as const };
+    expect(withRangeDate(cur, 'from', '2026-09-05')).toEqual({ from: '2026-09-05' });
+    expect(withRangeDate(cur, 'from', '2026-09-10')).toEqual({ from: '2026-09-10' });
+    expect(withRangeDate(cur, 'from', '2026-09-20')).toEqual({ from: '2026-09-20', to: '2026-09-20' });
+    expect(withRangeDate(cur, 'to', '2026-09-05')).toEqual({ to: '2026-09-05' });
+    expect(withRangeDate(cur, 'to', '2026-08-20')).toEqual({ from: '2026-08-20', to: '2026-08-20' });
+  });
+
+  it('withRangeDate: пусто, не дата и год вне границ — без правки', () => {
+    const cur = { from: '2026-09-01' as const, to: '2026-09-10' as const };
+    for (const bad of ['', '2026-02-30', '0001-01-01', '2101-01-01', 'abc']) expect(withRangeDate(cur, 'from', bad)).toBeNull();
   });
 });

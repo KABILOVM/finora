@@ -16,6 +16,7 @@ import {
   pinToday,
   rowTexts,
   seedHistory,
+  setDateInput,
   showApp,
   storeOf,
   table,
@@ -381,6 +382,102 @@ describe('поиск по категории, кошельку и сумме', (
   });
 });
 
+describe('период: «7 дней», «30 дней» и «Свои даты»', () => {
+  // поля «С» и «По» — два календаря подряд (у календаря нет роли «textbox», поэтому ищем по типу)
+  const dates = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="date"]'));
+  const from = () => dates()[0] as HTMLInputElement;
+  const to = () => dates()[1] as HTMLInputElement;
+
+  it('«7 дней» — сегодня и шесть предыдущих; «30 дней» захватывает и сентябрь, но не начало сентября и июль', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+
+    await period('7 дней');
+    await waitFor(() => expect(screen.getByRole('button', { name: '7 дней' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(days()).toEqual(['Сегодня', 'Вчера']);
+    expect(has('рынок')).toBe(false);
+    expect(currentSearch()).toBe('?period=7d');
+
+    await period('30 дней');
+    await waitFor(() => expect(has('рынок')).toBe(true)); // 20 сентября — 25 дней назад
+    expect(days()).toEqual(['Сегодня', 'Вчера', 'вс, 20 сен']);
+    expect(has('Работа')).toBe(false); // июль
+    expect(currentSearch()).toBe('?period=30d');
+  });
+
+  it('«Свои даты»: сначала с начала месяца по сегодня; даты меняются, список и адрес вместе с ними', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(dates()).toHaveLength(0); // полей нет, пока период не выбран
+
+    await period('Свои даты');
+    await waitFor(() => expect(from().value).toBe('2026-10-01'));
+    expect(to().value).toBe('2026-10-15');
+    expect(currentSearch()).toBe('?period=range&from=2026-10-01&to=2026-10-15');
+    expect(days()).toEqual(['Сегодня', 'Вчера']);
+
+    setDateInput(from(), '2026-09-01');
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера', 'вс, 20 сен', 'чт, 3 сен']));
+    expect(currentSearch()).toBe('?period=range&from=2026-09-01&to=2026-10-15');
+
+    setDateInput(to(), '2026-09-30');
+    await waitFor(() => expect(days()).toEqual(['вс, 20 сен', 'чт, 3 сен']));
+    expect(has('обед')).toBe(false);
+    // итог за период считается по выбранным датам
+    expect(document.querySelector('[data-testid="period-totals"]')?.textContent).toContain(money(-(200 + 4500)));
+  });
+
+  it('конец раньше начала подтягивает начало: список не пустеет молча', async () => {
+    await openList();
+    await period('Свои даты');
+    await waitFor(() => expect(from().value).toBe('2026-10-01'));
+    setDateInput(to(), '2026-09-20');
+    await waitFor(() => expect(from().value).toBe('2026-09-20'));
+    expect(to().value).toBe('2026-09-20');
+    await waitFor(() => expect(days()).toEqual(['вс, 20 сен']));
+    expect(currentSearch()).toBe('?period=range&from=2026-09-20&to=2026-09-20');
+  });
+
+  it('очищенное или невозможное поле даты ничего не меняет', async () => {
+    await openList();
+    await period('Свои даты');
+    await waitFor(() => expect(from().value).toBe('2026-10-01'));
+    setDateInput(from(), '');
+    setDateInput(to(), '0001-01-01');
+    expect(from().value).toBe('2026-10-01');
+    expect(to().value).toBe('2026-10-15');
+    expect(currentSearch()).toBe('?period=range&from=2026-10-01&to=2026-10-15');
+  });
+
+  it('ссылка со своими датами открывает их; вернуться на «Этот месяц» можно чипом, а выбранные даты при возврате на «Свои даты» сохраняются', async () => {
+    await openList({ path: '/transactions?period=range&from=2026-07-01&to=2026-09-10' });
+    await waitFor(() => expect(days()).toEqual(['чт, 3 сен', 'пт, 10 июл']));
+    expect(screen.getByRole('button', { name: 'Свои даты' })).toHaveAttribute('aria-pressed', 'true');
+    expect(from().value).toBe('2026-07-01');
+    expect(to().value).toBe('2026-09-10');
+
+    await period('Этот месяц');
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера']));
+    expect(dates()).toHaveLength(0);
+    expect(currentSearch()).toBe('');
+  });
+
+  it('невозможные даты в адресе — обычный список «Этот месяц»', async () => {
+    await openList({ path: '/transactions?period=range&from=2026-10-20&to=2026-10-01' });
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера']));
+    expect(screen.getByRole('button', { name: 'Этот месяц' })).toHaveAttribute('aria-pressed', 'true');
+    expect(dates()).toHaveLength(0);
+  });
+
+  it('за выбранные даты операций нет — «Ничего не найдено» и «Показать всё»', async () => {
+    await openList({ path: '/transactions?period=range&from=2026-08-01&to=2026-08-31' });
+    await waitFor(() => screen.getByText('Ничего не найдено'));
+    await user.click(screen.getByRole('button', { name: 'Показать всё' }));
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    expect(screen.getByRole('button', { name: 'Всё время' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
 describe('фильтры живут в адресе', () => {
   it('«Всё время» и фильтр из шита пишутся в адрес; «Сбросить» их убирает; поиск в адрес не попадает', async () => {
     await openList();
@@ -567,6 +664,8 @@ describe('чистые функции фильтров', () => {
   const f = (over: Partial<ListFilters> = {}): ListFilters => ({
     period: 'this',
     month: '2026-10',
+    from: '',
+    to: '',
     walletId: '',
     categoryId: '',
     kind: '',

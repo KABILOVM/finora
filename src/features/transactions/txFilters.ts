@@ -3,11 +3,15 @@ import type { TxFilter } from '@/db';
 import { hasChildren, withDescendants, type TreeNode } from '@/features/categories/categoryTree';
 import { addMinor, minorToInputString, parseAmountToMinor } from '@/domain/money';
 import type { CurrencyCode, IsoDate, Minor, Transaction, TxKind } from '@/domain/types';
-import { monthKey } from '@/lib/dates';
+import { addDays, isValidIsoDate, monthKey } from '@/lib/dates';
 
 /** Чистая логика фильтров списка операций и итога дня. */
 
-export type PeriodKind = 'this' | 'prev' | 'all' | 'month';
+/**
+ * this/prev — этот и прошлый месяц; 7d/30d — последние 7 и 30 дней по сегодня включительно; all — всё время;
+ * month — выбранный месяц; range — свои даты (поля from и to).
+ */
+export type PeriodKind = 'this' | 'prev' | '7d' | '30d' | 'all' | 'month' | 'range';
 
 /** Особое значение фильтра по категории: операции без категории. */
 export const NO_CATEGORY = '__none__';
@@ -16,6 +20,9 @@ export interface ListFilters {
   period: PeriodKind;
   /** 'ГГГГ-ММ' — для period = 'month'. */
   month: string;
+  /** Свои даты для period = 'range' (включительно); в остальных периодах не используются. '' — не задано. */
+  from: IsoDate | '';
+  to: IsoDate | '';
   /** '' — любой. */
   walletId: string;
   /** '' — любая, NO_CATEGORY — без категории. */
@@ -62,6 +69,15 @@ export function activeFilterLabels(
 
 export const MIN_MONTH = '2000-01';
 export const MAX_MONTH = '2100-12';
+/** Границы «своих дат»: те же годы, что у месяцев. */
+export const MIN_DATE = `${MIN_MONTH}-01`;
+export const MAX_DATE = `${MAX_MONTH}-31`;
+
+/** Годится ли дата для «своих дат»: настоящая и в пределах MIN_DATE…MAX_DATE (в поле даты браузер пропустит и год 0001). */
+export const isRangeDate = (s: unknown): s is IsoDate => isValidIsoDate(s) && s >= MIN_DATE && s <= MAX_DATE;
+
+/** «Свои даты» годятся целиком: обе настоящие и начало не позже конца. */
+const isRange = (from: string, to: string): boolean => isRangeDate(from) && isRangeDate(to) && from <= to;
 
 export const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ID_PARAM = /^[0-9A-Za-z_-]{1,64}$/;
@@ -70,6 +86,8 @@ const ID_PARAM = /^[0-9A-Za-z_-]{1,64}$/;
 export const defaultFilters = (today: IsoDate): ListFilters => ({
   period: 'this',
   month: monthKey(today),
+  from: '',
+  to: '',
   walletId: '',
   categoryId: '',
   kind: '',
@@ -88,8 +106,14 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
   const validMonth = month !== null && MONTH_PARAM.test(month) && month >= MIN_MONTH && month <= MAX_MONTH;
   if (validMonth) out.month = month;
   const period = params.get('period');
-  if (period === 'this' || period === 'prev' || period === 'all') out.period = period;
-  else if (validMonth) out.period = period === 'month' || month !== monthKey(today) ? 'month' : 'this';
+  const from = params.get('from') ?? '';
+  const to = params.get('to') ?? '';
+  if (period === 'this' || period === 'prev' || period === '7d' || period === '30d' || period === 'all') out.period = period;
+  else if (period === 'range' && isRange(from, to)) {
+    out.period = 'range';
+    out.from = from as IsoDate;
+    out.to = to as IsoDate;
+  } else if (validMonth) out.period = period === 'month' || month !== monthKey(today) ? 'month' : 'this';
   const wallet = params.get('wallet');
   if (wallet !== null && ID_PARAM.test(wallet)) out.walletId = wallet;
   const category = params.get('category');
@@ -108,7 +132,15 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
 export function filtersToParams(f: ListFilters, today: IsoDate): URLSearchParams {
   const q = new URLSearchParams();
   const rememberMonth = f.period === 'month' || f.month !== monthKey(today);
-  if (f.period !== 'this' || rememberMonth) q.set('period', f.period);
+  // «свои даты» без годных дат — это обычный «Этот месяц»: так их и пишем (как раз их и прочтёт filtersFromParams)
+  const period = f.period === 'range' && !isRange(f.from, f.to) ? 'this' : f.period;
+  if (period === 'range') {
+    q.set('period', 'range');
+    q.set('from', f.from);
+    q.set('to', f.to);
+  } else if (period !== 'this' || rememberMonth) {
+    q.set('period', period);
+  }
   if (rememberMonth) q.set('month', f.month);
   if (f.walletId !== '') q.set('wallet', f.walletId);
   if (f.categoryId === NO_CATEGORY) q.set('category', 'none');
@@ -147,16 +179,52 @@ export const canShiftMonth = (key: string, delta: number): boolean => {
   return next >= MIN_MONTH && next <= MAX_MONTH;
 };
 
-/** Даты периода (включительно). Весь месяц: с 1-го по «31-е» — сравнение строк, лишние числа ни на что не влияют. */
-export function periodRange(period: PeriodKind, month: string, today: IsoDate): { from?: IsoDate; to?: IsoDate } {
+/**
+ * Даты периода (включительно). Весь месяц: с 1-го по «31-е» — сравнение строк, лишние числа ни на что не влияют.
+ * 7 и 30 дней считаются вместе с сегодняшним: «7 дней» — это сегодня и шесть предыдущих.
+ * range — те свои даты, что заданы (не заданная граница не ограничивает).
+ */
+export function periodRange(
+  period: PeriodKind,
+  month: string,
+  today: IsoDate,
+  range: { from?: IsoDate | ''; to?: IsoDate | '' } = {},
+): { from?: IsoDate; to?: IsoDate } {
   if (period === 'all') return {};
+  if (period === '7d') return { from: addDays(today, -6), to: today };
+  if (period === '30d') return { from: addDays(today, -29), to: today };
+  if (period === 'range') {
+    const out: { from?: IsoDate; to?: IsoDate } = {};
+    if (range.from) out.from = range.from;
+    if (range.to) out.to = range.to;
+    return out;
+  }
   const key = period === 'this' ? monthKey(today) : period === 'prev' ? shiftMonth(monthKey(today), -1) : month;
   return { from: `${key}-01`, to: `${key}-31` };
 }
 
+/**
+ * Правка фильтров при выборе периода. «Свои даты» впервые открываются не пустыми: с начала этого месяца по сегодня
+ * (раньше выбранные даты запоминаются). Остальные периоды ничего, кроме себя, не меняют.
+ */
+export function withPeriod(f: Pick<ListFilters, 'from' | 'to'>, period: PeriodKind, today: IsoDate): Partial<ListFilters> {
+  if (period !== 'range') return { period };
+  return isRange(f.from, f.to) ? { period } : { period, from: `${monthKey(today)}-01`, to: today };
+}
+
+/**
+ * Правка «С»/«По» своих дат. Начало позже конца (и конец раньше начала) не оставляем: вторая граница подтягивается к новой,
+ * иначе список молча опустел бы. Дата не из диапазона MIN_DATE…MAX_DATE (в поле даты можно набрать и год 0001) — без правки (null).
+ */
+export function withRangeDate(f: Pick<ListFilters, 'from' | 'to'>, edge: 'from' | 'to', value: string): Partial<ListFilters> | null {
+  if (!isRangeDate(value)) return null;
+  if (edge === 'from') return f.to !== '' && value > f.to ? { from: value, to: value } : { from: value };
+  return f.from !== '' && value < f.from ? { from: value, to: value } : { to: value };
+}
+
 /** Фильтры экрана → фильтр запроса к базе. search приходит уже «успокоенным» (после паузы в наборе). */
 export function toTxFilter(f: ListFilters, search: string, today: IsoDate, categories: readonly TreeNode[] = []): TxFilter {
-  const out: TxFilter = { ...periodRange(f.period, f.month, today) };
+  const out: TxFilter = { ...periodRange(f.period, f.month, today, f) };
   if (f.walletId !== '') out.walletId = f.walletId;
   if (f.categoryId === NO_CATEGORY) out.categoryId = null;
   else if (f.categoryId !== '') {
