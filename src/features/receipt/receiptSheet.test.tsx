@@ -71,6 +71,29 @@ describe('«Чек по позициям»', () => {
     expect(save.mock.calls[0]![1]).toBe('w1'); // кошелёк в основной валюте; «Доллары» в выбор не попадают
   });
 
+  it('«Новый продукт»: пометка у названия вне каталога и ваших покупок; в правке — продукты каталога под названием', async () => {
+    setup({ isNewProduct: (name) => name !== 'Молоко' });
+    pick(photo());
+    await waitFor(() => expect(document.querySelectorAll('[data-testid="receipt-line"]')).toHaveLength(2));
+    const lines = Array.from(document.querySelectorAll('[data-testid="receipt-line"]'));
+    expect(text(lines[0]!)).not.toContain('Новый продукт'); // «Молоко» знакомо
+    expect(text(lines[1]!)).toContain('Новый продукт'); // «Порошок» — по этой проверке новый
+    // правка названия: «карто» предлагает «Картофель»; выбор подставляет название
+    await user.click(screen.getByRole('button', { name: 'Изменить: Порошок' }));
+    const name = screen.getByRole('textbox', { name: 'Название' });
+    await user.clear(name);
+    await user.type(name, 'картош');
+    await user.click(await findByRole('button', { name: 'Картофель' }));
+    expect((screen.getByRole('textbox', { name: 'Название' }) as HTMLInputElement).value).toBe('Картофель');
+  });
+
+  it('без проверки «Новый продукт» пометок нет', async () => {
+    setup();
+    pick(photo());
+    await waitFor(() => expect(document.querySelectorAll('[data-testid="receipt-line"]')).toHaveLength(2));
+    expect(document.querySelector('[data-testid="new-product"]')).toBeNull();
+  });
+
   it('в выборе кошелька только кошельки в основной валюте', async () => {
     setup();
     pick(photo());

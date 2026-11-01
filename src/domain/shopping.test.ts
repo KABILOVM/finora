@@ -5,6 +5,7 @@ import {
   formatQty,
   itemTitle,
   parseQty,
+  planByAverage,
   priceKey,
   priceMemory,
   totalsOf,
@@ -133,6 +134,17 @@ describe('память цен', () => {
     expect(priceKey('Хлеб', 'pcs')).not.toBe(priceKey('Хлеб', 'kg'));
   });
 
+  it('продукт каталога один и под синонимом: «Картошка» и «Картофель» — одна память цен; своё название — по написанию', () => {
+    expect(priceKey('Картошка', 'kg')).toBe(priceKey('картофель', 'kg'));
+    expect(priceKey('Картошка', 'kg')).not.toBe(priceKey('Картошка', 'pcs'));
+    expect(priceKey('Мой  КУРТ', 'pcs')).toBe(priceKey('мой курт', 'pcs'));
+    expect(priceKey('Мой курт', 'pcs')).not.toBe(priceKey('Мой сыр', 'pcs'));
+    const mem = priceMemory([bought('Картофель', 'kg', 2000, 2400, '2026-10-01T10:00:00.000Z')]);
+    expect(mem.get(priceKey('картошка', 'kg'))).toBe(1200);
+    // и в списке: позиция «Картошка» получает цену «Картофеля»
+    expect(viewItem(item({ name: 'Картошка', unit: 'kg', qtyMilli: 3000 }), mem)).toMatchObject({ priceMinor: 3600, lastUnitMinor: 1200 });
+  });
+
   it('помнит цену за единицу из последней покупки; побеждает более поздняя', () => {
     const mem = priceMemory([
       bought('Молоко', 'l', 2000, 2400, '2026-09-01T10:00:00.000Z'), // 12,00 за л
@@ -153,6 +165,31 @@ describe('память цен', () => {
   it('цена за кг и за штуку не смешиваются', () => {
     const mem = priceMemory([bought('Яблоки', 'kg', 1000, 1200, '2026-10-01T10:00:00.000Z')]);
     expect(mem.get(priceKey('Яблоки', 'pcs'))).toBeUndefined();
+  });
+});
+
+describe('план по средним ценам', () => {
+  const last = new Map([
+    [priceKey('Молоко', 'l'), 1300],
+    [priceKey('Хлеб', 'pcs'), 350],
+  ]);
+  const avg = new Map([[priceKey('Молоко', 'l'), 1100]]);
+
+  it('где есть средняя — по ней, иначе по последней; без цены — не входит; купленные и удалённые — тоже', () => {
+    const list = [
+      item({ name: 'Молоко', unit: 'l', qtyMilli: 2000 }), // 2 л × 11,00 = 22,00
+      item({ name: 'Хлеб', unit: 'pcs', qtyMilli: 2000 }), // нет средней: 2 × 3,50 = 7,00
+      item({ name: 'Манго', unit: 'pcs', qtyMilli: 1000 }), // цены нет
+      bought('Молоко', 'l', 1000, 1300, '2026-10-10T10:00:00.000Z'),
+      item({ name: 'Молоко', unit: 'l', qtyMilli: 1000, deletedAt: '2026-10-10T10:00:00.000Z' }),
+    ];
+    expect(planByAverage(list, avg, last)).toBe(2200 + 700);
+  });
+
+  it('нет позиций — 0; переполнение — RangeError, как у итогов', () => {
+    expect(planByAverage([], avg, last)).toBe(0);
+    const big = new Map([[priceKey('Молоко', 'l'), 900_000_000_000_000]]);
+    expect(() => planByAverage([item({ qtyMilli: 6000 }), item({ qtyMilli: 6000 })], big, big)).toThrow(RangeError);
   });
 });
 

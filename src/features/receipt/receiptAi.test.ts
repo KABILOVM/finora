@@ -35,6 +35,43 @@ describe('normalizeAiReceipt', () => {
     ]);
   });
 
+  it('каталог: продукт получает каталожное название, а без категории от ИИ — «Продукты»; названную ИИ категорию не меняем', () => {
+    const d = normalizeAiReceipt(
+      {
+        items: [
+          { name: 'картошки молодой', qty: 1, unit: 'kg', price: 8, category: '' }, // нет в каталоге как есть → остаётся
+          { name: 'хлеба', qty: 1, unit: 'pcs', price: 5, category: '' }, // каталог, категории нет → «Продукты»
+          { name: 'Молоко 3,2% 1л', qty: 1, unit: 'l', price: 13, category: 'Быт' }, // с цифрами остаётся как напечатано; ИИ назвал «Быт» → «Быт»
+          { name: 'мыло', qty: 1, unit: 'pcs', price: 4, category: '' }, // «Дом и гигиена»: категорию не навязываем
+          { name: 'Курт сушёный', qty: 1, unit: 'pcs', price: 9, category: '' }, // не из каталога
+          { name: 'Кофе', qty: 1, unit: 'pcs', price: 30, category: '' }, // чек из магазина: кофе в банке тоже «Продукты»
+        ],
+      },
+      ctx,
+    );
+    expect(d.lines.map((l) => [l.name, l.categoryId, l.newCategory])).toEqual([
+      ['Картошки молодой', '', ''],
+      ['Хлеб', 'food', ''],
+      ['Молоко 3,2% 1л', 'home', ''],
+      ['Мыло', '', ''],
+      ['Курт сушёный', '', ''],
+      ['Кофе', 'food', ''],
+    ]);
+  });
+
+  it('название с цифрами («Яйца С1 10шт») и уже каталожное остаются как есть, но категория по продукту подставляется', () => {
+    const d = normalizeAiReceipt({ items: [{ name: 'Яйца С1 10шт', qty: 1, unit: 'pcs', price: 20, category: '' }, { name: 'яблоки', qty: 1, unit: 'kg', price: 9, category: '' }] }, ctx);
+    expect(d.lines.map((l) => [l.name, l.categoryId])).toEqual([
+      ['Яйца С1 10шт', 'food'],
+      ['Яблоки', 'food'],
+    ]);
+  });
+
+  it('нет категории «Продукты» у человека — продукту категорию не подставляем', () => {
+    const d = normalizeAiReceipt({ items: [{ name: 'хлеба', qty: 1, unit: 'pcs', price: 5, category: '' }] }, { ...ctx, categories: [{ id: 'home', name: 'Быт' }] });
+    expect(d.lines.map((l) => [l.name, l.categoryId])).toEqual([['Хлеб', '']]);
+  });
+
   it('мусор вместо ответа — пустой чек; даты из будущего и неверные заменяются сегодняшней', () => {
     expect(normalizeAiReceipt('x', ctx).lines).toEqual([]);
     expect(normalizeAiReceipt(null, ctx)).toEqual({ merchant: '', date: '2026-10-15', totalText: '', lines: [] });

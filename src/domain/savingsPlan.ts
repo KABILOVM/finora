@@ -1,5 +1,6 @@
+import { addDays } from '@/lib/dates';
 import { endOfMonth } from './forecast';
-import { ceilDiv, goalProgress, type GoalProgress } from './goals';
+import { ceilDiv, goalProgress, NUDGE_FROM_DAY, wholeMonthsBetween, type GoalProgress } from './goals';
 import { addMinor, isMinor } from './money';
 import type { CurrencyCode, IsoDate, Minor, UUID } from './types';
 
@@ -19,6 +20,9 @@ import type { CurrencyCode, IsoDate, Minor, UUID } from './types';
  *     Нужно сократить C = R − (лимит без цели × H − привычные траты), не меньше 0. C раскладывается на необязательные категории
  *     пропорционально привычным тратам (метод наибольших остатков: сумма ровно C). Не хватает необязательных трат — «впритык».
  *  5. Деление целочисленное (BigInt), никогда не обещаем больше, чем есть. Переполнение — признак ошибки, не исключение.
+ *  6. «Впритык» (даже без необязательных трат не хватает) → подсказка срока catchUp: сколько удаётся отложить, если не тратить на
+ *     необязательное (деньги на горизонте минус обязательные траты), и самая ранняя дата, к которой при таком темпе накопятся остатки
+ *     всех целей. Это нижняя граница срока, а не обещание: темп берётся по этому месяцу и предполагает такой же в следующих.
  */
 
 export type GoalState = 'active' | 'reached' | 'overdue' | 'other-currency';
@@ -86,6 +90,8 @@ export type CategoryAdviceKind = 'keep' | 'trim' | 'skip';
 export interface CategoryAdvice {
   categoryId: UUID;
   essential: boolean;
+  /** Сколько на неё обычно уходит за месяц (среднее за прошлые месяцы). */
+  usualMonthlyMinor: Minor;
   /** Сколько на неё обычно ушло бы до конца горизонта. */
   usualRestMinor: Minor;
   /** На сколько сократить (0 — не нужно или нельзя). */
@@ -101,6 +107,18 @@ export interface CategoryAdvice {
  * tight — даже без необязательных трат не хватает uncoveredMinor: пора менять срок или сумму.
  */
 export type PlanStatus = 'ok' | 'cut' | 'tight';
+
+/** Дольше стольких месяцев «самую раннюю дату» не называем: она ничего не подскажет. */
+export const MAX_CATCHUP_MONTHS = 120;
+
+/**
+ * Подсказка срока для «впритык». date — самая ранняя реалистичная дата накопить остатки всех активных целей при темпе monthlyMinor
+ * (всё, что остаётся после обязательных трат); far — дольше MAX_CATCHUP_MONTHS; none — после обязательных трат ничего не остаётся.
+ */
+export type CatchUp =
+  | { kind: 'date'; date: IsoDate; months: number; monthlyMinor: Minor }
+  | { kind: 'far'; monthlyMinor: Minor }
+  | { kind: 'none' };
 
 export interface DayPlan {
   status: PlanStatus;
@@ -119,6 +137,8 @@ export interface DayPlan {
   uncoveredMinor: Minor;
   /** Разбор по категориям: пусто, если привычных трат нет. Сначала те, где сокращение больше. */
   categories: CategoryAdvice[];
+  /** Когда реально успеть — только при status = 'tight', иначе null. */
+  catchUp: CatchUp | null;
 }
 
 export interface SavingsPlan {
@@ -187,7 +207,43 @@ export function planGoal(goal: PlanGoal, base: CurrencyCode, today: IsoDate): Go
   return { ...idle, state: 'active', monthNeedMinor: need, leftThisMonthMinor: need > saved ? need - saved : 0 };
 }
 
-function dayPlan(reserve: Minor, forecast: PlanForecast, usual: UsualSpend | null, today: IsoDate): DayPlan {
+/** Дата через n месяцев; день месяца, которого в нём нет (31-е в апреле), сдвигается на последний день месяца. */
+export function addMonths(date: IsoDate, n: number): IsoDate {
+  const [y = 0, m = 1, d = 1] = date.split('-').map(Number);
+  const total = y * 12 + (m - 1) + n;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  const last = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  return `${String(ny).padStart(4, '0')}-${String(nm).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
+
+/**
+ * Дата, до которой от `today` проходит не меньше `months` ПОЛНЫХ месяцев (так срок считает goalProgress). Обычно это сегодня + months;
+ * если такого числа в месяце нет (31-е → февраль), addMonths даёт последний день месяца и полных месяцев на один меньше — берём следующий день.
+ */
+export function dateForWholeMonths(today: IsoDate, months: number): IsoDate {
+  let date = addMonths(today, months);
+  for (let i = 0; i < 3 && wholeMonthsBetween(today, date) < months; i++) date = addDays(date, 1);
+  return date;
+}
+
+/**
+ * Самая ранняя реалистичная дата. fundable — сколько можно отложить за горизонт, если не тратить на необязательное; remaining — сколько
+ * ещё накопить по всем активным целям. Деньги на горизонте — запас, а не ежемесячный доход, поэтому растягивать его на весь месяц нельзя:
+ * темп в месяц = fundable, а если горизонт короче остатка месяца (близкая зарплата) — fundable, пересчитанный на остаток месяца, вниз
+ * (так же, как резерв: tight ⇔ резерв > fundable ⇔ месячная потребность > темп).
+ */
+function catchUpPlan(fundable: Minor, horizon: number, today: IsoDate, remaining: Minor): CatchUp {
+  const { daysToEnd } = monthSpan(today);
+  const funds = Math.max(0, fundable);
+  const monthly = horizon >= daysToEnd ? funds : mulDivFloor(funds, daysToEnd, horizon);
+  if (monthly <= 0) return { kind: 'none' };
+  const months = Math.max(1, ceilDiv(remaining, monthly));
+  if (months > MAX_CATCHUP_MONTHS) return { kind: 'far', monthlyMinor: monthly };
+  return { kind: 'date', date: dateForWholeMonths(today, months), months, monthlyMinor: monthly };
+}
+
+function dayPlan(reserve: Minor, forecast: PlanForecast, usual: UsualSpend | null, today: IsoDate, remaining: Minor): DayPlan {
   const horizon = forecast.daysLeft;
   const perDay = forecast.perDayMinor;
   const cutPerDay = mulDivCeil(reserve, 1, horizon);
@@ -198,7 +254,14 @@ function dayPlan(reserve: Minor, forecast: PlanForecast, usual: UsualSpend | nul
   if (usual === null) {
     // истории трат нет: без разбора по категориям — «можно тратить в день столько-то»; не хватает денег даже на цель — впритык
     const short = reserve > allowance ? reserve - allowance : 0;
-    return { ...base, status: short > 0 ? 'tight' : 'cut', cutTotalMinor: null, uncoveredMinor: short, categories: [] };
+    return {
+      ...base,
+      status: short > 0 ? 'tight' : 'cut',
+      cutTotalMinor: null,
+      uncoveredMinor: short,
+      categories: [],
+      catchUp: short > 0 ? catchUpPlan(allowance, horizon, today, remaining) : null,
+    };
   }
 
   const { totalDays } = monthSpan(today);
@@ -227,6 +290,7 @@ function dayPlan(reserve: Minor, forecast: PlanForecast, usual: UsualSpend | nul
       return {
         categoryId: r.categoryId,
         essential: r.essential,
+        usualMonthlyMinor: r.usualMonthlyMinor,
         usualRestMinor: r.rest,
         cutMinor: cut,
         allowedMinor: r.rest - cut,
@@ -236,12 +300,15 @@ function dayPlan(reserve: Minor, forecast: PlanForecast, usual: UsualSpend | nul
     .sort((a, b) => b.cutMinor - a.cutMinor || b.usualRestMinor - a.usualRestMinor || (a.categoryId < b.categoryId ? -1 : 1));
 
   const uncovered = cutTotal > flexRest ? cutTotal - flexRest : 0;
+  // сколько можно отложить, если не тратить на необязательное: деньги на горизонте минус обязательные траты, не ушедшие в прогноз
+  const fundable = allowance > protectedUnscheduled ? allowance - protectedUnscheduled : 0;
   return {
     ...base,
     status: cutTotal === 0 ? 'ok' : uncovered > 0 ? 'tight' : 'cut',
     cutTotalMinor: cutTotal,
     uncoveredMinor: uncovered,
     categories,
+    catchUp: uncovered > 0 ? catchUpPlan(fundable, horizon, today, remaining) : null,
   };
 }
 
@@ -257,7 +324,9 @@ export function computeSavingsPlan(input: SavingsPlanInput): SavingsPlanResult {
     const { daysToEnd } = monthSpan(input.today);
     const horizon = input.forecast.daysLeft;
     const reserve = horizon >= daysToEnd ? left : mulDivCeil(left, horizon, daysToEnd);
-    return { ok: true, items, leftThisMonthMinor: left, day: dayPlan(reserve, input.forecast, input.usual, input.today) };
+    let remaining: Minor = 0;
+    for (const it of items) if (it.state === 'active' && it.progress) remaining = addMinor(remaining, it.progress.remainingMinor);
+    return { ok: true, items, leftThisMonthMinor: left, day: dayPlan(reserve, input.forecast, input.usual, input.today, remaining) };
   } catch (e) {
     if (e instanceof RangeError) return { ok: false, error: 'overflow' };
     throw e;
@@ -306,4 +375,23 @@ export function usualSpendFromHistory(months: readonly HistoryMonth[], isEssenti
     .sort((a, b) => b.usualMonthlyMinor - a.usualMonthlyMinor || (a.categoryId < b.categoryId ? -1 : 1));
   const rest = expenses - attributed;
   return { categories, uncategorizedMonthlyMinor: rest > 0n ? toMinor(rest / n) : 0 };
+}
+
+// ───────────────────────── напоминание «пора отложить» ─────────────────────────
+
+export interface GoalNudge {
+  /** Сколько отложено в этом месяце. */
+  savedMinor: Minor;
+  /** Сколько нужно отложить за месяц. */
+  neededMinor: Minor;
+}
+
+/**
+ * «Пора отложить»: идёт вторая половина месяца (с NUDGE_FROM_DAY, как у целей кошельков), цель ещё копится, а за месяц отложено меньше
+ * нужного. Без привязанного кошелька приложение не видит, сколько отложено, — напоминать не о чем (null).
+ */
+export function goalNudge(item: GoalPlanItem, hasWallet: boolean, today: IsoDate): GoalNudge | null {
+  if (!hasWallet || item.state !== 'active' || item.leftThisMonthMinor <= 0) return null;
+  if (Number(today.slice(8, 10)) < NUDGE_FROM_DAY) return null;
+  return { savedMinor: item.savedThisMonthMinor, neededMinor: item.monthNeedMinor };
 }

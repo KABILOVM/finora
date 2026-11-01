@@ -1,7 +1,9 @@
+import { useCallback, useEffect } from 'react';
 import { useHideAmounts } from '@/components/hideAmounts';
 import { Segmented } from '@/components/Segmented';
 import { Switch } from '@/components/Switch';
-import { useAccentPref, useCustomAccent, useThemePref, type ThemePref } from '@/theme';
+import { paletteFromHex } from '@/lib/palette';
+import { readCustomPalette, saveCustomAccent, useAccentPref, useCustomAccent, useThemePref, type ThemePref } from '@/theme';
 import { AccentPicker } from './AccentPicker';
 import { SettingsSection } from './SettingsSection';
 
@@ -15,7 +17,16 @@ const OPTIONS = [
 export function AppearanceSection() {
   const [pref, setPref] = useThemePref();
   const [accent, setAccent] = useAccentPref();
-  const [customHex, setCustomHex] = useCustomAccent();
+  const customHex = useCustomAccent();
+  // Палитру «своего цвета» строит генератор (он грузится только здесь) и сохраняет вместе с цветом: основному файлу он при запуске не нужен
+  const setCustomHex = useCallback((hex: string): boolean => {
+    const palette = paletteFromHex(hex);
+    return palette !== null && saveCustomAccent(hex, palette);
+  }, []);
+  // Цвет есть, а палитры для него нет (хранилище почистили частично): досчитываем, пока человек в настройках
+  useEffect(() => {
+    if (accent === 'custom' && customHex !== null && readCustomPalette(customHex) === null) setCustomHex(customHex);
+  }, [accent, customHex, setCustomHex]);
   const { hidden, toggle } = useHideAmounts();
   return (
     <SettingsSection title="Оформление">

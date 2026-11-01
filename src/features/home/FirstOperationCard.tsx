@@ -4,7 +4,6 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { useCategories, useSettings, useTransactions } from '@/db';
 import type { LocalRow, Wallet } from '@/domain/types';
-import { parseQuickLine } from '@/features/transactions/quickLine';
 import { sameName } from '@/features/wallets/walletUi';
 import { ADD_PATH, useAddLink } from '@/layout/nav';
 import { useToday } from '@/recurring/useToday';
@@ -50,8 +49,10 @@ export default function FirstOperationCard({ wallets }: FirstOperationCardProps)
 
   const defaultWalletId = settings?.defaultWalletId && live.some((w) => w.id === settings.defaultWalletId) ? settings.defaultWalletId : (live[0]?.id ?? null);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // разбор строки (вместе с историей заметок) нужен только по нажатию, поэтому в основной файл «Главной» не входит
+    const { parseQuickLine } = await import('@/features/transactions/quickLine');
     const line = parseQuickLine(text, {
       wallets: live.map((w) => ({ id: w.id, name: w.name, currency: w.currency })),
       categories: categories.map((c) => ({ id: c.id, name: c.name, kind: c.kind, archivedAt: c.archivedAt })),
@@ -83,7 +84,7 @@ export default function FirstOperationCard({ wallets }: FirstOperationCardProps)
         Запишите первую трату
       </h2>
       <p className="mt-1 text-sm text-muted">Напишите одной строкой, на что и сколько. Остальное подставим, вы проверите и сохраните.</p>
-      <form onSubmit={submit} className="mt-3 flex flex-col gap-2" noValidate>
+      <form onSubmit={(e) => void submit(e)} className="mt-3 flex flex-col gap-2" noValidate>
         <div className="flex gap-2">
           <input
             value={text}

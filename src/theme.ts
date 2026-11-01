@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { GENERATED_ACCENTS } from './lib/accentSpecs';
-import { buildPalette, normalizeHex, paletteFromHex, paletteHex, PALETTE_KEYS, triple, type Palette } from './lib/palette';
+import { isPalette, normalizeHex, PALETTE_KEYS, triple, type Palette } from './lib/paletteBase';
 
 /**
  * Тема оформления: «светлая» (по умолчанию), «тёмная» или «как в системе». Хранится на самом устройстве (localStorage),
@@ -32,13 +32,10 @@ export interface AccentOption {
 
 const VIOLET: AccentOption = { id: 'violet', label: 'Фиолетовый', bar: { light: '#eceefb', dark: '#080a18' } };
 
-/** Цвет строки состояния для палитры: фон светлой и тёмной темы. */
-const barOf = (p: Palette): AccentOption['bar'] => ({ light: paletteHex(p, 'bg-l'), dark: paletteHex(p, 'bg-d') });
-
 const generated = (id: GeneratedAccentId): AccentOption => {
   const spec = GENERATED_ACCENTS.find((a) => a.id === id);
   if (!spec) throw new Error(`Нет описания акцента ${id}`);
-  return { id, label: spec.label, bar: barOf(buildPalette(spec)) };
+  return { id, label: spec.label, bar: spec.bar };
 };
 
 /**
@@ -79,6 +76,8 @@ export const DEFAULT_ACCENT: AccentId = VIOLET.id;
 const KEY = 'finora-theme';
 const ACCENT_KEY = 'finora-accent';
 const CUSTOM_KEY = 'finora-accent-custom';
+/** Готовая палитра «своего цвета» вместе с кодом, для которого она посчитана: чтобы при запуске не нужен был генератор (он грузится только в настройках). */
+const CUSTOM_PALETTE_KEY = 'finora-accent-custom-palette';
 const EVENT = 'finora-theme-change';
 
 const accentById = (id: string | null): AccentOption | undefined => ACCENTS.find((a) => a.id === id);
@@ -100,6 +99,18 @@ export function readCustomAccent(): string | null {
     return raw === null ? null : normalizeHex(raw);
   } catch {
     /* хранилище недоступно — своего цвета нет */
+    return null;
+  }
+}
+
+/** Палитра, посчитанная для этого цвета и сохранённая на устройстве; null — нет, или она для другого цвета, или испорчена. */
+export function readCustomPalette(hex: string): Palette | null {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PALETTE_KEY);
+    if (raw === null) return null;
+    const o = JSON.parse(raw) as { hex?: unknown; p?: unknown } | null;
+    return o && o.hex === hex && isPalette(o.p) ? o.p : null;
+  } catch {
     return null;
   }
 }
@@ -170,15 +181,28 @@ function clearCustomVars(root: HTMLElement): void {
   for (const key of PALETTE_KEYS) root.style.removeProperty(`--ac-${key}`);
 }
 
+/** Свой цвет вместе с готовой палитрой. */
+export interface CustomAccent {
+  hex: string;
+  palette: Palette;
+}
+
+/** «Свой цвет» из хранилища; null — цвета нет или палитра для него ещё не сохранена (настройки досчитают её при открытии). */
+function readCustom(): CustomAccent | null {
+  const hex = readCustomAccent();
+  const palette = hex === null ? null : readCustomPalette(hex);
+  return hex !== null && palette !== null ? { hex, palette } : null;
+}
+
 /**
  * Ставит атрибут data-accent на <html> (у фиолетового — без атрибута: так работает прежняя палитра) и цвет строки состояния.
  * «Свой цвет» атрибут получает тоже, а его палитра ставится прямо на <html> переменными --ac-*: они перекрывают блоки index.css.
- * Цвет берётся из `customHex` или из хранилища; если его нет (или он испорчен), применяется фиолетовый.
+ * Палитра берётся из `custom` или из хранилища; если её нет (или она испорчена), применяется фиолетовый.
  */
-export function applyAccent(id: AccentId, customHex: string | null = id === CUSTOM_ACCENT ? readCustomAccent() : null): void {
+export function applyAccent(id: AccentId, custom: CustomAccent | null = id === CUSTOM_ACCENT ? readCustom() : null): void {
   const root = document.documentElement;
   clearCustomVars(root);
-  const palette = id === CUSTOM_ACCENT && customHex !== null ? paletteFromHex(customHex) : null;
+  const palette = id === CUSTOM_ACCENT ? (custom?.palette ?? null) : null;
   if (palette) {
     for (const key of PALETTE_KEYS) root.style.setProperty(`--ac-${key}`, triple(palette[key]));
     root.setAttribute('data-accent', CUSTOM_ACCENT);
@@ -207,17 +231,21 @@ export function saveAccentPref(id: AccentId): void {
   window.dispatchEvent(new Event(EVENT));
 }
 
-/** Запоминает «свой цвет» и сразу выбирает его акцентом. Не цвет (испорченная строка) — ничего не меняет и возвращает false. */
-export function saveCustomAccent(hex: string): boolean {
+/**
+ * Запоминает «свой цвет» вместе с его готовой палитрой (её строит src/lib/palette.ts в настройках) и сразу выбирает его акцентом.
+ * Не цвет или негодная палитра — ничего не меняет и возвращает false.
+ */
+export function saveCustomAccent(hex: string, palette: Palette): boolean {
   const clean = normalizeHex(hex);
-  if (clean === null || paletteFromHex(clean) === null) return false;
+  if (clean === null || !isPalette(palette)) return false;
   try {
     localStorage.setItem(CUSTOM_KEY, clean);
+    localStorage.setItem(CUSTOM_PALETTE_KEY, JSON.stringify({ hex: clean, p: palette }));
     localStorage.setItem(ACCENT_KEY, CUSTOM_ACCENT);
   } catch {
     /* не сохранилось — цвет всё равно применится до перезагрузки */
   }
-  applyAccent(CUSTOM_ACCENT, clean);
+  applyAccent(CUSTOM_ACCENT, { hex: clean, palette });
   window.dispatchEvent(new Event(EVENT));
   return true;
 }
@@ -243,11 +271,7 @@ export function useAccentPref(): [AccentId, (id: AccentId) => void] {
   return [id, saveAccentPref];
 }
 
-/**
- * «Свой цвет» (#rrggbb, null — не выбирали) и функция, которая запоминает цвет и выбирает его акцентом.
- * Хранилище читается заново на каждый кадр, поэтому значение берём строкой (одинаковая строка — без перерисовки).
- */
-export function useCustomAccent(): [string | null, (hex: string) => boolean] {
-  const hex = useSyncExternalStore(subscribe, readCustomAccent, () => null);
-  return [hex, saveCustomAccent];
+/** «Свой цвет» (#rrggbb, null — не выбирали); компонент обновляется сам. Запоминает цвет saveCustomAccent. */
+export function useCustomAccent(): string | null {
+  return useSyncExternalStore(subscribe, readCustomAccent, () => null);
 }

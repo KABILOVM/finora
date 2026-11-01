@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { render, screen, user } from '@/components/testUtils';
-import { ACCENTS, applyAccent, applyTheme, readAccentPref, readCustomAccent, readThemePref, resolveTheme, saveAccentPref, saveCustomAccent, saveThemePref, useAccentPref, useCustomAccent, type AccentId } from './theme';
-import { PALETTE_KEYS } from './lib/palette';
+import { ACCENTS, applyAccent, applyTheme, readAccentPref, readCustomAccent, readCustomPalette, readThemePref, resolveTheme, saveAccentPref, saveCustomAccent, saveThemePref, useAccentPref, useCustomAccent, type AccentId } from './theme';
+import { paletteFromHex, PALETTE_KEYS, type Palette } from './lib/palette';
 
 const reset = () => {
   localStorage.clear();
@@ -10,6 +10,9 @@ const reset = () => {
   document.documentElement.removeAttribute('data-accent');
   document.head.innerHTML = '';
 };
+/** Как это делают настройки: палитру строит генератор, тема её запоминает вместе с цветом. */
+const saveCustom = (hex: string): boolean => saveCustomAccent(hex, paletteFromHex(hex) ?? ({} as Palette));
+
 beforeEach(reset);
 afterEach(() => {
   vi.restoreAllMocks();
@@ -147,7 +150,7 @@ describe('цвет акцента', () => {
     const rootVar = (name: string) => document.documentElement.style.getPropertyValue(name);
 
     it('запоминается и сразу становится акцентом: палитра ставится на <html>, атрибут data-accent="custom"', () => {
-      expect(saveCustomAccent('#0A8F4A')).toBe(true);
+      expect(saveCustom('#0A8F4A')).toBe(true);
       expect(readCustomAccent()).toBe('#0a8f4a');
       expect(readAccentPref()).toBe('custom');
       expect(localStorage.getItem('finora-accent')).toBe('custom');
@@ -157,15 +160,15 @@ describe('цвет акцента', () => {
 
     it('не цвет — ничего не меняет', () => {
       saveAccentPref('blue');
-      expect(saveCustomAccent('синий')).toBe(false);
-      expect(saveCustomAccent('#12345')).toBe(false);
+      expect(saveCustom('синий')).toBe(false);
+      expect(saveCustom('#12345')).toBe(false);
       expect(readCustomAccent()).toBeNull();
       expect(readAccentPref()).toBe('blue');
       expect(rootVar('--ac-brand-l')).toBe('');
     });
 
     it('готовый акцент убирает палитру своего цвета, а сам цвет остаётся для возврата', () => {
-      saveCustomAccent('#aa3377');
+      saveCustom('#aa3377');
       saveAccentPref('orange');
       expect(document.documentElement.getAttribute('data-accent')).toBe('orange');
       for (const key of PALETTE_KEYS) expect(rootVar(`--ac-${key}`), key).toBe('');
@@ -176,7 +179,7 @@ describe('цвет акцента', () => {
     });
 
     it('фиолетовый после своего цвета возвращает прежнюю палитру: ни атрибута, ни переменных', () => {
-      saveCustomAccent('#aa3377');
+      saveCustom('#aa3377');
       saveAccentPref('violet');
       expect(document.documentElement.hasAttribute('data-accent')).toBe(false);
       expect(rootVar('--ac-bg-l')).toBe('');
@@ -192,18 +195,10 @@ describe('цвет акцента', () => {
       expect(document.documentElement.hasAttribute('data-accent')).toBe(false);
     });
 
-    it('при запуске применяется сохранённый свой цвет', () => {
-      localStorage.setItem('finora-accent', 'custom');
-      localStorage.setItem('finora-accent-custom', '#336699');
-      applyAccent(readAccentPref());
-      expect(document.documentElement.getAttribute('data-accent')).toBe('custom');
-      expect(rootVar('--ac-brand-l')).not.toBe('');
-    });
-
     it('цвет строки состояния браузера = фон страницы по палитре своего цвета, в светлой и тёмной теме', () => {
       document.head.innerHTML =
         '<meta name="theme-color" content="#eceefb" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#080a18" media="(prefers-color-scheme: dark)">';
-      saveCustomAccent('#0a8f4a');
+      saveCustom('#0a8f4a');
       const hex = (name: string) => `#${rootVar(name).split(' ').map((c) => Number(c).toString(16).padStart(2, '0')).join('')}`;
       const bar = () => [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute('content'));
       applyTheme('light');
@@ -217,15 +212,15 @@ describe('цвет акцента', () => {
       vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
         throw new DOMException('нет места', 'QuotaExceededError');
       });
-      expect(() => saveCustomAccent('#336699')).not.toThrow();
+      expect(() => saveCustom('#336699')).not.toThrow();
       expect(document.documentElement.getAttribute('data-accent')).toBe('custom');
     });
 
     it('useCustomAccent: компонент видит новый цвет сразу', async () => {
       function Probe() {
-        const [hex, setHex] = useCustomAccent();
+        const hex = useCustomAccent();
         return (
-          <button type="button" onClick={() => setHex('#112233')}>
+          <button type="button" onClick={() => saveCustom('#112233')}>
             {hex ?? 'нет'}
           </button>
         );
@@ -234,6 +229,42 @@ describe('цвет акцента', () => {
       expect(screen.getByRole('button')).toHaveTextContent('нет');
       await user.click(screen.getByRole('button'));
       expect(screen.getByRole('button')).toHaveTextContent('#112233');
+    });
+
+    it('при запуске палитра берётся из сохранённой копии: генератор не нужен', () => {
+      saveCustom('#336699');
+      // «перезагрузка»: с <html> всё снято, в хранилище осталось
+      document.documentElement.removeAttribute('data-accent');
+      document.documentElement.removeAttribute('style');
+      applyAccent(readAccentPref());
+      expect(document.documentElement.getAttribute('data-accent')).toBe('custom');
+      for (const key of PALETTE_KEYS) expect(rootVar(`--ac-${key}`), key).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/);
+      expect(readCustomPalette('#336699')).toEqual(paletteFromHex('#336699'));
+    });
+
+    it('цвет есть, а копии палитры нет (хранилище почистили частично): до открытия настроек действует фиолетовый, ошибок нет', () => {
+      localStorage.setItem('finora-accent', 'custom');
+      localStorage.setItem('finora-accent-custom', '#336699');
+      expect(readCustomPalette('#336699')).toBeNull();
+      expect(() => applyAccent(readAccentPref())).not.toThrow();
+      expect(document.documentElement.hasAttribute('data-accent')).toBe(false);
+    });
+
+    it('копия палитры для другого цвета или испорченная не применяется', () => {
+      saveCustom('#336699');
+      expect(readCustomPalette('#aa3377')).toBeNull();
+      localStorage.setItem('finora-accent-custom', '#aa3377'); // цвет сменили в обход, копия осталась от прежнего
+      applyAccent(readAccentPref());
+      expect(document.documentElement.hasAttribute('data-accent')).toBe(false);
+      localStorage.setItem('finora-accent-custom-palette', '{не json');
+      expect(readCustomPalette('#aa3377')).toBeNull();
+      localStorage.setItem('finora-accent-custom-palette', JSON.stringify({ hex: '#aa3377', p: { 'bg-l': [999, 0, 0] } }));
+      expect(readCustomPalette('#aa3377')).toBeNull();
+    });
+
+    it('негодная палитра не сохраняется', () => {
+      expect(saveCustomAccent('#336699', {} as Palette)).toBe(false);
+      expect(readCustomAccent()).toBeNull();
     });
   });
 

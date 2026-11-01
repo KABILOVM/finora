@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { inputClasses } from '@/components/Field';
+import { inputClasses, TextInput } from '@/components/Field';
 import { FiltersButton } from '@/components/filters/FilterBar';
 import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { Icon } from '@/components/Icon';
-import type { Category, LocalRow, Wallet } from '@/domain/types';
+import type { Category, IsoDate, LocalRow, Wallet } from '@/domain/types';
+import { monthKey } from '@/lib/dates';
 import { cn } from '@/lib/cn';
 import { FiltersSheet } from './FiltersSheet';
 import { MonthSwitcher } from './MonthSwitcher';
@@ -11,16 +12,23 @@ import {
   activeFilterCount,
   activeFilterLabels,
   EMPTY_SHEET_FILTERS,
+  MAX_DATE,
+  MIN_DATE,
   type ListFilters,
   type PeriodKind,
   type SheetFilters,
+  withPeriod,
+  withRangeDate,
 } from './txFilters';
 
 const PERIODS = [
   { value: 'this', label: 'Этот месяц' },
   { value: 'prev', label: 'Прошлый' },
+  { value: '7d', label: '7 дней' },
+  { value: '30d', label: '30 дней' },
   { value: 'all', label: 'Всё время' },
   { value: 'month', label: 'Другой месяц' },
+  { value: 'range', label: 'Свои даты' },
 ] as const;
 
 /**
@@ -79,28 +87,64 @@ export interface TransactionFiltersProps {
   onChange: (patch: Partial<ListFilters>) => void;
   wallets: readonly LocalRow<Wallet>[];
   categories: readonly LocalRow<Category>[];
-  /** Текущий месяц 'ГГГГ-ММ': дальше него листать вперёд не нужно. */
-  currentMonth: string;
+  /** Сегодня: дальше текущего месяца листать вперёд не нужно, а «Свои даты» впервые открываются «с начала месяца по сегодня». */
+  today: IsoDate;
 }
 
 /**
  * Панель над списком, максимально плотная: в первой строке чипы периода и кнопка «Фильтры» (с числом включённых),
- * ниже — поиск (заметка, категория, кошелёк, сумма). Кошелёк, вид и категория спрятаны в шит «Фильтры»; что из них включено, видно в строке под поиском.
+ * при «Другой месяц» ниже переключатель месяца, при «Свои даты» — поля «С» и «По»; затем поиск (заметка, категория, кошелёк, сумма). Кошелёк, вид и категория спрятаны в шит «Фильтры»; что из них включено, видно в строке под поиском.
  */
-export function TransactionFilters({ filters, onChange, wallets, categories, currentMonth }: TransactionFiltersProps) {
+export function TransactionFilters({ filters, onChange, wallets, categories, today }: TransactionFiltersProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const inSheet: SheetFilters = { walletId: filters.walletId, kind: filters.kind, categoryId: filters.categoryId };
+  const inSheet: SheetFilters = {
+    walletId: filters.walletId,
+    kind: filters.kind,
+    categoryId: filters.categoryId,
+    amountFrom: filters.amountFrom,
+    amountTo: filters.amountTo,
+    source: filters.source,
+  };
   const count = activeFilterCount(inSheet);
 
   return (
     <div className="mb-3 flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <PeriodChips value={filters.period} onChange={(period) => onChange({ period })} />
+        <PeriodChips value={filters.period} onChange={(period) => onChange(withPeriod(filters, period, today))} />
         <FiltersButton count={count} onClick={() => setSheetOpen(true)} />
       </div>
 
       {filters.period === 'month' && (
-        <MonthSwitcher month={filters.month} max={currentMonth} onChange={(month) => onChange({ month })} />
+        <MonthSwitcher month={filters.month} max={monthKey(today)} onChange={(month) => onChange({ month })} />
+      )}
+
+      {filters.period === 'range' && (
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label="Свои даты">
+          <TextInput
+            label="С"
+            type="date"
+            value={filters.from}
+            min={MIN_DATE}
+            max={MAX_DATE}
+            onChange={(e) => {
+              const patch = withRangeDate(filters, 'from', e.target.value);
+              if (patch) onChange(patch);
+            }}
+            wrapperClassName="min-w-0"
+          />
+          <TextInput
+            label="По"
+            type="date"
+            value={filters.to}
+            min={MIN_DATE}
+            max={MAX_DATE}
+            onChange={(e) => {
+              const patch = withRangeDate(filters, 'to', e.target.value);
+              if (patch) onChange(patch);
+            }}
+            wrapperClassName="min-w-0"
+          />
+        </div>
       )}
 
       <div className="relative">

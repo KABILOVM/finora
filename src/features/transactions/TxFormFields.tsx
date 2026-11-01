@@ -58,6 +58,13 @@ export interface TxFormFieldsProps {
   /** Новая операция: похожие записи для набираемой заметки (под полем заметки) и что делать при нажатии. */
   noteSuggestions?: readonly NoteChoice[];
   onPickNote?: (key: string) => void;
+  /** Новая операция: кнопка «Что куплено» у поля суммы (только у расхода в «Продуктах»); нет — кнопки нет. */
+  onOpenPurchases?: () => void;
+  /** Сколько продуктов уже внесено в «Что куплено»: точка на кнопке. */
+  purchasesCount?: number;
+  /** Сумма считается по продуктам «Что куплено»: набирать её нельзя, комиссии нет; вместо клавиатуры — эта сводка. */
+  amountLocked?: boolean;
+  purchasesSummary?: ReactNode;
 }
 
 /** Круглая кнопка у края суммы (комиссия слева, заметка справа). */
@@ -94,7 +101,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote, onOpenPurchases, purchasesCount = 0, amountLocked = false, purchasesSummary }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -103,7 +110,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
   const showNote = noteOpen || !!errors.note;
   const [feePanel, setFeePanel] = useState(false);
   // Комиссия: у расхода (новый) и у перевода в одной валюте; у перевода между валютами сумма зачисления задаётся курсом
-  const feeAvailable = (form.kind === 'expense' && !c.editing) || (isTransfer && c.received?.mode === 'fee');
+  const feeAvailable = (form.kind === 'expense' && !c.editing && !amountLocked) || (isTransfer && c.received?.mode === 'fee');
   const feeShown = feeAvailable && ((feePanel && form.feeOpen) || !!errors.fee);
   const hasFee = feeAvailable && form.feeOpen && c.fee.minor !== null && c.fee.minor > 0;
 
@@ -204,6 +211,8 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           className={COMPACT_KEYPAD}
           compact
           calculator
+          locked={amountLocked}
+          wideSides={!!onOpenPurchases}
           autoFocus
           onSubmit={feeTyping ? undefined : onSubmit}
           start={
@@ -214,9 +223,16 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
             ) : undefined
           }
           end={
-            <SideButton label="Заметка" active={showNote} onClick={toggleNote} dot={form.note !== '' && !showNote}>
-              <Icon name="edit" size={20} />
-            </SideButton>
+            <div className="flex items-center gap-1">
+              {onOpenPurchases && (
+                <SideButton label="Что куплено" active={purchasesCount > 0} onClick={onOpenPurchases} dot={purchasesCount > 0}>
+                  <Icon name="cart" size={20} />
+                </SideButton>
+              )}
+              <SideButton label="Заметка" active={showNote} onClick={toggleNote} dot={form.note !== '' && !showNote}>
+                <Icon name="edit" size={20} />
+              </SideButton>
+            </div>
           }
           overlay={
             feeShown ? (
@@ -267,6 +283,8 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           onKeyIntercept={feeKey}
         />
       </div>
+
+      {amountLocked && purchasesSummary}
 
       {isTransfer && c.received && c.received.mode === 'cross' && (
         <ReceivedField

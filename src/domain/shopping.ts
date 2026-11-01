@@ -1,4 +1,5 @@
 import { addMinor, isMinor } from './money';
+import { productKeyOf } from './products/catalog';
 import type { IsoDateTime, Minor, ShoppingItem, ShoppingUnit, UUID } from './types';
 
 /**
@@ -43,9 +44,12 @@ export function itemTitle(name: string, qtyMilli: number, unit: ShoppingUnit): s
   return `${name} ${formatQty(qtyMilli)} ${UNIT_LABEL[unit]}`;
 }
 
-/** Ключ памяти цен: название без регистра, лишних пробелов и «ё» + единица (цена за кг и за шт несравнимы). */
+/**
+ * Ключ памяти цен: продукт + единица (цена за кг и за шт несравнимы). Продукт — по каталогу: «Картошка» и «Картофель» один и тот же,
+ * а свои названия различаются без учёта регистра, «ё», знаков и лишних пробелов.
+ */
 export function priceKey(name: string, unit: ShoppingUnit): string {
-  return `${name.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ')}|${unit}`;
+  return `${productKeyOf(name)}|${unit}`;
 }
 
 /** Деление с округлением половинки вверх (положительные числа). */
@@ -135,6 +139,22 @@ export function totalsOf(items: readonly ShoppingItem[], memory: ReadonlyMap<str
     }
   }
   return { planMinor, unknownCount, cartMinor, cartCount };
+}
+
+/**
+ * План по средним ценам: как «План» в totalsOf, но цена за единицу берётся из средней (если её нет — из последней). Позиции без цены
+ * не входят. Бросает RangeError при переполнении суммы.
+ */
+export function planByAverage(items: readonly ShoppingItem[], avg: ReadonlyMap<string, Minor>, last: ReadonlyMap<string, Minor>): Minor {
+  let plan = 0;
+  for (const it of items) {
+    if (it.deletedAt !== null || it.purchasedAt !== null) continue;
+    const key = priceKey(it.name, it.unit);
+    const unitMinor = avg.get(key) ?? last.get(key);
+    const exp = unitMinor === undefined ? null : expectedPrice(unitMinor, it.qtyMilli);
+    if (exp !== null) plan = addMinor(plan, exp);
+  }
+  return plan;
 }
 
 /** Активные позиции в порядке добавления. */

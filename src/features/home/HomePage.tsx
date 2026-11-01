@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { InstallHint } from '@/components/InstallHint';
 import { PageHeader } from '@/components/PageHeader';
-import { useBalances, useSettings, useWallets } from '@/db';
+import { useBalances, useSettings, useTransactions, useWallets } from '@/db';
+import type { LocalRow, Wallet } from '@/domain/types';
 import BudgetsWidget from '@/features/budgets/BudgetsWidget';
 import UpcomingWidget from '@/features/recurring/UpcomingWidget';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
@@ -13,7 +14,6 @@ import { useToday } from '@/recurring/useToday';
 import { computeWalletsTotal } from '@/rates/walletsTotal';
 import AttentionRow from './AttentionRow';
 import MissedDaysCard from './MissedDaysCard';
-import FirstOperationCard from './FirstOperationCard';
 import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
@@ -23,6 +23,20 @@ import TemplatesRow from './TemplatesRow';
 import TripCard from './TripCard';
 import { WalletChips } from './WalletChips';
 import WeeklyCard from './WeeklyCard';
+
+// Карточка «Запишите первую трату» нужна только тому, у кого нет операций: остальным она в основной файл не грузится
+const FirstOperationCard = lazy(() => import('./FirstOperationCard'));
+
+/** Затвор: карточку подгружаем, только когда операций нет совсем. */
+function FirstOperation({ wallets }: { wallets: readonly LocalRow<Wallet>[] }) {
+  const rows = useTransactions({}, { limit: 1 });
+  if (!rows || rows.length > 0) return null;
+  return (
+    <Suspense fallback={null}>
+      <FirstOperationCard wallets={wallets} />
+    </Suspense>
+  );
+}
 
 /**
  * На телефоне заголовок «Главная» скрыт визуально (остаётся для скринридера): название и так видно внизу в меню,
@@ -95,7 +109,7 @@ export default function HomePage() {
       <PageHeader title="Главная" className={HEADER_CLASS} />
       <div className="stagger flex flex-col gap-3 md:gap-4">
         <HomeHero total={total ?? null} base={base} />
-        <FirstOperationCard wallets={wallets} />
+        <FirstOperation wallets={wallets} />
         <TemplatesRow />
         <AttentionRow />
         <MissedDaysCard />
@@ -106,7 +120,7 @@ export default function HomePage() {
         <WalletChips wallets={wallets} balances={balances} />
         <BudgetsWidget />
         <UpcomingWidget />
-        <RecentOps wallets={walletIndex} categories={categoryIndex} />
+        <RecentOps wallets={walletIndex} categories={categoryIndex} today={today} base={base} />
       </div>
     </HideAmountsProvider>
   );

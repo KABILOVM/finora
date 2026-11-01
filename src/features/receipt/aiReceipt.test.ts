@@ -15,7 +15,7 @@ describe('parseReceiptWithAi', () => {
     const d = await parseReceiptWithAi({ base64: 'QUJD', mime: 'image/jpeg' }, ctx, 1, client);
     expect(invoke).toHaveBeenCalledWith('parse-receipt', { body: { image: 'QUJD', mime: 'image/jpeg', categories: ['Продукты'], today: '2026-10-15' } });
     expect(d).toMatchObject({ merchant: 'Корзинка', date: '2026-10-14', totalText: '36,5' });
-    expect(d.lines.map((l) => [l.name, l.priceText, l.categoryId])).toEqual([['Молоко', '26', 'food'], ['Хлеб', '10,5', '']]);
+    expect(d.lines.map((l) => [l.name, l.priceText, l.categoryId])).toEqual([['Молоко', '26', 'food'], ['Хлеб', '10,5', 'food']]); // у «хлеба» ИИ категорию не назвал: продукт из каталога → «Продукты»
   });
 
   it('нет облака — понятная ошибка; ответ с ошибкой сервера — тоже', async () => {

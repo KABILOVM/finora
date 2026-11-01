@@ -109,7 +109,7 @@ describe('«Запишите первую трату»', () => {
       await user.clear(field());
       await user.type(field(), bad);
       await user.click(screen.getByRole('button', { name: 'Далее' }));
-      expect(screen.getByRole('alert').textContent).toContain('Не вижу суммы');
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Не вижу суммы'));
       expect(probe().path).toBe('/');
     }
     await user.type(field(), '1');

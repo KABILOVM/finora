@@ -9,47 +9,10 @@
  * текст ≥ 4.5:1, рамки полей ≥ 3:1, белое на кнопке ≥ 4.5:1 и так далее. Любой оттенок, даже жёлтый или серый, даёт читаемую тему.
  */
 
-export type Rgb = readonly [number, number, number];
+import { normalizeHex, PALETTE_KEYS, triple, type Palette, type PaletteKey, type Rgb } from './paletteBase.ts';
 
-/** Все переменные палитры без префикса «--ac-», в порядке, как они записаны в index.css. */
-export const PALETTE_KEYS = [
-  'bg-l',
-  'surface-2-l',
-  'text-l',
-  'muted-l',
-  'border-l',
-  'border-strong-l',
-  'brand-l',
-  'brand-hover-l',
-  'accent-l',
-  'hero-l',
-  'orb-1-l',
-  'orb-2-l',
-  'orb-3-l',
-  'glass-shadow-l',
-  'bg-d',
-  'surface-d',
-  'surface-2-d',
-  'text-d',
-  'muted-d',
-  'border-d',
-  'border-strong-d',
-  'brand-d',
-  'brand-hover-d',
-  'on-brand-d',
-  'accent-d',
-  'hero-from-d',
-  'hero-d',
-  'orb-1-d',
-  'orb-2-d',
-  'orb-3-d',
-  'logo-from',
-  'logo-to',
-  'logo-glyph',
-] as const;
-
-export type PaletteKey = (typeof PALETTE_KEYS)[number];
-export type Palette = Readonly<Record<PaletteKey, Rgb>>;
+export { isPalette, normalizeHex, PALETTE_KEYS, triple } from './paletteBase.ts';
+export type { Palette, PaletteKey, Rgb } from './paletteBase.ts';
 
 /** Описание акцента для генератора: оттенок в градусах OKLCH (0–360) и яркость красок от 0 (серый) до 1 (самые сочные). */
 export interface PaletteSpec {
@@ -269,16 +232,6 @@ export function buildPalette(spec: PaletteSpec): Palette {
 
 /* ------------------------------ свой цвет ------------------------------ */
 
-const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-/** «#4f46e5», «4f46e5» или «#f00» → '#rrggbb' в нижнем регистре; всё остальное — null. */
-export function normalizeHex(raw: string): string | null {
-  const m = HEX.exec(raw.trim());
-  if (!m) return null;
-  const digits = (m[1] ?? '').toLowerCase();
-  return `#${digits.length === 3 ? [...digits].map((d) => d + d).join('') : digits}`;
-}
-
 export function hexToRgb(hex: string): Rgb | null {
   const n = normalizeHex(hex);
   if (!n) return null;
@@ -303,9 +256,6 @@ export function paletteFromHex(hex: string): Palette | null {
   const spec = specFromHex(hex);
   return spec ? buildPalette(spec) : null;
 }
-
-/** «R G B» — так значения записаны в index.css. */
-export const triple = ([r, g, b]: Rgb): string => `${r} ${g} ${b}`;
 
 /** Цвет в виде «#rrggbb» для строки состояния браузера и подписей. */
 export const paletteHex = (palette: Palette, key: PaletteKey): string => rgbToHex(palette[key]);

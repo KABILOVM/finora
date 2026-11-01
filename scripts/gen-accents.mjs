@@ -1,8 +1,17 @@
 // Пересобирает блоки готовых акцентов в src/index.css из описаний src/lib/accentSpecs.ts (генератор — src/lib/palette.ts).
 // Запуск: `npm run gen:accents`. Проверка без записи: `npm run gen:accents -- --check` (то же делает src/accents.test.ts).
+// `npm run gen:accents -- --bars` печатает цвета строки браузера (bar) для src/lib/accentSpecs.ts: их надо записать туда готовыми значениями.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { GENERATED_ACCENTS } from '../src/lib/accentSpecs.ts';
-import { GENERATED_BEGIN, GENERATED_END, generatedAccentsCss } from '../src/lib/palette.ts';
+import { buildPalette, GENERATED_BEGIN, GENERATED_END, generatedAccentsCss, paletteHex } from '../src/lib/palette.ts';
+
+if (process.argv.includes('--bars')) {
+  for (const a of GENERATED_ACCENTS) {
+    const p = buildPalette(a);
+    console.log(`${a.id}: bar: { light: '${paletteHex(p, 'bg-l')}', dark: '${paletteHex(p, 'bg-d')}' }`);
+  }
+  process.exit(0);
+}
 
 const FILE = new URL('../src/index.css', import.meta.url);
 const css = readFileSync(FILE, 'utf8');

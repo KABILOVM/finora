@@ -7,12 +7,14 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { ListRow } from '@/components/ListRow';
 import { PageHeader } from '@/components/PageHeader';
+import { SearchField } from '@/components/SearchField';
 import { Segmented } from '@/components/Segmented';
 import { useToast } from '@/components/Toast';
 import { useCategories, useStore } from '@/db';
 import type { Category, CategoryKind, LocalRow } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
-import { childrenOf, groupUnderParents, hasChildren, parentIn } from './categoryTree';
+import { matchesQuery, showsSearch } from '@/lib/search';
+import { childrenOf, groupUnderParents, hasChildren, parentIn, searchCategories } from './categoryTree';
 import { CategorySheet } from './CategorySheet';
 
 // Готовых наборов много (около 150 записей): грузятся только когда окно открывают
@@ -43,13 +45,16 @@ export default function CategoriesPage() {
   const [busy, setBusy] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [catalog, setCatalog] = useState(false);
+  const [query, setQuery] = useState('');
 
   const active = useMemo(() => (all ?? []).filter((c) => c.archivedAt === null), [all]);
-  const archived = useMemo(() => (all ?? []).filter((c) => c.archivedAt !== null), [all]);
+  // поиск по названию: и в списке, и в архиве
+  const found = useMemo(() => searchCategories(active, query), [active, query]);
+  const archived = useMemo(() => (all ?? []).filter((c) => c.archivedAt !== null && matchesQuery(c.name, query)), [all, query]);
   const activeById = useMemo(() => new Map(active.map((c) => [c.id, c] as const)), [active]);
   const allById = useMemo(() => new Map((all ?? []).map((c) => [c.id, c] as const)), [all]);
   // родитель, затем его подкатегории; категория с архивным родителем остаётся в списке как обычная
-  const ordered = useMemo(() => groupUnderParents(active), [active]);
+  const ordered = useMemo(() => groupUnderParents(found), [found]);
   const archivingKids = archiving ? childrenOf(archiving.id, active) : [];
 
   const fail = (e: unknown, fallback: string) => {
@@ -104,12 +109,16 @@ export default function CategoriesPage() {
         onChange={(v) => {
           setKind(v);
           setShowArchived(false);
+          setQuery('');
         }}
         className="mb-3"
       />
-      <Button variant="secondary" icon="stars" fullWidth disabled={all === undefined} onClick={() => setCatalog(true)} className="mb-4">
+      <Button variant="secondary" icon="stars" fullWidth disabled={all === undefined} onClick={() => setCatalog(true)} className="mb-3">
         Готовые категории с подкатегориями
       </Button>
+      {all !== undefined && showsSearch(active.length, query) && (
+        <SearchField label="Поиск по категориям" placeholder="Найти категорию" value={query} onChange={setQuery} className="mb-4" />
+      )}
 
       {all === undefined ? (
         <p role="status" className="py-10 text-center text-muted">
@@ -121,6 +130,17 @@ export default function CategoriesPage() {
           title={kind === 'expense' ? 'Нет категорий расходов' : 'Нет категорий доходов'}
           text="Добавьте первую категорию."
           action={<Button onClick={() => setSheet({ kind: 'new' })}>Добавить категорию</Button>}
+        />
+      ) : found.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title="Ничего не найдено"
+          text="Такой категории нет среди активных."
+          action={
+            <Button variant="secondary" onClick={() => setQuery('')}>
+              Очистить поиск
+            </Button>
+          }
         />
       ) : (
         <Card padding="none">

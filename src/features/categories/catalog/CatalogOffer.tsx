@@ -103,3 +103,5 @@ export function CatalogOffer() {
     </Silent>
   );
 }
+
+export default CatalogOffer;

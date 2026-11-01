@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react';
+import { Button } from '@/components/Button';
 import { Sheet } from '@/components/Sheet';
 import { itemTitle, unitPrice, UNIT_LABEL } from '@/domain/shopping';
 import { PRODUCT_GROUPS, type Product } from '@/domain/products/catalog';
@@ -31,19 +33,45 @@ export interface ProductSheetProps {
   items: readonly LocalRow<ShoppingItem>[];
   currency: CurrencyCode;
   book: PriceBook;
+  /** «В список покупок»: добавляет продукт в «Покупки» (1 в его единице). Нет — кнопки нет. */
+  onAddToList?: () => Promise<void>;
   onClose: () => void;
 }
 
 /** Карточка продукта: последняя и средняя цена, сколько раз покупали и последние покупки (дата, количество, сумма, цена за единицу). */
-export function ProductSheet({ product, items, currency, onClose }: ProductSheetProps) {
+export function ProductSheet({ product, items, currency, onAddToList, onClose }: ProductSheetProps) {
   const { stats } = product;
+  const [adding, setAdding] = useState(false);
+  const busy = useRef(false);
+  const addToList = async () => {
+    if (!onAddToList || busy.current) return; // второе нажатие, пока идёт добавление
+    busy.current = true;
+    setAdding(true);
+    try {
+      await onAddToList();
+    } finally {
+      busy.current = false;
+      setAdding(false);
+    }
+  };
   const purchases = items
     .filter((i) => i.purchasedAt !== null && i.priceMinor !== null && i.priceMinor > 0 && productKeyOf(i.name) === product.key)
     .sort((a, b) => ((a.purchasedAt as string) !== (b.purchasedAt as string) ? ((a.purchasedAt as string) < (b.purchasedAt as string) ? 1 : -1) : a.id < b.id ? 1 : -1))
     .slice(0, HISTORY_MAX);
 
   return (
-    <Sheet open onClose={onClose} title={product.name}>
+    <Sheet
+      open
+      onClose={onClose}
+      title={product.name}
+      footer={
+        onAddToList && (
+          <Button size="lg" fullWidth icon="cart" loading={adding} onClick={() => void addToList()}>
+            В список покупок
+          </Button>
+        )
+      }
+    >
       <div className="flex flex-col gap-4">
         <p className="text-sm text-muted">
           {product.group ? `${product.group} · ` : 'Мой продукт · '}цена за {UNIT_LABEL[product.unit]}

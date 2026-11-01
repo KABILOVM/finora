@@ -349,8 +349,8 @@ export async function pickDate(which: 'Сегодня' | 'Вчера' | 'Дру�
 
 // ───────────── шит «Новая операция» ─────────────
 
-/** Открывает шит «Новая операция» (и показывает текущий адрес). */
-export async function openAddSheet(td: OpsDeps = opsDeps()) {
+/** Открывает шит «Новая операция» (и показывает текущий адрес). path — с какого адреса (например, `/add?kind=income`, как у ярлыка). */
+export async function openAddSheet(td: OpsDeps = opsDeps(), path = '/add') {
   const onClose = vi.fn();
   await showApp(
     <>
@@ -358,7 +358,7 @@ export async function openAddSheet(td: OpsDeps = opsDeps()) {
       <LocationProbe />
     </>,
     td,
-    '/add',
+    path,
   );
   await findByRole('dialog', { name: 'Новая операция' });
   return { td, onClose };

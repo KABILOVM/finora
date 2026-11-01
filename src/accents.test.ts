@@ -301,6 +301,14 @@ describe('готовые акценты, выпущенные генератор
     expect(css.slice(begin, end + GENERATED_END.length)).toBe(generatedAccentsCss(GENERATED_ACCENTS));
   });
 
+  it('цвета строки браузера, записанные в accentSpecs.ts, совпадают с тем, что считает генератор (иначе: посмотреть вывод `npm run gen:accents -- --bars`)', () => {
+    for (const a of GENERATED_ACCENTS) {
+      const p = buildPalette(a);
+      const hex = (k: 'bg-l' | 'bg-d') => `#${p[k].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+      expect(a.bar, a.id).toEqual({ light: hex('bg-l'), dark: hex('bg-d') });
+    }
+  });
+
   it('все описанные генератором акценты есть в ACCENTS (и ни один не описан дважды)', () => {
     const ids = GENERATED_ACCENTS.map((a) => a.id);
     expect(new Set(ids).size).toBe(ids.length);

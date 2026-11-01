@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { FilterBar } from '@/components/filters/FilterBar';
+import { SearchField } from '@/components/SearchField';
 import { countFilters, emptyFilters, pruneFilters, type FilterValues } from '@/components/filters/filterState';
 import { Icon } from '@/components/Icon';
 import { MoneyText } from '@/components/MoneyText';
@@ -24,6 +25,8 @@ import { useSkipped } from '@/recurring/useSkipped';
 import { useToday } from '@/recurring/useToday';
 import { PostSheet } from './PostSheet';
 import { ArchivedRow, RuleRow } from './RulesList';
+import { isSearching, matchesQuery, showsSearch } from '@/lib/search';
+import { viewRule } from '@/recurring/ruleView';
 import { matchesRuleFilter, ruleFilterFields } from './ruleFilters';
 import { RuleSheet } from './RuleSheet';
 import { SalaryCard, useSalaryCardDismissed } from './SalaryCard';
@@ -99,6 +102,7 @@ export default function RecurringPage() {
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
   const busyRef = useRef(new Set<string>());
   const [filters, setFilters] = useState<FilterValues>({});
+  const [query, setQuery] = useState('');
 
   const allGroups = useMemo(() => groupUpcoming(upcoming), [upcoming]);
   // уже проведённые и пропущенные даты по правилам: «Следующий платёж» их не называет
@@ -141,8 +145,19 @@ export default function RecurringPage() {
   // Фильтр действует на все списки и на итог «В месяц»; выбранное, чего больше нет среди вариантов, считается «любым».
   const filterFields = ruleFilterFields(rules, lookups.categories, lookups.wallets);
   const filterValues = pruneFilters(filterFields, filters);
-  const filtering = countFilters(filterFields, filterValues) > 0;
-  const fits = (r: LocalRow<RecurringRule>) => !filtering || matchesRuleFilter(r, filterValues);
+  const filtersOn = countFilters(filterFields, filterValues) > 0;
+  // поиск — по тому, что видно в строке: название (заметка или категория), категория, кошелёк; действует так же, как фильтры
+  const searching = isSearching(query);
+  const filtering = filtersOn || searching;
+  const ruleText = (r: LocalRow<RecurringRule>) => {
+    const v = viewRule(r, lookups.wallets, lookups.categories, lookups.base);
+    return `${v.title} ${v.subtitle}`;
+  };
+  const fits = (r: LocalRow<RecurringRule>) => (!filtersOn || matchesRuleFilter(r, filterValues)) && (!searching || matchesQuery(ruleText(r), query));
+  const resetFilters = () => {
+    setFilters(emptyFilters(filterFields));
+    setQuery('');
+  };
   const groups = {
     overdue: allGroups.overdue.filter((it) => fits(it.rule)),
     due: allGroups.due.filter((it) => fits(it.rule)),
@@ -286,6 +301,9 @@ export default function RecurringPage() {
         </>
       ) : (
         <>
+          {showsSearch(rules.length, query) && (
+            <SearchField label="Поиск по платежам" placeholder="Найти платёж" value={query} onChange={setQuery} className="mb-3" />
+          )}
           {filterFields.length > 0 && (
             <FilterBar title="Фильтры платежей" fields={filterFields} values={filterValues} onChange={setFilters} className="mb-3" />
           )}
@@ -347,7 +365,7 @@ export default function RecurringPage() {
           )}
           {empty && (
             <Card className="mb-6 text-muted" role="status">
-              {filtering ? `По выбранным фильтрам на ближайшие ${SOON_DAYS} дней платежей нет.` : `На ближайшие ${SOON_DAYS} дней платежей нет.`}
+              {filtering ? `${searching ? 'По поиску и фильтрам' : 'По выбранным фильтрам'} на ближайшие ${SOON_DAYS} дней платежей нет.` : `На ближайшие ${SOON_DAYS} дней платежей нет.`}
             </Card>
           )}
 
@@ -384,9 +402,9 @@ export default function RecurringPage() {
             {active.length === 0 ? (
               filtering ? (
                 <li data-testid="recurring-filter-empty" className="flex flex-col items-start gap-2 px-4 py-4">
-                  <p className="text-muted">Нет платежей, подходящих под выбранные фильтры.</p>
-                  <Button variant="secondary" onClick={() => setFilters(emptyFilters(filterFields))}>
-                    Сбросить фильтры
+                  <p className="text-muted">Нет платежей, подходящих {searching ? 'под поиск и фильтры' : 'под выбранные фильтры'}.</p>
+                  <Button variant="secondary" onClick={resetFilters}>
+                    {searching ? 'Сбросить поиск и фильтры' : 'Сбросить фильтры'}
                   </Button>
                 </li>
               ) : (

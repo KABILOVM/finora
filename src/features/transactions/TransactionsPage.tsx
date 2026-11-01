@@ -2,23 +2,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { IconButton } from '@/components/IconButton';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
-import { exportTransactionsCsv, useCategories, useHasTransactions, useSettings, useStore, useTransactions, useWallets } from '@/db';
+import { exportTransactionsCsv, useCategories, useHasTransactions, useSettings, useStore, useTransactions, useWallets, ValidationError } from '@/db';
 import type { LocalRow, Transaction } from '@/domain/types';
 import { useToast } from '@/components/Toast';
 import { downloadTextFile } from '@/features/settings/download';
 import { useAddLink } from '@/layout/nav';
 import { formatMinor } from '@/domain/money';
-import { formatDayLabel, monthKey, todayLocal } from '@/lib/dates';
+import { formatDayLabel, todayLocal } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { useSyncEnabled } from '@/sync/syncContext';
+import { BulkCategorySheet } from './BulkCategorySheet';
+import { BulkSelectionBar } from './BulkSelectionBar';
+import { categoryEligibility, deleteMany, restoreMany, revertCategories, setCategoryMany } from './bulkActions';
+import { DayHeader } from './DayHeader';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionRow } from './TransactionRow';
+import { toastWithUndo } from './txActions';
 import { useCategoryIndex, useWalletIndex } from './txData';
-import { dayTotal, matchesSearch, toTxFilter, totalsByCurrency } from './txFilters';
+import { dayTotal, matchesAmountRange, matchesSearch, matchesSource, toTxFilter, totalsByCurrency } from './txFilters';
 import { useListFilters } from './useListFilters';
 
 /** Сколько операций показываем сразу (целыми днями) и сколько добавляет «Показать ещё». */
@@ -45,20 +51,29 @@ export default function TransactionsPage() {
   const filter = useMemo(() => toTxFilter(filters, '', today, categories ?? []), [filters, today, categories]);
   const found = useTransactions(filter);
   const anyRow = useHasTransactions();
+  const { amountFrom, amountTo, source } = filters;
   const rows = useMemo(() => {
-    if (!found || search.trim() === '') return found;
-    if (!walletIndex || !categoryIndex) return undefined;
+    if (!found) return found;
+    const bySource = source === '' ? found : found.filter((t) => matchesSource(t, source));
+    const needSearch = search.trim() !== '';
+    const needAmount = amountFrom !== '' || amountTo !== '';
+    if (!needSearch && !needAmount) return bySource;
+    // сумма сравнивается в валюте кошелька операции, поиск смотрит и в названия: пока справочники не загрузились, списка нет
+    if (!walletIndex || (needSearch && !categoryIndex)) return undefined;
+    const currencyOf = (id: string) => walletIndex.get(id)?.currency;
     const look = {
       walletName: (id: string) => walletIndex.get(id)?.name,
-      categoryName: (id: string) => categoryIndex.get(id)?.name,
-      currencyOf: (id: string) => walletIndex.get(id)?.currency,
+      categoryName: (id: string) => categoryIndex?.get(id)?.name,
+      currencyOf,
     };
-    return found.filter((t) => matchesSearch(t, search, look));
-  }, [found, search, walletIndex, categoryIndex]);
+    return bySource.filter(
+      (t) => matchesAmountRange(t, amountFrom, amountTo, currencyOf) && (!needSearch || matchesSearch(t, search, look)),
+    );
+  }, [found, search, source, amountFrom, amountTo, walletIndex, categoryIndex]);
 
   // другой список (фильтр, поиск, вкладка «Операции», «Показать всё») — снова с первой страницы
   const filterKey = JSON.stringify(filter);
-  useEffect(() => setLimit(PAGE_SIZE), [filterKey, search]);
+  useEffect(() => setLimit(PAGE_SIZE), [filterKey, search, source, amountFrom, amountTo]);
 
   const { groups, shown } = useMemo(() => {
     const byDay = new Map<string, LocalRow<Transaction>[]>();
@@ -79,6 +94,87 @@ export default function TransactionsPage() {
     () => (rows && walletIndex ? totalsByCurrency(rows, (id) => walletIndex.get(id)?.currency, filters.walletId) : []),
     [rows, walletIndex, filters.walletId],
   );
+
+  // Выделение: «Выбрать» включает режим, где нажатие на строку отмечает её, а не открывает правку. Отмечать можно только показанное.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const shownItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  // сменился список (фильтр, поиск, удаление): выделенным остаётся только то, что ещё на экране, — невидимое не удаляем
+  useEffect(() => {
+    setPicked((cur) => {
+      if (cur.size === 0) return cur;
+      const visible = new Set(shownItems.map((t) => t.id));
+      const next = new Set([...cur].filter((id) => visible.has(id)));
+      return next.size === cur.size ? cur : next;
+    });
+  }, [shownItems]);
+  const pickedItems = useMemo(() => shownItems.filter((t) => picked.has(t.id)), [shownItems, picked]);
+  const allSelected = shownItems.length > 0 && pickedItems.length === shownItems.length;
+  const eligibility = useMemo(() => categoryEligibility(pickedItems), [pickedItems]);
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked(new Set());
+  };
+  const toggle = (id: string) =>
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const toggleAll = () => setPicked(allSelected ? new Set() : new Set(shownItems.map((t) => t.id)));
+
+  const guarded = async (act: () => Promise<void>) => {
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      await act();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+  const deleteSelected = () =>
+    guarded(async () => {
+      const res = await deleteMany(store, pickedItems.map((t) => t.id));
+      setConfirmOpen(false);
+      if (res.done.length === 0) {
+        toast.error(res.error ?? 'Не удалось удалить операции. Ничего не изменилось.');
+        return;
+      }
+      stopSelecting();
+      const partial = res.failed > 0 ? ` Не удалось удалить: ${res.failed}.` : '';
+      toastWithUndo(
+        toast,
+        `Удалено операций: ${res.done.length}.${partial}`,
+        async () => {
+          const back = await restoreMany(store, res.done);
+          if (back.failed > 0) throw new ValidationError(`Вернулось ${back.done.length} из ${res.done.length}. ${back.error ?? ''}`.trim());
+        },
+        'Операции возвращены',
+      );
+    });
+  const applyCategory = (categoryId: string) =>
+    guarded(async () => {
+      const res = await setCategoryMany(store, pickedItems.map((t) => ({ id: t.id, categoryId: t.categoryId })), categoryId);
+      setCategoryOpen(false);
+      if (res.done.length === 0) {
+        toast.error(res.error ?? 'Не удалось сменить категорию. Ничего не изменилось.');
+        return;
+      }
+      stopSelecting();
+      const partial = res.failed > 0 ? ` Не удалось: ${res.failed}.` : '';
+      toastWithUndo(
+        toast,
+        `Категория изменена у операций: ${res.done.length}.${partial}`,
+        async () => {
+          const back = await revertCategories(store, res.previous);
+          if (back.failed > 0) throw new ValidationError(`Вернулось ${back.done.length} из ${res.done.length}. ${back.error ?? ''}`.trim());
+        },
+        'Прежние категории возвращены',
+      );
+    });
 
   const open = (id: string) => navigate(`/edit/${id}`, { state: { background: location } });
 
@@ -107,8 +203,15 @@ export default function TransactionsPage() {
         title="Операции"
         className="!pb-2 !pt-1 md:!pb-4 md:!pt-0"
         actions={
-          rows && rows.length > 0 ? (
-            <IconButton icon="download" label="Выгрузить список в CSV" disabled={exporting} onClick={() => void exportList()} />
+          selecting ? (
+            <Button variant="secondary" onClick={stopSelecting}>
+              Готово
+            </Button>
+          ) : rows && rows.length > 0 ? (
+            <>
+              <IconButton icon="check" label="Выбрать операции" onClick={() => setSelecting(true)} />
+              <IconButton icon="download" label="Выгрузить список в CSV" disabled={exporting} onClick={() => void exportList()} />
+            </>
           ) : undefined
         }
       />
@@ -124,7 +227,7 @@ export default function TransactionsPage() {
               onChange={change}
               wallets={wallets}
               categories={categories}
-              currentMonth={monthKey(today)}
+              today={today}
             />
           )}
 
@@ -180,23 +283,7 @@ export default function TransactionsPage() {
                 const label = formatDayLabel(g.date, today);
                 return (
                   <section key={g.date} aria-label={label} className="mb-4">
-                    <header className="flex items-baseline justify-between gap-2 px-1 pb-1">
-                      <h2 className="text-sm font-semibold text-muted">{label}</h2>
-                      <span className="text-sm">
-                        {total ? (
-                          <>
-                            {total.excluded > 0 && (
-                              <span className="mr-2 text-xs text-muted">
-                                без {total.excluded} {pluralRu(total.excluded, 'операции', 'операций', 'операций')} в другой валюте
-                              </span>
-                            )}
-                            <MoneyText minor={total.netMinor} currency={settings.baseCurrency} sign="always" className="font-semibold" />
-                          </>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </span>
-                    </header>
+                    <DayHeader label={label} total={total} base={settings.baseCurrency} />
                     <Card padding="none" className="divide-y divide-border overflow-hidden">
                       {g.items.map((tx) => (
                         <TransactionRow
@@ -205,7 +292,8 @@ export default function TransactionsPage() {
                           wallets={walletIndex}
                           categories={categoryIndex}
                           syncEnabled={syncEnabled}
-                          onOpen={open}
+                          onOpen={selecting ? toggle : open}
+                          {...(selecting ? { selection: { selected: picked.has(tx.id) } } : {})}
                         />
                       ))}
                     </Card>
@@ -222,9 +310,41 @@ export default function TransactionsPage() {
                   </p>
                 </div>
               )}
+              {selecting && (
+                <BulkSelectionBar
+                  count={pickedItems.length}
+                  allSelected={allSelected}
+                  onToggleAll={toggleAll}
+                  categoryReason={eligibility.ok ? null : eligibility.reason}
+                  onCategory={() => setCategoryOpen(true)}
+                  onDelete={() => setConfirmOpen(true)}
+                  busy={bulkBusy}
+                />
+              )}
             </>
           )}
         </>
+      )}
+
+      <ConfirmDialog
+        open={confirmOpen && pickedItems.length > 0}
+        danger
+        loading={bulkBusy}
+        title={`Удалить выбранные операции (${pickedItems.length})?`}
+        message="Они пропадут из списка, остатки кошельков пересчитаются (и остатки долгов, если среди них есть операции по долгам). Сразу после удаления их можно вернуть кнопкой «Отменить»."
+        confirmLabel="Удалить"
+        onConfirm={() => void deleteSelected()}
+        onCancel={() => setConfirmOpen(false)}
+      />
+      {categoryOpen && eligibility.ok && categories && (
+        <BulkCategorySheet
+          kind={eligibility.kind}
+          count={pickedItems.length}
+          categories={categories}
+          saving={bulkBusy}
+          onApply={(id) => void applyCategory(id)}
+          onClose={() => setCategoryOpen(false)}
+        />
       )}
     </>
   );

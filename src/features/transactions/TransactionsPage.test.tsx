@@ -16,6 +16,7 @@ import {
   pinToday,
   rowTexts,
   seedHistory,
+  setDateInput,
   showApp,
   storeOf,
   table,
@@ -381,6 +382,387 @@ describe('поиск по категории, кошельку и сумме', (
   });
 });
 
+describe('выделение и массовые действия', () => {
+  const selectBtn = () => screen.getByRole('button', { name: 'Выбрать операции' });
+  const rowButton = (needle: string) => {
+    const hit = Array.from(document.querySelectorAll('section[aria-label] button')).find((b) => (b.textContent ?? '').includes(needle));
+    if (!hit) throw new Error(`Нет строки «${needle}»`);
+    return hit as HTMLElement;
+  };
+  const pick = (...needles: string[]) => needles.reduce((p, n) => p.then(() => user.click(rowButton(n))), Promise.resolve());
+  const barText = () => (document.querySelector('[data-testid="bulk-bar"]')?.textContent ?? '').replace(/\s+/g, ' ');
+  const categoryId = async (td: Awaited<ReturnType<typeof openList>>, name: string, kind: 'expense' | 'income' = 'expense') =>
+    (await storeOf(td).db.categories.toArray()).find((c) => c.name === name && c.kind === kind)?.id ?? '';
+  /** «Удалить» в диалоге подтверждения (такая же кнопка есть и в панели выбора). */
+  const confirmDelete = () => {
+    const dialog = screen.getByRole('alertdialog');
+    return user.click(Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Удалить') as HTMLElement);
+  };
+  const txOf = async (td: Awaited<ReturnType<typeof openList>>, key: string) => storeOf(td).db.transactions.get(hist.txs[key] ?? '');
+
+  it('«Выбрать» включает режим: нажатие отмечает строку, а не открывает правку; «Готово» выходит и сбрасывает выбор', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull();
+
+    await user.click(selectBtn());
+    expect(barText()).toContain('Выберите операции');
+    expect(rowButton('обед')).toHaveAttribute('aria-pressed', 'false');
+    await pick('обед');
+    expect(currentPath()).toBe('/transactions'); // правка не открылась
+    expect(rowButton('обед')).toHaveAttribute('aria-pressed', 'true');
+    expect(barText()).toContain('Выбрано: 1');
+    await pick('обед');
+    expect(barText()).toContain('Выберите операции'); // повторное нажатие снимает отметку
+
+    await pick('обед');
+    await user.click(screen.getByRole('button', { name: 'Готово' }));
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull();
+    expect(rowButton('обед')).not.toHaveAttribute('aria-pressed');
+    await user.click(rowButton('обед')); // обычный режим: открывает правку
+    expect(currentPath()).toBe(`/edit/${hist.txs['lunch']}`);
+  });
+
+  it('«Выбрать все» отмечает всё показанное, «Снять выбор» — снимает', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await user.click(screen.getByRole('button', { name: 'Выбрать все' }));
+    expect(barText()).toContain('Выбрано: 5');
+    await user.click(screen.getByRole('button', { name: 'Снять выбор' }));
+    expect(barText()).toContain('Выберите операции');
+  });
+
+  it('кнопки «Категория» и «Удалить» недоступны, пока ничего не выбрано', async () => {
+    await openList();
+    await user.click(selectBtn());
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Удалить' })).toBeDisabled();
+  });
+
+  it('смена категории у нескольких расходов, «Отменить» возвращает прежние', async () => {
+    const td = await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    const food = await categoryId(td, 'Еда');
+    const market = await categoryId(td, 'Продукты');
+    const transport = await categoryId(td, 'Транспорт');
+
+    await user.click(selectBtn());
+    await pick('обед', 'такси'); // Еда и Транспорт
+    await user.click(screen.getByRole('button', { name: 'Категория' }));
+    const dialog = await findByRole('dialog', { name: 'Категория для 2 операций' });
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled(); // категория ещё не выбрана
+    const chipFor = (name: string) =>
+      Array.from(dialog.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim().includes(name)) as HTMLElement;
+    await user.click(chipFor('Продукты'));
+    await user.click(screen.getByRole('button', { name: 'Применить' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText('Категория изменена у операций: 2.')).toBeInTheDocument();
+    expect((await txOf(td, 'lunch'))?.categoryId).toBe(market);
+    expect((await txOf(td, 'taxi'))?.categoryId).toBe(market);
+    expect((await txOf(td, 'coffee'))?.categoryId).toBe(food); // не выбранная не тронута
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull(); // режим закрылся
+
+    await user.click(screen.getByRole('button', { name: 'Отменить' }));
+    await waitFor(async () => expect((await txOf(td, 'lunch'))?.categoryId).toBe(food));
+    expect((await txOf(td, 'taxi'))?.categoryId).toBe(transport);
+  });
+
+  it('категорию нельзя менять вперемешку (расход и доход) и у переводов — с причиной', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await pick('обед', 'аванс'); // расход и доход
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeDisabled();
+    expect(barText()).toContain('Выделите только расходы или только доходы');
+    await pick('обед'); // остался один доход
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeEnabled();
+    await pick('Наличные → Карта'); // перевод
+    expect(screen.getByRole('button', { name: 'Категория' })).toBeDisabled();
+    expect(barText()).toContain('У переводов категории нет');
+  });
+
+  it('удаление: подтверждение, строки пропадают, «Отменить» возвращает; отмена диалога ничего не делает', async () => {
+    const td = await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await pick('обед', 'аванс');
+    await user.click(screen.getByRole('button', { name: 'Удалить' }));
+    await findByRole('alertdialog', { name: 'Удалить выбранные операции (2)?' });
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect((await txOf(td, 'lunch'))?.deletedAt).toBeNull();
+    expect(barText()).toContain('Выбрано: 2'); // выбор сохранился
+
+    await user.click(screen.getByRole('button', { name: 'Удалить' }));
+    await findByRole('alertdialog', { name: 'Удалить выбранные операции (2)?' });
+    await confirmDelete();
+    await waitFor(() => expect(has('обед')).toBe(false));
+    expect(has('аванс')).toBe(false);
+    expect(has('такси')).toBe(true);
+    expect(screen.getByText('Удалено операций: 2.')).toBeInTheDocument();
+    expect((await txOf(td, 'lunch'))?.deletedAt).not.toBeNull();
+    expect(document.querySelector('[data-testid="bulk-bar"]')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Отменить' }));
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(has('аванс')).toBe(true);
+    expect((await txOf(td, 'lunch'))?.deletedAt).toBeNull();
+  });
+
+  it('часть операций не удалась — удалённые вернуть можно, неудавшаяся осталась, об этом сказано', async () => {
+    const td = await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    const real = storeOf(td).transactions.softDelete.bind(storeOf(td).transactions);
+    vi.spyOn(storeOf(td).transactions, 'softDelete').mockImplementation(async (id) => {
+      if (id === hist.txs['taxi']) throw new Error('сбой записи');
+      return real(id);
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await user.click(selectBtn());
+    await pick('обед', 'такси');
+    await user.click(screen.getByRole('button', { name: 'Удалить' }));
+    await findByRole('alertdialog', { name: 'Удалить выбранные операции (2)?' });
+    await confirmDelete();
+    await waitFor(() => expect(screen.getByText('Удалено операций: 1. Не удалось удалить: 1.')).toBeInTheDocument());
+    expect(has('обед')).toBe(false);
+    expect(has('такси')).toBe(true);
+    expect((await txOf(td, 'taxi'))?.deletedAt).toBeNull();
+  });
+
+  it('смена списка (период) оставляет выделенным только то, что ещё на экране', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    await user.click(selectBtn());
+    await pick('обед', 'такси');
+    expect(barText()).toContain('Выбрано: 2');
+    await period('Прошлый');
+    await waitFor(() => expect(has('рынок')).toBe(true));
+    expect(barText()).toContain('Выберите операции'); // выбранные остались в октябре, их на экране нет
+    await pick('рынок');
+    expect(barText()).toContain('Выбрано: 1');
+    // вернулись в октябрь: прежние отметки не «воскресли» — выбор снимается вместе с исчезновением строк с экрана
+    await period('Этот месяц');
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(barText()).toContain('Выберите операции');
+    expect(rowButton('обед')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('кнопки «Выбрать» нет, пока операций нет', async () => {
+    await openList({ empty: true });
+    expect(screen.queryByRole('button', { name: 'Выбрать операции' })).toBeNull();
+  });
+});
+
+describe('фильтры: сумма и «откуда операция»', () => {
+  const amountField = (name: 'От' | 'До') => screen.getByRole('textbox', { name }) as HTMLInputElement;
+  const type = async (name: 'От' | 'До', value: string) => {
+    await user.clear(amountField(name));
+    if (value !== '') await user.type(amountField(name), value);
+  };
+  const activeLabels = () => document.querySelector('[data-testid="active-filters"]')?.textContent ?? '';
+
+  it('«от»: крупные операции за всё время; «от и до» — в валюте кошелька каждой операции (10 $ тоже «10»)', async () => {
+    await openList();
+    await period('Всё время');
+    await waitFor(() => expect(days()).toHaveLength(5));
+
+    await applySheet(() => type('От', '100'));
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    expect(has('аванс')).toBe(true); // 5 000 с.
+    expect(has('Наличные → Карта')).toBe(true); // перевод 100 с. — граница входит
+    expect(currentSearch()).toBe('?period=all&min=100');
+    expect(activeLabels()).toContain('Сумма от 100');
+
+    // от 10 до 70: обед 12,50, coffee 10 $, рынок 45, «Работа» 70 (граница входит); выше и ниже — нет
+    await applySheet(async () => {
+      await type('От', '10');
+      await type('До', '70');
+    });
+    await waitFor(() => expect(rowTexts()).toHaveLength(4));
+    for (const note of ['обед', 'coffee', 'рынок', 'Работа']) expect(has(note)).toBe(true);
+    expect(has('аванс')).toBe(false);
+    expect(has('такси')).toBe(false); // 3 с.
+    expect(currentSearch()).toBe('?period=all&min=10&max=70');
+    expect(activeLabels()).toContain('Сумма 10–70');
+  });
+
+  it('итог за период и счётчик на кнопке «Фильтры» учитывают отфильтрованное', async () => {
+    await openList({ path: '/transactions?period=all&min=100' });
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    expect(screen.getByRole('button', { name: /^Фильтры/ })).toHaveAccessibleName(/1/);
+    const totals = document.querySelector('[data-testid="period-totals"]')?.textContent ?? '';
+    expect(totals).toContain(money(500_000, 'TJS', 'always'));
+    expect(totals).not.toContain(money(-1250)); // обед в итог не попал
+  });
+
+  it('запятая и пробелы в границе понятны; в списке она показана с запятой', async () => {
+    await openList({ path: '/transactions?period=all' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    await applySheet(() => type('От', '12,5'));
+    await waitFor(() => expect(currentSearch()).toBe('?period=all&min=12.5')); // внутри и в адресе — «чистое» число
+    await waitFor(() => expect(has('обед')).toBe(true)); // 12,50 — граница входит
+    expect(has('такси')).toBe(false);
+    await openSheet();
+    expect(amountField('От').value).toBe('12,5');
+  });
+
+  it('не число или «до» меньше «от» — подсказка у поля, «Применить» недоступна', async () => {
+    await openList({ path: '/transactions?period=all' });
+    await openSheet();
+    await type('От', 'abc');
+    expect(screen.getByText('Введите сумму числом')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled();
+    await type('От', '100');
+    await type('До', '50');
+    expect(screen.getByText('«До» меньше «От»')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeDisabled();
+    await type('До', '500');
+    expect(screen.getByRole('button', { name: 'Применить' })).toBeEnabled();
+    // закрытие без «Применить» ничего не меняет
+    await user.click(screen.getByRole('button', { name: 'Закрыть' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(currentSearch()).toBe('?period=all');
+  });
+
+  it('ссылка с суммой открывает фильтр; «Сбросить» убирает сумму; поиск работает вместе с суммой', async () => {
+    await openList({ path: '/transactions?period=all&min=100' });
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    await user.type(screen.getByRole('textbox', { name: 'Поиск по операциям' }), 'аванс');
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    await user.clear(screen.getByRole('textbox', { name: 'Поиск по операциям' }));
+    await user.click(screen.getByRole('button', { name: 'Сбросить' }));
+    await waitFor(() => expect(currentSearch()).toBe('?period=all'));
+    await waitFor(() => expect(days()).toHaveLength(5));
+  });
+
+  it('«Откуда»: регулярные платежи, по долгам, все', async () => {
+    const td = await openList({ path: '/transactions?period=all' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    // у одной операции — правило, у другой — долг (так их создают регулярный платёж и «Долги»)
+    await write(() => storeOf(td).db.transactions.update(hist.txs['taxi'] ?? '', { recurringRuleId: 'rule-1' }));
+    await write(() => storeOf(td).db.transactions.update(hist.txs['lunch'] ?? '', { debtId: 'debt-1' }));
+
+    await applySheet(() => user.click(screen.getByRole('button', { name: 'Регулярные платежи' })));
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(has('такси')).toBe(true);
+    expect(currentSearch()).toBe('?period=all&src=recurring');
+    expect(activeLabels()).toContain('Регулярные платежи');
+
+    await applySheet(() => user.click(screen.getByRole('button', { name: 'По долгам' })));
+    await waitFor(() => expect(has('такси')).toBe(false));
+    expect(rowTexts()).toHaveLength(1);
+    expect(currentSearch()).toBe('?period=all&src=debt');
+
+    await applySheet(() => user.click(screen.getByRole('button', { name: 'Все' })));
+    await waitFor(() => expect(days()).toHaveLength(5));
+    expect(currentSearch()).toBe('?period=all');
+  });
+
+  it('мусор в адресе (min=abc, src=чужое) — обычный список', async () => {
+    await openList({ path: '/transactions?period=all&min=abc&src=%D1%87%D1%83%D0%B6%D0%BE%D0%B5' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    expect(document.querySelector('[data-testid="active-filters"]')).toBeNull();
+  });
+});
+
+describe('период: «7 дней», «30 дней» и «Свои даты»', () => {
+  // поля «С» и «По» — два календаря подряд (у календаря нет роли «textbox», поэтому ищем по типу)
+  const dates = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="date"]'));
+  const from = () => dates()[0] as HTMLInputElement;
+  const to = () => dates()[1] as HTMLInputElement;
+
+  it('«7 дней» — сегодня и шесть предыдущих; «30 дней» захватывает и сентябрь, но не начало сентября и июль', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+
+    await period('7 дней');
+    await waitFor(() => expect(screen.getByRole('button', { name: '7 дней' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(days()).toEqual(['Сегодня', 'Вчера']);
+    expect(has('рынок')).toBe(false);
+    expect(currentSearch()).toBe('?period=7d');
+
+    await period('30 дней');
+    await waitFor(() => expect(has('рынок')).toBe(true)); // 20 сентября — 25 дней назад
+    expect(days()).toEqual(['Сегодня', 'Вчера', 'вс, 20 сен']);
+    expect(has('Работа')).toBe(false); // июль
+    expect(currentSearch()).toBe('?period=30d');
+  });
+
+  it('«Свои даты»: сначала с начала месяца по сегодня; даты меняются, список и адрес вместе с ними', async () => {
+    await openList();
+    await waitFor(() => expect(has('обед')).toBe(true));
+    expect(dates()).toHaveLength(0); // полей нет, пока период не выбран
+
+    await period('Свои даты');
+    await waitFor(() => expect(from().value).toBe('2026-10-01'));
+    expect(to().value).toBe('2026-10-15');
+    expect(currentSearch()).toBe('?period=range&from=2026-10-01&to=2026-10-15');
+    expect(days()).toEqual(['Сегодня', 'Вчера']);
+
+    setDateInput(from(), '2026-09-01');
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера', 'вс, 20 сен', 'чт, 3 сен']));
+    expect(currentSearch()).toBe('?period=range&from=2026-09-01&to=2026-10-15');
+
+    setDateInput(to(), '2026-09-30');
+    await waitFor(() => expect(days()).toEqual(['вс, 20 сен', 'чт, 3 сен']));
+    expect(has('обед')).toBe(false);
+    // итог за период считается по выбранным датам
+    expect(document.querySelector('[data-testid="period-totals"]')?.textContent).toContain(money(-(200 + 4500)));
+  });
+
+  it('конец раньше начала подтягивает начало: список не пустеет молча', async () => {
+    await openList();
+    await period('Свои даты');
+    await waitFor(() => expect(from().value).toBe('2026-10-01'));
+    setDateInput(to(), '2026-09-20');
+    await waitFor(() => expect(from().value).toBe('2026-09-20'));
+    expect(to().value).toBe('2026-09-20');
+    await waitFor(() => expect(days()).toEqual(['вс, 20 сен']));
+    expect(currentSearch()).toBe('?period=range&from=2026-09-20&to=2026-09-20');
+  });
+
+  it('очищенное или невозможное поле даты ничего не меняет', async () => {
+    await openList();
+    await period('Свои даты');
+    await waitFor(() => expect(from().value).toBe('2026-10-01'));
+    setDateInput(from(), '');
+    setDateInput(to(), '0001-01-01');
+    expect(from().value).toBe('2026-10-01');
+    expect(to().value).toBe('2026-10-15');
+    expect(currentSearch()).toBe('?period=range&from=2026-10-01&to=2026-10-15');
+  });
+
+  it('ссылка со своими датами открывает их; вернуться на «Этот месяц» можно чипом, а выбранные даты при возврате на «Свои даты» сохраняются', async () => {
+    await openList({ path: '/transactions?period=range&from=2026-07-01&to=2026-09-10' });
+    await waitFor(() => expect(days()).toEqual(['чт, 3 сен', 'пт, 10 июл']));
+    expect(screen.getByRole('button', { name: 'Свои даты' })).toHaveAttribute('aria-pressed', 'true');
+    expect(from().value).toBe('2026-07-01');
+    expect(to().value).toBe('2026-09-10');
+
+    await period('Этот месяц');
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера']));
+    expect(dates()).toHaveLength(0);
+    expect(currentSearch()).toBe('');
+  });
+
+  it('невозможные даты в адресе — обычный список «Этот месяц»', async () => {
+    await openList({ path: '/transactions?period=range&from=2026-10-20&to=2026-10-01' });
+    await waitFor(() => expect(days()).toEqual(['Сегодня', 'Вчера']));
+    expect(screen.getByRole('button', { name: 'Этот месяц' })).toHaveAttribute('aria-pressed', 'true');
+    expect(dates()).toHaveLength(0);
+  });
+
+  it('за выбранные даты операций нет — «Ничего не найдено» и «Показать всё»', async () => {
+    await openList({ path: '/transactions?period=range&from=2026-08-01&to=2026-08-31' });
+    await waitFor(() => screen.getByText('Ничего не найдено'));
+    await user.click(screen.getByRole('button', { name: 'Показать всё' }));
+    await waitFor(() => expect(has('Работа')).toBe(true));
+    expect(screen.getByRole('button', { name: 'Всё время' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
 describe('фильтры живут в адресе', () => {
   it('«Всё время» и фильтр из шита пишутся в адрес; «Сбросить» их убирает; поиск в адрес не попадает', async () => {
     await openList();
@@ -567,9 +949,14 @@ describe('чистые функции фильтров', () => {
   const f = (over: Partial<ListFilters> = {}): ListFilters => ({
     period: 'this',
     month: '2026-10',
+    from: '',
+    to: '',
     walletId: '',
     categoryId: '',
     kind: '',
+    amountFrom: '',
+    amountTo: '',
+    source: '',
     search: '',
     ...over,
   });

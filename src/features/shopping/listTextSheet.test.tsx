@@ -256,11 +256,15 @@ describe('«Добавить списком»: правка позиций и к
     await parsed([
       { name: 'молока', qtyMilli: 2000, unit: 'pcs' },
       { name: 'сыр', qtyMilli: 1000, unit: 'pcs' },
+      { name: 'Особый товар соседа', qtyMilli: 1000, unit: 'pcs' },
     ]);
-    // «молока» 2 шт: количество названо, единицу не меняем, но название — из каталога
+    // «молока» 2 шт: количество названо, единицу не меняем, но название — из каталога (вашего); «сыр» — из встроенного каталога продуктов
     expect(screen.getByText('Молоко')).toBeTruthy();
-    expect(screen.getByText('сыр')).toBeTruthy();
-    expect(screen.getAllByText('в каталоге')).toHaveLength(1);
+    expect(screen.getByText('Сыр')).toBeTruthy();
+    expect(screen.getAllByText('в каталоге')).toHaveLength(2);
+    // чего нет ни в вашей истории, ни в каталоге, — «Новый продукт»
+    expect(screen.getByText('Особый товар соседа')).toBeTruthy();
+    expect(screen.getAllByText('Новый продукт')).toHaveLength(1);
   });
 
   it('количество не названо — единица берётся из каталога, цена считается по памяти цен (13 с. за литр)', async () => {
@@ -291,16 +295,16 @@ describe('«Добавить списком»: правка позиций и к
 
   it('штуки — только целые: переход на «шт» округляет 1,5 вниз', async () => {
     const { onAdd } = await parsed([{ name: 'яблоки', qtyMilli: 1500, unit: 'kg' }]);
-    await user.click(btn('Изменить: яблоки'));
+    await user.click(btn('Изменить: Яблоки')); // название приведено к каталожному
     await user.click(screen.getByRole('radio', { name: 'шт' }));
     expect((screen.getByRole('textbox', { name: 'Количество, шт' }) as HTMLInputElement).value).toBe('1');
     await user.click(btn('Добавить 1 позицию'));
-    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'яблоки', qtyMilli: 1000, unit: 'pcs' }]));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'Яблоки', qtyMilli: 1000, unit: 'pcs' }]));
   });
 
   it('неверное количество и пустое название: понятная ошибка, в позиции остаётся прежнее', async () => {
     const { onAdd } = await parsed([{ name: 'хлеб', qtyMilli: 3000, unit: 'pcs' }]);
-    await user.click(btn('Изменить: хлеб'));
+    await user.click(btn('Изменить: Хлеб'));
     await user.clear(screen.getByRole('textbox', { name: 'Количество, шт' }));
     await user.type(screen.getByRole('textbox', { name: 'Количество, шт' }), '1,5');
     expect(screen.getByText('Штуки — целое число, например 3')).toBeTruthy();
@@ -308,7 +312,7 @@ describe('«Добавить списком»: правка позиций и к
     expect(screen.getByText('Впишите название товара')).toBeTruthy();
     await user.click(btn('Добавить 1 позицию'));
     // «1» набрано верно и сохранилось, «1,5» для штук нельзя — осталось последнее верное
-    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'хлеб', qtyMilli: 1000, unit: 'pcs' }]));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith([{ name: 'Хлеб', qtyMilli: 1000, unit: 'pcs' }]));
   });
 
   it('при правке названия предлагаются позиции из каталога: выбор подставляет название и единицу', async () => {
@@ -326,10 +330,72 @@ describe('«Добавить списком»: правка позиций и к
       { name: 'хлеб', qtyMilli: 1000, unit: 'pcs' },
       { name: 'соль', qtyMilli: 1000, unit: 'pcs' },
     ]);
-    await user.click(btn('Изменить: хлеб'));
-    await user.click(btn('Убрать позицию: хлеб'));
-    expect(screen.queryByText('хлеб')).toBeNull();
-    await user.click(btn('Убрать: соль'));
+    await user.click(btn('Изменить: Хлеб'));
+    await user.click(btn('Убрать позицию: Хлеб'));
+    expect(screen.queryByText('Хлеб')).toBeNull();
+    await user.click(btn('Убрать: Соль'));
     expect(btn('Разобрать')).toBeTruthy();
+  });
+
+  describe('каталог продуктов при разборе', () => {
+    const rows = () => (document.querySelector('[data-testid="parsed-items"]') as HTMLElement).querySelectorAll('li');
+    const text = (el: Element) => (el.textContent ?? '').replace(/[\s  ]+/g, ' ').trim();
+
+    it('«картошки» из речи становится «Картофель» в килограммах; продукт каталога помечен «в каталоге», свой — «Новый продукт»', async () => {
+      const onAdd = vi.fn(async () => {});
+      setup(async () => [
+        { name: 'картошки', qtyMilli: 1000, unit: 'pcs' },
+        { name: 'яблок', qtyMilli: 1500, unit: 'kg' },
+        { name: 'Курт сушёный', qtyMilli: 3000, unit: 'pcs' },
+      ], onAdd);
+      await user.type(field(), 'картошки яблок курт');
+      await user.click(btn('Разобрать'));
+      await waitFor(() => expect(rows()).toHaveLength(3));
+      const [potato, apples, kurt] = Array.from(rows());
+      expect(text(potato!)).toContain('Картофель');
+      expect(text(potato!)).toContain('в каталоге');
+      expect(text(potato!)).toContain('1 кг'); // единица каталога: количество не называли
+      expect(text(apples!)).toContain('Яблоки');
+      expect(text(apples!)).toContain('1,5 кг');
+      expect(text(kurt!)).toContain('Курт сушёный');
+      expect(text(kurt!)).toContain('Новый продукт');
+      expect(text(kurt!)).not.toContain('в каталоге');
+      await user.click(btn(/Добавить 3 позиции/));
+      await waitFor(() =>
+        expect(onAdd).toHaveBeenCalledWith([
+          { name: 'Картофель', qtyMilli: 1000, unit: 'kg' },
+          { name: 'Яблоки', qtyMilli: 1500, unit: 'kg' },
+          { name: 'Курт сушёный', qtyMilli: 3000, unit: 'pcs' },
+        ]),
+      );
+    });
+
+    it('прежнее написание важнее каталога: «картошки» при вашей «Картошке» остаётся «Картошка»', async () => {
+      const onAdd = vi.fn(async () => {});
+      render(
+        <ListTextSheet known={[]} catalog={[{ name: 'Картошка', unit: 'kg' as const }]} memory={new Map()} currency="TJS" parse={async () => [{ name: 'картошки', qtyMilli: 1000, unit: 'pcs' }]} listen={vi.fn()} canRecord={false} onAdd={onAdd} onClose={vi.fn()} />,
+      );
+      await user.type(field(), 'картошки');
+      await user.click(btn('Разобрать'));
+      await waitFor(() => expect(rows()).toHaveLength(1));
+      expect(text(rows()[0]!)).toContain('Картошка');
+      expect(text(rows()[0]!)).toContain('в каталоге');
+    });
+
+    it('«Новый продукт» можно исправить: в правке — продукты каталога, выбор подставляет название и единицу', async () => {
+      setup(async () => [{ name: 'Помидорчики', qtyMilli: 1000, unit: 'pcs' }]);
+      await user.type(field(), 'помидорчики');
+      await user.click(btn('Разобрать'));
+      await waitFor(() => expect(rows()).toHaveLength(1));
+      expect(text(rows()[0]!)).toContain('Новый продукт');
+      await user.click(btn('Изменить: Помидорчики'));
+      const name = screen.getByRole('textbox', { name: 'Название' });
+      await user.clear(name);
+      await user.type(name, 'помидор');
+      await user.click(await waitFor(() => btn(/^Помидоры · кг$/)));
+      expect(text(rows()[0]!)).toContain('Помидоры');
+      expect(text(rows()[0]!)).toContain('в каталоге');
+      expect(text(rows()[0]!)).not.toContain('Новый продукт');
+    });
   });
 });
