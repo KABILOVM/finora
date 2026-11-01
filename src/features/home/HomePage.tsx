@@ -13,6 +13,7 @@ import { useToday } from '@/recurring/useToday';
 import { computeWalletsTotal } from '@/rates/walletsTotal';
 import AttentionRow from './AttentionRow';
 import MissedDaysCard from './MissedDaysCard';
+import FirstOperationCard from './FirstOperationCard';
 import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
@@ -94,6 +95,7 @@ export default function HomePage() {
       <PageHeader title="Главная" className={HEADER_CLASS} />
       <div className="stagger flex flex-col gap-3 md:gap-4">
         <HomeHero total={total ?? null} base={base} />
+        <FirstOperationCard wallets={wallets} />
         <TemplatesRow />
         <AttentionRow />
         <MissedDaysCard />
