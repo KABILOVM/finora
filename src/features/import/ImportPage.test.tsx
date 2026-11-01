@@ -280,6 +280,47 @@ describe('Итог импорта: ошибки записи', () => {
     expect(text('report-failed')).toBe('25');
   });
 
+  describe('«Что дальше» после переноса истории', () => {
+    const next = () => document.querySelector('[data-testid="import-next"]');
+    const open = (r: ImportReport) =>
+      render(
+        <MemoryRouter>
+          <DoneStep report={r} onAgain={() => undefined} />
+        </MemoryRouter>,
+      );
+
+    it('история перенесена: подсказка про строку «такси 20» и про вечернее напоминание, обе со ссылками', () => {
+      open(report(0));
+      const card = screen.getByRole('region', { name: 'Что дальше' });
+      expect(card.textContent).toContain('такси 20');
+      expect(card.textContent).toContain('вечернее напоминание');
+      expect(card.textContent).toContain('нужен вход в аккаунт');
+      expect(screen.getByRole('link', { name: 'Записать трату' }).getAttribute('href')).toBe('/add');
+      expect(screen.getByRole('link', { name: 'Включить напоминание' }).getAttribute('href')).toBe('/settings?section=security');
+    });
+
+    it('основная кнопка «К операциям» остаётся главной и стоит после подсказки', () => {
+      open(report(0));
+      const links = screen.getAllByRole('link').map((a) => a.textContent);
+      expect(links.indexOf('Записать трату')).toBeLessThan(links.indexOf('К операциям'));
+    });
+
+    it('остановка, сбой, ничего не добавлено — подсказки нет (перенос не закончен или не было)', () => {
+      open({ ...report(0), stopped: true, added: 40 });
+      expect(next()).toBeNull();
+    });
+
+    it('сбой — подсказки нет', () => {
+      open({ ...report(0), fatal: 'Нет места' });
+      expect(next()).toBeNull();
+    });
+
+    it('ничего не добавлено — подсказки нет', () => {
+      open({ ...report(0), added: 0, alreadyThere: 100 });
+      expect(next()).toBeNull();
+    });
+  });
+
   it('без ошибок раздела нет; остановка и сбой названы своими словами', () => {
     const { rerender } = render(
       <MemoryRouter>
