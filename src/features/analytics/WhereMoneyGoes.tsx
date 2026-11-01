@@ -8,7 +8,7 @@ import { percentOf } from '@/domain/budgetLevels';
 import type { CurrencyCode } from '@/domain/types';
 import { pluralRu } from '@/lib/plural';
 import type { SpendGroup } from './spendGroups';
-import { walletSpendQuery } from './spendGroups';
+import { tagSpendQuery, walletSpendQuery } from './spendGroups';
 import type { AnalyticsData } from './useAnalyticsData';
 
 /** Сколько строк показываем сразу; остальные — по «Показать ещё». */
@@ -66,11 +66,16 @@ function Row({ group, by, base, totalMinor, wallets, month }: { group: SpendGrou
     </>
   );
   const cls = 'flex min-h-[56px] items-center gap-3 py-2';
+  const link = `${cls} transition-colors hover:bg-surface-2/60`;
   return (
     <li>
       {by === 'wallet' ? (
         // начало адреса фиксировано, из данных — только закодированный хвост (так требует статический аудит e2e/sec)
-        <Link to={`/transactions?${walletSpendQuery(month, group.key)}`} className={`${cls} transition-colors hover:bg-surface-2/60`}>
+        <Link to={`/transactions?${walletSpendQuery(month, group.key)}`} className={link}>
+          {body}
+        </Link>
+      ) : by === 'tag' ? (
+        <Link to={`/transactions?${tagSpendQuery(month, group.key)}`} className={link}>
           {body}
         </Link>
       ) : (
@@ -81,8 +86,8 @@ function Row({ group, by, base, totalMinor, wallets, month }: { group: SpendGrou
 }
 
 /**
- * «Куда уходят деньги»: расходы месяца, сложенные по заметке («такси», «базар»), по кошельку и по метке (#Самарканд). Строка кошелька — ссылка на
- * его расходы за месяц. Сначала видна первая вкладка, где что-то есть. Больше восьми строк — остальные по «Показать ещё».
+ * «Куда уходят деньги»: расходы месяца, сложенные по заметке («такси», «базар»), по кошельку и по метке (#Самарканд). Строки кошелька и метки —
+ * ссылки на их расходы за месяц. Сначала видна первая вкладка, где что-то есть. Больше восьми строк — остальные по «Показать ещё».
  */
 export function WhereMoneyGoes({ where, wallets, base, month }: WhereMoneyGoesProps) {
   const first: By = where.note.length > 0 ? 'note' : where.wallet.length > 0 ? 'wallet' : 'tag';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_NOTE_REPEATS, spendByNote, spendByTag, spendByWallet, spendTotal, walletSpendQuery, type SpendTx } from './spendGroups';
+import { MIN_NOTE_REPEATS, spendByNote, spendByTag, spendByWallet, spendTotal, tagSpendQuery, walletSpendQuery, type SpendTx } from './spendGroups';
 
 let seq = 0;
 /** Расход 10 с. (1000) в TJS на 10 октября 2026 с кошелька «w1»; поля переопределяются. */
@@ -166,5 +166,12 @@ describe('walletSpendQuery', () => {
 
   it('значения кодируются: лишнего в адрес не попадёт', () => {
     expect(walletSpendQuery('2026-10', 'a&b=c')).toBe('month=2026-10&wallet=a%26b%3Dc&kind=expense');
+  });
+});
+
+describe('tagSpendQuery', () => {
+  it('месяц, ключ метки и вид «расход»; значения кодируются', () => {
+    expect(tagSpendQuery('2026-10', 'самарканд')).toBe('month=2026-10&tag=%D1%81%D0%B0%D0%BC%D0%B0%D1%80%D0%BA%D0%B0%D0%BD%D0%B4&kind=expense');
+    expect(tagSpendQuery('2026-10', 'a&b=c')).toBe('month=2026-10&tag=a%26b%3Dc&kind=expense');
   });
 });
