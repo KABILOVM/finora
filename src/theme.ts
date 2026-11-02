@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { GENERATED_ACCENTS } from './lib/accentSpecs';
 import { isPalette, normalizeHex, PALETTE_KEYS, triple, type Palette } from './lib/paletteBase';
+import { DEFAULT_SKIN, skinById, type SkinId } from './skins';
 
 /**
  * Тема оформления: «светлая» (по умолчанию), «тёмная» или «как в системе». Хранится на самом устройстве (localStorage),
@@ -75,6 +76,7 @@ export const DEFAULT_ACCENT: AccentId = VIOLET.id;
 
 const KEY = 'finora-theme';
 const ACCENT_KEY = 'finora-accent';
+const SKIN_KEY = 'finora-skin';
 const CUSTOM_KEY = 'finora-accent-custom';
 /** Готовая палитра «своего цвета» вместе с кодом, для которого она посчитана: чтобы при запуске не нужен был генератор (он грузится только в настройках). */
 const CUSTOM_PALETTE_KEY = 'finora-accent-custom-palette';
@@ -143,7 +145,9 @@ function paintBar(): void {
   const root = document.documentElement;
   const theme = root.getAttribute('data-theme'); // атрибута нет — тема «как в системе»
   const accent = root.getAttribute('data-accent');
-  const bar = accent === CUSTOM_ACCENT ? customBar(root) : (accentById(accent) ?? VIOLET).bar;
+  // у клубного образа свой фон страницы, акцент на него не влияет
+  const skinBar = skinById(root.getAttribute('data-skin'))?.bar ?? null;
+  const bar = skinBar ?? (accent === CUSTOM_ACCENT ? customBar(root) : (accentById(accent) ?? VIOLET).bar);
   // В index.html два meta theme-color (для светлой и тёмной системы). Явный выбор темы перекрывает оба.
   document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
     const systemDark = (m.getAttribute('media') ?? '').includes('dark');
@@ -202,7 +206,8 @@ function readCustom(): CustomAccent | null {
 export function applyAccent(id: AccentId, custom: CustomAccent | null = id === CUSTOM_ACCENT ? readCustom() : null): void {
   const root = document.documentElement;
   clearCustomVars(root);
-  const palette = id === CUSTOM_ACCENT ? (custom?.palette ?? null) : null;
+  // Переменные «своего цвета» стоят прямо на <html> и перекрыли бы палитру образа, поэтому при образе их нет (цвет остаётся в хранилище)
+  const palette = id === CUSTOM_ACCENT && !root.hasAttribute('data-skin') ? (custom?.palette ?? null) : null;
   if (palette) {
     for (const key of PALETTE_KEYS) root.style.setProperty(`--ac-${key}`, triple(palette[key]));
     root.setAttribute('data-accent', CUSTOM_ACCENT);
@@ -228,6 +233,38 @@ export function saveAccentPref(id: AccentId): void {
     /* не сохранилось — акцент всё равно применится до перезагрузки */
   }
   applyAccent(id);
+  window.dispatchEvent(new Event(EVENT));
+}
+
+/** Выбранный образ; «Классика», если ничего не выбрано или значение испорчено. */
+export function readSkinPref(): SkinId {
+  try {
+    const found = skinById(localStorage.getItem(SKIN_KEY));
+    if (found) return found.id;
+  } catch {
+    /* хранилище недоступно — берём «Классику» */
+  }
+  return DEFAULT_SKIN;
+}
+
+/**
+ * Ставит атрибут data-skin на <html> («Классика» — без атрибута) и заново применяет акцент: под образом «свой цвет» не ставится,
+ * а при возврате к «Классике» возвращается. Заодно перекрашивает строку состояния браузера.
+ */
+export function applySkin(id: SkinId): void {
+  const root = document.documentElement;
+  if (id === DEFAULT_SKIN) root.removeAttribute('data-skin');
+  else root.setAttribute('data-skin', id);
+  applyAccent(readAccentPref());
+}
+
+export function saveSkinPref(id: SkinId): void {
+  try {
+    localStorage.setItem(SKIN_KEY, id);
+  } catch {
+    /* не сохранилось — образ всё равно применится до перезагрузки */
+  }
+  applySkin(id);
   window.dispatchEvent(new Event(EVENT));
 }
 
@@ -269,6 +306,12 @@ export function useThemePref(): [ThemePref, (pref: ThemePref) => void] {
 export function useAccentPref(): [AccentId, (id: AccentId) => void] {
   const id = useSyncExternalStore(subscribe, readAccentPref, () => DEFAULT_ACCENT);
   return [id, saveAccentPref];
+}
+
+/** Текущий образ и функция для его смены; компоненты обновляются сами. */
+export function useSkinPref(): [SkinId, (id: SkinId) => void] {
+  const id = useSyncExternalStore(subscribe, readSkinPref, () => DEFAULT_SKIN);
+  return [id, saveSkinPref];
 }
 
 /** «Свой цвет» (#rrggbb, null — не выбирали); компонент обновляется сам. Запоминает цвет saveCustomAccent. */

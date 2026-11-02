@@ -24,6 +24,56 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* Шрифты клубных образов (SIL OFL). Ссылаются на них только блоки образов ниже, поэтому у «Классики» браузер их не скачивает. Все таджикские буквы есть в файлах cyrillic-ext. */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/montserrat-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/montserrat-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/montserrat-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('./assets/skins/fonts/cormorant-garamond-cyrillic-700.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('./assets/skins/fonts/cormorant-garamond-cyrillic-ext-700.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('./assets/skins/fonts/cormorant-garamond-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -1013,6 +1063,135 @@
   --ac-logo-glyph: 230 228 211;
 }
 /* <<< generated accents */
+
+/*
+ * Образы оформления (src/skins.ts): клубные палитры. Блок образа задаёт те же переменные --ac-*, что и акцент, и перекрывает его
+ * (селектор :root[data-skin] сильнее [data-accent]); поэтому светлая и тёмная темы, строка состояния и контрасты работают как у акцента,
+ * а src/accents.test.ts проверяет каждый образ теми же правилами. Остальное (шрифты, узор, украшения) — в блоках html[data-skin] ниже:
+ * переменные лежат отдельно от палитры, чтобы тест видел в блоке палитры только положенные переменные.
+ * Картинки и логотипы лежат в src/assets/skins; в предзагрузку приложения они не входят (см. vite.config.ts), качаются при выборе образа.
+ */
+/* Барселона */
+:root[data-skin='barca'] {
+  --ac-bg-l: 238 242 251;
+  --ac-surface-2-l: 232 237 250;
+  --ac-text-l: 8 18 46;
+  --ac-muted-l: 70 84 120;
+  --ac-border-l: 208 217 238;
+  --ac-border-strong-l: 112 128 170;
+  --ac-brand-l: 0 77 152;
+  --ac-brand-hover-l: 0 60 122;
+  --ac-accent-l: 165 0 68;
+  --ac-hero-l: 165 0 68;
+  --ac-orb-1-l: 140 170 245;
+  --ac-orb-2-l: 245 160 190;
+  --ac-orb-3-l: 250 220 120;
+  --ac-glass-shadow-l: 30 50 140;
+  --ac-bg-d: 8 18 46;
+  --ac-surface-d: 16 28 68;
+  --ac-surface-2-d: 22 37 90;
+  --ac-text-d: 243 245 255;
+  --ac-muted-d: 169 182 224;
+  --ac-border-d: 36 53 111;
+  --ac-border-strong-d: 111 130 196;
+  --ac-brand-d: 237 187 0;
+  --ac-brand-hover-d: 247 209 64;
+  --ac-on-brand-d: 8 18 46;
+  --ac-accent-d: 255 214 64;
+  --ac-hero-from-d: 0 77 152;
+  --ac-hero-d: 165 0 68;
+  --ac-orb-1-d: 20 60 140;
+  --ac-orb-2-d: 120 10 62;
+  --ac-orb-3-d: 120 95 0;
+  --ac-logo-from: 0 77 152;
+  --ac-logo-to: 165 0 68;
+  --ac-logo-glyph: 255 223 120;
+}
+/* Реал Мадрид */
+:root[data-skin='real'] {
+  --ac-bg-l: 247 245 239;
+  --ac-surface-2-l: 239 236 226;
+  --ac-text-l: 10 31 77;
+  --ac-muted-l: 74 90 133;
+  --ac-border-l: 226 220 203;
+  --ac-border-strong-l: 110 124 162;
+  --ac-brand-l: 0 82 159;
+  --ac-brand-hover-l: 0 64 128;
+  --ac-accent-l: 20 104 190;
+  --ac-hero-l: 10 31 77;
+  --ac-orb-1-l: 150 185 235;
+  --ac-orb-2-l: 250 220 140;
+  --ac-orb-3-l: 205 220 245;
+  --ac-glass-shadow-l: 20 50 110;
+  --ac-bg-d: 7 16 40;
+  --ac-surface-d: 12 27 66;
+  --ac-surface-2-d: 18 38 90;
+  --ac-text-d: 244 246 252;
+  --ac-muted-d: 166 180 216;
+  --ac-border-d: 31 50 98;
+  --ac-border-strong-d: 108 128 182;
+  --ac-brand-d: 254 190 16;
+  --ac-brand-hover-d: 255 211 77;
+  --ac-on-brand-d: 7 16 40;
+  --ac-accent-d: 255 214 90;
+  --ac-hero-from-d: 0 82 159;
+  --ac-hero-d: 10 31 77;
+  --ac-orb-1-d: 0 60 130;
+  --ac-orb-2-d: 120 90 0;
+  --ac-orb-3-d: 20 50 120;
+  --ac-logo-from: 10 31 77;
+  --ac-logo-to: 0 82 159;
+  --ac-logo-glyph: 254 214 100;
+}
+
+html[data-skin='barca'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-mark: url('./assets/skins/barca/svg/watermark-ball.svg');
+  --skin-pattern: url('./assets/skins/barca/svg/stripes-tile-dim.svg');
+  --skin-pattern-opacity: 0.5;
+  --skin-gold: 237 187 0;
+}
+html[data-skin='real'] {
+  --skin-head: 'Cormorant Garamond', 'Onest', Georgia, serif;
+  --skin-mark: url('./assets/skins/real-madrid/svg/crown-color.svg');
+  --skin-pattern: url('./assets/skins/real-madrid/svg/pinstripe-tile.svg');
+  --skin-pattern-opacity: 0.28;
+  --skin-gold: 254 190 16;
+}
+/* Заголовки экранов и карточек — шрифтом образа (суммы и мелкий текст остаются Onest: у него табличные цифры). */
+html[data-skin] :is(h1, h2, h3) {
+  font-family: var(--skin-head);
+}
+html[data-skin='real'] :is(h1, h2, h3) {
+  font-size: 1.2em;
+  letter-spacing: 0.01em;
+}
+/* Узор образа поверх пятен фона: лежит под содержимым, касаний не принимает. */
+html[data-skin] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--skin-pattern);
+  opacity: var(--skin-pattern-opacity);
+}
+/* Украшение образа (мяч, корона) — водяным знаком в углу карточки «Всего» (класс skin-hero стоит на самой карточке). Официальные логотипы клубов в сборку не входят: см. README папок образов. */
+html[data-skin] .skin-hero::before {
+  content: '';
+  position: absolute;
+  right: -14px;
+  bottom: -18px;
+  width: 8.5rem;
+  height: 8.5rem;
+  pointer-events: none;
+  background: var(--skin-mark) center / contain no-repeat;
+  opacity: 0.24;
+}
+/* Золотая рамка карточки «Всего»: цвет задан у образа (--skin-gold). */
+html[data-skin] .skin-hero {
+  border: 2px solid rgb(var(--skin-gold, 237 187 0) / 0.85);
+}
 
 :root {
   color-scheme: light dark;
