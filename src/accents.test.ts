@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { GENERATED_ACCENTS } from './lib/accentSpecs';
 import { buildPalette, generatedAccentsCss, GENERATED_BEGIN, GENERATED_END, normalizeHex, paletteFromHex, paletteProblems, PALETTE_KEYS, specFromHex } from './lib/palette';
+import { SKINS } from './skins';
 import { ACCENTS, DEFAULT_ACCENT } from './theme';
 
 /**
@@ -11,6 +12,15 @@ import { ACCENTS, DEFAULT_ACCENT } from './theme';
  * с таблицей ACCENTS (src/theme.ts) и index.html, здесь не пройдёт.
  */
 const read = (relative: string): string => readFileSync(new URL(relative, import.meta.url), 'utf8');
+/** Файл рядом с тестом есть (читается так же, как index.css: existsSync с адресом из jsdom не работает). */
+const exists = (relative: string): boolean => {
+  try {
+    readFileSync(new URL(relative, import.meta.url));
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 type Rgb = readonly [number, number, number];
 type Decls = Record<string, string>;
@@ -38,6 +48,13 @@ const BLOCKS = new Map<string, Decls>();
 for (const [selector, decls] of rules) {
   const m = /^(?::root, )?\[data-accent='([a-z]+)'\]$/.exec(selector);
   if (m?.[1]) BLOCKS.set(m[1], decls);
+}
+
+/** Блок палитры каждого образа (src/skins.ts): `:root[data-skin='…']`. Шрифты и украшения лежат в других блоках, `html[data-skin]`. */
+const SKIN_BLOCKS = new Map<string, Decls>();
+for (const [selector, decls] of rules) {
+  const m = /^:root\[data-skin='([a-z0-9]+)'\]$/.exec(selector);
+  if (m?.[1]) SKIN_BLOCKS.set(m[1], decls);
 }
 
 /** Какие переменные должен задавать каждый акцент: «-l» — светлая тема, «-d» — тёмная, ac-logo-* — цвета знака «$», общие для тем (см. комментарий в index.css). */
@@ -117,9 +134,8 @@ describe('цвета акцентов (src/index.css)', () => {
     });
   });
 
-  describe.each(ACCENTS.map((a) => [a.label, a] as const))('акцент «%s»', (_label, accent) => {
-    const block = BLOCKS.get(accent.id) ?? {};
-
+  /** Проверки одной палитры (акцента или образа): состав переменных, строка состояния, знак «$», контрасты в обеих темах. */
+  function paletteTests(block: Decls, bar: { light: string; dark: string }, what: string): void {
     it('описан целиком: светлая и тёмная палитра, значения — «R G B»', () => {
       expect(Object.keys(block).sort()).toEqual([...REQUIRED].sort());
       for (const key of REQUIRED) rgb(block[key], `--${key}`);
@@ -130,9 +146,9 @@ describe('цвета акцентов (src/index.css)', () => {
       expect(() => palette(DARK, block)).not.toThrow();
     });
 
-    it('цвет строки состояния браузера (ACCENTS.bar) совпадает с фоном страницы', () => {
-      expect(accent.bar.light).toBe(hex(rgb(block['ac-bg-l'], '--ac-bg-l')));
-      expect(accent.bar.dark).toBe(hex(rgb(block['ac-bg-d'], '--ac-bg-d')));
+    it(`цвет строки состояния браузера (${what}.bar) совпадает с фоном страницы`, () => {
+      expect(bar.light).toBe(hex(rgb(block['ac-bg-l'], '--ac-bg-l')));
+      expect(bar.dark).toBe(hex(rgb(block['ac-bg-d'], '--ac-bg-d')));
     });
 
     it('знак «$»: белый значок и его светлый низ различимы на плитке (≥ 3:1, как у фиолетового знака)', () => {
@@ -197,6 +213,78 @@ describe('цвета акцентов (src/index.css)', () => {
         expect(contrast(WHITE, color('hero-from')), 'hero-from').toBeGreaterThanOrEqual(4.5);
         expect(contrast(WHITE, color('hero')), 'hero').toBeGreaterThanOrEqual(4.5);
       });
+    });
+  }
+
+  describe.each(ACCENTS.map((a) => [a.label, a] as const))('акцент «%s»', (_label, accent) => {
+    paletteTests(BLOCKS.get(accent.id) ?? {}, accent.bar, 'ACCENTS');
+  });
+
+  // Образ — те же переменные, поэтому те же проверки: ни один клубный образ не должен делать текст нечитаемым ни в светлой, ни в тёмной теме
+  describe.each(SKINS.filter((s) => s.bar !== null).map((s) => [s.label, s] as const))('образ «%s»', (_label, skin) => {
+    paletteTests(SKIN_BLOCKS.get(skin.id) ?? {}, skin.bar ?? { light: '', dark: '' }, 'SKINS');
+  });
+
+  describe('образы оформления (src/skins.ts)', () => {
+    it('у каждого клубного образа есть блок палитры в index.css, и лишних блоков нет', () => {
+      expect([...SKIN_BLOCKS.keys()].sort()).toEqual(SKINS.filter((s) => s.id !== 'classic').map((s) => s.id).sort());
+    });
+
+    it('«Классика» первая в списке и без своего блока: это прежний вид с выбираемым акцентом', () => {
+      expect(SKINS[0]?.id).toBe('classic');
+      expect(SKINS[0]?.bar).toBeNull();
+      expect(SKIN_BLOCKS.has('classic')).toBe(false);
+    });
+
+    it('образ перекрывает акцент: селектор :root[data-skin] сильнее [data-accent] (иначе выбранный раньше акцент испортил бы образ)', () => {
+      expect([...rules.keys()].some((sel) => /^:root\[data-skin='[a-z0-9]+'\]$/.test(sel))).toBe(true);
+      expect([...rules.keys()].filter((sel) => /data-accent/.test(sel) && /data-skin/.test(sel))).toEqual([]);
+    });
+
+    it('образы различаются: главные цвета и фоны не повторяются', () => {
+      for (const key of ['ac-brand-l', 'ac-brand-d', 'ac-bg-l', 'ac-bg-d']) {
+        const values = [...SKIN_BLOCKS.values()].map((b) => b[key]);
+        expect(new Set(values).size, key).toBe(values.length);
+      }
+    });
+
+    it('шрифты и украшения образа заданы отдельным блоком html[data-skin]: шрифт заголовков, узор и цвет рамки есть', () => {
+      for (const skin of SKINS.filter((s) => s.id !== 'classic')) {
+        const decls = rules.get(`html[data-skin='${skin.id}']`);
+        expect(decls?.['skin-head'], `--skin-head у ${skin.id}`).toBeTruthy();
+        expect(decls?.['skin-pattern'], `--skin-pattern у ${skin.id}`).toBeTruthy();
+        expect(decls?.['skin-line'], `--skin-line у ${skin.id}`).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/);
+        // украшение — рисунок или цифра; у части образов его нет
+        const mark = decls?.['skin-mark'];
+        const text = decls?.['skin-mark-text'];
+        if (mark !== undefined) expect(mark, `--skin-mark у ${skin.id}`).toContain('url(');
+        if (text !== undefined) expect(text, `--skin-mark-text у ${skin.id}`).toMatch(/^'[^']{1,3}'$/);
+      }
+    });
+
+    it('шрифт заголовков каждого образа подключён: три файла (кириллица, её расширение с таджикскими буквами, латиница) и @font-face', () => {
+      const css = read('./index.css');
+      const families = new Set<string>();
+      for (const skin of SKINS.filter((s) => s.id !== 'classic')) {
+        const first = /^'([^']+)'/.exec(rules.get(`html[data-skin='${skin.id}']`)?.['skin-head'] ?? '')?.[1];
+        if (first && first !== 'Onest') families.add(first);
+      }
+      expect(families.size, 'у образов должны быть свои шрифты').toBeGreaterThan(4);
+      for (const family of families) {
+        const stem = family.toLowerCase().replace(/ /g, '-');
+        for (const subset of ['cyrillic-ext', 'cyrillic', 'latin']) {
+          expect(css, `@font-face ${family} ${subset}`).toContain(`${stem}-${subset}-`);
+          expect(exists(`./assets/skins/fonts/${stem}-${subset}-${stem === 'cormorant-garamond' ? '700' : 'wght'}.woff2`), `файл ${stem} ${subset}`).toBe(true);
+        }
+        expect(exists(`./assets/skins/fonts/LICENSE-${family.replace(/ /g, '-')}-OFL.txt`), `лицензия ${family}`).toBe(true);
+      }
+    });
+
+    it('все картинки и шрифты, на которые ссылается index.css в src/assets/skins, существуют (иначе сборка упадёт или образ останется без узора)', () => {
+      const css = read('./index.css');
+      const urls = [...css.matchAll(/url\('\.\/(assets\/skins\/[^']+)'\)/g)].map((m) => m[1] ?? '');
+      expect(urls.length).toBeGreaterThan(20);
+      for (const u of new Set(urls)) expect(exists(`./${u}`), u).toBe(true);
     });
   });
 });

@@ -24,6 +24,152 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* Шрифты клубных образов (SIL OFL). Ссылаются на них только блоки образов ниже, поэтому у «Классики» браузер их не скачивает. Все таджикские буквы есть в файлах cyrillic-ext. */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/montserrat-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/montserrat-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/montserrat-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('./assets/skins/fonts/cormorant-garamond-cyrillic-700.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('./assets/skins/fonts/cormorant-garamond-cyrillic-ext-700.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('./assets/skins/fonts/cormorant-garamond-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500 700;
+  src: url('./assets/skins/fonts/oswald-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500 700;
+  src: url('./assets/skins/fonts/oswald-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500 700;
+  src: url('./assets/skins/fonts/oswald-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/exo-2-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/exo-2-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/exo-2-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700 900;
+  src: url('./assets/skins/fonts/nunito-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700 900;
+  src: url('./assets/skins/fonts/nunito-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700 900;
+  src: url('./assets/skins/fonts/nunito-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Podkova';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/podkova-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Podkova';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/podkova-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Podkova';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/podkova-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -1013,6 +1159,850 @@
   --ac-logo-glyph: 230 228 211;
 }
 /* <<< generated accents */
+
+/*
+ * Образы оформления (src/skins.ts): клубные палитры. Блок образа задаёт те же переменные --ac-*, что и акцент, и перекрывает его
+ * (селектор :root[data-skin] сильнее [data-accent]); поэтому светлая и тёмная темы, строка состояния и контрасты работают как у акцента,
+ * а src/accents.test.ts проверяет каждый образ теми же правилами. Остальное (шрифты, узор, украшения) — в блоках html[data-skin] ниже:
+ * переменные лежат отдельно от палитры, чтобы тест видел в блоке палитры только положенные переменные.
+ * Картинки и логотипы лежат в src/assets/skins; в предзагрузку приложения они не входят (см. vite.config.ts), качаются при выборе образа.
+ */
+/* Барселона */
+:root[data-skin='barca'] {
+  --ac-bg-l: 238 242 251;
+  --ac-surface-2-l: 232 237 250;
+  --ac-text-l: 8 18 46;
+  --ac-muted-l: 70 84 120;
+  --ac-border-l: 208 217 238;
+  --ac-border-strong-l: 112 128 170;
+  --ac-brand-l: 0 77 152;
+  --ac-brand-hover-l: 0 60 122;
+  --ac-accent-l: 165 0 68;
+  --ac-hero-l: 165 0 68;
+  --ac-orb-1-l: 140 170 245;
+  --ac-orb-2-l: 245 160 190;
+  --ac-orb-3-l: 250 220 120;
+  --ac-glass-shadow-l: 30 50 140;
+  --ac-bg-d: 8 18 46;
+  --ac-surface-d: 16 28 68;
+  --ac-surface-2-d: 22 37 90;
+  --ac-text-d: 243 245 255;
+  --ac-muted-d: 169 182 224;
+  --ac-border-d: 36 53 111;
+  --ac-border-strong-d: 111 130 196;
+  --ac-brand-d: 237 187 0;
+  --ac-brand-hover-d: 247 209 64;
+  --ac-on-brand-d: 8 18 46;
+  --ac-accent-d: 255 214 64;
+  --ac-hero-from-d: 0 77 152;
+  --ac-hero-d: 165 0 68;
+  --ac-orb-1-d: 20 60 140;
+  --ac-orb-2-d: 120 10 62;
+  --ac-orb-3-d: 120 95 0;
+  --ac-logo-from: 0 77 152;
+  --ac-logo-to: 165 0 68;
+  --ac-logo-glyph: 255 223 120;
+}
+/* Реал Мадрид */
+:root[data-skin='real'] {
+  --ac-bg-l: 247 245 239;
+  --ac-surface-2-l: 239 236 226;
+  --ac-text-l: 10 31 77;
+  --ac-muted-l: 74 90 133;
+  --ac-border-l: 226 220 203;
+  --ac-border-strong-l: 110 124 162;
+  --ac-brand-l: 0 82 159;
+  --ac-brand-hover-l: 0 64 128;
+  --ac-accent-l: 20 104 190;
+  --ac-hero-l: 10 31 77;
+  --ac-orb-1-l: 150 185 235;
+  --ac-orb-2-l: 250 220 140;
+  --ac-orb-3-l: 205 220 245;
+  --ac-glass-shadow-l: 20 50 110;
+  --ac-bg-d: 7 16 40;
+  --ac-surface-d: 12 27 66;
+  --ac-surface-2-d: 18 38 90;
+  --ac-text-d: 244 246 252;
+  --ac-muted-d: 166 180 216;
+  --ac-border-d: 31 50 98;
+  --ac-border-strong-d: 108 128 182;
+  --ac-brand-d: 254 190 16;
+  --ac-brand-hover-d: 255 211 77;
+  --ac-on-brand-d: 7 16 40;
+  --ac-accent-d: 255 214 90;
+  --ac-hero-from-d: 0 82 159;
+  --ac-hero-d: 10 31 77;
+  --ac-orb-1-d: 0 60 130;
+  --ac-orb-2-d: 120 90 0;
+  --ac-orb-3-d: 20 50 120;
+  --ac-logo-from: 10 31 77;
+  --ac-logo-to: 0 82 159;
+  --ac-logo-glyph: 254 214 100;
+}
+
+/* Шиноби */
+:root[data-skin='shinobi'] {
+  --ac-bg-l: 246 236 216;
+  --ac-surface-2-l: 237 223 194;
+  --ac-text-l: 25 32 63;
+  --ac-muted-l: 84 85 95;
+  --ac-border-l: 217 210 196;
+  --ac-border-strong-l: 121 119 124;
+  --ac-brand-l: 140 67 14;
+  --ac-brand-hover-l: 115 55 12;
+  --ac-accent-l: 26 33 64;
+  --ac-hero-l: 26 33 64;
+  --ac-orb-1-l: 209 180 159;
+  --ac-orb-2-l: 163 166 179;
+  --ac-orb-3-l: 255 195 152;
+  --ac-glass-shadow-l: 84 40 9;
+  --ac-bg-d: 14 19 38;
+  --ac-surface-d: 22 28 54;
+  --ac-surface-2-d: 29 37 71;
+  --ac-text-d: 243 236 222;
+  --ac-muted-d: 167 164 161;
+  --ac-border-d: 51 55 76;
+  --ac-border-strong-d: 121 122 130;
+  --ac-brand-d: 255 154 61;
+  --ac-brand-hover-d: 255 174 100;
+  --ac-on-brand-d: 14 19 38;
+  --ac-accent-d: 255 183 107;
+  --ac-hero-from-d: 181 71 10;
+  --ac-hero-d: 26 33 64;
+  --ac-orb-1-d: 122 65 33;
+  --ac-orb-2-d: 19 25 50;
+  --ac-orb-3-d: 98 55 34;
+  --ac-logo-from: 140 67 14;
+  --ac-logo-to: 26 33 64;
+  --ac-logo-glyph: 244 236 231;
+}
+/* Акацуки */
+:root[data-skin='akatsuki'] {
+  --ac-bg-l: 244 239 239;
+  --ac-surface-2-l: 234 225 225;
+  --ac-text-l: 26 16 18;
+  --ac-muted-l: 92 85 86;
+  --ac-border-l: 216 210 210;
+  --ac-border-strong-l: 128 121 122;
+  --ac-brand-l: 179 14 20;
+  --ac-brand-hover-l: 146 12 17;
+  --ac-accent-l: 26 26 31;
+  --ac-hero-l: 122 16 21;
+  --ac-orb-1-l: 224 159 161;
+  --ac-orb-2-l: 163 163 165;
+  --ac-orb-3-l: 243 148 152;
+  --ac-glass-shadow-l: 107 8 12;
+  --ac-bg-d: 10 10 12;
+  --ac-surface-d: 20 20 26;
+  --ac-surface-2-d: 28 28 36;
+  --ac-text-d: 246 246 246;
+  --ac-muted-d: 163 163 164;
+  --ac-border-d: 49 49 55;
+  --ac-border-strong-d: 122 122 125;
+  --ac-brand-d: 255 86 86;
+  --ac-brand-hover-d: 255 120 120;
+  --ac-on-brand-d: 10 10 12;
+  --ac-accent-d: 255 122 122;
+  --ac-hero-from-d: 184 16 26;
+  --ac-hero-d: 58 11 16;
+  --ac-orb-1-d: 109 14 18;
+  --ac-orb-2-d: 17 17 21;
+  --ac-orb-3-d: 87 13 17;
+  --ac-logo-from: 179 14 20;
+  --ac-logo-to: 26 26 31;
+  --ac-logo-glyph: 247 231 232;
+}
+/* Паутина */
+:root[data-skin='spider'] {
+  --ac-bg-l: 238 241 251;
+  --ac-surface-2-l: 227 232 247;
+  --ac-text-l: 10 13 28;
+  --ac-muted-l: 86 89 102;
+  --ac-border-l: 208 211 222;
+  --ac-border-strong-l: 123 126 138;
+  --ac-brand-l: 181 28 34;
+  --ac-brand-hover-l: 148 23 28;
+  --ac-accent-l: 31 79 184;
+  --ac-hero-l: 27 58 143;
+  --ac-orb-1-l: 225 164 167;
+  --ac-orb-2-l: 165 185 227;
+  --ac-orb-3-l: 243 156 160;
+  --ac-glass-shadow-l: 109 17 20;
+  --ac-bg-d: 10 13 28;
+  --ac-surface-d: 18 23 48;
+  --ac-surface-2-d: 26 33 66;
+  --ac-text-d: 244 246 255;
+  --ac-muted-d: 162 164 176;
+  --ac-border-d: 47 52 75;
+  --ac-border-strong-d: 120 123 141;
+  --ac-brand-d: 255 100 107;
+  --ac-brand-hover-d: 255 131 136;
+  --ac-on-brand-d: 10 13 28;
+  --ac-accent-d: 91 140 240;
+  --ac-hero-from-d: 179 19 27;
+  --ac-hero-d: 27 58 143;
+  --ac-orb-1-d: 109 23 35;
+  --ac-orb-2-d: 19 43 98;
+  --ac-orb-3-d: 87 21 33;
+  --ac-logo-from: 181 28 34;
+  --ac-logo-to: 31 79 184;
+  --ac-logo-glyph: 248 232 233;
+}
+/* Герой */
+:root[data-skin='comic'] {
+  --ac-bg-l: 238 242 255;
+  --ac-surface-2-l: 226 233 253;
+  --ac-text-l: 11 11 34;
+  --ac-muted-l: 88 89 108;
+  --ac-border-l: 208 212 226;
+  --ac-border-strong-l: 123 125 143;
+  --ac-brand-l: 184 19 36;
+  --ac-brand-hover-l: 151 15 29;
+  --ac-accent-l: 29 63 168;
+  --ac-hero-l: 29 63 168;
+  --ac-orb-1-l: 227 160 167;
+  --ac-orb-2-l: 165 178 220;
+  --ac-orb-3-l: 255 236 140;
+  --ac-glass-shadow-l: 110 11 21;
+  --ac-bg-d: 11 14 36;
+  --ac-surface-d: 19 24 56;
+  --ac-surface-2-d: 27 33 73;
+  --ac-text-d: 246 247 255;
+  --ac-muted-d: 164 165 178;
+  --ac-border-d: 49 53 82;
+  --ac-border-strong-d: 121 124 146;
+  --ac-brand-d: 255 212 0;
+  --ac-brand-hover-d: 255 221 51;
+  --ac-on-brand-d: 11 14 36;
+  --ac-accent-d: 255 75 92;
+  --ac-hero-from-d: 200 16 46;
+  --ac-hero-d: 29 63 168;
+  --ac-orb-1-d: 108 18 40;
+  --ac-orb-2-d: 19 36 95;
+  --ac-orb-3-d: 96 83 23;
+  --ac-logo-from: 184 19 36;
+  --ac-logo-to: 29 63 168;
+  --ac-logo-glyph: 248 231 233;
+}
+/* Кавай */
+:root[data-skin='kawaii'] {
+  --ac-bg-l: 255 240 248;
+  --ac-surface-2-l: 255 228 242;
+  --ac-text-l: 65 29 58;
+  --ac-muted-l: 108 84 102;
+  --ac-border-l: 230 213 223;
+  --ac-border-strong-l: 144 121 138;
+  --ac-brand-l: 128 80 104;
+  --ac-brand-hover-l: 105 65 85;
+  --ac-accent-l: 150 128 194;
+  --ac-hero-l: 133 86 201;
+  --ac-orb-1-l: 204 185 194;
+  --ac-orb-2-l: 213 204 231;
+  --ac-orb-3-l: 255 212 233;
+  --ac-glass-shadow-l: 76 48 62;
+  --ac-bg-d: 31 16 48;
+  --ac-surface-d: 42 23 64;
+  --ac-surface-2-d: 53 30 82;
+  --ac-text-d: 255 234 246;
+  --ac-muted-d: 181 163 181;
+  --ac-border-d: 70 50 88;
+  --ac-border-strong-d: 138 118 146;
+  --ac-brand-d: 255 159 207;
+  --ac-brand-hover-d: 255 178 217;
+  --ac-on-brand-d: 42 16 48;
+  --ac-accent-d: 198 168 255;
+  --ac-hero-from-d: 194 51 111;
+  --ac-hero-d: 122 79 192;
+  --ac-orb-1-d: 132 80 120;
+  --ac-orb-2-d: 106 84 141;
+  --ac-orb-3-d: 109 66 104;
+  --ac-logo-from: 128 80 104;
+  --ac-logo-to: 150 128 194;
+  --ac-logo-glyph: 247 245 248;
+}
+/* Эстетика */
+:root[data-skin='aesthetic'] {
+  --ac-bg-l: 247 235 230;
+  --ac-surface-2-l: 239 221 214;
+  --ac-text-l: 51 27 38;
+  --ac-muted-l: 97 81 85;
+  --ac-border-l: 222 208 205;
+  --ac-border-strong-l: 133 117 119;
+  --ac-brand-l: 139 62 92;
+  --ac-brand-hover-l: 114 51 75;
+  --ac-accent-l: 160 90 116;
+  --ac-hero-l: 90 42 64;
+  --ac-orb-1-l: 208 178 190;
+  --ac-orb-2-l: 217 189 199;
+  --ac-orb-3-l: 245 230 203;
+  --ac-glass-shadow-l: 83 37 55;
+  --ac-bg-d: 26 16 21;
+  --ac-surface-d: 36 23 30;
+  --ac-surface-2-d: 47 31 40;
+  --ac-text-d: 247 235 230;
+  --ac-muted-d: 170 158 157;
+  --ac-border-d: 63 51 56;
+  --ac-border-strong-d: 131 118 120;
+  --ac-brand-d: 232 200 140;
+  --ac-brand-hover-d: 237 211 163;
+  --ac-on-brand-d: 26 16 21;
+  --ac-accent-d: 201 143 166;
+  --ac-hero-from-d: 140 63 93;
+  --ac-hero-d: 90 42 64;
+  --ac-orb-1-d: 77 37 53;
+  --ac-orb-2-d: 86 49 64;
+  --ac-orb-3-d: 98 80 63;
+  --ac-logo-from: 139 62 92;
+  --ac-logo-to: 160 90 116;
+  --ac-logo-glyph: 243 236 239;
+}
+/* Гонки */
+:root[data-skin='racing'] {
+  --ac-bg-l: 241 242 245;
+  --ac-surface-2-l: 230 232 238;
+  --ac-text-l: 18 20 26;
+  --ac-muted-l: 88 90 94;
+  --ac-border-l: 212 213 217;
+  --ac-border-strong-l: 124 126 130;
+  --ac-brand-l: 187 5 0;
+  --ac-brand-hover-l: 153 4 0;
+  --ac-accent-l: 27 31 42;
+  --ac-hero-l: 27 31 42;
+  --ac-orb-1-l: 228 155 153;
+  --ac-orb-2-l: 164 165 170;
+  --ac-orb-3-l: 242 143 140;
+  --ac-glass-shadow-l: 112 3 0;
+  --ac-bg-d: 16 17 20;
+  --ac-surface-d: 23 26 34;
+  --ac-surface-2-d: 31 35 45;
+  --ac-text-d: 243 244 247;
+  --ac-muted-d: 164 165 168;
+  --ac-border-d: 52 54 62;
+  --ac-border-strong-d: 122 124 130;
+  --ac-brand-d: 255 101 90;
+  --ac-brand-hover-d: 255 132 123;
+  --ac-on-brand-d: 16 17 20;
+  --ac-accent-d: 255 122 112;
+  --ac-hero-from-d: 194 5 0;
+  --ac-hero-d: 27 31 42;
+  --ac-orb-1-d: 110 12 11;
+  --ac-orb-2-d: 21 23 30;
+  --ac-orb-3-d: 89 13 13;
+  --ac-logo-from: 187 5 0;
+  --ac-logo-to: 27 31 42;
+  --ac-logo-glyph: 248 230 230;
+}
+/* Футбол */
+:root[data-skin='football'] {
+  --ac-bg-l: 229 243 234;
+  --ac-surface-2-l: 214 235 222;
+  --ac-text-l: 14 42 26;
+  --ac-muted-l: 74 93 82;
+  --ac-border-l: 201 217 207;
+  --ac-border-strong-l: 109 128 117;
+  --ac-brand-l: 13 92 45;
+  --ac-brand-hover-l: 11 75 37;
+  --ac-accent-l: 31 157 77;
+  --ac-hero-l: 11 61 32;
+  --ac-orb-1-l: 158 190 171;
+  --ac-orb-2-l: 165 216 184;
+  --ac-orb-3-l: 255 235 169;
+  --ac-glass-shadow-l: 8 55 27;
+  --ac-bg-d: 7 20 12;
+  --ac-surface-d: 14 34 22;
+  --ac-surface-2-d: 21 48 31;
+  --ac-text-d: 234 247 239;
+  --ac-muted-d: 160 172 164;
+  --ac-border-d: 43 62 50;
+  --ac-border-strong-d: 113 130 120;
+  --ac-brand-d: 255 210 63;
+  --ac-brand-hover-d: 255 219 101;
+  --ac-on-brand-d: 7 20 12;
+  --ac-accent-d: 255 226 122;
+  --ac-hero-from-d: 20 112 58;
+  --ac-hero-d: 11 61 32;
+  --ac-orb-1-d: 10 52 27;
+  --ac-orb-2-d: 18 82 41;
+  --ac-orb-3-d: 94 86 30;
+  --ac-logo-from: 13 92 45;
+  --ac-logo-to: 31 157 77;
+  --ac-logo-glyph: 237 245 240;
+}
+/* Киберпанк */
+:root[data-skin='cyber'] {
+  --ac-bg-l: 243 238 252;
+  --ac-surface-2-l: 233 224 248;
+  --ac-text-l: 20 8 42;
+  --ac-muted-l: 92 83 109;
+  --ac-border-l: 214 208 225;
+  --ac-border-strong-l: 128 119 143;
+  --ac-brand-l: 7 97 120;
+  --ac-brand-hover-l: 6 80 98;
+  --ac-accent-l: 176 16 143;
+  --ac-hero-l: 42 10 74;
+  --ac-orb-1-l: 156 192 201;
+  --ac-orb-2-l: 223 159 210;
+  --ac-orb-3-l: 155 242 255;
+  --ac-glass-shadow-l: 4 58 72;
+  --ac-bg-d: 7 6 15;
+  --ac-surface-d: 17 13 36;
+  --ac-surface-2-d: 25 20 58;
+  --ac-text-d: 234 246 255;
+  --ac-muted-d: 155 162 171;
+  --ac-border-d: 45 43 64;
+  --ac-border-strong-d: 115 118 135;
+  --ac-brand-d: 32 227 255;
+  --ac-brand-hover-d: 77 233 255;
+  --ac-on-brand-d: 7 6 15;
+  --ac-accent-d: 255 43 214;
+  --ac-hero-from-d: 122 15 122;
+  --ac-hero-d: 42 10 74;
+  --ac-orb-1-d: 9 68 87;
+  --ac-orb-2-d: 83 10 73;
+  --ac-orb-3-d: 16 83 99;
+  --ac-logo-from: 7 97 120;
+  --ac-logo-to: 176 16 143;
+  --ac-logo-glyph: 230 239 241;
+}
+/* Пиксель */
+:root[data-skin='pixel'] {
+  --ac-bg-l: 238 244 210;
+  --ac-surface-2-l: 226 236 187;
+  --ac-text-l: 12 46 12;
+  --ac-muted-l: 75 95 67;
+  --ac-border-l: 209 218 184;
+  --ac-border-strong-l: 113 130 100;
+  --ac-brand-l: 48 98 48;
+  --ac-brand-hover-l: 39 80 39;
+  --ac-accent-l: 15 56 15;
+  --ac-hero-l: 15 56 15;
+  --ac-orb-1-l: 172 192 172;
+  --ac-orb-2-l: 159 175 159;
+  --ac-orb-3-l: 147 165 147;
+  --ac-glass-shadow-l: 29 59 29;
+  --ac-bg-d: 10 36 10;
+  --ac-surface-d: 15 48 15;
+  --ac-surface-2-d: 21 59 21;
+  --ac-text-d: 247 251 240;
+  --ac-muted-d: 172 182 167;
+  --ac-border-d: 45 74 44;
+  --ac-border-strong-d: 120 139 116;
+  --ac-brand-d: 155 188 15;
+  --ac-brand-hover-d: 175 201 63;
+  --ac-on-brand-d: 15 56 15;
+  --ac-accent-d: 139 172 15;
+  --ac-hero-from-d: 48 98 48;
+  --ac-hero-d: 15 56 15;
+  --ac-orb-1-d: 27 64 27;
+  --ac-orb-2-d: 12 45 12;
+  --ac-orb-3-d: 12 43 12;
+  --ac-logo-from: 48 98 48;
+  --ac-logo-to: 15 56 15;
+  --ac-logo-glyph: 234 239 234;
+}
+/* Памир */
+:root[data-skin='pamir'] {
+  --ac-bg-l: 231 240 246;
+  --ac-surface-2-l: 217 230 239;
+  --ac-text-l: 9 39 61;
+  --ac-muted-l: 71 90 103;
+  --ac-border-l: 202 214 222;
+  --ac-border-strong-l: 108 126 138;
+  --ac-brand-l: 18 64 95;
+  --ac-brand-hover-l: 15 52 78;
+  --ac-accent-l: 179 18 59;
+  --ac-hero-l: 10 42 66;
+  --ac-orb-1-l: 160 179 191;
+  --ac-orb-2-l: 225 160 177;
+  --ac-orb-3-l: 221 148 167;
+  --ac-glass-shadow-l: 11 38 57;
+  --ac-bg-d: 6 19 29;
+  --ac-surface-d: 13 34 51;
+  --ac-surface-2-d: 20 47 69;
+  --ac-text-d: 234 243 250;
+  --ac-muted-d: 163 173 180;
+  --ac-border-d: 42 61 77;
+  --ac-border-strong-d: 112 128 141;
+  --ac-brand-d: 143 176 209;
+  --ac-brand-hover-d: 165 192 218;
+  --ac-on-brand-d: 6 19 29;
+  --ac-accent-d: 255 122 150;
+  --ac-hero-from-d: 18 64 95;
+  --ac-hero-d: 10 42 66;
+  --ac-orb-1-d: 11 39 59;
+  --ac-orb-2-d: 84 19 42;
+  --ac-orb-3-d: 67 19 40;
+  --ac-logo-from: 18 64 95;
+  --ac-logo-to: 179 18 59;
+  --ac-logo-glyph: 231 236 239;
+}
+/* Таджикистан */
+:root[data-skin='tajik'] {
+  --ac-bg-l: 241 230 205;
+  --ac-surface-2-l: 232 219 188;
+  --ac-text-l: 43 26 22;
+  --ac-muted-l: 92 80 71;
+  --ac-border-l: 215 203 181;
+  --ac-border-strong-l: 128 115 102;
+  --ac-brand-l: 161 34 53;
+  --ac-brand-hover-l: 132 28 43;
+  --ac-accent-l: 31 47 102;
+  --ac-hero-l: 31 47 102;
+  --ac-orb-1-l: 218 166 174;
+  --ac-orb-2-l: 165 172 194;
+  --ac-orb-3-l: 238 213 160;
+  --ac-glass-shadow-l: 97 20 32;
+  --ac-bg-d: 29 26 34;
+  --ac-surface-d: 40 35 46;
+  --ac-surface-2-d: 51 44 58;
+  --ac-text-d: 248 242 228;
+  --ac-muted-d: 178 173 167;
+  --ac-border-d: 67 62 70;
+  --ac-border-strong-d: 133 128 128;
+  --ac-brand-d: 233 180 76;
+  --ac-brand-hover-d: 237 195 112;
+  --ac-on-brand-d: 29 26 34;
+  --ac-accent-d: 240 200 112;
+  --ac-hero-from-d: 168 35 55;
+  --ac-hero-d: 31 47 102;
+  --ac-orb-1-d: 92 30 43;
+  --ac-orb-2-d: 30 35 65;
+  --ac-orb-3-d: 95 74 37;
+  --ac-logo-from: 161 34 53;
+  --ac-logo-to: 31 47 102;
+  --ac-logo-glyph: 246 233 235;
+}
+/* Аргентина */
+:root[data-skin='argentina'] {
+  --ac-bg-l: 238 246 252;
+  --ac-surface-2-l: 224 238 249;
+  --ac-text-l: 10 37 64;
+  --ac-muted-l: 76 94 110;
+  --ac-border-l: 208 219 228;
+  --ac-border-strong-l: 114 130 145;
+  --ac-brand-l: 28 99 150;
+  --ac-brand-hover-l: 23 81 123;
+  --ac-accent-l: 58 140 200;
+  --ac-hero-l: 15 63 102;
+  --ac-orb-1-l: 164 193 213;
+  --ac-orb-2-l: 176 209 233;
+  --ac-orb-3-l: 251 221 147;
+  --ac-glass-shadow-l: 17 59 90;
+  --ac-bg-d: 6 20 31;
+  --ac-surface-d: 14 34 51;
+  --ac-surface-2-d: 21 47 71;
+  --ac-text-d: 238 246 252;
+  --ac-muted-d: 164 173 180;
+  --ac-border-d: 43 62 77;
+  --ac-border-strong-d: 115 129 141;
+  --ac-brand-d: 117 170 219;
+  --ac-brand-hover-d: 145 187 226;
+  --ac-on-brand-d: 6 20 31;
+  --ac-accent-d: 166 205 238;
+  --ac-hero-from-d: 31 111 168;
+  --ac-hero-d: 15 63 102;
+  --ac-orb-1-d: 17 61 93;
+  --ac-orb-2-d: 29 74 107;
+  --ac-orb-3-d: 90 76 25;
+  --ac-logo-from: 28 99 150;
+  --ac-logo-to: 58 140 200;
+  --ac-logo-glyph: 231 240 246;
+}
+/* Месси */
+:root[data-skin='messi'] {
+  --ac-bg-l: 244 241 232;
+  --ac-surface-2-l: 234 229 214;
+  --ac-text-l: 10 26 38;
+  --ac-muted-l: 81 89 93;
+  --ac-border-l: 214 213 207;
+  --ac-border-strong-l: 118 124 126;
+  --ac-brand-l: 20 80 127;
+  --ac-brand-hover-l: 16 66 104;
+  --ac-accent-l: 138 98 0;
+  --ac-hero-l: 15 63 102;
+  --ac-orb-1-l: 161 185 204;
+  --ac-orb-2-l: 208 192 153;
+  --ac-orb-3-l: 251 221 147;
+  --ac-glass-shadow-l: 12 48 76;
+  --ac-bg-d: 10 20 28;
+  --ac-surface-d: 17 31 43;
+  --ac-surface-2-d: 24 42 58;
+  --ac-text-d: 244 241 232;
+  --ac-muted-d: 165 166 163;
+  --ac-border-d: 47 58 68;
+  --ac-border-strong-d: 119 126 128;
+  --ac-brand-d: 246 180 14;
+  --ac-brand-hover-d: 248 195 62;
+  --ac-on-brand-d: 10 20 28;
+  --ac-accent-d: 255 211 92;
+  --ac-hero-from-d: 31 111 168;
+  --ac-hero-d: 15 63 102;
+  --ac-orb-1-d: 14 47 73;
+  --ac-orb-2-d: 68 55 15;
+  --ac-orb-3-d: 93 76 23;
+  --ac-logo-from: 20 80 127;
+  --ac-logo-to: 138 98 0;
+  --ac-logo-glyph: 232 238 242;
+}
+/* Испания */
+:root[data-skin='spain'] {
+  --ac-bg-l: 251 241 230;
+  --ac-surface-2-l: 244 229 211;
+  --ac-text-l: 42 10 12;
+  --ac-muted-l: 107 84 82;
+  --ac-border-l: 224 211 202;
+  --ac-border-strong-l: 141 120 116;
+  --ac-brand-l: 176 16 24;
+  --ac-brand-hover-l: 144 13 20;
+  --ac-accent-l: 212 49 15;
+  --ac-hero-l: 122 10 16;
+  --ac-orb-1-l: 223 159 163;
+  --ac-orb-2-l: 238 173 159;
+  --ac-orb-3-l: 249 226 140;
+  --ac-glass-shadow-l: 106 10 14;
+  --ac-bg-d: 26 10 11;
+  --ac-surface-d: 38 16 18;
+  --ac-surface-2-d: 50 23 25;
+  --ac-text-d: 251 241 230;
+  --ac-muted-d: 172 160 153;
+  --ac-border-d: 66 45 46;
+  --ac-border-strong-d: 134 117 113;
+  --ac-brand-d: 255 196 0;
+  --ac-brand-hover-d: 255 208 51;
+  --ac-on-brand-d: 26 10 11;
+  --ac-accent-d: 255 216 77;
+  --ac-hero-from-d: 176 16 24;
+  --ac-hero-d: 122 10 16;
+  --ac-orb-1-d: 94 13 17;
+  --ac-orb-2-d: 110 28 13;
+  --ac-orb-3-d: 101 73 7;
+  --ac-logo-from: 176 16 24;
+  --ac-logo-to: 212 49 15;
+  --ac-logo-glyph: 247 231 232;
+}
+/* Роналду */
+:root[data-skin='cr7'] {
+  --ac-bg-l: 246 243 236;
+  --ac-surface-2-l: 236 231 219;
+  --ac-text-l: 20 16 10;
+  --ac-muted-l: 92 89 83;
+  --ac-border-l: 217 213 207;
+  --ac-border-strong-l: 128 124 118;
+  --ac-brand-l: 138 21 32;
+  --ac-brand-hover-l: 113 17 26;
+  --ac-accent-l: 10 107 58;
+  --ac-hero-l: 10 74 40;
+  --ac-orb-1-l: 208 161 166;
+  --ac-orb-2-l: 157 196 176;
+  --ac-orb-3-l: 236 213 152;
+  --ac-glass-shadow-l: 83 13 19;
+  --ac-bg-d: 10 10 10;
+  --ac-surface-d: 20 20 20;
+  --ac-surface-2-d: 29 29 29;
+  --ac-text-d: 246 243 236;
+  --ac-muted-d: 163 161 157;
+  --ac-border-d: 49 49 48;
+  --ac-border-strong-d: 122 120 117;
+  --ac-brand-d: 212 161 27;
+  --ac-brand-hover-d: 221 180 73;
+  --ac-on-brand-d: 10 10 10;
+  --ac-accent-d: 232 187 74;
+  --ac-hero-from-d: 138 21 32;
+  --ac-hero-d: 10 74 40;
+  --ac-orb-1-d: 68 15 20;
+  --ac-orb-2-d: 10 54 32;
+  --ac-orb-3-d: 81 63 16;
+  --ac-logo-from: 138 21 32;
+  --ac-logo-to: 10 107 58;
+  --ac-logo-glyph: 243 232 233;
+}
+
+html[data-skin='barca'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: url('./assets/skins/barca/svg/stripes-tile-dim.svg');
+  --skin-pattern-opacity: 0.5;
+  --skin-line: 237 187 0;
+  --skin-mark: url('./assets/skins/marks/ball.svg');
+}
+html[data-skin='real'] {
+  --skin-head: 'Cormorant Garamond', 'Onest', Georgia, serif;
+  --skin-head-adjust: 0.5;
+  --skin-head-ls: 0.01em;
+  --skin-pattern: url('./assets/skins/real-madrid/svg/pinstripe-tile.svg');
+  --skin-pattern-opacity: 0.28;
+  --skin-line: 254 190 16;
+  --skin-mark: url('./assets/skins/real-madrid/svg/crown-color.svg');
+}
+html[data-skin='argentina'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.02em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(117 170 219 / 0.16) 0 26px, transparent 26px 52px);
+  --skin-line: 246 180 14;
+  --skin-mark: url('./assets/skins/marks/sun.svg');
+}
+html[data-skin='messi'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.02em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(246 180 14 / 0.12) 0 2px, transparent 2px 22px);
+  --skin-line: 246 180 14;
+  --skin-mark-text: '10';
+}
+html[data-skin='spain'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.02em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(241 191 0 / 0.14) 0 30px, transparent 30px 60px);
+  --skin-line: 241 191 0;
+  --skin-mark: url('./assets/skins/marks/ball.svg');
+}
+html[data-skin='cr7'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.02em;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(212 161 27 / 0.14) 0 2px, transparent 2px 16px);
+  --skin-line: 212 161 27;
+  --skin-mark-text: '7';
+}
+html[data-skin='football'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.02em;
+  --skin-pattern: repeating-linear-gradient(0deg, rgb(20 112 58 / 0.1) 0 46px, transparent 46px 92px);
+  --skin-line: 255 210 63;
+  --skin-mark: url('./assets/skins/marks/ball.svg');
+}
+html[data-skin='shinobi'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.03em;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(255 122 26 / 0.13) 0 2px, transparent 2px 16px);
+  --skin-line: 255 122 26;
+  --skin-mark: url('./assets/skins/marks/star.svg');
+}
+html[data-skin='akatsuki'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.06em;
+  --skin-pattern: repeating-linear-gradient(110deg, rgb(229 18 26 / 0.16) 0 1px, transparent 1px 22px);
+  --skin-line: 229 18 26;
+  --skin-mark: url('./assets/skins/marks/moon.svg');
+}
+html[data-skin='spider'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.03em;
+  --skin-pattern: url('./assets/skins/spider/svg/pattern-tile-dim.svg');
+  --skin-pattern-opacity: 0.6;
+  --skin-line: 229 35 43;
+  --skin-mark: url('./assets/skins/spider/svg/web-corner-tr.svg');
+}
+html[data-skin='comic'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: radial-gradient(rgb(227 23 44 / 0.22) 1.6px, transparent 1.9px);
+  --skin-pattern-size: 14px 14px;
+  --skin-line: 255 212 0;
+  --skin-mark: url('./assets/skins/marks/burst.svg');
+}
+html[data-skin='tajik'] {
+  --skin-head: 'Podkova', 'Onest', Georgia, serif;
+  --skin-pattern: url('./assets/skins/tajik/svg/gulduzi-tile-dim.svg');
+  --skin-pattern-opacity: 0.6;
+  --skin-line: 217 162 43;
+  --skin-mark: url('./assets/skins/tajik/svg/gulduzi-rosette.svg');
+}
+html[data-skin='pamir'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(60deg, rgb(18 64 95 / 0.07) 0 2px, transparent 2px 18px);
+  --skin-line: 179 18 59;
+}
+html[data-skin='kawaii'] {
+  --skin-head: 'Nunito', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: radial-gradient(rgb(255 159 207 / 0.38) 2.2px, transparent 2.6px);
+  --skin-pattern-size: 24px 24px;
+  --skin-line: 255 159 207;
+  --skin-mark: url('./assets/skins/marks/heart.svg');
+}
+html[data-skin='aesthetic'] {
+  --skin-head: 'Cormorant Garamond', 'Onest', Georgia, serif;
+  --skin-head-adjust: 0.5;
+  --skin-head-ls: 0.01em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(140 63 93 / 0.08) 0 1px, transparent 1px 28px);
+  --skin-line: 232 200 140;
+}
+html[data-skin='racing'] {
+  --skin-head: 'Exo 2', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.05em;
+  --skin-pattern: repeating-linear-gradient(45deg, rgb(120 126 140 / 0.12) 0 2px, transparent 2px 6px);
+  --skin-line: 225 6 0;
+  --skin-mark: url('./assets/skins/marks/checker.svg');
+}
+html[data-skin='cyber'] {
+  --skin-head: 'Exo 2', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.08em;
+  --skin-pattern: linear-gradient(rgb(255 43 214 / 0.1) 1px, transparent 1px), linear-gradient(90deg, rgb(32 227 255 / 0.08) 1px, transparent 1px);
+  --skin-pattern-size: 28px 28px;
+  --skin-line: 32 227 255;
+}
+html[data-skin='pixel'] {
+  --skin-head: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(0deg, rgb(15 56 15 / 0.1) 0 2px, transparent 2px 4px);
+  --skin-line: 15 56 15;
+}
+/* Заголовки экранов и карточек — шрифтом образа (суммы и мелкий текст остаются Onest: у него табличные цифры). */
+html[data-skin] :is(h1, h2, h3) {
+  font-family: var(--skin-head);
+  text-transform: var(--skin-head-tt, none);
+  letter-spacing: var(--skin-head-ls, normal);
+  /* у «низкого» шрифта (Cormorant) строчные мельче, чем у Onest: подгоняем по высоте строчных, где браузер это умеет */
+  font-size-adjust: var(--skin-head-adjust, none);
+}
+/* Узор образа поверх пятен фона: лежит под содержимым, касаний не принимает. */
+html[data-skin] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--skin-pattern);
+  background-size: var(--skin-pattern-size, auto);
+  opacity: var(--skin-pattern-opacity, 1);
+}
+/* Украшение образа — водяным знаком в углу карточки «Всего» (класс skin-hero стоит на самой карточке): рисунок --skin-mark или крупная цифра --skin-mark-text. */
+html[data-skin] .skin-hero::before {
+  content: var(--skin-mark-text, '');
+  position: absolute;
+  right: -14px;
+  bottom: -18px;
+  width: 8.5rem;
+  height: 8.5rem;
+  pointer-events: none;
+  background: var(--skin-mark, none) center / contain no-repeat;
+  color: #fff;
+  font: 800 7.5rem/1 var(--skin-head);
+  text-align: right;
+  opacity: 0.24;
+}
+/* Форма углов: у «технических» образов углы острые, у «Кавая» самые округлые. Остальные образы оставляют обычные скругления. Круги (rounded-full) не трогаем. */
+html[data-skin='pixel'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 2px;
+}
+html[data-skin='cyber'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 3px;
+}
+html[data-skin='racing'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill), html[data-skin='comic'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 5px;
+}
+html[data-skin='akatsuki'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 7px;
+}
+html[data-skin='kawaii'] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-control) {
+  border-radius: 1.5rem;
+}
+/* Рамка карточки «Всего» цвета образа (--skin-line). */
+html[data-skin] .skin-hero {
+  border: 2px solid rgb(var(--skin-line, 255 255 255) / 0.85);
+}
 
 :root {
   color-scheme: light dark;
