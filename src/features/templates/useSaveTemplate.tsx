@@ -28,7 +28,7 @@ export function useSaveTemplate(): { ask: (prefill: TxPrefill, categoryName: str
         const r = save(name, asking.prefill);
         setAsking(null);
         if (r.ok) toast.success(`Шаблон «${r.template.name}» сохранён`);
-        else if (r.reason === 'limit') toast.error(`Шаблонов уже ${TEMPLATES_MAX}. Удалите ненужные: Настройки → Шаблоны операций.`);
+        else if (r.reason === 'limit') toast.error(`Шаблонов уже ${TEMPLATES_MAX}. Удалите ненужные: Операции → «⋯» → Шаблоны операций.`);
         else toast.error('Не получилось сохранить шаблон: проверьте сумму и счёт.');
       }}
     />
