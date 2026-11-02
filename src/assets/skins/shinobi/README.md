@@ -1,0 +1,22 @@
+# Образ «Шиноби»: материалы
+
+Заготовки для будущего образа «Шиноби» (см. обсуждение образов). В сборку они **не попадают**, пока их никто не импортирует: файл, на который нет ссылки из `src/`, Vite в `dist` не кладёт, а предкэш PWA берёт только `dist`.
+
+| Папка | Что внутри | Чьё |
+| --- | --- | --- |
+| `svg/` | 19 значков 24×24 (`spiral`, `sharingan`, `leaf`, `shuriken`, `kunai`, `scroll`, `headband`, `ramen`, `sakura`, `torii`, `fan`, `ninja`, `rasengan`, `flame`, `chidori`, `poof`, `ofuda`, `dango`, `katana`), `sprite.svg` (все значки как `<symbol id="shinobi-…">`), `preview.html` (смотреть в браузере) | Своё, нарисовано для Finora |
+| `sprites/` | 25 пиксельных спрайтов 32×32: оружие (`kunai`, `kunai-fire`, `kunai-fire-red`, `shuriken`, `weapon-blade`, `weapon-chain`, `meteor`) и персонажи `char-NN` | [Naruto Sprites [16x16]](https://nogardlab.itch.io/naruto-themed-sprites-16x16), nogardlab, itch.io. Название обещает 16×16, на деле 32×32. Лицензия на странице не указана |
+| `icons-48/` | 14 значков 48×48, сделаны из `.ico` (`konoha`, `kunai`, портреты) | [Ninja Naruto Icons](https://softradar.com/ninja-naruto-icons/), автор Marcelo Paiva (deskmundo). Лицензия не указана |
+| `folder-icons/` | 20 иконок-папок ~230×170 (`sharingan`, `mangekyo`, портреты) | [Naruto Folder Icons](https://softradar.com/naruto-folder-icons/). Автор на странице не назван, лицензия не указана |
+| `art/` | `naruto-pixel.png`: большой пиксельный Наруто 873×1671 | [Naruto Pixel Art](https://martins22.itch.io/naruto-pixel-art), martins22, itch.io. Лицензия не указана |
+
+## Права
+
+Всё, кроме `svg/`, это чужие фан-материалы по «Наруто» без явной лицензии. Права на персонажей и символы принадлежат правообладателям. Файлы лежат здесь для личного некоммерческого использования владельца репозитория. Не распространять и не публиковать отдельно. Если образ когда-нибудь попадёт на публичный адрес, эти файлы будут отдаваться всем по ссылке.
+
+## Как пользоваться
+
+- Пиксельные картинки показывать целым масштабом и без сглаживания: `image-rendering: pixelated; width: 64px; height: 64px;` (32 × 2).
+- Значки из `svg/` рисуются штрихом `currentColor` (толщина 2, круглые концы), поэтому красятся обычным `color`, как значки Lucide. Для вставки на страницу удобен `sprite.svg`: после того как он встроен в разметку, `<svg width="24" height="24"><use href="#shinobi-kunai" /></svg>`.
+- CSP приложения (`img-src 'self' data: blob:`) эти файлы пропускает, если они лежат в сборке. Внешние адреса запрещены.
+- Новый значок: файл 24×24, штрих 2, без заливок, кроме точек. Добавить его в `sprite.svg` тем же `<symbol>`.
