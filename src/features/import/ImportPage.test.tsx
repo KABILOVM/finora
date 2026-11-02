@@ -106,6 +106,31 @@ describe('Импорт из Дзен-мани: экран', () => {
     expect((await store(td).db.wallets.toArray()).filter((w) => w.name === 'Карта Алиф')).toHaveLength(1);
   });
 
+  it('итог: «Сверить с банком» у кошелька исправляет начальный остаток, операции не меняются, «Отменить» возвращает', async () => {
+    const td = await openImport();
+    chooseFile(fixtureText('basic.csv'), 'basic.csv');
+    await findByRole('region', { name: 'Итоги разбора файла' });
+    await user.type(screen.getByRole('textbox', { name: /^Курс для пересчёта в TJS \(USD\)/ }), '10,9');
+    await waitFor(() => expect(text('count-add')).toBe('10'));
+    await user.click(screen.getByRole('button', { name: 'Импортировать 10 операций' }));
+    await findByRole('alertdialog');
+    await user.click(screen.getByRole('button', { name: 'Импортировать' }));
+    await findByRole('heading', { name: 'Импорт завершён', level: 2 });
+    expect(screen.getByText(/в выгрузке Дзен-мани его нет/)).toBeTruthy();
+
+    // по файлу на «Карта Алиф» 3 114,50, а в банке 4 000: начальный остаток должен стать 885,50
+    await user.click(await findByRole('button', { name: 'Сверить с банком: Карта Алиф' }));
+    await findByRole('dialog', { name: 'Сверка: Карта Алиф' });
+    await user.type(await findByRole('textbox', { name: /^Сколько на самом деле/ }), '4000');
+    await user.click(await findByRole('button', { name: 'Исправить остаток' }));
+    const wallet = () => store(td).db.wallets.filter((w) => w.name === 'Карта Алиф').first();
+    await eventually(async () => expect((await wallet())?.openingBalanceMinor).toBe(88_550));
+    expect(await store(td).db.transactions.filter((t) => t.deletedAt === null).count()).toBe(10);
+
+    await user.click(await findByRole('button', { name: 'Отменить' }));
+    await eventually(async () => expect((await wallet())?.openingBalanceMinor).toBe(0));
+  });
+
   it('ручной выбор кошелька меняет план сразу', async () => {
     await openImport();
     chooseFile(fixtureText('semicolon-ru.csv'));
@@ -264,6 +289,19 @@ describe('Итог импорта: ошибки записи', () => {
     createdCategories: 0,
     reconcile: [],
     elapsedMs: 1,
+  });
+
+  it('остатки по файлу: без списка кошельков кнопки «Сверить с банком» нет (экран итога остаётся рабочим)', () => {
+    render(
+      <MemoryRouter>
+        <DoneStep
+          report={{ ...report(0), reconcile: [{ id: 'w1', name: 'Карта Алиф', currency: 'TJS', fileBalanceMinor: 311_450, created: true }] }}
+          onAgain={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('list', { name: 'Остатки по файлу' }).textContent).toMatch(/Карта Алиф.*3\s114,50\sс\./);
+    expect(screen.queryByRole('button', { name: /Сверить с банком/ })).toBeNull();
   });
 
   it('показывает первые 20 ошибок и «и ещё N»', () => {
