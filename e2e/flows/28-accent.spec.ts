@@ -37,7 +37,8 @@ test.describe('28. Цвет акцента', () => {
     await openApp(page);
     await goSection(page, 'Настройки');
 
-    await expect(colors(page).getByRole('radio')).toHaveCount(7);
+    // 26 готовых цветов и «Свой цвет»
+    await expect(colors(page).getByRole('radio')).toHaveCount(27);
     await expect(colors(page).getByRole('radio', { name: 'Фиолетовый' })).toBeChecked();
     await expect(page.locator('html')).not.toHaveAttribute('data-accent', /.+/);
     const violetBrand = await token(page, '--brand');
@@ -99,5 +100,34 @@ test.describe('28. Цвет акцента', () => {
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue');
     await expect(appearance(page).getByRole('radio', { name: 'Тёмная', exact: true })).toBeChecked();
     await expect(colors(page).getByRole('radio', { name: 'Синий' })).toBeChecked();
+  });
+
+  test('«Свой цвет»: код цвета перекрашивает приложение, переживает перезагрузку, готовый цвет возвращает обычную палитру', async ({ page }, testInfo) => {
+    await openApp(page);
+    await goSection(page, 'Настройки');
+    const violetBrand = await token(page, '--brand');
+
+    await colors(page).getByRole('radio', { name: 'Свой цвет' }).click();
+    await expect(colors(page).getByRole('radio', { name: 'Свой цвет' })).toBeChecked();
+    await expect(page.locator('html')).toHaveAttribute('data-accent', 'custom');
+    const code = appearance(page).getByRole('textbox', { name: 'Код цвета' });
+    await code.fill('#0a8f4a');
+    await expect.poll(() => token(page, '--ac-brand-l')).not.toBe('');
+    const customBrand = await token(page, '--brand');
+    expect(customBrand).not.toBe(violetBrand);
+    const bar = hex(await token(page, '--bg'));
+    expect(await statusBar(page)).toEqual([bar, bar]);
+    await shot(page, '28-accent-custom', testInfo);
+
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Настройки' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-accent', 'custom');
+    expect(await token(page, '--brand')).toBe(customBrand);
+    await expect(colors(page).getByRole('radio', { name: 'Свой цвет' })).toBeChecked();
+
+    await colors(page).getByRole('radio', { name: 'Изумрудный' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-accent', 'emerald');
+    expect(await token(page, '--ac-brand-l')).not.toBe(''); // палитру теперь даёт блок index.css, а не <html>
+    expect(await page.evaluate(() => document.documentElement.style.getPropertyValue('--ac-brand-l'))).toBe('');
   });
 });

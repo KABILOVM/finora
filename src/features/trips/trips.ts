@@ -45,6 +45,13 @@ export const withoutTags = (note: string): string => note.replace(TAG_RE, '$1').
 
 export const hasTag = (note: string, tag: string): boolean => tagsOf(note).some((t) => tagKey(t) === tagKey(tag));
 
+/** Заметка без этой метки (все её вхождения, с любым регистром и «ё»); остальные метки и слова остаются. Лишние пробелы сворачиваются. */
+export const withoutTag = (note: string, tag: string): string =>
+  note
+    .replace(TAG_RE, (whole, lead: string, found: string) => (tagKey(found) === tagKey(tag) ? lead : whole))
+    .replace(/\s+/g, ' ')
+    .trim();
+
 /** Заметка с меткой в конце (`кофе #Самарканд`). Метка уже есть или заметка стала бы длиннее предела — заметка как есть. */
 export function withTag(note: string, tag: string | null): string {
   if (tag === null || hasTag(note, tag)) return note;

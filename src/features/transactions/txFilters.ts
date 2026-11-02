@@ -4,6 +4,7 @@ import { hasChildren, withDescendants, type TreeNode } from '@/features/categori
 import { exponentOf } from '@/domain/currency';
 import { addMinor, minorToInputString, parseAmountToMinor } from '@/domain/money';
 import type { CurrencyCode, IsoDate, Minor, Transaction, TxKind } from '@/domain/types';
+import { hasTag, tagKey, tagLabel } from '@/features/trips/trips';
 import { addDays, isValidIsoDate, monthKey } from '@/lib/dates';
 
 /** Чистая логика фильтров списка операций и итога дня. */
@@ -40,21 +41,23 @@ export interface ListFilters {
   amountFrom: string;
   amountTo: string;
   source: SourceFilter;
+  /** Метка `#…` в заметке: tagKey (без регистра и «ё»); '' — любая. */
+  tag: string;
   search: string;
 }
 
 /** Часть фильтров, которая живёт в шите «Фильтры» (период и поиск видны на самом экране). */
-export type SheetFilters = Pick<ListFilters, 'walletId' | 'kind' | 'categoryId' | 'amountFrom' | 'amountTo' | 'source'>;
+export type SheetFilters = Pick<ListFilters, 'walletId' | 'kind' | 'categoryId' | 'amountFrom' | 'amountTo' | 'source' | 'tag'>;
 
-export const EMPTY_SHEET_FILTERS: SheetFilters = { walletId: '', kind: '', categoryId: '', amountFrom: '', amountTo: '', source: '' };
+export const EMPTY_SHEET_FILTERS: SheetFilters = { walletId: '', kind: '', categoryId: '', amountFrom: '', amountTo: '', source: '', tag: '' };
 
 /** Включена ли сумма «от/до» (одним фильтром считаются обе границы). */
 const hasAmount = (f: Pick<SheetFilters, 'amountFrom' | 'amountTo'>): boolean => f.amountFrom !== '' || f.amountTo !== '';
 
-/** Сколько фильтров из шита включено (0–5): это число показывает кнопка «Фильтры». */
+/** Сколько фильтров из шита включено (0–6): это число показывает кнопка «Фильтры». */
 export function activeFilterCount(f: SheetFilters): number {
   return (
-    (f.walletId !== '' ? 1 : 0) + (f.kind !== '' ? 1 : 0) + (f.categoryId !== '' ? 1 : 0) + (hasAmount(f) ? 1 : 0) + (f.source !== '' ? 1 : 0)
+    (f.walletId !== '' ? 1 : 0) + (f.kind !== '' ? 1 : 0) + (f.categoryId !== '' ? 1 : 0) + (hasAmount(f) ? 1 : 0) + (f.source !== '' ? 1 : 0) + (f.tag !== '' ? 1 : 0)
   );
 }
 
@@ -83,6 +86,8 @@ export function activeFilterLabels(
   f: SheetFilters,
   wallets: readonly { id: string; name: string }[],
   categories: readonly { id: string; name: string }[],
+  /** Известные метки: по ним метка из фильтра называется так, как её пишет человек (в фильтре лежит только ключ). */
+  tags: readonly { key: string; label: string }[] = [],
 ): string[] {
   const out: string[] = [];
   if (f.walletId !== '') out.push(wallets.find((w) => w.id === f.walletId)?.name ?? 'Кошелёк');
@@ -91,6 +96,7 @@ export function activeFilterLabels(
   else if (f.categoryId !== '') out.push(categories.find((c) => c.id === f.categoryId)?.name ?? 'Категория');
   if (hasAmount(f)) out.push(amountLabel(f));
   if (f.source !== '') out.push(SOURCE_NAMES[f.source]);
+  if (f.tag !== '') out.push(`#${tags.find((t) => t.key === f.tag)?.label ?? tagLabel(f.tag)}`);
   return out;
 }
 
@@ -138,6 +144,8 @@ export const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ID_PARAM = /^[0-9A-Za-z_-]{1,64}$/;
 /** Сумма в адресе: уже «чистая» (см. normalizeAmountText), без запятой и пробелов. */
 const AMOUNT_PARAM = /^\d{1,12}(?:\.\d{1,4})?$/;
+/** Метка в адресе: уже ключ (без регистра и «ё»), 2–40 букв, цифр, «_» или «-» — как в заметке. */
+const TAG_PARAM = /^[\p{L}\p{N}_-]{2,40}$/u;
 
 /** Фильтры «по умолчанию»: этот месяц, всё остальное выключено. */
 export const defaultFilters = (today: IsoDate): ListFilters => ({
@@ -151,6 +159,7 @@ export const defaultFilters = (today: IsoDate): ListFilters => ({
   amountFrom: '',
   amountTo: '',
   source: '',
+  tag: '',
   search: '',
 });
 
@@ -187,6 +196,8 @@ export function filtersFromParams(params: URLSearchParams, today: IsoDate): Part
   if (max !== null && AMOUNT_PARAM.test(max)) out.amountTo = max;
   const src = params.get('src');
   if (src === 'recurring' || src === 'debt') out.source = src;
+  const tag = params.get('tag');
+  if (tag !== null && TAG_PARAM.test(tag)) out.tag = tagKey(tag);
   return out;
 }
 
@@ -215,6 +226,7 @@ export function filtersToParams(f: ListFilters, today: IsoDate): URLSearchParams
   if (f.amountFrom !== '') q.set('min', f.amountFrom);
   if (f.amountTo !== '') q.set('max', f.amountTo);
   if (f.source !== '') q.set('src', f.source);
+  if (f.tag !== '') q.set('tag', f.tag);
   return q;
 }
 
@@ -486,6 +498,9 @@ export function matchesAmountRange(
   const hi = to === '' ? null : boundMinor(to, currency, 'down');
   return (lo === null || tx.amountMinor >= lo) && (hi === null || tx.amountMinor <= hi);
 }
+
+/** Подходит ли операция под фильтр по метке (tagKey; '' — любая): метка `#…` есть в заметке, без учёта регистра и «ё». */
+export const matchesTag = (note: string, tag: string): boolean => tag === '' || hasTag(note, tag);
 
 /** Подходит ли операция под «Откуда»: регулярный платёж — рождена правилом, долг — движение денег по долгу. */
 export function matchesSource(tx: { debtId?: Transaction['debtId'] | undefined; recurringRuleId?: Transaction['recurringRuleId'] | undefined }, source: SourceFilter): boolean {

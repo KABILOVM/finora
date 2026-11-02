@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { defaultId, useOptionalStore, type Store } from '@/db';
+import { markCatalogOffered } from '@/features/categories/catalog/catalogOfferStorage';
 import { decide, doneProgress, initialProgress, type DataSnapshot } from './onboardingLogic';
 import { useOnboardingProgress } from './onboardingStorage';
 
@@ -61,6 +62,11 @@ function Gate({ store }: { store: Store }) {
   useEffect(() => {
     if (decision === 'complete') update(() => doneProgress(false));
   }, [decision, update]);
+
+  // Новому человеку готовые категории предлагает сам мастер (шаг «Категории»); разовое окно для действующих ему не нужно
+  useEffect(() => {
+    if (decision === 'show') markCatalogOffered(store.userId);
+  }, [decision, store.userId]);
 
   if (decision !== 'show' || pathname !== WIZARD_PATH) return null;
   return (

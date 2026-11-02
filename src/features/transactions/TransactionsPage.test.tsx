@@ -555,6 +555,88 @@ describe('выделение и массовые действия', () => {
   });
 });
 
+describe('фильтр по метке', () => {
+  /** У трёх операций метки в заметке: «обед #Самарканд», «такси #самарканд» (другой регистр), «coffee #работа». */
+  async function tagged(td: Awaited<ReturnType<typeof openList>>) {
+    const db = storeOf(td).db;
+    await write(() => db.transactions.update(hist.txs['lunch'] ?? '', { note: 'обед #Самарканд' }));
+    await write(() => db.transactions.update(hist.txs['taxi'] ?? '', { note: 'такси #самарканд' }));
+    await write(() => db.transactions.update(hist.txs['coffee'] ?? '', { note: 'coffee #работа' }));
+  }
+  const activeLabels = () => document.querySelector('[data-testid="active-filters"]')?.textContent ?? '';
+
+  it('метки есть — в шите поле «Метка» со счётчиком; выбор оставляет операции с меткой (регистр не важен), метка в адресе и в строке фильтров', async () => {
+    const td = await openList({ path: '/transactions?period=all' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    await tagged(td);
+    await waitFor(() => expect(has('обед #Самарканд')).toBe(true));
+
+    await applySheet(() => choose('Метка', '#Самарканд (2)'));
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    expect(has('обед')).toBe(true);
+    expect(has('такси')).toBe(true);
+    expect(has('coffee')).toBe(false);
+    expect(currentSearch()).toBe('?period=all&tag=%D1%81%D0%B0%D0%BC%D0%B0%D1%80%D0%BA%D0%B0%D0%BD%D0%B4');
+    expect(activeLabels()).toContain('#Самарканд');
+    expect(screen.getByRole('button', { name: /^Фильтры/ })).toHaveAccessibleName(/1/);
+
+    // «Сбросить» убирает метку
+    await user.click(screen.getByRole('button', { name: 'Сбросить' }));
+    await waitFor(() => expect(currentSearch()).toBe('?period=all'));
+    await waitFor(() => expect(days()).toHaveLength(5));
+  });
+
+  it('в шите все известные метки: чаще встречающиеся первыми', async () => {
+    const td = await openList({ path: '/transactions?period=all' });
+    await tagged(td);
+    await waitFor(() => expect(has('обед #Самарканд')).toBe(true));
+    await openSheet();
+    const select = screen.getByRole('combobox', { name: 'Метка' }) as HTMLSelectElement;
+    const options = () => Array.from(select.options).map((o) => (o.textContent ?? '').trim());
+    await waitFor(() => expect(options()).toEqual(['Все метки', '#Самарканд (2)', '#работа (1)']));
+  });
+
+  it('меток нет ни в одной операции — поля «Метка» в шите нет', async () => {
+    await openList({ path: '/transactions?period=all' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    await openSheet();
+    expect(screen.queryByRole('combobox', { name: 'Метка' })).toBeNull();
+  });
+
+  it('ссылка с меткой открывает готовый список; мусор в адресе — обычный список', async () => {
+    const td = await openList({ path: '/transactions?period=all&tag=%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%B0' });
+    await tagged(td);
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(has('coffee')).toBe(true);
+    expect(activeLabels()).toContain('#работа');
+  });
+
+  it('мусорная метка в адресе игнорируется', async () => {
+    await openList({ path: '/transactions?period=all&tag=a' });
+    await waitFor(() => expect(days()).toHaveLength(5));
+    expect(document.querySelector('[data-testid="active-filters"]')).toBeNull();
+  });
+
+  it('метка вместе с поиском и суммой: сужают друг друга', async () => {
+    const td = await openList({ path: '/transactions?period=all&tag=%D1%81%D0%B0%D0%BC%D0%B0%D1%80%D0%BA%D0%B0%D0%BD%D0%B4' });
+    await tagged(td);
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+    await user.type(screen.getByRole('textbox', { name: 'Поиск по операциям' }), 'такси');
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(has('такси')).toBe(true);
+  });
+
+  it('метка, которой больше нет в операциях, остаётся в списке шита: её можно снять', async () => {
+    await openList({ path: '/transactions?period=all&tag=%D1%83%D0%B4%D0%B0%D0%BB%D1%91%D0%BD%D0%BD%D0%B0%D1%8F' });
+    await waitFor(() => screen.getByText('Ничего не найдено'));
+    await openSheet();
+    const select = screen.getByRole('combobox', { name: 'Метка' }) as HTMLSelectElement;
+    // в адресе и в фильтре лежит ключ метки: без регистра и «ё»
+    expect(select.value).toBe('удаленная');
+    expect(Array.from(select.options).map((o) => (o.textContent ?? '').trim())).toEqual(['Все метки', '#удаленная']);
+  });
+});
+
 describe('фильтры: сумма и «откуда операция»', () => {
   const amountField = (name: 'От' | 'До') => screen.getByRole('textbox', { name }) as HTMLInputElement;
   const type = async (name: 'От' | 'До', value: string) => {
@@ -957,6 +1039,7 @@ describe('чистые функции фильтров', () => {
     amountFrom: '',
     amountTo: '',
     source: '',
+    tag: '',
     search: '',
     ...over,
   });

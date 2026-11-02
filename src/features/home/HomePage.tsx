@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { InstallHint } from '@/components/InstallHint';
 import { PageHeader } from '@/components/PageHeader';
-import { useBalances, useSettings, useWallets } from '@/db';
+import { useBalances, useSettings, useTransactions, useWallets } from '@/db';
+import type { LocalRow, Wallet } from '@/domain/types';
 import BudgetsWidget from '@/features/budgets/BudgetsWidget';
 import UpcomingWidget from '@/features/recurring/UpcomingWidget';
 import { useCategoryIndex, useWalletIndex } from '@/features/transactions/txData';
@@ -16,12 +17,29 @@ import MissedDaysCard from './MissedDaysCard';
 import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
+import { inMonthlyWindow } from './monthlyWindow';
 import { RecentOps } from './RecentOps';
 import SaveRemainderCard from './SaveRemainderCard';
 import TemplatesRow from './TemplatesRow';
 import TripCard from './TripCard';
 import { WalletChips } from './WalletChips';
 import WeeklyCard from './WeeklyCard';
+
+// Карточка «Запишите первую трату» нужна только тому, у кого нет операций: остальным она в основной файл не грузится
+const FirstOperationCard = lazy(() => import('./FirstOperationCard'));
+// «Итоги месяца» нужны только в первые дни месяца: в остальные дни их код не грузится
+const MonthlyCard = lazy(() => import('./MonthlyCard'));
+
+/** Затвор: карточку подгружаем, только когда операций нет совсем. */
+function FirstOperation({ wallets }: { wallets: readonly LocalRow<Wallet>[] }) {
+  const rows = useTransactions({}, { limit: 1 });
+  if (!rows || rows.length > 0) return null;
+  return (
+    <Suspense fallback={null}>
+      <FirstOperationCard wallets={wallets} />
+    </Suspense>
+  );
+}
 
 /**
  * На телефоне заголовок «Главная» скрыт визуально (остаётся для скринридера): название и так видно внизу в меню,
@@ -94,10 +112,16 @@ export default function HomePage() {
       <PageHeader title="Главная" className={HEADER_CLASS} />
       <div className="stagger flex flex-col gap-3 md:gap-4">
         <HomeHero total={total ?? null} base={base} />
+        <FirstOperation wallets={wallets} />
         <TemplatesRow />
         <AttentionRow />
         <MissedDaysCard />
         <WeeklyCard today={today} categories={categoryIndex} />
+        {inMonthlyWindow(today) && (
+          <Suspense fallback={null}>
+            <MonthlyCard today={today} categories={categoryIndex} />
+          </Suspense>
+        )}
         <SaveRemainderCard today={today} />
         <TripCard />
         <GlanceStrip base={base} />

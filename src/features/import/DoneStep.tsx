@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAddLink } from '@/layout/nav';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -54,6 +55,9 @@ export function DoneStep({ report, onAgain, onUndo }: DoneStepProps) {
   };
   const shown = report.failed.slice(0, FAILED_SHOWN);
   const moreFailed = report.failedCount - shown.length;
+  const addLink = useAddLink('expense');
+  // «Что дальше» — когда история перенесена целиком: перенесённое надо продолжить, иначе учёт останавливается в день импорта
+  const showNext = !report.fatal && !report.stopped && report.added > 0 && !undone;
   const title = report.fatal ? 'Импорт прерван' : report.stopped ? 'Импорт остановлен' : 'Импорт завершён';
   const notAdded = report.review + report.waitRate + report.blocked;
   return (
@@ -148,6 +152,29 @@ export function DoneStep({ report, onAgain, onUndo }: DoneStepProps) {
         </Notice>
       )}
       {undoError && <Notice tone="danger">{undoError}</Notice>}
+
+      {showNext && (
+        <Card className="flex flex-col gap-3" role="region" aria-label="Что дальше" data-testid="import-next">
+          <h2 className="text-lg font-bold">Что дальше</h2>
+          <p className="text-sm text-muted">История перенесена. Чтобы учёт не остановился в день переноса, продолжайте с сегодняшнего дня.</p>
+          <div className="flex flex-col gap-1">
+            <p className="font-semibold">Новая трата — одной строкой</p>
+            <p className="text-sm text-muted">Напишите, например, «такси 20»: форма откроется заполненной, останется нажать «Сохранить».</p>
+            <Link {...addLink} className={`${buttonClasses('secondary', 'md')} mt-1 self-start`}>
+              Записать трату
+            </Link>
+          </div>
+          <div className="flex flex-col gap-1 border-t border-border pt-3">
+            <p className="font-semibold">Чтобы не пропускать дни</p>
+            <p className="text-sm text-muted">
+              Включите вечернее напоминание: если за день ничего не внесено, мы напомним. Напоминания приходят с сервера, поэтому нужен вход в аккаунт.
+            </p>
+            <Link to="/settings?section=security" className={`${buttonClasses('secondary', 'md')} mt-1 self-start`}>
+              Включить напоминание
+            </Link>
+          </div>
+        </Card>
+      )}
 
       <Card className="flex flex-col gap-3">
         <Link to="/transactions" className={buttonClasses('primary', 'lg', true)}>

@@ -309,6 +309,711 @@
   --ac-logo-glyph: 254 216 222;
 }
 
+/* >>> generated accents: не править руками, `npm run gen:accents` */
+/* Пурпурный */
+[data-accent='purple'] {
+  --ac-bg-l: 241 236 249;
+  --ac-surface-2-l: 243 238 250;
+  --ac-text-l: 34 22 50;
+  --ac-muted-l: 101 86 124;
+  --ac-border-l: 224 215 236;
+  --ac-border-strong-l: 136 123 159;
+  --ac-brand-l: 131 44 207;
+  --ac-brand-hover-l: 114 31 182;
+  --ac-accent-l: 190 76 211;
+  --ac-hero-l: 162 58 208;
+  --ac-orb-1-l: 184 141 239;
+  --ac-orb-2-l: 240 144 220;
+  --ac-orb-3-l: 168 206 255;
+  --ac-glass-shadow-l: 90 47 137;
+  --ac-bg-d: 14 8 22;
+  --ac-surface-d: 37 23 53;
+  --ac-surface-2-d: 54 36 76;
+  --ac-text-d: 244 238 252;
+  --ac-muted-d: 177 163 198;
+  --ac-border-d: 67 48 93;
+  --ac-border-strong-d: 140 121 167;
+  --ac-brand-d: 196 170 241;
+  --ac-brand-hover-d: 218 204 248;
+  --ac-on-brand-d: 46 20 67;
+  --ac-accent-d: 225 157 228;
+  --ac-hero-from-d: 108 42 180;
+  --ac-hero-d: 158 50 175;
+  --ac-orb-1-d: 108 41 185;
+  --ac-orb-2-d: 157 44 165;
+  --ac-orb-3-d: 79 100 173;
+  --ac-logo-from: 159 88 234;
+  --ac-logo-to: 195 72 207;
+  --ac-logo-glyph: 240 218 245;
+}
+
+/* Орхидея */
+[data-accent='orchid'] {
+  --ac-bg-l: 245 235 246;
+  --ac-surface-2-l: 246 238 247;
+  --ac-text-l: 39 20 44;
+  --ac-muted-l: 110 84 116;
+  --ac-border-l: 229 213 231;
+  --ac-border-strong-l: 145 120 152;
+  --ac-brand-l: 153 35 177;
+  --ac-brand-hover-l: 133 21 155;
+  --ac-accent-l: 207 71 176;
+  --ac-hero-l: 181 51 175;
+  --ac-orb-1-l: 203 135 219;
+  --ac-orb-2-l: 250 143 192;
+  --ac-orb-3-l: 185 200 255;
+  --ac-glass-shadow-l: 104 42 120;
+  --ac-bg-d: 17 7 19;
+  --ac-surface-d: 42 21 47;
+  --ac-surface-2-d: 62 34 68;
+  --ac-text-d: 248 237 249;
+  --ac-muted-d: 186 161 190;
+  --ac-border-d: 76 45 84;
+  --ac-border-strong-d: 150 118 158;
+  --ac-brand-d: 212 165 226;
+  --ac-brand-hover-d: 228 201 238;
+  --ac-on-brand-d: 54 18 57;
+  --ac-accent-d: 237 155 206;
+  --ac-hero-from-d: 128 35 155;
+  --ac-hero-d: 173 45 143;
+  --ac-orb-1-d: 129 32 160;
+  --ac-orb-2-d: 171 38 134;
+  --ac-orb-3-d: 102 94 166;
+  --ac-logo-from: 182 80 205;
+  --ac-logo-to: 212 67 171;
+  --ac-logo-glyph: 246 217 237;
+}
+
+/* Маджента */
+[data-accent='magenta'] {
+  --ac-bg-l: 248 234 243;
+  --ac-surface-2-l: 249 237 244;
+  --ac-text-l: 44 18 38;
+  --ac-muted-l: 118 81 108;
+  --ac-border-l: 234 212 226;
+  --ac-border-strong-l: 153 117 143;
+  --ac-brand-l: 175 0 145;
+  --ac-brand-hover-l: 150 0 125;
+  --ac-accent-l: 226 55 138;
+  --ac-hero-l: 202 25 140;
+  --ac-orb-1-l: 223 127 197;
+  --ac-orb-2-l: 255 144 163;
+  --ac-orb-3-l: 201 194 255;
+  --ac-glass-shadow-l: 119 32 102;
+  --ac-bg-d: 19 6 16;
+  --ac-surface-d: 48 18 40;
+  --ac-surface-2-d: 69 31 59;
+  --ac-text-d: 251 236 245;
+  --ac-muted-d: 193 158 181;
+  --ac-border-d: 85 41 74;
+  --ac-border-strong-d: 160 115 147;
+  --ac-brand-d: 227 159 210;
+  --ac-brand-hover-d: 239 198 229;
+  --ac-on-brand-d: 61 13 47;
+  --ac-accent-d: 249 151 182;
+  --ac-hero-from-d: 148 5 130;
+  --ac-hero-d: 189 25 109;
+  --ac-orb-1-d: 149 0 134;
+  --ac-orb-2-d: 186 15 99;
+  --ac-orb-3-d: 121 86 159;
+  --ac-logo-from: 206 63 175;
+  --ac-logo-to: 230 50 131;
+  --ac-logo-glyph: 251 216 228;
+}
+
+/* Малиновый */
+[data-accent='crimson'] {
+  --ac-bg-l: 250 234 236;
+  --ac-surface-2-l: 251 237 238;
+  --ac-text-l: 49 17 24;
+  --ac-muted-l: 124 80 88;
+  --ac-border-l: 238 212 214;
+  --ac-border-strong-l: 160 117 123;
+  --ac-brand-l: 190 0 75;
+  --ac-brand-hover-l: 163 0 63;
+  --ac-accent-l: 232 65 55;
+  --ac-hero-l: 214 27 61;
+  --ac-orb-1-l: 237 126 145;
+  --ac-orb-2-l: 255 151 110;
+  --ac-orb-3-l: 233 182 240;
+  --ac-glass-shadow-l: 131 28 58;
+  --ac-bg-d: 22 6 9;
+  --ac-surface-d: 53 17 25;
+  --ac-surface-2-d: 75 30 38;
+  --ac-text-d: 254 236 237;
+  --ac-muted-d: 200 158 163;
+  --ac-border-d: 92 40 50;
+  --ac-border-strong-d: 169 114 122;
+  --ac-brand-d: 240 158 173;
+  --ac-brand-hover-d: 248 197 205;
+  --ac-on-brand-d: 67 12 23;
+  --ac-accent-d: 251 156 137;
+  --ac-hero-from-d: 163 0 70;
+  --ac-hero-d: 194 38 29;
+  --ac-orb-1-d: 164 0 72;
+  --ac-orb-2-d: 189 35 5;
+  --ac-orb-3-d: 145 78 129;
+  --ac-logo-from: 225 59 103;
+  --ac-logo-to: 234 64 41;
+  --ac-logo-glyph: 253 217 213;
+}
+
+/* Коралловый */
+[data-accent='coral'] {
+  --ac-bg-l: 250 235 234;
+  --ac-surface-2-l: 250 237 236;
+  --ac-text-l: 48 18 20;
+  --ac-muted-l: 123 82 82;
+  --ac-border-l: 237 213 211;
+  --ac-border-strong-l: 159 118 118;
+  --ac-brand-l: 188 21 52;
+  --ac-brand-hover-l: 165 2 41;
+  --ac-accent-l: 221 82 34;
+  --ac-hero-l: 206 54 38;
+  --ac-orb-1-l: 232 132 133;
+  --ac-orb-2-l: 246 158 104;
+  --ac-orb-3-l: 237 183 228;
+  --ac-glass-shadow-l: 127 37 46;
+  --ac-bg-d: 21 7 7;
+  --ac-surface-d: 52 19 20;
+  --ac-surface-2-d: 74 32 33;
+  --ac-text-d: 253 237 235;
+  --ac-muted-d: 198 159 158;
+  --ac-border-d: 91 42 44;
+  --ac-border-strong-d: 167 116 115;
+  --ac-brand-d: 236 162 164;
+  --ac-brand-hover-d: 245 199 200;
+  --ac-on-brand-d: 65 15 16;
+  --ac-accent-d: 242 162 132;
+  --ac-hero-from-d: 161 21 51;
+  --ac-hero-d: 184 59 0;
+  --ac-orb-1-d: 164 15 53;
+  --ac-orb-2-d: 173 63 0;
+  --ac-orb-3-d: 146 80 117;
+  --ac-logo-from: 219 73 84;
+  --ac-logo-to: 221 81 5;
+  --ac-logo-glyph: 251 219 210;
+}
+
+/* Персиковый */
+[data-accent='peach'] {
+  --ac-bg-l: 248 236 229;
+  --ac-surface-2-l: 249 239 232;
+  --ac-text-l: 46 21 5;
+  --ac-muted-l: 120 86 65;
+  --ac-border-l: 234 215 203;
+  --ac-border-strong-l: 156 122 102;
+  --ac-brand-l: 158 76 0;
+  --ac-brand-hover-l: 136 65 0;
+  --ac-accent-l: 184 118 0;
+  --ac-hero-l: 169 97 0;
+  --ac-orb-1-l: 225 142 87;
+  --ac-orb-2-l: 219 176 77;
+  --ac-orb-3-l: 252 180 195;
+  --ac-glass-shadow-l: 117 53 0;
+  --ac-bg-d: 20 8 3;
+  --ac-surface-d: 50 23 4;
+  --ac-surface-2-d: 71 36 11;
+  --ac-text-d: 251 238 230;
+  --ac-muted-d: 195 163 143;
+  --ac-border-d: 88 47 20;
+  --ac-border-strong-d: 163 121 95;
+  --ac-brand-d: 231 169 133;
+  --ac-brand-hover-d: 242 203 182;
+  --ac-on-brand-d: 58 25 0;
+  --ac-accent-d: 224 175 106;
+  --ac-hero-from-d: 139 62 0;
+  --ac-hero-d: 147 95 0;
+  --ac-orb-1-d: 141 62 0;
+  --ac-orb-2-d: 139 93 0;
+  --ac-orb-3-d: 155 80 81;
+  --ac-logo-from: 201 99 0;
+  --ac-logo-to: 175 116 0;
+  --ac-logo-glyph: 244 223 201;
+}
+
+/* Янтарный */
+[data-accent='amber'] {
+  --ac-bg-l: 246 237 227;
+  --ac-surface-2-l: 247 239 230;
+  --ac-text-l: 44 24 0;
+  --ac-muted-l: 116 89 58;
+  --ac-border-l: 231 217 200;
+  --ac-border-strong-l: 152 125 96;
+  --ac-brand-l: 142 89 0;
+  --ac-brand-hover-l: 122 75 0;
+  --ac-accent-l: 166 128 0;
+  --ac-hero-l: 153 108 0;
+  --ac-orb-1-l: 217 149 61;
+  --ac-orb-2-l: 200 185 72;
+  --ac-orb-3-l: 255 181 177;
+  --ac-glass-shadow-l: 105 63 0;
+  --ac-bg-d: 19 9 1;
+  --ac-surface-d: 47 25 0;
+  --ac-surface-2-d: 68 39 0;
+  --ac-text-d: 249 240 228;
+  --ac-muted-d: 190 166 138;
+  --ac-border-d: 84 51 3;
+  --ac-border-strong-d: 158 125 87;
+  --ac-brand-d: 225 174 118;
+  --ac-brand-hover-d: 238 206 174;
+  --ac-on-brand-d: 51 30 0;
+  --ac-accent-d: 210 183 97;
+  --ac-hero-from-d: 124 74 0;
+  --ac-hero-d: 133 103 0;
+  --ac-orb-1-d: 126 74 0;
+  --ac-orb-2-d: 125 101 0;
+  --ac-orb-3-d: 156 81 60;
+  --ac-logo-from: 180 114 0;
+  --ac-logo-to: 156 125 0;
+  --ac-logo-glyph: 238 226 198;
+}
+
+/* Горчичный */
+[data-accent='mustard'] {
+  --ac-bg-l: 242 239 227;
+  --ac-surface-2-l: 244 241 230;
+  --ac-text-l: 37 28 0;
+  --ac-muted-l: 106 94 57;
+  --ac-border-l: 225 220 200;
+  --ac-border-strong-l: 141 130 95;
+  --ac-brand-l: 123 100 0;
+  --ac-brand-hover-l: 105 85 0;
+  --ac-accent-l: 138 141 0;
+  --ac-hero-l: 131 119 0;
+  --ac-orb-1-l: 192 163 61;
+  --ac-orb-2-l: 164 196 103;
+  --ac-orb-3-l: 251 186 157;
+  --ac-glass-shadow-l: 90 72 0;
+  --ac-bg-d: 15 11 1;
+  --ac-surface-d: 39 30 0;
+  --ac-surface-2-d: 58 45 0;
+  --ac-text-d: 244 241 228;
+  --ac-muted-d: 180 171 138;
+  --ac-border-d: 72 57 1;
+  --ac-border-strong-d: 145 131 86;
+  --ac-brand-d: 206 183 118;
+  --ac-brand-hover-d: 226 211 173;
+  --ac-on-brand-d: 43 35 0;
+  --ac-accent-d: 183 193 113;
+  --ac-hero-from-d: 108 84 0;
+  --ac-hero-d: 110 113 0;
+  --ac-orb-1-d: 110 85 0;
+  --ac-orb-2-d: 102 111 0;
+  --ac-orb-3-d: 147 90 38;
+  --ac-logo-from: 155 126 0;
+  --ac-logo-to: 127 135 0;
+  --ac-logo-glyph: 228 230 201;
+}
+
+/* Оливковый */
+[data-accent='olive'] {
+  --ac-bg-l: 239 240 230;
+  --ac-surface-2-l: 241 242 233;
+  --ac-text-l: 30 30 7;
+  --ac-muted-l: 96 97 67;
+  --ac-border-l: 219 221 205;
+  --ac-border-strong-l: 132 133 104;
+  --ac-brand-l: 107 107 0;
+  --ac-brand-hover-l: 91 91 0;
+  --ac-accent-l: 111 148 54;
+  --ac-hero-l: 106 125 0;
+  --ac-orb-1-l: 168 170 105;
+  --ac-orb-2-l: 150 197 145;
+  --ac-orb-3-l: 232 195 163;
+  --ac-glass-shadow-l: 78 77 3;
+  --ac-bg-d: 12 12 3;
+  --ac-surface-d: 32 32 6;
+  --ac-surface-2-d: 48 49 15;
+  --ac-text-d: 241 242 231;
+  --ac-muted-d: 171 173 146;
+  --ac-border-d: 61 61 23;
+  --ac-border-strong-d: 133 135 98;
+  --ac-brand-d: 188 189 142;
+  --ac-brand-hover-d: 214 214 187;
+  --ac-on-brand-d: 35 38 0;
+  --ac-accent-d: 168 195 146;
+  --ac-hero-from-d: 94 91 0;
+  --ac-hero-d: 85 120 33;
+  --ac-orb-1-d: 96 91 0;
+  --ac-orb-2-d: 76 117 34;
+  --ac-orb-3-d: 128 100 57;
+  --ac-logo-from: 132 132 8;
+  --ac-logo-to: 96 140 47;
+  --ac-logo-glyph: 221 231 210;
+}
+
+/* Салатовый */
+[data-accent='lime'] {
+  --ac-bg-l: 235 241 230;
+  --ac-surface-2-l: 237 243 233;
+  --ac-text-l: 22 33 5;
+  --ac-muted-l: 86 101 65;
+  --ac-border-l: 213 223 204;
+  --ac-border-strong-l: 122 137 102;
+  --ac-brand-l: 79 114 0;
+  --ac-brand-hover-l: 67 99 0;
+  --ac-accent-l: 0 162 51;
+  --ac-hero-l: 52 134 0;
+  --ac-orb-1-l: 141 180 86;
+  --ac-orb-2-l: 93 208 153;
+  --ac-orb-3-l: 234 197 134;
+  --ac-glass-shadow-l: 58 84 0;
+  --ac-bg-d: 8 13 3;
+  --ac-surface-d: 23 35 4;
+  --ac-surface-2-d: 37 53 11;
+  --ac-text-d: 237 244 231;
+  --ac-muted-d: 161 177 145;
+  --ac-border-d: 48 66 18;
+  --ac-border-strong-d: 120 139 96;
+  --ac-brand-d: 170 196 130;
+  --ac-brand-hover-d: 204 219 180;
+  --ac-on-brand-d: 21 42 0;
+  --ac-accent-d: 131 205 147;
+  --ac-hero-from-d: 73 98 0;
+  --ac-hero-d: 0 130 45;
+  --ac-orb-1-d: 75 98 0;
+  --ac-orb-2-d: 0 125 55;
+  --ac-orb-3-d: 125 104 6;
+  --ac-logo-from: 98 142 0;
+  --ac-logo-to: 0 149 63;
+  --ac-logo-glyph: 212 234 211;
+}
+
+/* Изумрудный */
+[data-accent='emerald'] {
+  --ac-bg-l: 229 243 235;
+  --ac-surface-2-l: 232 244 238;
+  --ac-text-l: 1 36 20;
+  --ac-muted-l: 64 105 82;
+  --ac-border-l: 203 226 214;
+  --ac-border-strong-l: 102 141 118;
+  --ac-brand-l: 0 118 76;
+  --ac-brand-hover-l: 0 104 66;
+  --ac-accent-l: 0 156 134;
+  --ac-hero-l: 0 134 104;
+  --ac-orb-1-l: 67 191 135;
+  --ac-orb-2-l: 0 209 204;
+  --ac-orb-3-l: 204 210 136;
+  --ac-glass-shadow-l: 0 89 54;
+  --ac-bg-d: 2 15 7;
+  --ac-surface-d: 0 39 21;
+  --ac-surface-2-d: 0 57 34;
+  --ac-text-d: 230 245 237;
+  --ac-muted-d: 143 181 160;
+  --ac-border-d: 6 71 44;
+  --ac-border-strong-d: 93 145 117;
+  --ac-brand-d: 128 204 161;
+  --ac-brand-hover-d: 181 225 197;
+  --ac-on-brand-d: 0 44 28;
+  --ac-accent-d: 79 209 191;
+  --ac-hero-from-d: 0 105 62;
+  --ac-hero-d: 0 125 109;
+  --ac-orb-1-d: 0 106 60;
+  --ac-orb-2-d: 0 120 107;
+  --ac-orb-3-d: 88 117 38;
+  --ac-logo-from: 0 148 96;
+  --ac-logo-to: 0 145 128;
+  --ac-logo-glyph: 200 236 226;
+}
+
+/* Мятный */
+[data-accent='mint'] {
+  --ac-bg-l: 228 243 239;
+  --ac-surface-2-l: 231 244 241;
+  --ac-text-l: 0 36 28;
+  --ac-muted-l: 58 105 93;
+  --ac-border-l: 202 226 219;
+  --ac-border-strong-l: 98 141 128;
+  --ac-brand-l: 0 116 97;
+  --ac-brand-hover-l: 0 102 85;
+  --ac-accent-l: 0 154 153;
+  --ac-hero-l: 0 132 122;
+  --ac-orb-1-l: 49 190 162;
+  --ac-orb-2-l: 44 204 224;
+  --ac-orb-3-l: 187 214 154;
+  --ac-glass-shadow-l: 0 87 71;
+  --ac-bg-d: 1 15 11;
+  --ac-surface-d: 0 38 30;
+  --ac-surface-2-d: 0 56 45;
+  --ac-text-d: 229 245 241;
+  --ac-muted-d: 140 181 170;
+  --ac-border-d: 0 70 57;
+  --ac-border-strong-d: 87 144 130;
+  --ac-brand-d: 121 204 181;
+  --ac-brand-hover-d: 178 224 209;
+  --ac-on-brand-d: 0 43 36;
+  --ac-accent-d: 89 205 209;
+  --ac-hero-from-d: 0 103 83;
+  --ac-hero-d: 0 123 124;
+  --ac-orb-1-d: 0 104 82;
+  --ac-orb-2-d: 0 119 122;
+  --ac-orb-3-d: 68 120 66;
+  --ac-logo-from: 0 145 122;
+  --ac-logo-to: 0 143 145;
+  --ac-logo-glyph: 199 235 234;
+}
+
+/* Голубой */
+[data-accent='cyan'] {
+  --ac-bg-l: 227 242 247;
+  --ac-surface-2-l: 230 243 248;
+  --ac-text-l: 0 34 42;
+  --ac-muted-l: 51 103 117;
+  --ac-border-l: 199 224 233;
+  --ac-border-strong-l: 91 139 152;
+  --ac-brand-l: 0 113 136;
+  --ac-brand-hover-l: 0 98 118;
+  --ac-accent-l: 0 145 203;
+  --ac-hero-l: 0 126 165;
+  --ac-orb-1-l: 0 184 219;
+  --ac-orb-2-l: 122 188 255;
+  --ac-orb-3-l: 135 223 193;
+  --ac-glass-shadow-l: 0 83 100;
+  --ac-bg-d: 0 14 19;
+  --ac-surface-d: 0 36 45;
+  --ac-surface-2-d: 0 53 65;
+  --ac-text-d: 228 244 250;
+  --ac-muted-d: 135 179 192;
+  --ac-border-d: 0 67 81;
+  --ac-border-strong-d: 79 142 159;
+  --ac-brand-d: 102 201 225;
+  --ac-brand-hover-d: 168 223 237;
+  --ac-on-brand-d: 0 40 52;
+  --ac-accent-d: 109 195 252;
+  --ac-hero-from-d: 0 98 116;
+  --ac-hero-d: 0 116 166;
+  --ac-orb-1-d: 0 100 116;
+  --ac-orb-2-d: 0 111 164;
+  --ac-orb-3-d: 0 122 112;
+  --ac-logo-from: 0 141 169;
+  --ac-logo-to: 0 136 198;
+  --ac-logo-glyph: 202 232 251;
+}
+
+/* Небесный */
+[data-accent='sky'] {
+  --ac-bg-l: 229 241 250;
+  --ac-surface-2-l: 232 242 250;
+  --ac-text-l: 0 32 50;
+  --ac-muted-l: 60 100 124;
+  --ac-border-l: 203 222 237;
+  --ac-border-strong-l: 99 136 159;
+  --ac-brand-l: 0 109 158;
+  --ac-brand-hover-l: 0 94 137;
+  --ac-accent-l: 16 130 253;
+  --ac-hero-l: 0 121 201;
+  --ac-orb-1-l: 61 176 241;
+  --ac-orb-2-l: 154 179 255;
+  --ac-orb-3-l: 122 223 217;
+  --ac-glass-shadow-l: 0 80 116;
+  --ac-bg-d: 1 13 22;
+  --ac-surface-d: 0 34 54;
+  --ac-surface-2-d: 0 51 77;
+  --ac-text-d: 230 243 253;
+  --ac-muted-d: 142 176 199;
+  --ac-border-d: 0 64 94;
+  --ac-border-strong-d: 91 138 169;
+  --ac-brand-d: 119 195 240;
+  --ac-brand-hover-d: 175 219 246;
+  --ac-on-brand-d: 0 38 63;
+  --ac-accent-d: 144 186 255;
+  --ac-hero-from-d: 0 95 134;
+  --ac-hero-d: 0 102 213;
+  --ac-orb-1-d: 0 96 134;
+  --ac-orb-2-d: 21 95 211;
+  --ac-orb-3-d: 0 120 130;
+  --ac-logo-from: 0 136 196;
+  --ac-logo-to: 34 122 252;
+  --ac-logo-glyph: 209 229 254;
+}
+
+/* Лавандовый */
+[data-accent='lavender'] {
+  --ac-bg-l: 240 237 246;
+  --ac-surface-2-l: 241 239 247;
+  --ac-text-l: 30 25 44;
+  --ac-muted-l: 96 90 117;
+  --ac-border-l: 221 217 232;
+  --ac-border-strong-l: 132 126 152;
+  --ac-brand-l: 110 84 166;
+  --ac-brand-hover-l: 94 70 145;
+  --ac-accent-l: 160 111 184;
+  --ac-hero-l: 135 96 174;
+  --ac-orb-1-l: 169 155 210;
+  --ac-orb-2-l: 211 164 209;
+  --ac-orb-3-l: 175 207 238;
+  --ac-glass-shadow-l: 77 64 112;
+  --ac-bg-d: 12 10 19;
+  --ac-surface-d: 32 27 48;
+  --ac-surface-2-d: 49 41 69;
+  --ac-text-d: 242 239 249;
+  --ac-muted-d: 172 166 191;
+  --ac-border-d: 61 53 85;
+  --ac-border-strong-d: 134 126 158;
+  --ac-brand-d: 186 179 219;
+  --ac-brand-hover-d: 212 209 233;
+  --ac-on-brand-d: 40 28 59;
+  --ac-accent-d: 204 172 214;
+  --ac-hero-from-d: 91 73 143;
+  --ac-hero-d: 132 86 152;
+  --ac-orb-1-d: 91 74 146;
+  --ac-orb-2-d: 130 81 145;
+  --ac-orb-3-d: 86 105 143;
+  --ac-logo-from: 137 114 192;
+  --ac-logo-to: 161 107 180;
+  --ac-logo-glyph: 234 222 241;
+}
+
+/* Сланцевый */
+[data-accent='slate'] {
+  --ac-bg-l: 235 239 245;
+  --ac-surface-2-l: 237 241 246;
+  --ac-text-l: 20 30 41;
+  --ac-muted-l: 83 96 111;
+  --ac-border-l: 213 220 229;
+  --ac-border-strong-l: 119 132 146;
+  --ac-brand-l: 79 104 135;
+  --ac-brand-hover-l: 66 89 117;
+  --ac-accent-l: 122 133 167;
+  --ac-hero-l: 100 118 151;
+  --ac-orb-1-l: 150 167 188;
+  --ac-orb-2-l: 179 180 206;
+  --ac-orb-3-l: 185 208 211;
+  --ac-glass-shadow-l: 60 75 93;
+  --ac-bg-d: 7 12 17;
+  --ac-surface-d: 21 32 44;
+  --ac-surface-2-d: 34 48 64;
+  --ac-text-d: 237 242 248;
+  --ac-muted-d: 160 172 186;
+  --ac-border-d: 44 60 79;
+  --ac-border-strong-d: 117 133 152;
+  --ac-brand-d: 173 187 202;
+  --ac-brand-hover-d: 205 213 222;
+  --ac-on-brand-d: 22 36 55;
+  --ac-accent-d: 179 184 205;
+  --ac-hero-from-d: 66 90 115;
+  --ac-hero-d: 97 106 137;
+  --ac-orb-1-d: 65 91 116;
+  --ac-orb-2-d: 95 102 133;
+  --ac-orb-3-d: 87 110 117;
+  --ac-logo-from: 106 130 159;
+  --ac-logo-to: 118 127 162;
+  --ac-logo-glyph: 222 227 241;
+}
+
+/* Графитовый */
+[data-accent='graphite'] {
+  --ac-bg-l: 237 239 243;
+  --ac-surface-2-l: 239 241 244;
+  --ac-text-l: 25 29 37;
+  --ac-muted-l: 89 95 107;
+  --ac-border-l: 217 219 226;
+  --ac-border-strong-l: 125 130 142;
+  --ac-brand-l: 100 102 108;
+  --ac-brand-hover-l: 85 87 92;
+  --ac-accent-l: 133 133 139;
+  --ac-hero-l: 116 117 123;
+  --ac-orb-1-l: 163 165 169;
+  --ac-orb-2-l: 183 182 186;
+  --ac-orb-3-l: 200 203 205;
+  --ac-glass-shadow-l: 72 74 77;
+  --ac-bg-d: 9 11 16;
+  --ac-surface-d: 27 31 40;
+  --ac-surface-2-d: 41 46 59;
+  --ac-text-d: 239 241 246;
+  --ac-muted-d: 166 170 182;
+  --ac-border-d: 53 59 73;
+  --ac-border-strong-d: 125 131 146;
+  --ac-brand-d: 184 185 188;
+  --ac-brand-hover-d: 211 212 214;
+  --ac-on-brand-d: 30 35 49;
+  --ac-accent-d: 185 184 188;
+  --ac-hero-from-d: 85 87 92;
+  --ac-hero-d: 107 107 112;
+  --ac-orb-1-d: 86 88 93;
+  --ac-orb-2-d: 103 103 108;
+  --ac-orb-3-d: 103 106 108;
+  --ac-logo-from: 126 128 133;
+  --ac-logo-to: 128 128 134;
+  --ac-logo-glyph: 226 226 236;
+}
+
+/* Коричневый */
+[data-accent='brown'] {
+  --ac-bg-l: 245 237 232;
+  --ac-surface-2-l: 247 239 234;
+  --ac-text-l: 42 24 13;
+  --ac-muted-l: 114 89 74;
+  --ac-border-l: 230 216 207;
+  --ac-border-strong-l: 149 125 110;
+  --ac-brand-l: 152 81 27;
+  --ac-brand-hover-l: 132 67 15;
+  --ac-accent-l: 175 122 52;
+  --ac-hero-l: 163 101 34;
+  --ac-orb-1-l: 202 153 123;
+  --ac-orb-2-l: 204 179 128;
+  --ac-orb-3-l: 233 190 198;
+  --ac-glass-shadow-l: 104 62 34;
+  --ac-bg-d: 18 9 5;
+  --ac-surface-d: 45 25 13;
+  --ac-surface-2-d: 65 40 23;
+  --ac-text-d: 248 239 233;
+  --ac-muted-d: 188 165 151;
+  --ac-border-d: 81 51 33;
+  --ac-border-strong-d: 155 124 106;
+  --ac-brand-d: 213 176 155;
+  --ac-brand-hover-d: 230 207 195;
+  --ac-on-brand-d: 55 27 4;
+  --ac-accent-d: 209 180 141;
+  --ac-hero-from-d: 131 68 28;
+  --ac-hero-d: 143 97 27;
+  --ac-orb-1-d: 133 68 28;
+  --ac-orb-2-d: 137 94 20;
+  --ac-orb-3-d: 136 92 91;
+  --ac-logo-from: 180 111 65;
+  --ac-logo-to: 167 117 40;
+  --ac-logo-glyph: 239 224 208;
+}
+
+/* Песочный */
+[data-accent='sand'] {
+  --ac-bg-l: 242 238 232;
+  --ac-surface-2-l: 243 240 234;
+  --ac-text-l: 36 28 12;
+  --ac-muted-l: 104 93 73;
+  --ac-border-l: 224 219 208;
+  --ac-border-strong-l: 140 129 110;
+  --ac-brand-l: 125 98 43;
+  --ac-brand-hover-l: 108 83 32;
+  --ac-accent-l: 144 136 81;
+  --ac-hero-l: 133 116 60;
+  --ac-orb-1-l: 181 163 129;
+  --ac-orb-2-l: 181 187 149;
+  --ac-orb-3-l: 225 195 188;
+  --ac-glass-shadow-l: 88 71 41;
+  --ac-bg-d: 15 11 4;
+  --ac-surface-d: 38 29 12;
+  --ac-surface-2-d: 56 45 22;
+  --ac-text-d: 244 241 233;
+  --ac-muted-d: 179 169 151;
+  --ac-border-d: 70 57 32;
+  --ac-border-strong-d: 143 130 105;
+  --ac-brand-d: 197 183 159;
+  --ac-brand-hover-d: 220 211 197;
+  --ac-on-brand-d: 45 34 4;
+  --ac-accent-d: 189 187 156;
+  --ac-hero-from-d: 108 83 38;
+  --ac-hero-d: 116 109 58;
+  --ac-orb-1-d: 110 83 36;
+  --ac-orb-2-d: 109 106 56;
+  --ac-orb-3-d: 125 99 85;
+  --ac-logo-from: 151 125 75;
+  --ac-logo-to: 135 130 73;
+  --ac-logo-glyph: 230 228 211;
+}
+/* <<< generated accents */
+
 :root {
   color-scheme: light dark;
 
@@ -558,6 +1263,50 @@
     :root:not([data-theme]) .accent-swatch {
       background-image: linear-gradient(135deg, rgb(var(--ac-brand-d)), rgb(var(--ac-accent-d)));
     }
+  }
+
+  /* Буквы кружка человека (features/debts/personAvatar.tsx): из атрибута, чтобы не попадать в текст строки. */
+  .person-initials::before {
+    content: attr(data-initials);
+  }
+
+  /* «Свой цвет» в настройках, пока цвет не выбран: радуга. Когда выбран — обычный образец .accent-swatch с переменными цвета. */
+  .custom-swatch-empty {
+    background-image: conic-gradient(from 0deg, #f87171, #fbbf24, #a3e635, #34d399, #22d3ee, #60a5fa, #a78bfa, #f472b6, #f87171);
+  }
+
+  /* Ползунок оттенка («Свой цвет»): дорожка-радуга задаётся стилем на элементе, ручка — по цвету текста темы. */
+  .hue-range {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 2.75rem;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--border-strong));
+    background-size: 100% 100%;
+    background-clip: padding-box;
+    cursor: pointer;
+  }
+  .hue-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    background: rgb(var(--surface));
+    border: 4px solid rgb(var(--text));
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  }
+  .hue-range::-moz-range-thumb {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 9999px;
+    background: rgb(var(--surface));
+    border: 4px solid rgb(var(--text));
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  }
+  .hue-range:focus-visible {
+    outline: 3px solid rgb(var(--brand));
+    outline-offset: 3px;
   }
 
   /* Цвета знака «$» (Logo.tsx) из палитры выбранного акцента. */
