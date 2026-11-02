@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventually } from '@/app/testkit';
 import { findByRole, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { forgetTemplatesCache, readTemplates, saveTemplate } from '@/features/templates/templateStore';
-import { amountField, clickSave, liveTxs, openAddSheet, opsDeps, pinToday, storeOf, tapAmount, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
+import { amountField, liveTxs, openAddSheet, opsDeps, pinToday, storeOf, tapAmount, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
 
 beforeEach(() => {
   localStorage.clear();
@@ -17,8 +16,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const GROUP = 'Шаблоны и частые операции';
-const strip = () => screen.queryByRole('group', { name: GROUP });
 /** Кнопка в окне «Название шаблона»: «Сохранить» есть и у самой формы, поэтому ищем только внутри окна. */
 const dialogButton = (label: string): HTMLElement =>
   Array.from(screen.getByRole('alertdialog', { name: 'Название шаблона' }).querySelectorAll('button')).find((b) => b.textContent === label)!;
@@ -46,32 +43,16 @@ function deps() {
 }
 
 describe('шаблоны в «Новой операции»', () => {
-  it('в панели категорий шаблоны этого вида стоят первыми со звёздочкой; нажатие подставляет кошелёк, категорию, сумму и заметку', async () => {
-    const { ids, td } = deps();
-    await openAddSheet(td);
-    await openCategories();
-    await waitFor(() => expect(strip()).not.toBeNull());
-    const chips = Array.from(strip()!.querySelectorAll('button'));
-    expect(chips.map((b) => b.textContent)).toEqual([expect.stringContaining('Кофе')]); // «Зарплата» — доход, на вкладке «Расход» её нет
-    await user.click(chips[0]!);
-    expect((amountField() as HTMLInputElement).value.replace(/\s/g, '')).toBe('15');
-    await user.click(screen.getByRole('button', { name: 'Заметка' }));
-    expect((screen.getByRole('textbox', { name: /^Заметка/ }) as HTMLInputElement).value).toBe('эспрессо');
-    await clickSave();
-    await eventually(async () => expect(await liveTxs(td)).toHaveLength(1));
-    expect((await liveTxs(td))[0]).toMatchObject({ kind: 'expense', walletId: ids.cash, categoryId: ids.food, amountMinor: 1_500, note: 'эспрессо' });
-  });
-
-  it('на вкладке «Доход» — свои шаблоны', async () => {
+  it('панель категорий — только категории: полосы «Шаблоны и частые» над сеткой нет, даже когда шаблоны есть (они на «Главной»)', async () => {
     const { td } = deps();
     await openAddSheet(td);
-    await user.click(screen.getByRole('radio', { name: 'Доход' }));
     await openCategories();
-    await waitFor(() => expect(strip()).not.toBeNull());
-    expect(Array.from(strip()!.querySelectorAll('button')).map((b) => b.textContent)).toEqual([expect.stringContaining('Зарплата')]);
+    await waitFor(() => screen.getByRole('group', { name: 'Категория' }));
+    expect(screen.queryByRole('group', { name: /Шаблоны|Частые|Часто/ })).toBeNull();
+    expect(screen.queryByText(/Часто вносите|Шаблоны и частые|Выберите категорию/)).toBeNull();
   });
 
-  it('«Сохранить как шаблон» — в панели категорий: пока не набрана сумма, кнопки нет; название предлагается из заметки; шаблон сохраняется, форма остаётся', async () => {
+  it('плитка «В шаблон» в панели категорий: пока не набрана сумма, её нет; название предлагается из заметки; шаблон сохраняется, форма остаётся', async () => {
     const td = opsDeps();
     const { onClose } = await openAddSheet(td);
     await openCategories();

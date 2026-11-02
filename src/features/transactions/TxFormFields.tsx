@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AmountInput, isCoarsePointer } from '@/components/AmountInput';
+import { AmountInput } from '@/components/AmountInput';
 import type { KeypadKey } from '@/components/Keypad';
 import { Button } from '@/components/Button';
 import { Floating, useDismiss } from '@/components/Floating';
 import { Icon } from '@/components/Icon';
 import { isOpKey } from '@/components/amountExpr';
 import { cn } from '@/lib/cn';
+import { canAutoFocusText, isCoarsePointer } from '@/lib/pointer';
 import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import type { LocalRow, TxKind, Wallet } from '@/domain/types';
 import { ContextRow, type CategoryState } from './ContextRow';
-import type { FrequentChoice } from './FrequentPanel';
 import { FeeField, applyPctKey } from './FeeField';
 import { ForeignAmountField } from './ForeignAmountField';
 import { FxNotice } from './FxNotice';
@@ -54,10 +54,7 @@ export interface TxFormFieldsProps {
   onCategorySkip?: () => void;
   /** Enter в поле суммы сохраняет операцию; Ctrl/⌘+Enter — сохраняет и открывает новую (more). */
   onSubmit?: (more: boolean) => void;
-  /** Новая операция: частые операции текущего вида (полоса чипов в панели категорий) и что делать при нажатии. */
-  frequent?: readonly FrequentChoice[];
-  onPickFrequent?: (key: string) => void;
-  /** Новая операция: «Сохранить как шаблон» в панели категорий; нет — кнопки нет. */
+  /** Новая операция: плитка «В шаблон» в панели категорий; нет — плитки нет. */
   onSaveTemplate?: () => void;
   /** Новая операция: похожие записи для набираемой заметки (под полем заметки) и что делать при нажатии. */
   noteSuggestions?: readonly NoteChoice[];
@@ -107,7 +104,7 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote, noteTags, onOpenPurchases, purchasesCount = 0, amountLocked = false, purchasesSummary }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, onSaveTemplate, noteSuggestions, onPickNote, noteTags, onOpenPurchases, purchasesCount = 0, amountLocked = false, purchasesSummary }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
@@ -197,8 +194,6 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
           categoryState={categoryState}
           onCategorySkip={onCategorySkip}
           onPicked={focusAmount}
-          frequent={frequent}
-          onPickFrequent={onPickFrequent}
           onSaveTemplate={onSaveTemplate}
         />
         <FxNotice
@@ -266,7 +261,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
                     }}
                     autoComplete="off"
                     enterKeyHint="done"
-                    autoFocus
+                    autoFocus={canAutoFocusText()}
                     placeholder="Например, хлеб и молоко"
                     error={errors.note}
                   />

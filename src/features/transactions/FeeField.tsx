@@ -1,9 +1,10 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
-import { AmountInput, isCoarsePointer } from '@/components/AmountInput';
+import { AmountInput } from '@/components/AmountInput';
 import type { KeypadKey } from '@/components/Keypad';
 import { Icon } from '@/components/Icon';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import { formatMinor } from '@/domain/money';
+import { isCoarsePointer } from '@/lib/pointer';
 import { NO_FEE, type FeeMode } from './txForm';
 import type { TxFormController } from './useTxFormController';
 

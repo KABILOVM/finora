@@ -5,6 +5,7 @@ import { TextInput } from '@/components/Field';
 import { FormError, OfflineNotice } from './LoginNotices';
 import type { useCodeLogin } from './useCodeLogin';
 import { resendAnnouncement } from './useCountdown';
+import { canAutoFocusText } from '@/lib/pointer';
 
 type CodeLogin = ReturnType<typeof useCodeLogin>;
 
@@ -19,9 +20,9 @@ export function CodeLoginForm({ email, onEmailChange, flow }: CodeLoginFormProps
   const { step, code, setCode, busy, error, sentTo, remaining, requestCode, resend, verify, changeEmail } = flow;
   const codeRef = useRef<HTMLInputElement>(null);
 
-  // На втором шаге сразу в поле кода (на телефоне откроется цифровая клавиатура, если система позволяет).
+  // На втором шаге на компьютере сразу в поле кода; на телефоне поле открывается нажатием (клавиатура сама не выезжает)
   useEffect(() => {
-    if (step === 'code') codeRef.current?.focus();
+    if (step === 'code' && canAutoFocusText()) codeRef.current?.focus();
   }, [step]);
 
   const onSubmit = (action: () => Promise<void>) => (e: FormEvent) => {

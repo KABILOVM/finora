@@ -1,4 +1,4 @@
-import { addTx, dismissToasts, expect, fillTx, goSection, openApp, openCategories, openCategoryList, saveNewTx, shot, sheet, test } from '../helpers';
+import { addTx, confirmDiscard, dismissToasts, expect, fillTx, goSection, openApp, openCategories, openCategoryList, saveNewTx, shot, sheet, test } from '../helpers';
 import type { Page } from '@playwright/test';
 
 /** Названия строк списка «Категории» сверху вниз. */
@@ -49,18 +49,33 @@ test.describe('64. Подкатегории', () => {
     expect(all.indexOf('Свет')).toBe(all.indexOf('Коммунальные услуги') + 2);
     await shot(page, '64-subcategories-list', testInfo);
 
-    // Операция в подкатегорию «Вода»: в списке выбора она показана под родителем (мелкая подпись)
+    // Операция в подкатегорию «Вода»: в сетке одни родители («Коммунальные услуги» с «2 ›»), подкатегории открываются по нажатию
     const add = await fillTx(page, { amount: '30' });
     const group = await openCategoryList(add);
-    const water = group.getByRole('button', { name: /Вода/ });
-    await expect(water).toContainText('Коммунальные услуги');
-    await water.click();
+    await expect(group.getByRole('button', { name: 'Вода', exact: true })).toHaveCount(0);
+    await group.getByRole('button', { name: /^Коммунальные услуги/ }).click();
+    await expect(add.getByRole('button', { name: 'Назад к категориям' })).toContainText('Коммунальные услуги');
+    await shot(page, '64-subcategories-panel', testInfo);
+    await group.getByRole('button', { name: 'Вода', exact: true }).click();
+    await expect(add.getByRole('button', { name: 'Категория: Вода' })).toBeVisible();
     // заметку — после категории, как в хелпере: иначе плитка категории уезжает под закреплённую кнопку «Сохранить»
     await add.getByRole('button', { name: 'Заметка', exact: true }).click();
     await add.getByRole('textbox', { name: 'Заметка' }).fill('вода за октябрь');
     await saveNewTx(add);
     await expect(add).toBeHidden();
     await dismissToasts(page);
+
+    // Поиск находит подкатегорию прямо из списка: «свет» → «Свет» с подписью родителя, выбор — одним касанием
+    const found = await fillTx(page, { amount: '5' });
+    const foundGroup = await openCategoryList(found);
+    await found.getByRole('searchbox', { name: 'Поиск категории' }).fill('свет');
+    const light = foundGroup.getByRole('button', { name: /Свет/ });
+    await expect(light).toContainText('Коммунальные услуги');
+    await light.click();
+    await expect(found.getByRole('button', { name: 'Категория: Свет' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await confirmDiscard(page);
+    await expect(found).toBeHidden();
     await addTx(page, { amount: '10', category: 'Еда', note: 'обед' });
     await dismissToasts(page);
 

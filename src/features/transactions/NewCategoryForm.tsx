@@ -6,6 +6,7 @@ import { useStore } from '@/db';
 import type { CategoryKind } from '@/domain/types';
 import { suggestColor, suggestGlyph } from '@/features/categories/suggestGlyph';
 import { cleanName, sameName } from '@/features/wallets/walletUi';
+import { canAutoFocusText } from '@/lib/pointer';
 
 export interface NewCategoryFormProps {
   /** Уже есть: категория с таким названием не создаётся второй раз, а выбирается. */
@@ -16,16 +17,20 @@ export interface NewCategoryFormProps {
   onPick: (id: string) => void;
   /** Закрыть форму (после добавления или «Отмена»). */
   onClose: (created: boolean) => void;
+  /** Название заранее (например, то, что искали и не нашли). */
+  initialName?: string;
+  /** Заводится подкатегория этого родителя: цвет по умолчанию как у родителя. */
+  parent?: { id: string; color?: string };
 }
 
 /**
  * Строка «Новая категория»: достаточно написать название, значок и цвет подберутся сами. Enter добавляет категорию, а не
  * сохраняет всю операцию.
  */
-export function NewCategoryForm({ options, kind, onPick, onClose }: NewCategoryFormProps) {
+export function NewCategoryForm({ options, kind, onPick, onClose, initialName = '', parent }: NewCategoryFormProps) {
   const store = useStore();
   const toast = useToast();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,7 +48,13 @@ export function NewCategoryForm({ options, kind, onPick, onClose }: NewCategoryF
     setBusy(true);
     setProblem(null);
     try {
-      const row = await store.categories.create({ name: clean, kind, color: suggestColor(options.length), icon: suggestGlyph(clean) });
+      const row = await store.categories.create({
+        name: clean,
+        kind,
+        color: parent?.color ?? suggestColor(options.length),
+        icon: suggestGlyph(clean),
+        ...(parent ? { parentId: parent.id } : {}),
+      });
       onPick(row.id);
       onClose(true);
     } catch (e) {
@@ -65,7 +76,7 @@ export function NewCategoryForm({ options, kind, onPick, onClose }: NewCategoryF
     >
       <div className="flex gap-2">
         <input
-          autoFocus
+          autoFocus={canAutoFocusText()}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
@@ -74,8 +85,8 @@ export function NewCategoryForm({ options, kind, onPick, onClose }: NewCategoryF
               void add();
             }
           }}
-          placeholder="Название, например «Кофе»"
-          aria-label="Название новой категории"
+          placeholder={parent ? 'Название подкатегории' : 'Название, например «Кофе»'}
+          aria-label={parent ? 'Название новой подкатегории' : 'Название новой категории'}
           maxLength={60}
           autoComplete="off"
           enterKeyHint="done"

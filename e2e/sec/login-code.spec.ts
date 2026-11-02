@@ -120,7 +120,9 @@ test.describe('Вход по коду на почту (облачная сбор
     await openCodeLogin(page);
     await requestCode(page, ` ${EMAIL.toUpperCase()} `);
     await expect(page.getByText('Если такая почта есть, мы отправили на неё код.')).toBeVisible();
-    await expect(codeField(page)).toBeFocused();
+    // на компьютере курсор сразу в поле кода, на телефоне — нет: экранная клавиатура сама не выезжает
+    if ((page.viewportSize()?.width ?? 1280) < 768) await expect(codeField(page)).not.toBeFocused();
+    else await expect(codeField(page)).toBeFocused();
     await shot(page, 'login-code-step2', testInfo);
 
     // запрос кода: именно эта почта (строчными), пользователей не создаём

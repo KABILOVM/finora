@@ -3,6 +3,7 @@ import { currencyInfo, exponentOf } from '@/domain/currency';
 import { formatMinor } from '@/domain/money';
 import type { CurrencyCode, Minor } from '@/domain/types';
 import { cn } from '@/lib/cn';
+import { canAutoFocusText, isCoarsePointer } from '@/lib/pointer';
 import { applyKey, clampToCurrency, draftToMinor, formatDraft, minorToDraft, sanitizeAmountText } from './amountText';
 import { acceptExpr, applyExprKey, evalExpr, formatExpr, hasOperator, hasWords, isOpKey, normalizeExprText } from './amountExpr';
 import { Keypad, type KeypadKey } from './Keypad';
@@ -66,10 +67,6 @@ export interface AmountInputProps {
 }
 
 const TONE = { neutral: 'text-text', income: 'text-income', expense: 'text-expense' } as const;
-
-export function isCoarsePointer(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
-}
 
 /**
  * Главный элемент быстрого ввода: крупная сумма с символом валюты + цифровая клавиатура.
@@ -145,9 +142,11 @@ export function AmountInput({
     if (m !== valueRef.current) onChangeRef.current(m);
   }, [currency]);
 
+  // На телефоне курсор сам ставится только в поле со своей цифровой клавиатурой (inputmode="none"): системная закрыла бы полэкрана
+  const focusOnMount = autoFocus && ((showKeypad || noSystemKeyboard) && coarse ? true : canAutoFocusText());
   useEffect(() => {
-    if (autoFocus) inputRef.current?.focus({ preventScroll: true });
-  }, [autoFocus]);
+    if (focusOnMount) inputRef.current?.focus({ preventScroll: true });
+  }, [focusOnMount]);
 
   const shown = expr !== null ? formatExpr(expr) : formatDraft(text);
 

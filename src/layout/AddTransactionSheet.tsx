@@ -17,8 +17,6 @@ import { checkReceipt } from '@/features/receipt/receiptAi';
 import { listenToExpensesWithAi, parseExpensesWithAi } from '@/features/dictation/aiExpenses';
 import { saveExpenses, validateAll } from '@/features/dictation/saveExpenses';
 import { useSaveTemplate } from '@/features/templates/useSaveTemplate';
-import { useTemplates } from '@/features/templates/templateStore';
-import { resolveTemplate, type Template } from '@/features/templates/templates';
 import { useActiveTrip } from '@/features/trips/activeTrip';
 import { withTag } from '@/features/trips/trips';
 import { useTripRateLookup } from '@/features/trips/useTripMoney';
@@ -31,11 +29,9 @@ import { DateChip } from '@/features/transactions/DateChip';
 import { useToast } from '@/components/Toast';
 import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
-import { pluralRu } from '@/lib/plural';
 import type { Category, CurrencyCode, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
-import type { FrequentChoice } from '@/features/transactions/FrequentPanel';
 import { suggestNotes, useNoteIndex } from '@/features/transactions/noteSuggest';
 import { parseQuickLine } from '@/features/transactions/quickLine';
 import type { NoteChoice } from '@/features/transactions/NoteSuggestions';
@@ -145,7 +141,6 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const trip = useActiveTrip(store.userId);
   // метки, что уже встречались в заметках: полоса чипов под полем заметки
   const knownTags = useKnownTags();
-  const { templates } = useTemplates(store.userId);
   const saveTemplate = useSaveTemplate();
   const formRef = useRef<HTMLDivElement>(null);
 
@@ -239,33 +234,6 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   }, [categories, kind, pop]);
   const walletsRanked = useMemo(() => rankWallets(wallets, pop), [wallets, pop]);
 
-  // «Частые операции»: только те, что можно внести сейчас (кошелёк и категория на месте, не в архиве)
-  const frequent = useMemo(() => {
-    const walletById = new Map(wallets.map((w) => [w.id, w]));
-    const categoryById = new Map(categories.map((x) => [x.id, x]));
-    const mixed = new Set(wallets.map((w) => w.currency)).size > 1;
-    const out: { choice: FrequentChoice; op: RecentStats['frequent'][number] }[] = [];
-    stats.frequent.forEach((op, i) => {
-      const w = walletById.get(op.walletId);
-      if (!w) return;
-      const cat = op.categoryId === null ? undefined : categoryById.get(op.categoryId);
-      if (op.categoryId !== null && (!cat || cat.archivedAt !== null || cat.kind !== op.kind)) return;
-      const catName = cat?.name ?? 'Без категории';
-      const times = `${op.count} ${pluralRu(op.count, 'раз', 'раза', 'раз')}`;
-      out.push({
-        op,
-        choice: {
-          key: String(i),
-          title: op.note !== '' ? op.note : catName,
-          subtitle: [op.note !== '' ? catName : null, mixed ? `${w.name} · ${w.currency}` : w.name, times].filter(Boolean).join(' · '),
-          amount: formatMinor(op.amountMinor, w.currency),
-          icon: cat?.icon ?? '🏷️',
-          ...(cat ? { color: cat.color } : {}),
-        },
-      });
-    });
-    return out;
-  }, [stats.frequent, wallets, categories]);
   // «Похожие записи» под полем заметки: по набранным буквам ищем, что вносилось с такой заметкой
   const noteIndex = useNoteIndex();
   const noteMatches = useMemo(() => {
@@ -348,52 +316,6 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     c.set({ note: m.note, categoryId: m.categoryId, ...(c.form.amountMinor === null ? { amountMinor: m.amountMinor } : {}) });
     setCategoryState(m.categoryId === null ? 'skipped' : 'untouched');
   };
-  // «Шаблоны»: именованные заготовки этого вида, которые можно внести сейчас; стоят в строке первыми
-  const templateChoices = useMemo(() => {
-    const mixed = new Set(wallets.map((w) => w.currency)).size > 1;
-    const out: { choice: FrequentChoice; template: Template }[] = [];
-    for (const t of templates) {
-      if (t.prefill.kind === 'transfer') continue;
-      const r = resolveTemplate(t, wallets, categories);
-      if (!r) continue;
-      out.push({
-        template: t,
-        choice: {
-          key: `t:${t.id}`,
-          template: true,
-          title: t.name,
-          subtitle: [r.category?.name ?? 'Без категории', mixed ? `${r.wallet.name} · ${r.wallet.currency}` : r.wallet.name, t.prefill.note !== '' ? t.prefill.note : null].filter(Boolean).join(' · '),
-          amount: formatMinor(t.prefill.amountMinor, r.wallet.currency),
-          icon: r.category?.icon ?? '🏷️',
-          ...(r.category ? { color: r.category.color } : {}),
-        },
-      });
-    }
-    return out;
-  }, [templates, wallets, categories]);
-  const frequentForKind = useMemo(() => {
-    const mine = templateChoices.filter((x) => x.template.prefill.kind === kind);
-    // частая операция, которая уже есть шаблоном (тот же кошелёк, категория, сумма и заметка), второй раз не нужна
-    const same = (op: RecentStats['frequent'][number]) =>
-      mine.some(({ template: { prefill: p } }) => p.walletId === op.walletId && p.categoryId === op.categoryId && p.amountMinor === op.amountMinor && p.note === op.note);
-    return [...mine.map((x) => x.choice), ...frequent.filter((f) => f.op.kind === kind && !same(f.op)).map((f) => f.choice)];
-  }, [templateChoices, frequent, kind]);
-  const pickFrequent = (key: string) => {
-    const tpl = templateChoices.find((x) => x.choice.key === key)?.template;
-    if (tpl) {
-      c.setWallet(tpl.prefill.walletId);
-      c.set({ categoryId: tpl.prefill.categoryId, amountMinor: tpl.prefill.amountMinor, note: tpl.prefill.note });
-      setCategoryState(tpl.prefill.categoryId === null ? 'skipped' : 'untouched');
-      return;
-    }
-    const f = frequent.find((x) => x.choice.key === key)?.op;
-    if (!f) return;
-    c.setWallet(f.walletId);
-    c.set({ categoryId: f.categoryId, amountMinor: f.amountMinor, note: f.note });
-    // у такой операции категории может не быть по выбору человека: второй раз напоминать о ней при «Сохранить» не нужно
-    setCategoryState(f.categoryId === null ? 'skipped' : 'untouched');
-  };
-
   useScrollToError(formRef, c.errors);
   // Другой вид операции — другие категории: прежнее решение про категорию не в счёт
   useEffect(() => setCategoryState('untouched'), [kind]);
@@ -586,9 +508,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
           categoryState={categoryState}
           onCategorySkip={() => setCategoryState('skipped')}
           onSubmit={(more) => void save(more)}
-          frequent={frequentForKind}
-          onPickFrequent={pickFrequent}
-          // «Сохранить как шаблон» живёт в панели категорий (под полями форме места нет): появляется, когда набрана сумма
+          // «В шаблон» — плитка в панели категорий (под полями форме места нет): появляется, когда набрана сумма
           {...(c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId
             ? {
                 onSaveTemplate: () =>

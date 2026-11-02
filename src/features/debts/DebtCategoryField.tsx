@@ -3,6 +3,7 @@ import { ChipPicker } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
 import { DEBT_CATEGORY_MAX, debtCategoryKey } from '@/domain/debtCategory';
 import { FieldGroup } from '@/features/transactions/FieldGroup';
+import { canAutoFocusText } from '@/lib/pointer';
 
 /** Служебное значение чипа «Другая…»: настоящей категорией быть не может (в чипах категории — их названия). */
 const OTHER = '__other__';
@@ -59,7 +60,7 @@ export function DebtCategoryField({ value, options, onChange, error }: DebtCateg
           enterKeyHint="next"
           onChange={(e) => onChange(e.target.value)}
           error={error}
-          autoFocus
+          autoFocus={canAutoFocusText()}
         />
       )}
     </FieldGroup>

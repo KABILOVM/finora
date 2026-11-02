@@ -70,7 +70,7 @@ export function buildNoteIndex(rows: readonly Row[], today: IsoDate): NoteEntry[
 /**
  * Подсказки для набираемой заметки. Совпадает начало заметки («ко» → «Кофе с собой») или начало любого её слова («соб» →
  * «Кофе с собой»); середина слова не в счёт: так меньше случайных попаданий. Порядок: сначала совпадения с начала заметки,
- * потом по числу повторов, потом свежее. Пустой запрос подсказок не даёт (для него есть «Частые операции»).
+ * потом по числу повторов, потом свежее. Пустой запрос подсказок не даёт.
  */
 export function suggestNotes(index: readonly NoteEntry[], kind: string, query: string, limit = NOTE_SUGGEST_LIMIT): NoteEntry[] {
   const q = normNote(query);

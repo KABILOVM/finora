@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { isCoarsePointer, opensKeyboard } from '@/lib/pointer';
 import { enterModalHistory } from './modalHistory';
 
 /**
@@ -81,7 +82,9 @@ export function useModal({ open, onClose, panelRef, initialFocusRoot, history = 
       const explicit = panel.querySelector<HTMLElement>('[data-autofocus]');
       const root = initialFocusRoot?.current ?? panel;
       // Нет полей ввода — фокус на саму панель (скринридер прочтёт название окна), а не на «×».
-      const target = explicit ?? focusables(root)[0] ?? panel;
+      let target = explicit ?? focusables(root)[0] ?? panel;
+      // На телефоне окно не должно открываться с готовой экранной клавиатурой (она закрывает половину окна): фокус на саму панель, поле — по нажатию.
+      if (isCoarsePointer() && opensKeyboard(target)) target = panel;
       target.focus({ preventScroll: true });
     }
 
@@ -125,7 +128,8 @@ export function useModal({ open, onClose, panelRef, initialFocusRoot, history = 
       unlockScroll();
       leaveHistory?.();
       // Возвращаем фокус туда, откуда окно открыли (если элемент ещё на странице).
-      if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus({ preventScroll: true });
+      // (на телефоне — кроме текстового поля: возврат курсора в него снова выдвинул бы клавиатуру)
+      if (previouslyFocused && previouslyFocused.isConnected && !(isCoarsePointer() && opensKeyboard(previouslyFocused))) previouslyFocused.focus({ preventScroll: true });
     };
     // panelRef/initialFocusRoot — стабильные ref-объекты.
   }, [open]);

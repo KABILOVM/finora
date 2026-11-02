@@ -6,6 +6,7 @@ import type { CurrencyCode, Minor } from '@/domain/types';
 import { enteredLabel } from '@/rates/enteredText';
 import type { FxView } from './useTxFormController';
 import { formatRate, rateSourceLabel, ruDate } from './txForm';
+import { canAutoFocusText } from '@/lib/pointer';
 
 export interface FxNoticeProps {
   fx: FxView;
@@ -110,7 +111,7 @@ export function FxNotice({ fx, amountMinor, rateText, onRateText, error }: FxNot
             autoComplete="off"
             placeholder="Например, 10,9"
             error={error}
-            autoFocus={changing && rateText === ''}
+            autoFocus={changing && rateText === '' && canAutoFocusText()}
           />
         )}
       </div>
