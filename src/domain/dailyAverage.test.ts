@@ -164,6 +164,15 @@ describe('periodAverage: дни поездок и начало истории', 
     expect(a.perDayMinor).toBe(som(20));
   });
 
+  it('tripDaysOf: окно — считаются только дни внутри него, забытая на год метка поездки не роняет расчёт', () => {
+    const year = [{ firstOn: '2024-01-01', lastOn: '2026-11-10' }]; // почти три года подряд
+    expect(() => tripDaysOf(year)).toThrow(RangeError);
+    const days = tripDaysOf(year, { from: '2026-11-08', to: '2026-11-10' });
+    expect([...days].sort()).toEqual(['2026-11-08', '2026-11-09', '2026-11-10']);
+    expect(tripDaysOf([{ firstOn: '2026-11-01', lastOn: '2026-11-03' }], { from: '2026-11-08', to: '2026-11-10' }).size).toBe(0); // вне окна
+    expect([...tripDaysOf([{ firstOn: '2026-11-09', lastOn: '2026-12-31' }], { from: '2026-11-08', to: '2026-11-10' })].sort()).toEqual(['2026-11-09', '2026-11-10']);
+  });
+
   it('tripDaysOf: перевёрнутый и кривой диапазон пропускаются', () => {
     expect(tripDaysOf([{ firstOn: '2026-11-06', lastOn: '2026-11-03' }]).size).toBe(0);
     expect(tripDaysOf([{ firstOn: '2026-02-30', lastOn: '2026-03-03' }]).size).toBe(0);
