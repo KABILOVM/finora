@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
  * Размер задаёт вызывающий (text-lg, text-xl…).
  */
 export function Wordmark({ className }: { className?: string }) {
-  // Начертание Manrope ExtraBold слегка утолщено обводкой того же цвета, чтобы название держалось рядом со знаком.
+  // Начертание Onest ExtraBold слегка утолщено обводкой того же цвета, чтобы название держалось рядом со знаком.
   return (
     <span
       className={cn('inline-block -skew-x-6 font-extrabold leading-none tracking-[0.02em]', className)}
