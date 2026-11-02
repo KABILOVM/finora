@@ -34,12 +34,21 @@ const FORECAST = {
   },
 };
 
+/** Тот же прогноз, но с осадками: сейчас идёт дождь (и ближайшие часы тоже) или снег. */
+const wet = (code: number, temp: number) => ({
+  ...FORECAST,
+  current: { ...FORECAST.current, weather_code: code, temperature_2m: temp, apparent_temperature: temp },
+  hourly: { ...FORECAST.hourly, weather_code: [code, code, 3], temperature_2m: [temp, temp, temp] },
+});
+const FORECASTS = { ok: FORECAST, rain: wet(63, 14), snow: wet(73, -2) };
+
 const glance = (page: Page) => page.getByTestId('home-glance');
+const advice = (page: Page) => page.getByTestId('weather-advice');
 const ratesWidget = (page: Page) => page.getByTestId('rates-widget');
 const weatherWidget = (page: Page) => page.getByTestId('weather-widget');
 
 /** Курсы кладём на устройство заранее; всё внешнее, кроме подменённого прогноза, закрыто (как без интернета). */
-async function prepare(page: Page, opts: { forecast?: 'ok' | 'down' } = {}): Promise<{ forecastCalls: () => number }> {
+async function prepare(page: Page, opts: { forecast?: 'ok' | 'down' | 'rain' | 'snow' | 'flaky' } = {}): Promise<{ forecastCalls: () => number }> {
   await page.addInitScript((rates) => {
     try {
       if (localStorage.getItem('finora:rates:v1') === null) localStorage.setItem('finora:rates:v1', JSON.stringify(rates));
@@ -53,11 +62,15 @@ async function prepare(page: Page, opts: { forecast?: 'ok' | 'down' } = {}): Pro
     async (route) => {
       calls += 1;
       if (opts.forecast === 'down') return route.abort('internetdisconnected');
+      // «ломается»: первый запрос сервис погоды заваливает ответом 503, дальше приходит в себя
+      if (opts.forecast === 'flaky' && calls === 1) {
+        return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{}' });
+      }
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         headers: { 'access-control-allow-origin': '*' },
-        body: JSON.stringify(FORECAST),
+        body: JSON.stringify(opts.forecast === 'rain' || opts.forecast === 'snow' ? FORECASTS[opts.forecast] : FORECASTS.ok),
       });
     },
   );
@@ -124,6 +137,102 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await expect(page).toHaveURL(/#\/weather$/);
     await expect(page.getByRole('heading', { name: 'По часам' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'На неделю' })).toBeVisible();
+  });
+
+  /** Человек уже выбирал Худжанд на этом устройстве. */
+  const chooseKhujand = (page: Page) =>
+    page.addInitScript(() => {
+      try {
+        localStorage.setItem('finora:weather:selected:v1', JSON.stringify('40.28,69.62'));
+      } catch {
+        /* без хранилища выбора не будет — тест сам об этом скажет */
+      }
+    });
+
+  test('дождь: под полосой «Курсы и погода» совет «возьмите зонт» → нажатие открывает «Погоду»; в ясную погоду совета нет', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    await prepare(page, { forecast: 'rain' });
+    await chooseKhujand(page);
+    await openApp(page);
+    await expect(weatherWidget(page)).toContainText('+14°');
+    await expect(advice(page)).toBeVisible();
+    await expect(advice(page)).toHaveText('Сейчас дождь — возьмите зонт');
+    await noHorizontalScroll(page);
+    await advice(page).scrollIntoViewIfNeeded();
+    await shot(page, '38-home-weather-advice-rain', testInfo);
+
+    await advice(page).click();
+    await expect(page).toHaveURL(/#\/weather$/);
+    await expect(page.getByRole('heading', { name: 'По часам' })).toBeVisible();
+  });
+
+  test('снег: совет «оденьтесь потеплее»', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    await prepare(page, { forecast: 'snow' });
+    await chooseKhujand(page);
+    await openApp(page);
+    await expect(advice(page)).toHaveText('Сейчас снег — оденьтесь потеплее');
+    await noHorizontalScroll(page);
+    await advice(page).scrollIntoViewIfNeeded();
+    await shot(page, '38-home-weather-advice-snow', testInfo);
+  });
+
+  test('ясно: строки с советом нет, полоса на месте', async ({ page }) => {
+    await page.clock.install({ time: NOW });
+    await prepare(page);
+    await chooseKhujand(page);
+    await openApp(page);
+    await expect(weatherWidget(page)).toContainText('+23°');
+    await expect(glance(page)).toBeVisible();
+    await expect(advice(page)).toHaveCount(0);
+  });
+
+  test('503 при прогнозе из памяти двухчасовой давности: лента без прошедших часов, «Данные на …» на карточке, сама обновляется через 5 секунд', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    const net = await prepare(page, { forecast: 'flaky' });
+    await chooseKhujand(page);
+    // на устройстве лежит прогноз, загруженный в 11:15 (сейчас 14:00): +21°, часы с 11:00 до 18:00
+    await page.addInitScript(() => {
+      const hours = Array.from({ length: 8 }, (_, i) => ({ time: `${String(11 + i).padStart(2, '0')}:00`, temp: 22 - i, code: 3, isDay: true, rain: null }));
+      const cached = {
+        fetchedAt: '2026-10-15T06:15:00.000Z',
+        current: { temp: 21, feels: 20, humidity: 40, code: 3, isDay: true, wind: 2, pressure: 690, time: '2026-10-15T11:15' },
+        hours,
+        days: [{ date: '2026-10-15', code: 3, min: 9, max: 27, rain: 0 }],
+        sunrise: '06:20',
+        sunset: '17:30',
+      };
+      try {
+        localStorage.setItem('finora:weather:cache:v1:40.28,69.62', JSON.stringify(cached));
+      } catch {
+        /* без хранилища прогноза из памяти не будет — тест сам об этом скажет */
+      }
+    });
+    await openApp(page, '/weather');
+
+    // сервис ответил 503: показан прогноз из памяти, но честно
+    const note = page.getByTestId('weather-stale-note');
+    await expect(note).toBeVisible();
+    await expect(note).toContainText('Сервис погоды ответил ошибкой 503');
+    await expect(note).toContainText('Показаны данные на 11:15');
+    await expect(note).toContainText('Попробуем ещё раз автоматически');
+    await expect(page.getByTestId('weather-stale')).toHaveText('Данные на 11:15');
+    // в ленте нет прошедших часов, а «Сейчас» — слот 14:00 (по почасовому прогнозу: +19°)
+    const hours = page.getByRole('region', { name: 'По часам' }).getByRole('listitem');
+    await expect(hours.first()).toContainText('Сейчас');
+    await expect(hours.first()).toContainText('+19°');
+    await expect(hours.nth(1)).toContainText('15:00');
+    await expect(page.getByRole('region', { name: 'По часам' })).not.toContainText(/11:00|12:00|13:00/);
+    await noHorizontalScroll(page);
+    await shot(page, '38-weather-stale-503', testInfo);
+    expect(net.forecastCalls()).toBe(1);
+
+    // через 5 секунд сама пробует снова: сервис ответил, пометки пропали, данные новые
+    await page.clock.fastForward(6_000);
+    await expect(page.getByTestId('weather-stale-note')).toHaveCount(0);
+    await expect(page.getByTestId('weather-stale')).toHaveCount(0);
+    await expect(page.getByRole('region', { name: /Погода сейчас: Ясно/ })).toContainText('+23°');
+    expect(net.forecastCalls()).toBe(2);
   });
 
   test('нет связи с сервисом погоды: на главной «Погода недоступна», страница и курсы работают', async ({ page }) => {

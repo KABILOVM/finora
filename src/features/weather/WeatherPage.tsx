@@ -14,7 +14,9 @@ import { conditionOf, formatTemp, skyGradient } from './conditions';
 import { locate } from './geolocation';
 import { withCity, withoutCity, type PlacesChange } from './places';
 import { clearCache, MAX_CITIES } from './store';
+import { hoursFrom } from './slots';
 import { useForecast } from './useForecast';
+import { useNow } from './useNow';
 import { usePlaces } from './usePlaces';
 import { WeatherIcon } from './WeatherIcon';
 
@@ -164,7 +166,8 @@ export default function WeatherPage() {
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   const city = cities.find((c) => c.id === selectedId) ?? cities[0]!;
-  const { data, loading, error, reload } = useForecast(city);
+  const { data, loading, error, retrying, reload } = useForecast(city);
+  const now = useNow();
 
   const apply = async (change: PlacesChange): Promise<boolean> => {
     try {
@@ -204,6 +207,9 @@ export default function WeatherPage() {
 
   const cond = data ? conditionOf(data.current.code) : null;
   const today = data?.days[0];
+  // прогноз из памяти мог быть загружен давно: прошедшие часы из ленты убираем, «Сейчас» подписываем у настоящего текущего часа
+  const hours = data ? hoursFrom(data, now) : [];
+  const fetchedAt = data ? new Date(data.fetchedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
 
   return (
     <>
@@ -268,6 +274,11 @@ export default function WeatherPage() {
                     Днём {formatTemp(today.max)} · ночью {formatTemp(today.min)}
                   </p>
                 )}
+                {error && (
+                  <p data-testid="weather-stale" className="mt-2 inline-block rounded-full bg-black/25 px-2.5 py-0.5 text-xs font-semibold text-white/90">
+                    Данные на {fetchedAt}
+                  </p>
+                )}
               </div>
               <WeatherIcon kind={cond.kind} isDay={data.current.isDay} size={104} className="shrink-0 drop-shadow-lg" />
             </div>
@@ -285,21 +296,22 @@ export default function WeatherPage() {
           </section>
 
           {error && (
-            <p role="status" className="mt-3 rounded-2xl bg-warning/10 px-4 py-2.5 text-sm font-medium text-warning">
-              Не удалось обновить ({error}). Показаны данные на {new Date(data.fetchedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.
+            <p role="status" data-testid="weather-stale-note" className="mt-3 rounded-2xl bg-warning/10 px-4 py-2.5 text-sm font-medium text-warning">
+              Не удалось обновить ({error}). Показаны данные на {fetchedAt}.{' '}
+              {retrying || loading ? 'Попробуем ещё раз автоматически.' : 'Нажмите кнопку обновления вверху, чтобы попробовать снова.'}
             </p>
           )}
 
-          {data.hours.length > 0 && (
+          {hours.length > 0 && (
             <section aria-labelledby="hours-title" className="mt-6">
               <h2 id="hours-title" className="mb-2 text-lg font-bold">
                 По часам
               </h2>
               <Card padding="none">
                 <ul className="flex gap-1 overflow-x-auto px-2 py-3">
-                  {data.hours.map((h, i) => (
+                  {hours.map(({ hour: h, now: isNow }, i) => (
                     <li key={h.time + i} className="flex w-[64px] shrink-0 flex-col items-center gap-1 rounded-2xl px-1 py-1">
-                      <span className="text-xs font-semibold text-muted">{i === 0 ? 'Сейчас' : h.time}</span>
+                      <span className="text-xs font-semibold text-muted">{isNow ? 'Сейчас' : h.time}</span>
                       <WeatherIcon kind={conditionOf(h.code).kind} isDay={h.isDay} size={36} />
                       <span className="font-bold tabular-nums">{formatTemp(h.temp)}</span>
                       <span className="h-4 text-xs text-brand">{h.rain !== null && h.rain >= 20 ? `${h.rain}%` : ''}</span>
@@ -341,7 +353,7 @@ export default function WeatherPage() {
           )}
 
           <p className="mt-4 text-center text-xs text-muted">
-            Обновлено {new Date(data.fetchedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · данные{' '}
+            Обновлено {fetchedAt} · данные{' '}
             <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" className="underline">
               Open-Meteo
             </a>
