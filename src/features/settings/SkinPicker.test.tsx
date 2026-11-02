@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, user } from '@/components/testUtils';
+import { SKIN_THUMBS } from '@/skinThumbs';
 import { SKIN_GROUPS, SKINS } from '@/skins';
 import { AppearanceSection } from './AppearanceSection';
 import { SkinPicker } from './SkinPicker';
@@ -49,6 +50,22 @@ describe('выбор образа', () => {
     // в списке все нужные образы
     for (const id of ['barca', 'real', 'argentina', 'messi', 'spain', 'cr7', 'football', 'shinobi', 'akatsuki', 'spider', 'comic', 'tajik', 'pamir', 'kawaii', 'aesthetic', 'racing', 'cyber', 'pixel']) {
       expect(SKINS.map((s) => s.id), id).toContain(id);
+    }
+  });
+
+  it('у образов с картинкой на карточке миниатюра, у остальных три цветные точки', () => {
+    render(<SkinPicker value="classic" onChange={() => undefined} />);
+    for (const skin of SKINS) {
+      const card = document.querySelector(`[data-skin-option="${skin.id}"]`);
+      const thumb = card?.querySelector('img[data-skin-thumb]');
+      if (SKIN_THUMBS[skin.id]) {
+        expect(thumb?.getAttribute('src'), skin.id).toBe(SKIN_THUMBS[skin.id]);
+        expect(thumb?.getAttribute('alt'), skin.id).toBe(''); // название рядом, миниатюра — просто украшение
+        expect(card?.querySelectorAll('span[style]').length, skin.id).toBe(0);
+      } else {
+        expect(thumb, skin.id).toBeNull();
+        expect(card?.querySelectorAll('span[style]').length, skin.id).toBe(3);
+      }
     }
   });
 

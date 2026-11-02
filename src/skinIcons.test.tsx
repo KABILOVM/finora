@@ -5,7 +5,8 @@ import { act, render, waitFor } from '@/components/testUtils';
 import { DUO } from '@/components/iconData';
 import { SKIN_ICON_PACKS } from './skinCore';
 import { SKINS } from './skins';
-import { ICON_GEOMETRY, ICON_STYLES, lineMarkup, PIXEL_BITMAPS, pixelMarkup, SKIN_ICON_STYLE, skinIconPack, type IconStyleId } from './skinIcons';
+import { NATIVE_ICONS, nativeShapes, nativeSvg } from './skinNativeIcons';
+import { ICON_GEOMETRY, ICON_STYLES, lineMarkup, nativeMarkup, PIXEL_BITMAPS, pixelMarkup, SKIN_ICON_STYLE, skinIconPack, type IconStyleId } from './skinIcons';
 import { saveSkinPref } from './theme';
 
 const reset = () => {
@@ -102,9 +103,10 @@ describe('линейные наборы: общий рисунок и пять �
     expect(used.has('pixel')).toBe(true);
   });
 
-  it('образы с одним стилем получают один и тот же набор, образы с разными — разные', () => {
-    expect(skinIconPack('cyber')).toEqual(skinIconPack('spider'));
-    expect(skinIconPack('barca')).toEqual(skinIconPack('messi'));
+  it('образы с одним стилем получают один и тот же общий набор (кроме родных значков образа), образы с разными стилями — разные', () => {
+    const without = (id: 'cyber' | 'spider' | 'barca' | 'messi', skip: readonly string[]) => Object.fromEntries(Object.entries(skinIconPack(id) ?? {}).filter(([name]) => !skip.includes(name)));
+    expect(without('cyber', Object.keys(NATIVE_ICONS.spider ?? {}))).toEqual(without('spider', Object.keys(NATIVE_ICONS.spider ?? {})));
+    expect(skinIconPack('barca')).toEqual(skinIconPack('messi')); // у футбольных образов один и тот же набор родных значков
     expect(skinIconPack('cyber')).not.toEqual(skinIconPack('racing'));
     expect(skinIconPack('kawaii')).not.toEqual(skinIconPack('real'));
   });
@@ -162,5 +164,54 @@ describe('выбор образа подгружает набор значков
     saveSkinPref('classic'); // сразу передумали
     await new Promise((r) => setTimeout(r, 50));
     expect(container.innerHTML).toBe(plain);
+  });
+});
+
+describe('родные значки образов из материалов', () => {
+  const entries = Object.entries(NATIVE_ICONS).flatMap(([skin, map]) => Object.entries(map ?? {}).map(([name, key]) => ({ skin, name, key })));
+
+  it('родные значки есть у образов по Наруто, Акацуки, Паутине, Таджикистану, Памиру и у всех футбольных', () => {
+    expect(Object.keys(NATIVE_ICONS).sort()).toEqual(['akatsuki', 'argentina', 'barca', 'cr7', 'football', 'messi', 'pamir', 'real', 'shinobi', 'spain', 'spider', 'tajik']);
+    expect(entries.length).toBeGreaterThanOrEqual(50);
+  });
+
+  it('каждая замена: образ с линейным набором, значок из встроенных, файл найден, один цвет (штрих currentColor), разбирается как SVG', () => {
+    for (const { skin, name, key } of entries) {
+      const style = SKIN_ICON_STYLE[skin as keyof typeof SKIN_ICON_STYLE];
+      expect(style, `${skin}: стиль`).toBeDefined();
+      expect(style, `${skin}: у «Пикселя» значки из пикселей`).not.toBe('pixel');
+      expect(name in DUO, `${skin}/${name}: нет такого встроенного значка`).toBe(true);
+      const svg = nativeSvg(key);
+      expect(svg, `${skin}/${name}: файл ${key}`).toBeDefined();
+      expect(svg, `${key}: цветной значок не годится (нужна линия currentColor)`).not.toMatch(/fill="#/);
+      const markup = nativeMarkup(nativeShapes(svg ?? ''), style as IconStyleId);
+      expect(parse(markup).querySelector('parsererror'), `${skin}/${name}`).toBeNull();
+      expect(markup, `${skin}/${name}`).not.toMatch(/NaN|undefined|<title|<svg/);
+    }
+  });
+
+  it('родной значок попадает в набор образа вместо общего, а остальные значки остаются общими', () => {
+    const shinobi = skinIconPack('shinobi') ?? {};
+    const generic = lineMarkup(ICON_GEOMETRY.home ?? [], 'sharp');
+    expect(shinobi.home).not.toBe(generic);
+    expect(shinobi.home).toContain('stroke-width="2.6"'); // толщина стиля «Острый», а не 2 из файла
+    expect(shinobi.cart).toBe(lineMarkup(ICON_GEOMETRY.cart ?? [], 'sharp'));
+    expect(Object.keys(shinobi).sort()).toEqual(Object.keys(ICON_GEOMETRY).sort()); // замена не добавляет и не убирает значки
+    expect(Object.keys(skinIconPack('pixel') ?? {}).sort()).toEqual(Object.keys(PIXEL_BITMAPS).sort());
+  });
+
+  it('nativeMarkup: толщина штриха берётся из стиля; точки толще линии, но не шире 4,4; тонкие нити пересчитываются пропорционально', () => {
+    const shapes = '<path d="M3 3h18"/><path d="M6 12h.01" stroke-width="2.4"/><path d="M4 4l8 8" stroke-width="1"/>';
+    const sharp = nativeMarkup(shapes, 'sharp');
+    expect(sharp).toContain('<g stroke="currentColor" stroke-width="2.6"');
+    expect(sharp).toContain('<path d="M6 12h.01" stroke-width="4.4"/>');
+    expect(sharp).toContain('<path d="M4 4l8 8" stroke-width="1.3"/>');
+    expect(nativeMarkup(shapes, 'fine')).toContain('<path d="M4 4l8 8" stroke-width="0.7"/>');
+    expect(nativeMarkup(shapes, 'sport')).toContain('fill-opacity="0.2"');
+  });
+
+  it('nativeShapes: убирает обёртку <svg> и заголовок, оставляя только фигуры', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><title>Лист</title><path d="M1 1h2"/><circle cx="3" cy="3" r="1"/></svg>\n';
+    expect(nativeShapes(svg)).toBe('<path d="M1 1h2"/><circle cx="3" cy="3" r="1"/>');
   });
 });

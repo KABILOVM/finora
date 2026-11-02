@@ -100,6 +100,7 @@ export default defineConfig({
       },
       workbox: {
         // Только файлы самого приложения. Запросы к Supabase НЕ кэшируем никогда (приватные данные).
+        // Картинки образов (webp, src/assets/skins/art) намеренно не в списке: иначе их скачал бы каждый при установке, даже не выбрав образ.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
@@ -112,7 +113,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     // Шрифты — всегда отдельными файлами: политика безопасности (font-src 'self') не пускает шрифты, встроенные в CSS как data:.
-    assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
+    // Картинки образов (webp) — тоже файлами: их грузят только те, кто образ выбрал, и в офлайн-кэш они не входят (webp нет в globPatterns).
+    assetsInlineLimit: (file) => (file.endsWith('.woff2') || file.endsWith('.webp') ? false : undefined),
     sourcemap: false,
     rollupOptions: {
       output: {

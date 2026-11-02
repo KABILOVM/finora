@@ -1822,7 +1822,9 @@ html[data-skin='barca'] {
   --skin-pattern: url('./assets/skins/barca/svg/stripes-tile-dim.svg');
   --skin-pattern-opacity: 0.5;
   --skin-line: 237 187 0;
-  --skin-mark: url('./assets/skins/marks/ball.svg');
+  --skin-mark: url('./assets/skins/art/barca-mark.webp');
+  --skin-art: url('./assets/skins/art/barca-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='real'] {
   --skin-head: 'Cormorant Garamond', 'Onest', Georgia, serif;
@@ -1831,7 +1833,9 @@ html[data-skin='real'] {
   --skin-pattern: url('./assets/skins/real-madrid/svg/pinstripe-tile.svg');
   --skin-pattern-opacity: 0.28;
   --skin-line: 254 190 16;
-  --skin-mark: url('./assets/skins/real-madrid/svg/crown-color.svg');
+  --skin-mark: url('./assets/skins/art/real-mark.webp');
+  --skin-art: url('./assets/skins/art/real-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='argentina'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1845,14 +1849,15 @@ html[data-skin='messi'] {
   --skin-head-ls: 0.02em;
   --skin-pattern: repeating-linear-gradient(90deg, rgb(246 180 14 / 0.12) 0 2px, transparent 2px 22px);
   --skin-line: 246 180 14;
-  --skin-mark-text: '10';
+  --skin-art: url('./assets/skins/art/messi-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='spain'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
   --skin-head-ls: 0.02em;
   --skin-pattern: repeating-linear-gradient(90deg, rgb(241 191 0 / 0.14) 0 30px, transparent 30px 60px);
   --skin-line: 241 191 0;
-  --skin-mark: url('./assets/skins/marks/ball.svg');
+  --skin-mark: url('./assets/skins/football/flags/es-circle.svg');
 }
 html[data-skin='cr7'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1873,7 +1878,8 @@ html[data-skin='shinobi'] {
   --skin-head-ls: 0.03em;
   --skin-pattern: repeating-linear-gradient(135deg, rgb(255 122 26 / 0.13) 0 2px, transparent 2px 16px);
   --skin-line: 255 122 26;
-  --skin-mark: url('./assets/skins/marks/star.svg');
+  --skin-art: url('./assets/skins/art/shinobi-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='akatsuki'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1881,7 +1887,9 @@ html[data-skin='akatsuki'] {
   --skin-head-ls: 0.06em;
   --skin-pattern: repeating-linear-gradient(110deg, rgb(229 18 26 / 0.16) 0 1px, transparent 1px 22px);
   --skin-line: 229 18 26;
-  --skin-mark: url('./assets/skins/marks/moon.svg');
+  --skin-mark: url('./assets/skins/akatsuki/svg/emblem.svg');
+  --skin-art: url('./assets/skins/art/akatsuki-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='spider'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1889,7 +1897,8 @@ html[data-skin='spider'] {
   --skin-pattern: url('./assets/skins/spider/svg/pattern-tile-dim.svg');
   --skin-pattern-opacity: 0.6;
   --skin-line: 229 35 43;
-  --skin-mark: url('./assets/skins/spider/svg/web-corner-tr.svg');
+  --skin-art: url('./assets/skins/art/spider-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='comic'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1905,12 +1914,16 @@ html[data-skin='tajik'] {
   --skin-pattern: url('./assets/skins/tajik/svg/gulduzi-tile-dim.svg');
   --skin-pattern-opacity: 0.6;
   --skin-line: 217 162 43;
-  --skin-mark: url('./assets/skins/tajik/svg/gulduzi-rosette.svg');
+  --skin-mark: url('./assets/skins/art/tajik-mark.webp');
+  --skin-art: url('./assets/skins/art/tajik-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='pamir'] {
   --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
   --skin-pattern: repeating-linear-gradient(60deg, rgb(18 64 95 / 0.07) 0 2px, transparent 2px 18px);
   --skin-line: 179 18 59;
+  --skin-art: url('./assets/skins/art/pamir-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='kawaii'] {
   --skin-head: 'Nunito', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1986,6 +1999,20 @@ html[data-skin] .skin-hero::before {
   font: 800 7.5rem/1 var(--skin-head);
   text-align: right;
   opacity: 0.24;
+}
+/* Картинка образа (--skin-art) — фоном карточки «Всего», справа: слева она уходит в прозрачность (под ней обычный цвет карточки), а яркость каждой точки заранее
+   ограничена (scripts/skin-art/build.py), поэтому белый текст читается поверх любой её части. Нет картинки (--skin-art-content не задан) — слоя нет совсем.
+   Картинки грузятся только когда образ выбран и в офлайн-кэш не входят: без сети остаётся обычный цвет карточки. */
+html[data-skin] .skin-hero {
+  isolation: isolate;
+}
+html[data-skin] .skin-hero::after {
+  content: var(--skin-art-content, none);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--skin-art, none) right center / cover no-repeat;
 }
 /* Форма углов: у «технических» образов углы острые, у «Кавая» самые округлые. Остальные образы оставляют обычные скругления. Круги (rounded-full) не трогаем. */
 html[data-skin='pixel'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {

@@ -1,6 +1,7 @@
 import { useId, useRef, type KeyboardEvent } from 'react';
 import { Icon } from '@/components/Icon';
 import { cn } from '@/lib/cn';
+import { SKIN_THUMBS } from '@/skinThumbs';
 import { SKIN_GROUPS, SKINS, type SkinId } from '@/skins';
 
 export interface SkinPickerProps {
@@ -11,7 +12,8 @@ export interface SkinPickerProps {
 /**
  * Выбор образа: «Классика» и готовые образы, по разделам (футбол, кино и аниме, национальные, стили). Одна радиогруппа, как у выбора
  * цвета: в группу заходят одним Tab, внутри — стрелками по всему списку (разделы — только заголовки над карточками).
- * Три цветные точки на карточке — просто образец (фон, главный и второй цвет образа), на сам образ они не влияют.
+ * Слева на карточке: миниатюра образа (герб, флаг или картинка), а если её нет, три цветные точки (фон, главный и второй цвет образа).
+ * Это просто образец, на сам образ он не влияет.
  */
 export function SkinPicker({ value, onChange }: SkinPickerProps) {
   const labelId = useId();
@@ -68,10 +70,25 @@ export function SkinPicker({ value, onChange }: SkinPickerProps) {
                         selected ? 'border-brand bg-brand/10' : 'border-border bg-surface hover:bg-surface-2',
                       )}
                     >
-                      <span aria-hidden="true" className="flex shrink-0 -space-x-2">
-                        {skin.swatch.map((color, k) => (
-                          <span key={k} style={{ backgroundColor: color }} className="h-7 w-7 rounded-full border-2 border-surface shadow-sm" />
-                        ))}
+                      <span aria-hidden="true" className="flex w-14 shrink-0 items-center justify-center">
+                        {SKIN_THUMBS[skin.id] ? (
+                          <img
+                            src={SKIN_THUMBS[skin.id]}
+                            alt=""
+                            width={40}
+                            height={40}
+                            loading="lazy"
+                            decoding="async"
+                            data-skin-thumb={skin.id}
+                            className="h-10 w-10 rounded-xl border border-border bg-surface-2 object-cover"
+                          />
+                        ) : (
+                          <span className="flex -space-x-2">
+                            {skin.swatch.map((color, k) => (
+                              <span key={k} style={{ backgroundColor: color }} className="h-6 w-6 rounded-full border-2 border-surface shadow-sm" />
+                            ))}
+                          </span>
+                        )}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-semibold text-text">{skin.label}</span>

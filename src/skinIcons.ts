@@ -1,3 +1,4 @@
+import { NATIVE_ICONS, nativeShapes, nativeSvg } from './skinNativeIcons';
 import type { SkinId } from './skinCore';
 import type { SkinIconPack } from './components/skinIconStore';
 
@@ -10,6 +11,9 @@ import type { SkinIconPack } from './components/skinIconStore';
  *    двухтонных значков), «.» — пусто. Из картинки получается обычная двухтонная разметка, так что Icon рисует её как остальные;
  *  — линейные: один общий рисунок на 24 значка (ICON_GEOMETRY, сетка 24×24) и пять стилей линии (ICON_STYLES): толщина, концы, углы
  *    и мягкая заливка. Какому образу какой стиль — SKIN_ICON_STYLE. Так у каждого образа свой вид значков, а рисунки не копятся по 18 раз.
+ *
+ * Поверх линейного набора часть значков заменена «родными» из материалов образа (src/skinNativeIcons.ts: лист Конохи, облако, стадион…): их
+ * рисуют линией того же стиля, что и соседние.
  */
 const PIXEL: Readonly<Record<string, readonly string[]>> = {
   home: ['............', '.....##.....', '....####....', '...######...', '..########..', '.##########.', '############', '.####++####.', '.####++####.', '.####++####.', '.##########.', '............'],
@@ -137,9 +141,33 @@ export function lineMarkup(paths: readonly string[], style: IconStyleId): string
 
 const linePack = (style: IconStyleId): SkinIconPack => Object.fromEntries(Object.entries(ICON_GEOMETRY).map(([name, paths]) => [name, lineMarkup(paths, style)]));
 
+/** Родной значок из материалов образа (src/skinNativeIcons.ts) в линии стиля: те же толщина, концы и заливка, что у соседних значков набора. */
+export function nativeMarkup(shapes: string, style: IconStyleId): string {
+  const st = ICON_STYLES[style];
+  const fill = st.fill > 0 ? ` fill="currentColor" fill-opacity="${st.fill}"` : ' fill="none"';
+  // В файле штрих 2. Фигуры со своей толщиной (тонкие нити паутины, точки) пересчитываем под стиль: точки — как у общих значков, остальные — пропорционально.
+  const dot = Math.round(Math.min(st.width * 2.2, 4.4) * 10) / 10;
+  const body = shapes.replace(/<[^<>]*?stroke-width="([\d.]+)"[^<>]*>/g, (tag, w: string) => {
+    const next = /h\.01/.test(tag) ? dot : Math.round(((Number(w) * st.width) / 2) * 10) / 10;
+    return tag.replace(/stroke-width="[\d.]+"/, `stroke-width="${next}"`);
+  });
+  return `<g stroke="currentColor" stroke-width="${st.width}" stroke-linecap="${st.cap}" stroke-linejoin="${st.join}"${fill}>${body}</g>`;
+}
+
+/** Родные значки образа в линии его стиля: имя значка приложения → разметка. Пусто, если у образа их нет. */
+function nativePack(id: SkinId, style: IconStyleId): SkinIconPack {
+  const map = NATIVE_ICONS[id] ?? {};
+  const out: Record<string, string> = {};
+  for (const [name, key] of Object.entries(map)) {
+    const svg = nativeSvg(key);
+    if (svg !== undefined) out[name] = nativeMarkup(nativeShapes(svg), style);
+  }
+  return out;
+}
+
 /** Набор значков образа; undefined — у образа своего набора нет. */
 export function skinIconPack(id: SkinId): SkinIconPack | undefined {
   const style = SKIN_ICON_STYLE[id];
   if (style === undefined) return undefined;
-  return style === 'pixel' ? pack(PIXEL) : linePack(style);
+  return style === 'pixel' ? pack(PIXEL) : { ...linePack(style), ...nativePack(id, style) };
 }
