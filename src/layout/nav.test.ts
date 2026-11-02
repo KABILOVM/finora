@@ -10,7 +10,7 @@ const item = (to: string) => {
 describe('isInSection', () => {
   it('раздел и всё внутри него', () => {
     expect(isInSection('/settings', '/settings')).toBe(true);
-    expect(isInSection('/settings/categories', '/settings')).toBe(true);
+    expect(isInSection('/settings/import', '/settings')).toBe(true);
     expect(isInSection('/settings/', '/settings')).toBe(true);
     expect(isInSection('/SETTINGS', '/settings')).toBe(true); // маршруты не различают регистр, подсветка тоже
   });
@@ -25,7 +25,7 @@ describe('isInSection', () => {
 });
 
 describe('isNavActive: нижняя панель телефона', () => {
-  it.each([...MORE_SECTIONS, '/settings/categories', '/more/'])('«Ещё» подсвечен на %s', (path) => {
+  it.each([...MORE_SECTIONS, '/categories/', '/more/'])('«Ещё» подсвечен на %s', (path) => {
     expect(isNavActive(item('/more'), path, 'phone')).toBe(true);
   });
   it.each(['/', '/transactions', '/analytics'])('«Ещё» не подсвечен на %s', (path) => {
@@ -62,7 +62,7 @@ describe('isNavActive: боковая панель ПК', () => {
     ['/weather', ['Погода']],
     ['/more', []], // на ПК пункта «Ещё» нет
     ['/import', ['Настройки']],
-    ['/settings/categories', ['Настройки']],
+    ['/categories', ['Категории']],
     ['/settings', ['Настройки']],
     ['/settings/', ['Настройки']],
   ])('на %s подсвечено: %j', (path, expected) => {

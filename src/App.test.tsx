@@ -25,7 +25,7 @@ describe('маршруты', () => {
     ['/debts', 'Долги'],
     ['/import', 'Импорт из Дзен-мани'],
     ['/settings', 'Настройки'],
-    ['/settings/categories', 'Категории'],
+    ['/categories', 'Категории'],
   ])('%s показывает страницу «%s»', async (path, title) => {
     renderAt(path);
     expect(await findByRole('heading', { name: title, level: 1 })).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('навигация', () => {
     const side = screen.getAllByRole('navigation', { name: 'Основная навигация' }).find((n) => n.closest('aside'));
     expect(side).toBeDefined();
     const labels = Array.from((side as HTMLElement).querySelectorAll('a')).map((a) => a.textContent);
-    expect(labels).toEqual(['Главная', 'Операции', 'Аналитика', 'Кошельки', 'Долги', 'Бюджеты', 'Регулярные платежи', 'Поездки', 'Покупки', 'Продукты', 'Курсы валют', 'Погода', 'Настройки']);
+    expect(labels).toEqual(['Главная', 'Операции', 'Аналитика', 'Кошельки', 'Долги', 'Категории', 'Бюджеты', 'Регулярные платежи', 'Поездки', 'Покупки', 'Продукты', 'Курсы валют', 'Погода', 'Настройки']);
     const aside = (side as HTMLElement).closest('aside') as HTMLElement;
     expect(aside.querySelector('a[href="#/add"], a[href="/add"]')?.textContent).toContain('Добавить операцию');
   });
@@ -89,12 +89,19 @@ describe('навигация', () => {
     expect(current.sort()).toEqual(['Ещё', 'Кошельки']);
   });
 
-  it('на странице категорий подсвечены «Ещё» (телефон) и «Настройки» (ПК)', async () => {
+  it('на странице категорий подсвечены «Ещё» (телефон) и «Категории» (ПК)', async () => {
+    renderAt('/categories');
+    await findByRole('heading', { name: 'Категории', level: 1 });
+    const current = Array.from(document.querySelectorAll('[aria-current="page"]')).map((a) => a.textContent);
+    // телефон: «Ещё» (категории лежат за ним); ПК: свой пункт «Категории» в боковой панели
+    expect(current.sort()).toEqual(['Ещё', 'Категории']);
+  });
+
+  it('старый адрес /settings/categories ведёт на /categories (закладка, ссылка, уведомление)', async () => {
     renderAt('/settings/categories');
     await findByRole('heading', { name: 'Категории', level: 1 });
     const current = Array.from(document.querySelectorAll('[aria-current="page"]')).map((a) => a.textContent);
-    // телефон: «Ещё»; ПК: «Настройки» (категории — их часть)
-    expect(current.sort()).toEqual(['Ещё', 'Настройки']);
+    expect(current.sort()).toEqual(['Ещё', 'Категории']);
   });
 
   it('переход по пункту меню меняет страницу', async () => {

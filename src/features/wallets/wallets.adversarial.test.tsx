@@ -117,7 +117,7 @@ describe('ATTACK: ввод в форму кошелька', () => {
 describe('ATTACK: категории', () => {
   it('«Еда» и «еда » (пробел, другой регистр) не создают дубль; архивная «Еда» подсказывает вернуть', async () => {
     const td = makeTestDeps();
-    renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/settings/categories' });
+    renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/categories' });
     await findByRole('heading', { name: 'Категории', level: 1 });
     await waitFor(() => expect(screen.getByText('Еда')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Добавить' }));

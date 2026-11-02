@@ -11,7 +11,7 @@ afterEach(() => vi.restoreAllMocks());
 
 async function openPage() {
   const td = makeTestDeps();
-  renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/settings/categories' });
+  renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/categories' });
   await findByRole('heading', { name: 'Категории', level: 1 });
   await waitFor(() => expect(screen.getByText('Еда')).toBeInTheDocument());
   return td;
@@ -34,9 +34,9 @@ describe('экран «Категории»', () => {
     expect(screen.getByText('Зарплата').closest('li')?.querySelector('svg')).not.toBeNull();
   });
 
-  it('есть ссылка назад в «Настройки»', async () => {
+  it('это отдельный раздел, а не часть «Настроек»: ссылки «назад в Настройки» нет', async () => {
     await openPage();
-    expect(screen.getByRole('link', { name: 'Настройки' })).toHaveAttribute('href', '/settings');
+    expect(screen.queryByRole('link', { name: 'Настройки' })).toBeNull();
   });
 
   it('добавляет категорию расходов с выбранным значком; вид берётся из вкладки', async () => {

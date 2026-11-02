@@ -29,7 +29,7 @@ const live = async (td: TestDeps) => (await store(td).db.categories.toArray()).f
 
 async function openPage() {
   const td = makeTestDeps();
-  renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/settings/categories' });
+  renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/categories' });
   await findByRole('heading', { name: 'Категории', level: 1 });
   await waitFor(() => expect(screen.getByText('Еда')).toBeInTheDocument());
   return td;
@@ -119,7 +119,7 @@ describe('окно «Готовые категории»', () => {
 
   it('свои категории переносятся под набор, а не дублируются: «Коммуналка» и «Свет» → под одним родителем', async () => {
     const td = makeTestDeps();
-    renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/settings/categories' });
+    renderAppRoot(<CategoriesPage />, { deps: td.deps, path: '/categories' });
     await findByRole('heading', { name: 'Категории', level: 1 });
     await waitFor(() => expect(screen.getByText('Еда')).toBeInTheDocument());
     const komm = await write(() => store(td).categories.create({ name: 'Коммуналка', kind: 'expense', color: '#111111', icon: '🏠' }));

@@ -39,7 +39,7 @@ export const PHONE_ITEMS: readonly NavItem[] = [...SECTIONS.filter((s) => s.bott
 
 /**
  * Боковая панель ПК: группы из реестра. Основная (без заголовка) сверху, потом «Деньги», «Планирование», «Инструменты»; «Настройки»
- * внизу под чертой. Пункта «Ещё» на ПК нет. Категории и импорт лежат внутри «Настроек» (там же подсвечиваются).
+ * внизу под чертой. Пункта «Ещё» на ПК нет. Импорт лежит внутри «Настроек» (там же подсвечивается).
  */
 export const SIDE_ITEMS: readonly NavItem[] = SECTIONS.filter((s) => s.side !== false).map((s) =>
   s.id === 'settings' ? { ...toItem(s), sideActiveOn: ['/settings', '/import'] } : toItem(s),

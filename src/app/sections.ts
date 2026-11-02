@@ -5,7 +5,7 @@ import type { IconName } from '../components/Icon';
  * название — оно же в меню, в заголовке страницы и в тестах. Файл без импортов с алиасами `@/`: его читает и Playwright.
  *
  * group — смысловая группа «Ещё» и боковой панели; bottomBar — раздел стоит в нижней панели телефона (в «Ещё» его нет);
- * side: false — в боковой панели ПК раздела нет (категории и импорт там лежат внутри «Настроек»).
+ * side: false — в боковой панели ПК раздела нет (импорт там лежит внутри «Настроек»).
  */
 export type SectionGroup = 'main' | 'money' | 'planning' | 'tools' | 'app';
 
@@ -25,6 +25,7 @@ export const SECTIONS: readonly Section[] = [
   { id: 'analytics', path: '/analytics', title: 'Аналитика', icon: 'chart', group: 'main', bottomBar: true },
   { id: 'wallets', path: '/wallets', title: 'Кошельки', icon: 'wallet', group: 'money' },
   { id: 'debts', path: '/debts', title: 'Долги', icon: 'banknote', group: 'money' },
+  { id: 'categories', path: '/categories', title: 'Категории', icon: 'tag', group: 'money' },
   { id: 'budgets', path: '/budgets', title: 'Бюджеты', icon: 'pie', group: 'planning' },
   { id: 'recurring', path: '/recurring', title: 'Регулярные платежи', icon: 'repeat', group: 'planning' },
   { id: 'trips', path: '/trips', title: 'Поездки', icon: 'plane', group: 'planning' },
@@ -32,7 +33,6 @@ export const SECTIONS: readonly Section[] = [
   { id: 'products', path: '/products', title: 'Продукты', icon: 'food', group: 'tools' },
   { id: 'rates', path: '/rates', title: 'Курсы валют', icon: 'transfer', group: 'tools' },
   { id: 'weather', path: '/weather', title: 'Погода', icon: 'cloud', group: 'tools' },
-  { id: 'categories', path: '/settings/categories', title: 'Категории', icon: 'tag', group: 'app', side: false },
   { id: 'import', path: '/import', title: 'Импорт из Дзен-мани', icon: 'upload', group: 'app', side: false },
   { id: 'settings', path: '/settings', title: 'Настройки', icon: 'sliders', group: 'app' },
 ];

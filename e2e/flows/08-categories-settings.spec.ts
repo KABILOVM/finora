@@ -59,8 +59,7 @@ test.describe('8. Категории и настройки', () => {
     await expect(page.getByRole('button', { name: /Кафе/ })).toHaveCount(1);
 
     // Вернуть из архива
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Категории' }).click();
+    await goSection(page, 'Категории');
     await page.getByRole('button', { name: /^Архив · 1 категория/ }).click();
     await page.getByRole('button', { name: 'Вернуть: Кафе' }).click();
     await expect(page.getByRole('button', { name: /^Кафе/ })).toHaveCount(1);
@@ -74,8 +73,7 @@ test.describe('8. Категории и настройки', () => {
 
   test('вкладка «Доходы»: своя категория дохода вносится в доход', async ({ page }) => {
     await openApp(page);
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Категории' }).click();
+    await goSection(page, 'Категории');
     await page.getByRole('radio', { name: 'Доходы' }).click();
     await page.getByRole('button', { name: 'Добавить', exact: true }).click();
     const dlg = sheet(page, 'Новая категория доходов');

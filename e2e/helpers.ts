@@ -237,6 +237,7 @@ export type Section =
   | 'Аналитика'
   | 'Кошельки'
   | 'Долги'
+  | 'Категории'
   | 'Бюджеты'
   | 'Платежи'
   | 'Поездки'
@@ -267,7 +268,7 @@ export const mainNav = (page: Page): Locator => page.getByRole('navigation', { n
 
 /**
  * Перейти в раздел через меню. ПК: пункт боковой панели. Телефон: пункт нижней панели (Главная, Операции, Аналитика, Ещё), а
- * остальное (Кошельки, Долги, Бюджеты, Платежи, Покупки, Курсы, Погода, Настройки) открывается в два шага: «Ещё», затем строка списка.
+ * остальное (Кошельки, Долги, Категории, Бюджеты, Платежи, Покупки, Курсы, Погода, Настройки) открывается в два шага: «Ещё», затем строка списка.
  */
 export async function goSection(page: Page, section: Section): Promise<void> {
   const title = SECTION_TITLE(section);
@@ -287,10 +288,9 @@ export async function openFromMore(page: Page, title: string): Promise<void> {
   await page.getByRole('main').getByRole('link', { name: title, exact: true }).click();
 }
 
-/** Экран «Категории»: Настройки → Категории (на телефоне «Настройки» лежат за «Ещё»). */
+/** Экран «Категории»: отдельный раздел меню (на ПК — боковая панель, на телефоне — «Ещё»). */
 export async function openCategories(page: Page): Promise<void> {
-  await goSection(page, 'Настройки');
-  await page.getByRole('main').getByRole('link', { name: 'Категории', exact: true }).click();
+  await goSection(page, 'Категории');
   await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
 }
 

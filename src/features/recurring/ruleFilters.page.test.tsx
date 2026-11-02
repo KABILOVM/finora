@@ -22,7 +22,7 @@ afterEach(() => {
 const TODAY = '2026-10-15';
 const day = (n: number) => addDays(TODAY, n);
 
-/** Четыре платежа в ближайшие 30 дней: «Аренда» (расход, Наличные, Жильё), «Интернет» (расход, Карта, Связь), «Зарплата» (доход, Карта), «Копилка» (перевод). */
+/** Четыре платежа до конца месяца: «Аренда» (расход, Наличные, Жильё), «Интернет» (расход, Карта, Связь), «Зарплата» (доход, Карта), «Копилка» (перевод). */
 async function setup(s: Store) {
   const cash = (await s.db.wallets.toArray()).find((w) => w.name === 'Наличные')?.id ?? '';
   const card = (await s.wallets.create({ name: 'Карта', currency: 'TJS', kind: 'card', openingBalanceMinor: 0, color: '#2563eb', icon: '💳' })).id;
@@ -90,7 +90,7 @@ describe('экран «Регулярные платежи»: фильтры', (
     await apply();
     await waitFor(() => expect(document.querySelector('[data-testid="recurring-filter-empty"]')).not.toBeNull());
     expect(soon()).toEqual([]);
-    expect(document.body.textContent).toContain('По выбранным фильтрам на ближайшие 30 дней платежей нет.');
+    expect(document.body.textContent).toContain('По выбранным фильтрам до конца месяца платежей нет.');
 
     await user.click(screen.getByRole('button', { name: 'Сбросить фильтры' }));
     await waitFor(() => expect(soon()).toHaveLength(4));

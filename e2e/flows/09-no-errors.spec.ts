@@ -12,8 +12,7 @@ test.describe('9. Нет ошибок в консоли', () => {
     for (let i = 0; i < 3; i++) {
       for (const s of ['Главная', 'Операции', 'Кошельки', 'Настройки'] as const) await goSection(page, s);
     }
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Категории' }).click();
+    await goSection(page, 'Категории');
     await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
   });
 

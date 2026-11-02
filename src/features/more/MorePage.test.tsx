@@ -26,6 +26,7 @@ describe('MorePage', () => {
     expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
       '/wallets',
       '/debts',
+      '/categories',
       '/budgets',
       '/recurring',
       '/trips',
@@ -33,7 +34,6 @@ describe('MorePage', () => {
       '/products',
       '/rates',
       '/weather',
-      '/settings/categories',
       '/import',
       '/settings',
     ]);

@@ -20,6 +20,8 @@ const HOSTILE = [
   '/edit/<script>alert(1)</script>',
   '/settings/categories//',
   '/settings/categories/extra',
+  '/categories//',
+  '/categories/extra',
   '/wallets/%',
   '/add/%',
 ];

@@ -75,7 +75,7 @@ describe('подсказка «как установить»: только «Г�
     ['/debts', 'Долги'],
     ['/import', 'Импорт из Дзен-мани'],
     ['/settings', 'Настройки'],
-    ['/settings/categories', 'Категории'],
+    ['/categories', 'Категории'],
   ])('на странице %s подсказки нет', async (path, title) => {
     iphone();
     renderAt(path);

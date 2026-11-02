@@ -113,7 +113,7 @@ describe('экран «Регулярные платежи»: разделы', (
     expect(screen.getAllByText('Ждёт подтверждения').length).toBe(2);
   });
 
-  it('на ближайшие 30 дней платежей нет — об этом сказано словами', async () => {
+  it('до конца месяца платежей нет — об этом сказано словами', async () => {
     await openPage(async (s, ids) => {
       await rule(s, { walletId: ids.cash, startOn: day(-20), frequency: 'yearly', note: 'Раз в год' });
     });
@@ -121,13 +121,28 @@ describe('экран «Регулярные платежи»: разделы', (
     expect(headings()).toEqual(['Просроченные', 'Все правила']);
   });
 
-  it('все платежи проведены — «На ближайшие 30 дней платежей нет»', async () => {
+  it('«Скоро» — до конца текущего месяца, а не скользящие 30 дней: ноябрьских дат при сегодня 15 октября нет', async () => {
+    // еженедельно с завтрашнего дня: 16, 23 и 30 октября — в месяце; 6 и 13 ноября входят в 30 дней, но это уже следующий месяц
+    await openPage(async (s, ids) => {
+      await rule(s, { walletId: ids.cash, startOn: day(1), frequency: 'weekly', note: 'Еженедельный' });
+    });
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: /^Провести: Еженедельный/ })).toHaveLength(3));
+    expect(screen.queryAllByRole('button', { name: /^Провести: Еженедельный/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Провести: Еженедельный, Завтра',
+      'Провести: Еженедельный, пт, 23 окт',
+      'Провести: Еженедельный, пт, 30 окт',
+    ]);
+    expect(document.body.textContent).toContain('До конца месяца');
+    expect(document.body.textContent).not.toContain('ноя');
+  });
+
+  it('все платежи проведены — «До конца месяца платежей нет»', async () => {
     const { td } = await openPage(async (s, ids) => {
       await rule(s, { walletId: ids.cash, startOn: day(-1), frequency: 'yearly', note: 'Раз в год' });
       const r = (await s.db.recurring_rules.toArray())[0];
       if (r) await s.transactions.createFromRule(r.id, day(-1));
     });
-    await waitFor(() => expect(screen.getByText(/На ближайшие 30 дней платежей нет/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/До конца месяца платежей нет/)).toBeInTheDocument());
     expect(await live(td)).toHaveLength(1);
   });
 
