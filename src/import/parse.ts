@@ -33,6 +33,46 @@ export function splitCategory(raw: string): string[] {
   return [parts[0]!, parts.slice(1).join(' / ')];
 }
 
+/**
+ * Несколько категорий у одной операции Дзен-мани пишет в одну ячейку через запятую:
+ * «Еда / Продукты, Одежда», «Еда / Вкусняшки , Еда / Продукты» (проверено на выгрузке настоящего пользователя).
+ * Запятая разделяет категории, только если она вне скобок и за ней (после пробела) идёт заглавная буква:
+ * «Красота / Товары (парфюм, кремы и тп), Игрушки» — это две категории, а «Кафе, рестораны» — одна.
+ * Сомнительное остаётся одной категорией, как раньше: лучше не разрезать, чем порезать настоящее название.
+ */
+export function splitCategoryList(raw: string): string[] {
+  const s = sanitizeText(raw);
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (c === '(' || c === '[') depth++;
+    else if ((c === ')' || c === ']') && depth > 0) depth--;
+    else if (c === ',' && depth === 0) {
+      const next = s[i + 1] === ' ' ? s[i + 2] : s[i + 1]; // sanitizeText схлопывает пробелы: после запятой их не больше одного
+      if (next !== undefined && /\p{Lu}/u.test(next)) {
+        parts.push(s.slice(start, i));
+        start = i + 1;
+      }
+    }
+  }
+  parts.push(s.slice(start));
+  return parts.map(trimCommas).filter((p) => p !== '');
+}
+
+/** Пробелы и запятые по краям части («Еда,» → «Еда»). Без регулярных выражений: на длинной ячейке из одних запятых они считали бы долго. */
+function trimCommas(p: string): string {
+  let a = 0;
+  let b = p.length;
+  while (a < b && (p[a] === ',' || p[a] === ' ')) a++;
+  while (b > a && (p[b - 1] === ',' || p[b - 1] === ' ')) b--;
+  return p.slice(a, b);
+}
+
+/** Начало приписки в заметке: категории операции, кроме первой (у операции Sumoima одна категория). */
+const ALSO_CATEGORIES = 'Ещё категории: ';
+
 interface SideRaw {
   cols: SideColumns | undefined;
   amount: string;
@@ -131,16 +171,26 @@ class Reader {
       return review('same-account', `Перевод со счёта «${sides.out.account.name}» на него же`);
     }
 
-    const categoryPath = kind === 'transfer' ? [] : splitCategory(get(idx.category)).map((p) => this.cutName(p));
+    const rawCategory = kind === 'transfer' ? '' : get(idx.category);
+    // Несколько категорий через запятую: первая становится категорией операции, остальные — припиской в заметке (не теряются)
+    const [firstCategory, ...otherCategories] = splitCategoryList(rawCategory);
+    const categoryPath = firstCategory === undefined ? [] : splitCategory(firstCategory).map((p) => this.cutName(p));
+    const alsoCategories = otherCategories.map((c) => splitCategory(c).join(' / ')).filter((c) => c !== '');
+    const also = alsoCategories.length > 0 ? `${ALSO_CATEGORIES}${alsoCategories.join(', ')}` : '';
     const payee = sanitizeText(get(idx.payee));
     const comment = sanitizeText(get(idx.comment));
-    const joined = [payee, comment].filter((p) => p !== '').join(' — ');
+    const joined = [payee, comment, also].filter((p) => p !== '').join(' — ');
     const note = truncateText(joined, NOTE_MAX, true);
     if (note.cut) this.notesTruncated++;
 
+    // id операции считается от категории КАК ЕЁ РАЗБИРАЛИ РАНЬШЕ (вся ячейка целиком): у тех, кто уже импортировал этот файл,
+    // операции с несколькими категориями остаются теми же и при повторной загрузке не задваиваются.
+    const idCategory = splitCategory(rawCategory)
+      .map((p) => truncateText(p, NAME_MAX, false).text)
+      .join(' / ');
     const norm = [
       date.date,
-      categoryPath.join(' / '),
+      idCategory,
       payee,
       comment,
       sides.out?.account.key ?? '',

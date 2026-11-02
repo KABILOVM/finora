@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { makeBigCsv } from './__fixtures__/bigCsv';
 import { fixtureBytes, fixtureText } from './__fixtures__/load';
 import { decodeBytes } from './decode';
-import { NAME_MAX, NOTE_MAX, parseZenmoney, splitCategory } from './parse';
+import { NAME_MAX, NOTE_MAX, parseZenmoney, splitCategory, splitCategoryList } from './parse';
 import { ImportFileError } from './types';
 
 const fixture = fixtureText;
@@ -28,6 +28,84 @@ describe('splitCategory', () => {
   it('пустые части выбрасываются', () => {
     expect(splitCategory('Еда / ')).toEqual(['Еда']);
     expect(splitCategory(' / Еда')).toEqual(['Еда']);
+  });
+});
+
+describe('splitCategoryList: несколько категорий через запятую (примеры из настоящей выгрузки)', () => {
+  it('одна категория остаётся одной', () => {
+    expect(splitCategoryList('Еда')).toEqual(['Еда']);
+    expect(splitCategoryList('Еда / Продукты')).toEqual(['Еда / Продукты']);
+    expect(splitCategoryList('')).toEqual([]);
+    expect(splitCategoryList('   ')).toEqual([]);
+  });
+  it('две и три категории; пробел перед запятой не мешает', () => {
+    expect(splitCategoryList('Платежи, Личная гигиена')).toEqual(['Платежи', 'Личная гигиена']);
+    expect(splitCategoryList('Еда / Вкусняшки , Еда / Продукты')).toEqual(['Еда / Вкусняшки', 'Еда / Продукты']);
+    expect(splitCategoryList('Одежда / Одежда Ахмадшох, Одежда / Одежда Кадрина, Одежда / Одежда Комрон')).toEqual([
+      'Одежда / Одежда Ахмадшох',
+      'Одежда / Одежда Кадрина',
+      'Одежда / Одежда Комрон',
+    ]);
+    expect(splitCategoryList('Транспорт / Такси,Транспорт / Общественный транспорт')).toEqual(['Транспорт / Такси', 'Транспорт / Общественный транспорт']);
+  });
+  it('запятая внутри скобок — часть названия', () => {
+    expect(splitCategoryList('Красота / Товары (парфюм, кремы и тп)')).toEqual(['Красота / Товары (парфюм, кремы и тп)']);
+    expect(splitCategoryList('Красота / Товары (парфюм, кремы и тп), Игрушки')).toEqual(['Красота / Товары (парфюм, кремы и тп)', 'Игрушки']);
+    expect(splitCategoryList('Товары [Парфюм, Кремы]')).toEqual(['Товары [Парфюм, Кремы]']);
+  });
+  it('запятая перед строчной буквой или без буквы — часть названия', () => {
+    expect(splitCategoryList('Кафе, рестораны')).toEqual(['Кафе, рестораны']);
+    expect(splitCategoryList('Подарки, 8 марта')).toEqual(['Подарки, 8 марта']);
+  });
+  it('незакрытая скобка: не режем', () => {
+    expect(splitCategoryList('Товары (парфюм, Кремы')).toEqual(['Товары (парфюм, Кремы']);
+  });
+  it('лишние запятые по краям и пустые части не дают пустых категорий', () => {
+    expect(splitCategoryList('Еда,')).toEqual(['Еда']);
+    expect(splitCategoryList('Еда, , Одежда')).toEqual(['Еда', 'Одежда']);
+    expect(splitCategoryList(',,,')).toEqual([]);
+  });
+  it('очень длинная ячейка разбирается быстро', () => {
+    const big = Array.from({ length: 20000 }, (_, i) => `Категория ${i}`).join(', ');
+    const t = Date.now();
+    expect(splitCategoryList(big)).toHaveLength(20000);
+    expect(Date.now() - t).toBeLessThan(1000);
+  });
+});
+
+describe('parseZenmoney: несколько категорий у одной операции', () => {
+  const cat = (raw: string, payee = '', comment = '') => `2024-01-05,"${raw}",${payee},${comment},Наличные,100,TJS,Наличные,0,TJS`;
+
+  it('первая категория — категория операции, остальные — в заметке', () => {
+    const p = parse(cat('Еда / Вкусняшки , Еда / Продукты'));
+    expect(p.review).toEqual([]);
+    expect(p.rows[0]!.categoryPath).toEqual(['Еда', 'Вкусняшки']);
+    expect(p.rows[0]!.note).toBe('Ещё категории: Еда / Продукты');
+  });
+  it('три категории; заметка склеивается с получателем и комментарием', () => {
+    const p = parse(cat('Одежда / Одежда Ахмадшох, Одежда / Одежда Кадрина, Одежда', 'Магазин', 'плащ'));
+    expect(p.rows[0]!.categoryPath).toEqual(['Одежда', 'Одежда Ахмадшох']);
+    expect(p.rows[0]!.note).toBe('Магазин — плащ — Ещё категории: Одежда / Одежда Кадрина, Одежда');
+  });
+  it('категория с запятой в скобках — по-прежнему одна, заметка не меняется', () => {
+    const p = parse(cat('Красота / Товары (парфюм, кремы и тп)'));
+    expect(p.rows[0]!.categoryPath).toEqual(['Красота', 'Товары (парфюм, кремы и тп)']);
+    expect(p.rows[0]!.note).toBe('');
+  });
+  it('id операции считается от ячейки целиком, как до исправления: повторный импорт старого файла не задваивает', () => {
+    const p = parse(cat('Еда / Вкусняшки , Еда / Продукты'));
+    // прежний разбор брал всю ячейку: родитель «Еда», ребёнок «Вкусняшки , Еда / Продукты»
+    expect(p.rows[0]!.idKey).toContain('Еда / Вкусняшки , Еда / Продукты');
+  });
+  it('перевод: категория не разбирается', () => {
+    const p = parse('2024-01-05,"Еда, Одежда",,,Наличные,100,TJS,Карта,100,TJS');
+    expect(p.rows[0]!.kind).toBe('transfer');
+    expect(p.rows[0]!.categoryPath).toEqual([]);
+    expect(p.rows[0]!.note).toBe('');
+  });
+  it('счётчик обрезанных названий не двоится', () => {
+    const long = 'Я'.repeat(NAME_MAX + 5);
+    expect(parse(cat(`${long}, Одежда`)).namesTruncated).toBe(1);
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * Поиск столбцов по названиям заголовков. Формат Дзен-мани по памяти: date, categoryName, payee, comment,
+ * Поиск столбцов по названиям заголовков. Формат Дзен-мани по памяти (итог одного настоящего импорта его подтвердил): date, categoryName, payee, comment,
  * outcomeAccountName, outcome, outcomeCurrencyShortTitle, incomeAccountName, income, incomeCurrencyShortTitle,
  * createdDate, changedDate, qrCode. Названия ищутся с вариантами (английские и русские), регистр, пробелы,
  * подчёркивания и «ё/е» не важны. Если нужного не нашли — не гадаем, а говорим словами (см. notZenmoneyMessage).

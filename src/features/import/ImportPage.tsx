@@ -220,7 +220,12 @@ export default function ImportPage() {
           )}
           {stage.name === 'running' && <RunStep progress={stage.progress} stopping={stage.stopping} onStop={stop} />}
           {stage.name === 'done' && (
-            <DoneStep report={stage.report} onAgain={again} onUndo={stage.report.journal ? () => undoImport(store, stage.report.journal!) : undefined} />
+            <DoneStep
+              report={stage.report}
+              onAgain={again}
+              onUndo={stage.report.journal ? () => undoImport(store, stage.report.journal!) : undefined}
+              wallets={dbRows.wallets}
+            />
           )}
         </>
       )}

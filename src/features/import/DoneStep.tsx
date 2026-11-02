@@ -7,6 +7,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Notice } from '@/components/Notice';
 import { SectionHeader } from '@/components/SectionHeader';
 import { formatMinor } from '@/domain/money';
+import type { LocalRow, Wallet } from '@/domain/types';
+import { ReconcileSheet } from '@/features/wallets/ReconcileSheet';
 import type { ImportReport } from '@/import/runImport';
 import type { UndoResult } from '@/import/undoImport';
 import { opsWord, rowsWord } from './importText';
@@ -29,10 +31,17 @@ export interface DoneStepProps {
   onAgain: () => void;
   /** «Отменить импорт»: убрать то, что записал этот запуск. Нет — кнопки нет (например, ничего не записано). */
   onUndo?: () => Promise<UndoResult>;
+  /**
+   * Кошельки из базы (по ним у строки остатка появляется «Сверить с банком»). Нет — кнопок нет.
+   * Начальный остаток в Дзен-мани не выгружается, поэтому после импорта он 0 и остатки могут оказаться отрицательными.
+   */
+  wallets?: readonly LocalRow<Wallet>[];
 }
 
 /** Шаг 4. Итог: что добавлено и что нет, ошибки записи, остатки по файлу для сверки с банком. */
-export function DoneStep({ report, onAgain, onUndo }: DoneStepProps) {
+export function DoneStep({ report, onAgain, onUndo, wallets }: DoneStepProps) {
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const checking = checkingId === null ? undefined : wallets?.find((w) => w.id === checkingId);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [undone, setUndone] = useState<UndoResult | null>(null);
@@ -123,19 +132,27 @@ export function DoneStep({ report, onAgain, onUndo }: DoneStepProps) {
           </SectionHeader>
           <Card padding="none">
             <p className="px-4 pt-3 text-sm text-muted">
-              Остатки считаются из операций, начальный остаток новых кошельков — 0. Сверьте цифры с банком; при расхождении поправьте начальный
-              остаток кошелька (Кошельки → кошелёк → Изменить).
+              Остатки считаются из операций, а начальный остаток новых кошельков — 0: в выгрузке Дзен-мани его нет, поэтому остаток может
+              получиться другим, в том числе отрицательным. Нажмите «Сверить с банком», введите, сколько на самом деле, — и начальный остаток
+              поправится одной кнопкой. Операции при этом не меняются.
             </p>
             <ul className="divide-y divide-border" aria-label="Остатки по файлу">
               {report.reconcile.map((r) => (
-                <li key={r.id} className="flex items-baseline justify-between gap-3 px-4 py-3">
-                  <span className="min-w-0 break-words font-medium">{r.name}</span>
-                  <span className="shrink-0 text-right tabular-nums">
-                    <span className="block text-sm text-muted">Остаток по файлу</span>
-                    <span className="font-semibold">
-                      {r.fileBalanceMinor === null ? 'не удалось посчитать' : formatMinor(r.fileBalanceMinor, r.currency)}
+                <li key={r.id} className="flex flex-col gap-2 px-4 py-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 break-words font-medium">{r.name}</span>
+                    <span className="shrink-0 text-right tabular-nums">
+                      <span className="block text-sm text-muted">Остаток по файлу</span>
+                      <span className="font-semibold">
+                        {r.fileBalanceMinor === null ? 'не удалось посчитать' : formatMinor(r.fileBalanceMinor, r.currency)}
+                      </span>
                     </span>
-                  </span>
+                  </div>
+                  {wallets?.some((w) => w.id === r.id) && (
+                    <Button variant="secondary" className="self-start" aria-label={`Сверить с банком: ${r.name}`} onClick={() => setCheckingId(r.id)}>
+                      Сверить с банком
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -189,6 +206,8 @@ export function DoneStep({ report, onAgain, onUndo }: DoneStepProps) {
           </Button>
         )}
       </Card>
+
+      {checking && <ReconcileSheet wallet={checking} onClose={() => setCheckingId(null)} />}
 
       <ConfirmDialog
         open={confirming}
