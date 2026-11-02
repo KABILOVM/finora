@@ -562,7 +562,10 @@ describe('добавление, правка и архив лимита', () => 
       await s.budgets.create({ categoryId: null, amountMinor: 100_000 });
     });
     await write(() => storeOf(td).settings.update({ baseCurrency: 'USD' }));
-    await user.click(await waitFor(() => rowButton('Все расходы')));
+    // Лист запоминает сумму при открытии: откроешь его, пока страница ещё считает основной валютой TJS, — в поле останется «1 000».
+    // Поэтому сначала ждём, пока строка покажет смену валюты (как в тесте выше), и только потом открываем лист.
+    await waitFor(() => expect(text(rowButton('Все расходы'))).toContain('Лимит задан в TJS, а основная валюта сейчас USD'));
+    await user.click(rowButton('Все расходы'));
     await findByRole('dialog', { name: 'Лимит: Все расходы' });
     // под нагрузкой текст листа появляется позже самого диалога — ждём его, а не читаем сразу
     await waitFor(() => expect(screen.getByText(/Раньше лимит был в TJS\. Укажите сумму в USD/)).toBeTruthy());
