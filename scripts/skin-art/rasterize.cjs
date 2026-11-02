@@ -12,14 +12,8 @@ const jobs = [
   ['barca-crest.png', 'barca/logo/FC-Barcelona.svg'],
   ['real-crest.png', 'real-madrid/logo/Real-Madrid-CF.svg'],
   ['spain-flag.png', 'football/flags/es-circle.svg'],
-  ['ar-flag.png', 'football/flags/ar-circle.svg'],
-  ['pt-flag.png', 'football/flags/pt-circle.svg'],
   ['akatsuki-cloud.png', 'akatsuki/svg/emblem.svg'],
   ['classic-icon.png', '~/public/icon.svg'],
-  ...fs
-    .readdirSync(path.join(skins, 'emoji'))
-    .filter((f) => f.endsWith('.svg'))
-    .map((f) => ['emoji-' + f.replace(/\.svg$/, '.png'), 'emoji/' + f]),
 ];
 
 (async () => {

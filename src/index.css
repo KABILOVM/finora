@@ -1858,14 +1858,16 @@ html[data-skin='spain'] {
   --skin-head-ls: 0.02em;
   --skin-pattern: repeating-linear-gradient(90deg, rgb(241 191 0 / 0.14) 0 30px, transparent 30px 60px);
   --skin-line: 241 191 0;
-  --skin-mark: url('./assets/skins/football/flags/es-circle.svg');
+  --skin-art: url('./assets/skins/art/spain-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='cr7'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
   --skin-head-ls: 0.02em;
   --skin-pattern: repeating-linear-gradient(135deg, rgb(212 161 27 / 0.14) 0 2px, transparent 2px 16px);
   --skin-line: 212 161 27;
-  --skin-mark-text: '7';
+  --skin-art: url('./assets/skins/art/cr7-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='football'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;

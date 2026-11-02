@@ -17,10 +17,10 @@ const artSkins = SKINS.filter((s) => s.id !== 'classic' && extras(s.id).includes
 const KB = 1024;
 
 describe('картинки образов: фон карточки «Всего»', () => {
-  it('картинка на карточке есть у всех образов, кроме «Классики», «Роналду» (там цифра «7») и «Испании» (там флаг-знак)', () => {
-    const ids = SKINS.map((s) => s.id).filter((id) => !['classic', 'cr7', 'spain'].includes(id));
+  it('картинка на карточке есть у всех образов, кроме «Классики» (там обычный цвет без картинки)', () => {
+    const ids = SKINS.map((s) => s.id).filter((id) => id !== 'classic');
     expect(artSkins.map((s) => s.id).sort()).toEqual([...ids].sort());
-    expect(ids).toHaveLength(16);
+    expect(ids).toHaveLength(18);
   });
 
   it('каждая картинка — webp 640×320 из assets/skins/art, файл есть и не тяжелее 45 КБ; рядом задан --skin-art-content', () => {
@@ -70,8 +70,9 @@ describe('картинки образов: фон карточки «Всего�
     }
   });
 
-  it('там, где на карточке картинка-герой или значок в правом нижнем углу, водяной знак не рисуется поверх неё', () => {
-    for (const id of ['messi', 'shinobi', 'spider', 'tajik', 'argentina', 'football', 'comic', 'kawaii', 'racing']) {
+  it('там, где на карточке картинка (герой, фото, флаг), водяной знак в углу не рисуется поверх неё; он остался только у клубов и «Акацуки»', () => {
+    for (const id of ['akatsuki', 'barca', 'real']) expect(extras(id).includes('--skin-mark:'), id).toBe(true);
+    for (const id of ['messi', 'shinobi', 'spider', 'tajik', 'argentina', 'football', 'comic', 'kawaii', 'racing', 'spain', 'cr7']) {
       const body = extras(id);
       expect(body.includes('--skin-mark:'), `${id}: --skin-mark`).toBe(false);
       expect(body.includes('--skin-mark-text:'), `${id}: --skin-mark-text`).toBe(false);

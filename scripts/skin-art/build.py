@@ -7,8 +7,8 @@
   <образ>-hero.webp   640×320, фон карточки «Всего» на главной. Два вида:
                       — «кадр» (фото, арт на всю карточку): левая часть плавно уходит в прозрачность (под ней цвет карточки), а яркость
                         каждой точки ограничена (LCAP), поэтому белый текст читается поверх любой части (контраст не меньше 4,5);
-                      — «вырез» (герой или значок на прозрачном фоне): стоит в правом нижнем углу не выше двух третей карточки, под суммой
-                        за месяц, поэтому текст его не задевает; яркость не ограничена, чтобы краски остались живыми.
+                      — «вырез» (герой на прозрачном фоне): стоит в правом нижнем углу не выше двух третей карточки, под суммой за месяц,
+                        поэтому текст его не задевает; яркость не ограничена, чтобы краски остались живыми.
   <образ>-mark.webp   256×256, водяной знак в углу карточки (герб).
   <образ>-thumb.webp  112×112, значок образа в «Настройки → Оформление» (есть у каждого образа).
 Файлы грузятся только у тех, кто выбрал образ, и в офлайн-кэш (precache) не попадают: webp нет в globPatterns у vite.config.ts.
@@ -123,7 +123,7 @@ def hero(name: str, im: Image.Image, start: float = 0.12, end: float = 0.55, qua
 
 # ---- «кадры»: фото и арты на всю карточку ----
 def gradient_map(im: Image.Image, stops: list[tuple[float, tuple[int, int, int]]], lo: float = 2, hi: float = 98) -> Image.Image:
-    """Фото -> двухцветная (многоцветная) картинка: яркость точки задаёт цвет по ступеням stops (0..1 -> цвет). Так любое фото получает цвета образа."""
+    """Фото -> картинка в цветах образа: яркость точки задаёт цвет по ступеням stops (0..1 -> цвет). Так любое фото получает цвета образа."""
     g = np.asarray(im.convert('L'), dtype=np.float64) / 255
     a, b = np.percentile(g, [lo, hi])
     g = np.clip((g - a) / max(b - a, 1e-6), 0, 1)
@@ -143,78 +143,54 @@ hero('akatsuki', cover('akatsuki/images/banner-itachi-red.jpg', 0.30, 0.5), 0.10
 # Барселона: стадион ночью. Реал Мадрид: ночное поле, «Hala Madrid».
 hero('barca', cover('barca/images/stadium-night.webp', 0.5, 0.62, 1.15), 0.05, 0.60)
 hero('real', cover('real-madrid/images/hala-madrid-pitch.webp', 0.5, 0.72), 0.05, 0.60)
-# Таджикистан: арка памятника Исмоили Сомони в закатных красно-золотых цветах (фото CC BY-SA 4.0, см. CREDITS.md).
+# Национальные: флаги и флагштоки (настоящие фото). Цвета флага сохраняются, яркость только ограничена.
 TAJ = [(0, (30, 6, 20)), (0.4, (110, 18, 40)), (0.75, (190, 90, 50)), (1, (236, 190, 110))]
-hero('tajik', gradient_map(cover('tajik/photos/somoni-arch.jpg', 0.56, 0.52, 1.7), TAJ), 0.03, 0.40)
+hero('tajik', gradient_map(cover('photos/tajik-flagpole.jpg', 0.44, 0.3, 1.8), TAJ), 0.04, 0.45)  # душанбинский флагшток (165 м) в закатной дымке, цвета образа
+hero('spain', cover('photos/spain-flag.jpg', 0.55, 0.5, 1.0), 0.05, 0.55)  # огромный флаг на площади Колумба в Мадриде
+hero('argentina', cover('photos/argentina-flag.jpg', 0.43, 0.2, 2.2), 0.03, 0.45)  # флаг Аргентины с «Солнцем мая» на мачте
 # Памир: хребет над озером Каракуль в ледяных сине-голубых цветах (фото CC BY-SA 4.0, см. CREDITS.md).
 PAM = [(0, (6, 12, 38)), (0.35, (22, 44, 96)), (0.7, (60, 120, 150)), (1, (190, 215, 225))]
 hero('pamir', gradient_map(cover('tajik/photos/karakul-lake.jpg', 0.5, 0.40, 1.5), PAM), 0.05, 0.60)
+# Стили: настоящие фото (Unsplash и др.), у «Пикселя» ещё и в цветах Game Boy.
+hero('football', cover('photos/football-night.jpg', 0.5, 0.62, 1.0), 0.05, 0.55)
+hero('racing', cover('photos/racing-f1.jpg', 0.62, 0.45, 1.0), 0.05, 0.55)
+hero('cyber', cover('photos/cyber-shibuya.jpg', 0.5, 0.45, 1.0), 0.05, 0.55)
+hero('aesthetic', cover('photos/aesthetic-roses.jpg', 0.5, 0.35, 1.0), 0.05, 0.55)
+hero('kawaii', cover('photos/kawaii-unicorn.jpg', 0.5, 0.5, 1.0), 0.05, 0.55)
+hero('comic', cover('photos/comic-superhero.jpg', 0.5, 0.42, 1.0), 0.05, 0.55)
+GB = [(0, (15, 38, 15)), (0.5, (48, 98, 48)), (1, (155, 188, 15))]
+hero('pixel', gradient_map(cover('photos/pixel-retro-tv.jpg', 0.5, 0.5, 1.15), GB), 0.05, 0.55)
 
 
-# ---- «вырезы»: герой или значок на прозрачном фоне, в правом нижнем углу ----
+# ---- «вырезы»: герой на прозрачном фоне, в правом нижнем углу ----
 def trim(im: Image.Image) -> Image.Image:
     bb = im.getbbox()
     return im.crop(bb) if bb else im
 
 
-def glow(size: tuple[int, int], center: tuple[float, float], radius: float, alpha: float) -> Image.Image:
-    """Мягкое белое пятно за фигурой: чтобы она не терялась на цвете карточки."""
-    yy, xx = np.mgrid[0:size[1], 0:size[0]]
-    d = np.hypot(xx - center[0], yy - center[1]) / radius
-    a = np.clip(1 - d, 0, 1) ** 2 * alpha * 255
-    out = np.zeros((size[1], size[0], 4), dtype=np.uint8)
-    out[..., :3] = 255
-    out[..., 3] = a.astype(np.uint8)
-    return Image.fromarray(out, 'RGBA')
-
-
-def cutout(name: str, im: Image.Image, frac: float, glow_alpha: float = 0.0, extra: Image.Image | None = None, pad: float = 0.04) -> None:
-    """Вырез в правом нижнем углу: высота frac от карточки, отступ справа pad от ширины. Всё, что в extra, ложится поверх на тот же холст."""
+def cutout(name: str, im: Image.Image, frac: float, pad: float = 0.04) -> None:
+    """Вырез в правом нижнем углу: высота frac от карточки, отступ справа pad от ширины."""
     im = trim(im)
     h = round(H * frac)
     w = max(1, round(im.width * h / im.height))
     r = im.resize((w, h), Image.LANCZOS)
-    x = W - w - round(W * pad)
     canvas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    if glow_alpha:
-        canvas.alpha_composite(glow((W, H), (x + w / 2, H - h / 2), h * 0.75, glow_alpha))
-    canvas.alpha_composite(r, (x, H - h))
-    if extra is not None:
-        canvas.alpha_composite(extra)
+    canvas.alpha_composite(r, (W - w - round(W * pad), H - h))
     save(canvas, f'{name}-hero.webp', 80)
-
-
-def tmp(name: str) -> Image.Image:
-    return Image.open(TMP / name).convert('RGBA')
 
 
 # Паутина: человек-паук на чёрном -> вырезан по яркости. Месси: арт с майкой «10». Шиноби: Наруто с расенганом (PNG с прозрачным фоном).
 cutout('spider', key_black(load('spider/images/hero-dynamic.webp'), 1.6), 0.88)
-messi = feather_top(feather_left(load('barca/images/messi-10-art.webp'), 0.0, 0.55), 0.3)
-cutout('messi', messi, 0.74, pad=0.0)
+cutout('messi', feather_top(feather_left(load('barca/images/messi-10-art.webp'), 0.0, 0.55), 0.3), 0.74, pad=0.0)
 cutout('shinobi', load('shinobi/png/rasengan.png'), 0.72, pad=0.0)
-# Остальные образы: значок-иллюстрация (Fluent Emoji Flat, MIT) с мягким пятном за ним.
-cutout('argentina', tmp('emoji-sun-with-face.png'), 0.66, 0.16)  # «Солнце мая» с флага
-cutout('football', tmp('emoji-soccer-ball.png'), 0.62, 0.16)
-cutout('comic', tmp('emoji-collision.png'), 0.68, 0.14)
-cutout('kawaii', tmp('emoji-cat-face.png'), 0.62, 0.18)
-cutout('aesthetic', tmp('emoji-rose.png'), 0.70, 0.14)
-cutout('cyber', tmp('emoji-robot.png'), 0.66, 0.14)
-cutout('pixel', tmp('emoji-alien-monster.png'), 0.62, 0.14)
-# Гонки: болид на фоне клетчатых флагов.
-flag = trim(tmp('emoji-chequered-flag.png'))
-fh = round(H * 0.7)
-flag = flag.resize((round(flag.width * fh / flag.height), fh), Image.LANCZOS)
-front = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-front.alpha_composite(flag, (W - flag.width - round(W * 0.06), H - fh))
-car = trim(tmp('emoji-racing-car.png'))
-cw = round(W * 0.5)
-car = car.resize((cw, round(car.height * cw / car.width)), Image.LANCZOS)
+# Роналду: портрет в цветах образа (чёрное, гранат, золото), по высоте карточки у правого края, слева уходит в прозрачность.
+CR = [(0, (8, 6, 8)), (0.45, (120, 16, 32)), (0.8, (200, 140, 40)), (1, (240, 210, 130))]
+portrait = feather_top(feather_left(cap_luminance(gradient_map(load('photos/cr7.jpg'), CR)), 0.0, 0.6), 0.3)
 canvas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-canvas.alpha_composite(glow((W, H), (W * 0.78, H * 0.6), H * 0.7, 0.14))
-canvas.alpha_composite(front)
-canvas.alpha_composite(car, (W - cw - round(W * 0.02), H - car.height - round(H * 0.04)))
-save(canvas, 'racing-hero.webp', 80)
+ph = round(H * 0.86)
+pw = round(portrait.width * ph / portrait.height)
+canvas.alpha_composite(portrait.resize((pw, ph), Image.LANCZOS), (W - pw - round(W * 0.03), H - ph))
+save(canvas, 'cr7-hero.webp', 80)
 
 
 # ---- водяной знак (герб) и значки образов ----
@@ -230,6 +206,15 @@ def square(im: Image.Image, size: int, pad: float = 0.04) -> Image.Image:
     return c
 
 
+def tmp(name: str) -> Image.Image:
+    return Image.open(TMP / name).convert('RGBA')
+
+
+def sq(rel: str, fx: float, fy: float, zoom: float = 1.0) -> Image.Image:
+    """Квадратный кадр из фото для значка: настоящие цвета, без ограничения яркости."""
+    return crop_cover(load(rel), fx, fy, zoom, ratio=1.0)
+
+
 marks = {'barca': tmp('barca-crest.png'), 'real': tmp('real-crest.png')}
 for key, im in marks.items():
     save(square(im, 256), f'{key}-mark.webp', 80)
@@ -239,22 +224,31 @@ thumbs = {
     'classic': tmp('classic-icon.png'),
     'barca': marks['barca'],
     'real': marks['real'],
-    'argentina': tmp('ar-flag.png'),
-    'messi': crop_cover(load('barca/images/messi-10-art.webp'), fx=0.62, fy=0.30, zoom=2.4, ratio=1.0),
-    'spain': tmp('spain-flag.png'),
-    'cr7': tmp('pt-flag.png'),
-    'football': tmp('emoji-soccer-ball.png'),
+    'argentina': sq('photos/argentina-flag.jpg', 0.43, 0.2, 3.0),
+    'messi': sq('barca/images/messi-10-art.webp', 0.62, 0.30, 2.4),
+    'spain': sq('photos/spain-flag-detail.jpg', 0.42, 0.4, 1.5),
+    'cr7': sq('photos/cr7.jpg', 0.5, 0.28, 1.7),
+    'football': sq('photos/football-night.jpg', 0.5, 0.6, 1.9),
     'shinobi': load('shinobi/png/face.png'),
-    'akatsuki': tmp('akatsuki-cloud.png'),
+    'akatsuki': sq('akatsuki/images/banner-itachi-red.jpg', 0.42, 0.45, 1.5),
     'spider': key_black(crop_cover(load('spider/images/hero-mask-closeup.webp'), fx=0.5, fy=0.5, zoom=1.05, ratio=1.0)),
-    'comic': tmp('emoji-collision.png'),
-    'tajik': emblem,
-    'pamir': tmp('emoji-snow-capped-mountain.png'),
-    'kawaii': tmp('emoji-cat-face.png'),
-    'aesthetic': tmp('emoji-rose.png'),
-    'racing': tmp('emoji-chequered-flag.png'),
-    'cyber': tmp('emoji-cityscape-at-dusk.png'),
-    'pixel': tmp('emoji-alien-monster.png'),
+    'comic': sq('photos/comic-superhero.jpg', 0.55, 0.5, 2.2),
+    'tajik': sq('photos/tajik-flagpole-view.jpg', 0.34, 0.5, 1.5),  # флаг Таджикистана с высоты флагштока
+    'pamir': sq('tajik/photos/karakul-lake.jpg', 0.5, 0.42, 2.0),
+    'kawaii': sq('photos/kawaii-unicorn.jpg', 0.45, 0.4, 2.0),
+    'aesthetic': sq('photos/aesthetic-roses.jpg', 0.5, 0.45, 1.5),
+    'racing': sq('photos/racing-f1.jpg', 0.65, 0.5, 2.2),
+    'cyber': sq('photos/cyber-shibuya.jpg', 0.78, 0.3, 2.4),
+    'pixel': sq('photos/pixel-retro-tv.jpg', 0.5, 0.45, 2.0),
 }
+FULL = {'classic', 'barca', 'real', 'shinobi'}  # значок-герб или картинка с прозрачным фоном: вписываем целиком
+def on_dark(im: Image.Image) -> Image.Image:
+    """Прозрачная картинка на тёмном фоне: файл заметно легче, чем с прозрачностью."""
+    bg = Image.new('RGBA', im.size, (12, 14, 30, 255))
+    bg.alpha_composite(im.convert('RGBA'))
+    return bg
+
+
+thumbs['spider'] = on_dark(thumbs['spider'].resize((112, 112), Image.LANCZOS))
 for key, im in thumbs.items():
-    save(square(im, 112, 0.0 if key == 'messi' else 0.06), f'{key}-thumb.webp', 78)
+    save(square(im, 112, 0.06) if key in FULL else im.convert('RGBA').resize((112, 112), Image.LANCZOS), f'{key}-thumb.webp', 68)
