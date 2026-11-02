@@ -107,3 +107,28 @@ describe('поиск категории в окне «Новая операци�
     expect(screen.getByRole('button', { name: 'Назад к категориям' })).toHaveTextContent('Еда');
   });
 });
+
+describe('на телефоне окно «Новая операция» не выдвигает клавиатуру само', () => {
+  const touch = () => vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('coarse'), media: query, addEventListener: () => undefined, removeEventListener: () => undefined }));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('панель категорий: поле поиска без курсора; «Заметка»: поле открыто, но курсор в нём только после нажатия', async () => {
+    touch();
+    await openAddSheet();
+    await openCategories();
+    expect(document.activeElement).not.toBe(searchBox());
+    await openCategories(); // закрыли панель
+    await user.click(screen.getByRole('button', { name: 'Заметка' }));
+    const note = await waitFor(() => screen.getByRole('textbox', { name: /^Заметка/ }));
+    expect(document.activeElement).not.toBe(note);
+    await user.click(note);
+    expect(document.activeElement).toBe(note);
+  });
+
+  it('сумма по-прежнему под курсором: у неё своя цифровая клавиатура', async () => {
+    touch();
+    await openAddSheet();
+    expect(document.activeElement).toBe(amountField());
+  });
+});
+

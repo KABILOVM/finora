@@ -211,3 +211,27 @@ describe('поиск в панели категорий (новая операц
     }
   });
 });
+
+describe('на телефоне клавиатура сама не выезжает', () => {
+  it('«Новая» открывает поле названия, но курсор в него сам не встаёт', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('coarse'), media: query, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    try {
+      mount(OPTIONS);
+      await user.click(await waitFor(() => screen.getByRole('button', { name: 'Новая категория' })));
+      const name = await waitFor(() => screen.getByRole('textbox', { name: 'Название новой категории' }));
+      expect(document.activeElement).not.toBe(name);
+      await user.click(name);
+      expect(document.activeElement).toBe(name);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('на компьютере поле названия получает курсор сразу', async () => {
+    mount(OPTIONS);
+    await user.click(await waitFor(() => screen.getByRole('button', { name: 'Новая категория' })));
+    const name = await waitFor(() => screen.getByRole('textbox', { name: 'Название новой категории' }));
+    expect(document.activeElement).toBe(name);
+  });
+});
+

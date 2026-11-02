@@ -14,6 +14,7 @@ import { suggestGlyph } from '@/features/categories/suggestGlyph';
 import { walletOptions } from '@/features/transactions/ContextRow';
 import { cn } from '@/lib/cn';
 import { formatDayLabel } from '@/lib/dates';
+import { canAutoFocusText } from '@/lib/pointer';
 
 export interface DraftExpensesEditorProps {
   drafts: readonly DraftExpense[];
@@ -106,7 +107,7 @@ export function NewCategory({
     >
       <div className="flex gap-2">
         <input
-          autoFocus
+          autoFocus={canAutoFocusText()}
           value={name}
           maxLength={CATEGORY_NAME_MAX}
           onChange={(e) => {

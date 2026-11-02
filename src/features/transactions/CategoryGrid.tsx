@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { isCoarsePointer } from '@/components/AmountInput';
 import type { ChipOption } from '@/components/ChipPicker';
 import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
@@ -7,6 +6,7 @@ import { SearchField } from '@/components/SearchField';
 import type { CategoryKind } from '@/domain/types';
 import { searchOptions } from '@/features/categories/categoryTree';
 import { cn } from '@/lib/cn';
+import { canAutoFocusText } from '@/lib/pointer';
 import { isSearching, showsSearch } from '@/lib/search';
 import { NewCategoryForm } from './NewCategoryForm';
 
@@ -87,7 +87,7 @@ export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, onSav
   const [query, setQuery] = useState('');
   // открытая категория (её подкатегории вместо верхнего уровня); если выбрана подкатегория — сразу её соседи
   const [openId, setOpenId] = useState<string | null>(() => options.find((o) => o.value === value)?.parent ?? null);
-  const [focusSearch] = useState(() => !isCoarsePointer());
+  const [focusSearch] = useState(canAutoFocusText);
 
   const searching = isSearching(query);
   const found = useMemo(() => searchOptions(options, query), [options, query]);

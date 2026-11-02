@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AmountInput, isCoarsePointer } from '@/components/AmountInput';
+import { AmountInput } from '@/components/AmountInput';
 import type { KeypadKey } from '@/components/Keypad';
 import { Button } from '@/components/Button';
 import { Floating, useDismiss } from '@/components/Floating';
 import { Icon } from '@/components/Icon';
 import { isOpKey } from '@/components/amountExpr';
 import { cn } from '@/lib/cn';
+import { canAutoFocusText, isCoarsePointer } from '@/lib/pointer';
 import type { ChipOption } from '@/components/ChipPicker';
 import { TextInput } from '@/components/Field';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
@@ -249,7 +250,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
                     }}
                     autoComplete="off"
                     enterKeyHint="done"
-                    autoFocus
+                    autoFocus={canAutoFocusText()}
                     placeholder="Например, хлеб и молоко"
                     error={errors.note}
                   />

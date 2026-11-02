@@ -16,6 +16,7 @@ import { moneyText, priceLine } from './productText';
 import { checkLines, statsOfName, totalOfLines, viewLine, type PurchaseLine } from './purchase';
 import { searchProducts, type Choice } from './suggest';
 import { useProductsData } from './useProductsData';
+import { canAutoFocusText } from '@/lib/pointer';
 
 const UNITS = SHOPPING_UNITS.map((u) => ({ value: u, label: UNIT_LABEL[u] }));
 /** Сколько подсказок показываем под строкой поиска. */
@@ -240,7 +241,7 @@ function LineItem({ line, currency, book, open, error, onToggle, onPatch, onRemo
             inputMode="decimal"
             placeholder="0"
             autoComplete="off"
-            autoFocus={line.amountText === ''}
+            autoFocus={line.amountText === '' && canAutoFocusText()}
             value={line.amountText}
             onChange={(e) => onPatch({ amountText: e.target.value.replace('.', ',') })}
             {...(v.unitMinor !== null ? { hint: `Цена: ${moneyText(v.unitMinor, currency)} за ${UNIT_LABEL[line.unit]}` } : {})}

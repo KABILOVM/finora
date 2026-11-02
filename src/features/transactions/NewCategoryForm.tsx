@@ -6,6 +6,7 @@ import { useStore } from '@/db';
 import type { CategoryKind } from '@/domain/types';
 import { suggestColor, suggestGlyph } from '@/features/categories/suggestGlyph';
 import { cleanName, sameName } from '@/features/wallets/walletUi';
+import { canAutoFocusText } from '@/lib/pointer';
 
 export interface NewCategoryFormProps {
   /** Уже есть: категория с таким названием не создаётся второй раз, а выбирается. */
@@ -75,7 +76,7 @@ export function NewCategoryForm({ options, kind, onPick, onClose, initialName = 
     >
       <div className="flex gap-2">
         <input
-          autoFocus
+          autoFocus={canAutoFocusText()}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
