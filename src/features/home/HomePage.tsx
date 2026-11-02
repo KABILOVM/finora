@@ -29,6 +29,8 @@ import WeeklyCard from './WeeklyCard';
 const FirstOperationCard = lazy(() => import('./FirstOperationCard'));
 // «Итоги месяца» нужны только в первые дни месяца: в остальные дни их код не грузится
 const MonthlyCard = lazy(() => import('./MonthlyCard'));
+// «Траты в день» нужны только тому, кто отметил ежедневные категории: расчёт и карточка грузятся отдельным файлом
+const DailyHomeCard = lazy(() => import('@/features/daily/DailyHomeCard'));
 
 /** Затвор: карточку подгружаем, только когда операций нет совсем. */
 function FirstOperation({ wallets }: { wallets: readonly LocalRow<Wallet>[] }) {
@@ -124,6 +126,9 @@ export default function HomePage() {
         )}
         <SaveRemainderCard today={today} />
         <TripCard />
+        <Suspense fallback={null}>
+          <DailyHomeCard />
+        </Suspense>
         <GlanceStrip base={base} />
         <WalletChips wallets={wallets} balances={balances} />
         <BudgetsWidget />

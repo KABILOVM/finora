@@ -59,6 +59,8 @@ export function makeCategory(overrides: Partial<Category> = {}): Category {
     sortOrder: n,
     archivedAt: null,
     essential: 0,
+    daily: 0,
+    dailyLimitMinor: null,
     ...overrides,
   };
 }

@@ -1242,3 +1242,42 @@ begin
   end loop;
 end
 $$;
+
+
+-- 20. «Ежедневные» категории и дневной лимит -------------------------------------------------
+-- Категория расходов (еда, дорога, продукты) может быть помечена «ежедневной»: её траты входят в среднюю трату в день, а крупные разовые
+-- покупки (техника, одежда) — нет. Отметка действует и на подкатегории. daily — 0 (нет) или 1 (да); у категорий доходов клиент всегда пишет 0.
+-- У ежедневной категории может быть лимит в день — daily_limit_minor, в минимальных единицах основной валюты, от 1 до 1e15: «в среднем не
+-- больше» (экономия копится в пределах месяца, считает клиент). Пусто (NULL) — лимита нет. Лимит бывает только при daily = 1.
+-- Месячные бюджеты (таблица budgets) не затронуты: дневной лимит живёт в категории и не меняет смысла ни одной их суммы.
+-- Блок идемпотентен, как разделы 16 и 19: колонки «add column if not exists», ограничения — только если их ещё нет (у существующих категорий
+-- daily = 0 и лимита нет, поэтому нарушить ограничения они не могут). Данные не трогаются, триггер sync_guard, права и политики остаются
+-- прежними. Старые приложения колонки не знают: при записи они их не присылают, и сохранённые отметка и лимит не затираются.
+-- Выполнять до выкладки приложения; повторный запуск безопасен.
+alter table public.categories add column if not exists daily bigint not null default 0;
+alter table public.categories add column if not exists daily_limit_minor bigint;
+
+do $$
+declare
+  r record;
+begin
+  for r in
+    select * from (values
+      ('categories', 'categories_daily', 'daily in (0, 1)'),
+      ('categories', 'categories_daily_limit', 'daily_limit_minor is null or (daily = 1 and daily_limit_minor between 1 and 1000000000000000)')
+    ) as c (tbl, cname, expr)
+  loop
+    if not exists (
+      select 1 from pg_constraint
+       where conname = r.cname and conrelid = format('public.%I', r.tbl)::regclass
+    ) then
+      execute format('alter table public.%I add constraint %I check (%s) not valid', r.tbl, r.cname, r.expr);
+      begin
+        execute format('alter table public.%I validate constraint %I', r.tbl, r.cname);
+      exception when check_violation then
+        raise warning 'В таблице % есть старые строки, нарушающие ограничение %; новые и изменённые строки оно проверяет', r.tbl, r.cname;
+      end;
+    end if;
+  end loop;
+end
+$$;

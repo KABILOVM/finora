@@ -1,5 +1,6 @@
 import { Glyph } from '@/components/Glyph';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -41,6 +42,21 @@ export default function CategoriesPage() {
   const [kind, setKind] = useState<CategoryKind>('expense');
   const all = useCategories(kind, { includeArchived: true });
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  // Ссылка /categories?edit=<id> (из «Трат в день» на экране «Бюджеты») сразу открывает правку этой категории
+  const [params, setParams] = useSearchParams();
+  const editId = params.get('edit');
+  useEffect(() => {
+    if (editId === null || !all) return;
+    const found = all.find((c) => c.id === editId);
+    if (found) setSheet({ kind: 'edit', category: found });
+    setParams(
+      (p) => {
+        p.delete('edit');
+        return p;
+      },
+      { replace: true },
+    );
+  }, [editId, all, setParams]);
   const [archiving, setArchiving] = useState<LocalRow<Category> | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchived, setShowArchived] = useState(false);

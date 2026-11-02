@@ -1,10 +1,11 @@
 import { createElement, type ReactNode, type SVGProps } from 'react';
 import { DUO, LINE } from './iconData';
+import { skinIconKey, skinIconMarkup, useSkinIconPack } from './skinIconStore';
 
 /**
  * Встроенные SVG-иконки (24×24). Без внешних файлов и CDN — работают офлайн.
  * «duo» — двухтонные заливки (Solar), «line» — линия (Lucide): плюс, галочка, крестик, стрелка, глаз.
- * Разметка берётся только из iconData.ts (наши константы, не пользовательские данные). Строки один раз разбираются в обычные
+ * Разметка берётся только из iconData.ts и из набора значков образа (skinIconStore.ts): это наши константы, не пользовательские данные. Строки один раз разбираются в обычные
  * React-элементы (без dangerouslySetInnerHTML), результат кэшируется.
  */
 export type IconName = keyof typeof DUO | keyof typeof LINE;
@@ -41,8 +42,10 @@ function shapes(name: string, markup: string): ReactNode {
 }
 
 export function Icon({ name, size = 24, label, strokeWidth = 2.2, ...rest }: IconProps) {
-  const isLine = name in LINE;
-  const html = isLine ? LINE[name as keyof typeof LINE] : DUO[name as keyof typeof DUO];
+  useSkinIconPack(); // у образа может быть свой рисунок значка (замены двухтонные, как DUO)
+  const custom = skinIconMarkup(name);
+  const isLine = custom === null && name in LINE;
+  const html = custom ?? (isLine ? LINE[name as keyof typeof LINE] : DUO[name as keyof typeof DUO]);
   return (
     <svg
       width={size}
@@ -59,7 +62,7 @@ export function Icon({ name, size = 24, label, strokeWidth = 2.2, ...rest }: Ico
       focusable="false"
       {...rest}
     >
-      {shapes(name, html)}
+      {shapes(skinIconKey(name), html)}
     </svg>
   );
 }

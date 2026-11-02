@@ -84,8 +84,9 @@ test.describe('Статический аудит (один раз)', () => {
         if (/^ADD_PATH,\s*\{/.test(arg)) continue;
         // Адрес целиком внутренний: начало ФИКСИРОВАННОЕ (/debts/, /debts/people/, /debts?dir=, /edit/, /transactions?, /analytics?, /wallets/),
         // из данных подставляется только хвост (номер долга/операции/кошелька, закодированный ключ человека, 'borrowed', закодированные
-        // фильтры, месяц или период). Уйти на чужой сайт такой адрес не может: «//evil» и «https:» тут не начало.
-        if (/^(?:dir \? )?`\/(?:debts\/|debts\/people\/|debts\?dir=|edit\/|transactions\?|analytics\?|wallets\/)\$\{/.test(arg)) continue;
+        // фильтры, месяц или период, закодированный id категории в /categories?edit=). Уйти на чужой сайт такой адрес не может: «//evil» и
+        // «https:» тут не начало.
+        if (/^(?:dir \? )?`\/(?:debts\/|debts\/people\/|debts\?dir=|edit\/|transactions\?|analytics\?|wallets\/|categories\?edit=)\$\{/.test(arg)) continue;
         dynamic.push(`${f}: ${arg.slice(0, 60)}`);
       }
     }

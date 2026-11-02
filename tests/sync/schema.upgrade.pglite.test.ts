@@ -113,8 +113,8 @@ const asStage1 = (table: SyncTableName, row: Record<string, unknown>): Record<st
   const { debt_id: _d, recurring_rule_id: _r, foreign_currency: _fc, foreign_amount_minor: _fa, ...rest } = row; // «сумма в валюте» — ещё позже (раздел 19 схемы)
   const { goal_minor: _gm, goal_on: _go, ...withoutGoal } = row;
   const { weather: _w, ...withoutWeather } = row;
-  const { essential: _e, ...withoutEssential } = row;
-  if (table === 'categories') return withoutEssential; // «обязательная» категория — ещё позже (раздел 16 схемы)
+  const { essential: _e, daily: _dl, daily_limit_minor: _dlm, ...withoutLate } = row;
+  if (table === 'categories') return withoutLate; // «обязательная» (раздел 16) и «ежедневная» с дневным лимитом (раздел 20) — ещё позже
   if (table === 'wallets') return withoutGoal; // цели накопления появились позже (раздел 11 схемы)
   if (table === 'settings') return withoutWeather; // города для погоды — ещё позже (раздел 13 схемы)
   return table === 'transactions' ? rest : row;
@@ -160,8 +160,8 @@ describe('схема: обновление с этапа 1 на этап 2 по�
         ...(t === 'transactions' ? { debt_id: null, recurring_rule_id: null, foreign_currency: null, foreign_amount_minor: null } : {}),
         ...(t === 'wallets' ? { goal_minor: null, goal_on: null } : {}),
         ...(t === 'settings' ? { weather: null } : {}),
-        // существующие категории получают «не обязательная» (0), а не пустое значение
-        ...(t === 'categories' ? { essential: 0 } : {}),
+        // существующие категории получают «не обязательная» и «не ежедневная» (0) и пустой дневной лимит, а не пустое значение
+        ...(t === 'categories' ? { essential: 0, daily: 0, daily_limit_minor: null } : {}),
       }));
       expect(after[t], t).toEqual(expected);
     }
