@@ -73,6 +73,24 @@ describe('геокодер и запросы', () => {
     const ok = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => sample });
     await expect(fetchForecast({ lat: 1, lon: 1 }, undefined, ok as never)).resolves.toMatchObject({ current: { temp: 21.4 } });
   });
+  it('какие сбои временные (их стоит повторить): 5xx, нет связи, не ответили вовремя; 4xx, «слишком часто» и мусор в ответе — нет', async () => {
+    const transient = async (f: unknown): Promise<boolean> => {
+      try {
+        await fetchForecast({ lat: 1, lon: 1 }, undefined, f as never);
+      } catch (e) {
+        if (e instanceof WeatherError) return e.transient;
+      }
+      throw new Error('ожидалась WeatherError');
+    };
+    const status = (s: number) => vi.fn().mockResolvedValue({ ok: false, status: s, json: async () => ({}) });
+    expect(await transient(status(503))).toBe(true);
+    expect(await transient(status(500))).toBe(true);
+    expect(await transient(status(429))).toBe(false);
+    expect(await transient(status(404))).toBe(false);
+    expect(await transient(vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))).toBe(true);
+    expect(await transient(vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ current: {} }) }))).toBe(false);
+    expect(new WeatherError('x').transient).toBe(false);
+  });
   it('searchCities: короткий запрос не ходит в сеть', async () => {
     const f = vi.fn();
     await expect(searchCities(' а ', undefined, f as never)).resolves.toEqual([]);

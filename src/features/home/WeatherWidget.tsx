@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Spinner } from '@/components/Button';
 import { Icon } from '@/components/Icon';
 import { Skeleton } from '@/components/Skeleton';
+import type { Forecast } from '@/features/weather/api';
 import { conditionOf, formatTemp } from '@/features/weather/conditions';
 import { locate } from '@/features/weather/geolocation';
 import { withCity } from '@/features/weather/places';
@@ -19,12 +20,17 @@ function hhmm(iso: string): string {
 /**
  * Правая ячейка полосы «Курсы и погода» на «Главной»: сейчас в выбранном городе. Нажатие открывает «Погоду» — день по часам и
  * следующие дни. Пока город не выбран, в сеть не ходим: ячейка предлагает определить место или выбрать город.
+ * `onForecast` сообщает наружу прогноз выбранного города (или `null`, пока его нет): по нему «Главная» решает, что посоветовать.
  */
-export default function WeatherWidget() {
+export default function WeatherWidget({ onForecast }: { onForecast?: (forecast: Forecast | null) => void }) {
   const { ready, cities, chosen: city, commit } = usePlaces();
   const { data, loading, error } = useForecast(city);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onForecast?.(city ? data : null);
+  }, [city, data, onForecast]);
 
   // Геолокацию спрашиваем только по нажатию: само приложение за человеком не следит.
   const findMe = async () => {
