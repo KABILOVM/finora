@@ -36,7 +36,7 @@ async function openPage(setup?: (s: Store) => void) {
       <StateProbe />
     </>,
     td,
-    '/settings/templates',
+    '/transactions/templates',
   );
   await findByRole('heading', { name: 'Шаблоны операций', level: 1 });
   if (setup) {
@@ -57,6 +57,14 @@ async function seed(td: Awaited<ReturnType<typeof openPage>>) {
 }
 
 describe('«Шаблоны операций»', () => {
+  it('«Назад» ведёт в «Операции»: экран лежит внутри этого раздела', async () => {
+    await openPage();
+    const back = screen.getByRole('link', { name: /Операции/ });
+    expect(back.getAttribute('href')).toBe('/transactions');
+    await user.click(back);
+    await waitFor(() => expect(currentPath()).toBe('/transactions'));
+  });
+
   it('пока шаблонов нет — подсказка, как их завести, и кнопка «Новая операция»', async () => {
     await openPage();
     expect(await findByRole('heading', { name: 'Шаблонов пока нет' })).toBeTruthy();

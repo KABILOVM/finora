@@ -26,9 +26,26 @@ describe('«Проверка данных» внутри «Операций»', 
     expect(back.some((l) => l.getAttribute('href') === '/transactions' && l.getAttribute('aria-current') === null)).toBe(true);
   });
 
-  it('в «Настройках» отдельной строки «Проверка данных» больше нет', async () => {
+  it('в «Настройках» строк «Проверка данных» и «Шаблоны операций» больше нет', async () => {
     renderAt('/settings');
     expect(await findByRole('heading', { name: 'Настройки', level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Проверка данных/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Шаблоны операций/ })).toBeNull();
+  });
+});
+
+describe('«Шаблоны операций» внутри «Операций»', () => {
+  it('/transactions/templates открывает экран шаблонов; подсвечена вкладка «Операции», а не «Ещё»', async () => {
+    renderAt('/transactions/templates');
+    expect(await findByRole('heading', { name: 'Шаблоны операций', level: 1 })).toBeInTheDocument();
+    const active = Array.from(document.querySelectorAll('[aria-current="page"]')).map((l) => norm(l.textContent));
+    expect(active).toEqual(['Операции', 'Операции']);
+  });
+
+  it('старый адрес /settings/templates (закладка, ссылка) ведёт на тот же экран; «Назад» — в «Операции»', async () => {
+    renderAt('/settings/templates');
+    expect(await findByRole('heading', { name: 'Шаблоны операций', level: 1 })).toBeInTheDocument();
+    const back = screen.getAllByRole('link', { name: /Операции/ });
+    expect(back.some((l) => l.getAttribute('href') === '/transactions' && l.getAttribute('aria-current') === null)).toBe(true);
   });
 });

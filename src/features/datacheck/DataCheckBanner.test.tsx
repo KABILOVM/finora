@@ -67,14 +67,7 @@ describe('«Операции»: вход в «Проверку данных»', 
     await waitFor(() => expect(currentPath()).toBe('/transactions/check'));
   });
 
-  it('значок «Проверка данных» в шапке есть всегда (и при чистых данных) и открывает проверку', async () => {
-    await openOperations(seedClean);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Проверка данных' })).toBeTruthy());
-    await user.click(screen.getByRole('button', { name: 'Проверка данных' }));
-    await waitFor(() => expect(currentPath()).toBe('/transactions/check'));
-  });
-
-  it('когда всё отмечено «Это нормально», плашка уходит, а значок в шапке остаётся', async () => {
+  it('когда всё отмечено «Это нормально», плашка уходит, а меню «⋯» в шапке остаётся', async () => {
     const td = await openOperations(async (s) => {
       await seedClean(s);
       await s.wallets.create({ name: 'Кредитка', currency: 'TJS', kind: 'card', openingBalanceMinor: -5_000, color: '#2563eb', icon: '💳' });
@@ -83,7 +76,7 @@ describe('«Операции»: вход в «Проверку данных»', 
     const credit = (await storeOf(td).db.wallets.toArray()).find((w) => w.name === 'Кредитка')!;
     dismissKey(DATACHECK_NAMESPACE, storeOf(td).userId, `neg:${credit.id}`);
     await waitFor(() => expect(banner()).toBeNull());
-    expect(screen.getByRole('button', { name: 'Проверка данных' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Шаблоны и проверка данных' })).toBeTruthy();
   });
 
   it('отмеченное «Это нормально» не считается: число в плашке то же, что на экране; всё отмечено — плашка уходит', async () => {
@@ -114,6 +107,5 @@ describe('«Операции»: вход в «Проверку данных»', 
   it('без операций (пустой список) плашки нет', async () => {
     await openOperations(async () => undefined);
     expect(banner()).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Проверка данных' })).toBeNull();
   });
 });

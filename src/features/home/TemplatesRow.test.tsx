@@ -57,7 +57,7 @@ describe('«Шаблоны» на «Главной»', () => {
     expect(row()).toBeNull();
   });
 
-  it('чипы с названием и суммой; шаблон на пропавшем кошельке не показывается; «Все» ведёт в Настройки', async () => {
+  it('чипы с названием и суммой; шаблон на пропавшем кошельке не показывается; «Все» ведёт в «Шаблоны операций»', async () => {
     await openHome((s, { cash, food }) => {
       saveTemplate(s.userId, 'Кофе', { kind: 'expense', walletId: cash, toWalletId: null, amountMinor: 1_500, categoryId: food, note: '' });
       saveTemplate(s.userId, 'Аренда', { kind: 'expense', walletId: 'gone', toWalletId: null, amountMinor: 300_000, categoryId: null, note: '' });
@@ -67,7 +67,7 @@ describe('«Шаблоны» на «Главной»', () => {
     expect(norm(chips()[0]!.textContent)).toContain('Кофе');
     expect(norm(chips()[0]!.textContent)).toContain(norm(formatMinor(1_500, 'TJS')));
     await user.click(screen.getByRole('link', { name: 'Все' }));
-    await waitFor(() => expect(currentPath()).toBe('/settings/templates'));
+    await waitFor(() => expect(currentPath()).toBe('/transactions/templates'));
   });
 
   it('нажатие открывает «Новую операцию» с готовой заготовкой', async () => {

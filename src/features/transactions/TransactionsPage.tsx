@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ActionMenu, type ActionMenuItem } from '@/components/ActionMenu';
 import { Button, buttonClasses } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { IconButton } from '@/components/IconButton';
+import { runWithoutModalAnchor } from '@/components/modalHistory';
 import { MoneyText } from '@/components/MoneyText';
 import { PageHeader } from '@/components/PageHeader';
 import { exportTransactionsCsv, useCategories, useHasTransactions, useSettings, useStore, useTransactions, useWallets, ValidationError } from '@/db';
@@ -13,6 +15,7 @@ import { useToast } from '@/components/Toast';
 import { DATACHECK_PATH } from '@/features/datacheck/constants';
 import { DataCheckBanner } from '@/features/datacheck/DataCheckBanner';
 import { downloadTextFile } from '@/features/settings/download';
+import { TEMPLATES_PATH } from '@/features/templates/constants';
 import { useAddLink } from '@/layout/nav';
 import { formatMinor } from '@/domain/money';
 import { formatDayLabel, todayLocal } from '@/lib/dates';
@@ -180,6 +183,14 @@ export default function TransactionsPage() {
 
   const open = (id: string) => navigate(`/edit/${id}`, { state: { background: location } });
 
+  // Меню «⋯»: страницы, которые лежат внутри «Операций». Переход из окна-меню — без лишней записи в истории (runWithoutModalAnchor).
+  const goTo = (path: string) => () => runWithoutModalAnchor(() => navigate(path));
+  const tools: ActionMenuItem[] = [
+    { key: 'templates', label: 'Шаблоны операций', hint: 'Готовые операции в один тап', icon: 'star', onSelect: goTo(TEMPLATES_PATH) },
+    { key: 'datacheck', label: 'Проверка данных', hint: 'Дубли и лишние нули', icon: 'shield', onSelect: goTo(DATACHECK_PATH) },
+  ];
+  const toolsMenu = <ActionMenu items={tools} label="Шаблоны и проверка данных" title="Операции" />;
+
   // «Выгрузить список»: в файл идёт ровно то, что под текущими фильтрами и поиском (все найденные операции, а не только показанные страницей)
   const [exporting, setExporting] = useState(false);
   const exportList = async () => {
@@ -209,13 +220,18 @@ export default function TransactionsPage() {
             <Button variant="secondary" onClick={stopSelecting}>
               Готово
             </Button>
-          ) : rows && rows.length > 0 ? (
+          ) : (
             <>
-              <IconButton icon="shield" label="Проверка данных" onClick={() => navigate(DATACHECK_PATH)} />
-              <IconButton icon="check" label="Выбрать операции" onClick={() => setSelecting(true)} />
-              <IconButton icon="download" label="Выгрузить список в CSV" disabled={exporting} onClick={() => void exportList()} />
+              {rows && rows.length > 0 && (
+                <>
+                  <IconButton icon="check" label="Выбрать операции" onClick={() => setSelecting(true)} />
+                  <IconButton icon="download" label="Выгрузить список в CSV" disabled={exporting} onClick={() => void exportList()} />
+                </>
+              )}
+              {/* меню — всегда, когда экран загрузился: шаблоны есть и без операций, а у пустого фильтра выбирать и выгружать нечего */}
+              {!loading && toolsMenu}
             </>
-          ) : undefined
+          )
         }
       />
       {loading ? (

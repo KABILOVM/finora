@@ -63,7 +63,8 @@ function TemplateRow({ template: t, resolved, onRename, onDelete }: RowProps) {
 }
 
 /**
- * «Шаблоны операций» (Настройки): список заготовок, которые хранятся на этом устройстве (templateStore.ts). «Внести» открывает
+ * «Шаблоны операций» (внутри «Операций», TEMPLATES_PATH; вход — меню «⋯» в шапке списка и «Все» в строке «Шаблоны» на «Главной»):
+ * список заготовок, которые хранятся на этом устройстве (templateStore.ts). «Внести» открывает
  * «Новую операцию» с заполненными полями, «Переименовать» меняет название, «Удалить» убирает (с «Отменить»). Новый шаблон создаётся
  * кнопкой «Сохранить как шаблон» в панели категорий формы и внизу правки операции.
  */
@@ -76,7 +77,7 @@ export default function TemplatesPage() {
   const [renaming, setRenaming] = useState<Template | null>(null);
   const addLink = useAddLink();
 
-  const header = <PageHeader title="Шаблоны операций" subtitle="Готовые операции в один тап" back={{ to: '/settings', label: 'Настройки' }} />;
+  const header = <PageHeader title="Шаблоны операций" subtitle="Готовые операции в один тап" back={{ to: '/transactions', label: 'Операции' }} />;
   if (!wallets || !categories) {
     return (
       <>

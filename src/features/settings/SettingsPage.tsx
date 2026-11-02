@@ -79,9 +79,7 @@ export default function SettingsPage() {
         <CurrencySection />
         <RatesSection />
         <Card padding="none" className="mb-6">
-          <NavRow to="/settings/categories" icon="i:tag" color="#4f46e5" title="Категории" />
-          <NavRow to="/settings/templates" icon="i:star" color="#d97706" title="Шаблоны операций" />
-        </Card>
+          <NavRow to="/settings/categories" icon="i:tag" color="#4f46e5" title="Категории" />        </Card>
       </Block>
 
       <Block id="data">
