@@ -111,7 +111,7 @@ export function pathLabel<T extends TreeNode & { name: string }>(row: T, byId: R
 
 /**
  * Варианты для выбора категории: родители и подкатегории в порядке «родитель, его дети»; у подкатегории — подпись `sub` с названием родителя
- * (в чипах и сетке выбора она показывается мелко перед названием). `label` всегда обычное название: по нему ищется «такая категория уже есть».
+ * (в чипах и результатах поиска она показывается мелко перед названием) и `parent` — id родителя. `label` всегда обычное название: по нему ищется «такая категория уже есть».
  * `rows` — уже отфильтрованные и упорядоченные нужным образом (например, по частоте); порядок групп берётся из него.
  */
 export function buildCategoryOptions<T extends OptionRow>(rows: readonly T[], labelOf: (row: T) => string = (r) => r.name): ChipOption[] {
@@ -119,7 +119,7 @@ export function buildCategoryOptions<T extends OptionRow>(rows: readonly T[], la
   const byId = new Map(rows.map((r) => [r.id, r] as const));
   return ordered.map((r) => {
     const parent = parentIn(r, byId);
-    return { value: r.id, label: labelOf(r), icon: r.icon, color: r.color, ...(parent ? { sub: parent.name } : {}) };
+    return { value: r.id, label: labelOf(r), icon: r.icon, color: r.color, ...(parent ? { sub: parent.name, parent: parent.id } : {}) };
   });
 }
 

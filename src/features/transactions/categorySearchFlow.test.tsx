@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, user, waitFor } from '@/components/testUtils';
-import { allTxs, amountField, categoryByName, openAddSheet, opsDeps, pinToday, tapAmount, unpinToday } from './__fixtures__/opsKit';
+import { allTxs, amountField, categoryByName, openAddSheet, opsDeps, pinToday, storeOf, tapAmount, unpinToday } from './__fixtures__/opsKit';
 
 beforeEach(pinToday); // сегодня — 15.10.2026
 afterEach(() => {
@@ -67,5 +67,43 @@ describe('поиск категории в окне «Новая операци�
     await openCategories();
     await waitFor(() => grid());
     expect(screen.queryByRole('textbox', { name: 'Поиск категории' })).toBeNull();
+  });
+
+  it('подкатегории: в сетке только «Еда» с «1 ›»; нажатие открывает «Обеды»; «Новая подкатегория» заводит ещё одну под «Едой» и выбирает её', async () => {
+    const td = opsDeps([], {
+      setup: async (s) => {
+        const food = (await s.db.categories.toArray()).find((c) => c.name === 'Еда' && c.kind === 'expense')!;
+        await s.categories.create({ name: 'Обеды', kind: 'expense', color: '#f97316', icon: '🍲', parentId: food.id });
+      },
+    });
+    await openAddSheet(td);
+    await openCategories();
+    expect(names()).not.toContain('Обеды');
+    await user.click(screen.getByRole('button', { name: /^Еда/ }));
+    expect(names()).toEqual(['Без подкатегории', 'Обеды']);
+    await user.click(screen.getByRole('button', { name: 'Новая подкатегория' }));
+    await user.type(await waitFor(() => screen.getByRole('textbox', { name: 'Название новой подкатегории' })), 'Кофе');
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+    await waitFor(() => screen.getByRole('button', { name: 'Категория: Кофе' }));
+    const cats = await storeOf(td).db.categories.toArray();
+    const food = cats.find((c) => c.name === 'Еда' && c.kind === 'expense')!;
+    expect(cats.find((c) => c.name === 'Кофе')).toMatchObject({ parentId: food.id, kind: 'expense', color: '#f97316' }); // цвет как у родителя
+  });
+
+  it('выбранная подкатегория: панель открывается сразу на её соседях', async () => {
+    const td = opsDeps([], {
+      setup: async (s) => {
+        const food = (await s.db.categories.toArray()).find((c) => c.name === 'Еда' && c.kind === 'expense')!;
+        await s.categories.create({ name: 'Обеды', kind: 'expense', color: '#f97316', icon: '🍲', parentId: food.id });
+      },
+    });
+    await openAddSheet(td);
+    await openCategories();
+    await user.click(screen.getByRole('button', { name: /^Еда/ }));
+    await user.click(screen.getByRole('button', { name: 'Обеды' }));
+    expect(screen.getByRole('button', { name: 'Категория: Обеды' })).toBeTruthy();
+    await openCategories();
+    expect(names()).toEqual(['Без подкатегории', 'Обеды']);
+    expect(screen.getByRole('button', { name: 'Назад к категориям' })).toHaveTextContent('Еда');
   });
 });

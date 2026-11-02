@@ -37,7 +37,8 @@ export function SearchField({ value, onChange, label, placeholder = 'Назва�
         onKeyDown={onKeyDown}
         onChange={(e) => onChange(e.target.value)}
         // своя кнопка «очистить» ниже: встроенный крестик браузера прячем, чтобы их не стало два
-        className={cn(inputClasses(false), 'min-h-[44px] py-2 pl-10 pr-11 [&::-webkit-search-cancel-button]:hidden')}
+        // справа место под «очистить» нужно, только пока что-то набрано: пустое поле отдаёт его подсказке (в узких строках она иначе обрезается)
+        className={cn(inputClasses(false), 'min-h-[44px] py-2 pl-10 [&::-webkit-search-cancel-button]:hidden', value === '' ? 'pr-3' : 'pr-11')}
       />
       {value !== '' && (
         <IconButton icon="close" label="Очистить поиск" iconSize={18} className="absolute right-0 top-1/2 -translate-y-1/2" onClick={() => onChange('')} />

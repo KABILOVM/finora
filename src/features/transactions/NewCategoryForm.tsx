@@ -18,13 +18,15 @@ export interface NewCategoryFormProps {
   onClose: (created: boolean) => void;
   /** Название заранее (например, то, что искали и не нашли). */
   initialName?: string;
+  /** Заводится подкатегория этого родителя: цвет по умолчанию как у родителя. */
+  parent?: { id: string; color?: string };
 }
 
 /**
  * Строка «Новая категория»: достаточно написать название, значок и цвет подберутся сами. Enter добавляет категорию, а не
  * сохраняет всю операцию.
  */
-export function NewCategoryForm({ options, kind, onPick, onClose, initialName = '' }: NewCategoryFormProps) {
+export function NewCategoryForm({ options, kind, onPick, onClose, initialName = '', parent }: NewCategoryFormProps) {
   const store = useStore();
   const toast = useToast();
   const [name, setName] = useState(initialName);
@@ -45,7 +47,13 @@ export function NewCategoryForm({ options, kind, onPick, onClose, initialName = 
     setBusy(true);
     setProblem(null);
     try {
-      const row = await store.categories.create({ name: clean, kind, color: suggestColor(options.length), icon: suggestGlyph(clean) });
+      const row = await store.categories.create({
+        name: clean,
+        kind,
+        color: parent?.color ?? suggestColor(options.length),
+        icon: suggestGlyph(clean),
+        ...(parent ? { parentId: parent.id } : {}),
+      });
       onPick(row.id);
       onClose(true);
     } catch (e) {
@@ -76,8 +84,8 @@ export function NewCategoryForm({ options, kind, onPick, onClose, initialName = 
               void add();
             }
           }}
-          placeholder="Название, например «Кофе»"
-          aria-label="Название новой категории"
+          placeholder={parent ? 'Название подкатегории' : 'Название, например «Кофе»'}
+          aria-label={parent ? 'Название новой подкатегории' : 'Название новой категории'}
           maxLength={60}
           autoComplete="off"
           enterKeyHint="done"

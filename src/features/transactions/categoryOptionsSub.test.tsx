@@ -24,14 +24,24 @@ describe('выбор категории с подкатегориями', () => 
     expect(OPTIONS[1]?.sub).toBe('Коммунальные услуги');
   });
 
-  it('сетка: у подкатегории мелкая подпись с названием родителя; выбор отдаёт id подкатегории', async () => {
+  it('подкатегории знают родителя: у «Вода» parent — id «Коммунальных услуг», у верхних parent нет', () => {
+    expect(OPTIONS[1]?.parent).toBe('comm');
+    expect(OPTIONS[0]?.parent).toBeUndefined();
+    expect(OPTIONS[2]?.parent).toBeUndefined();
+  });
+
+  it('сетка: подкатегорий в ней нет, у родителя — «1 ›»; нажатие открывает подкатегорию, её выбор отдаёт id подкатегории', async () => {
     const onPick = vi.fn();
     renderAppRoot(<CategoryGrid options={OPTIONS} value={null} onPick={onPick} onSkip={() => undefined} kind="expense" />, { deps: makeTestDeps().deps });
-    const water = await waitFor(() => screen.getByRole('button', { name: /Вода/ }));
-    expect(water).toHaveTextContent('Коммунальные услуги');
-    expect(water).toHaveTextContent('Вода');
-    // у родителя и обычной категории подписи нет
-    expect(screen.getByRole('button', { name: 'Еда' })).not.toHaveTextContent('Коммунальные');
+    const parent = await waitFor(() => screen.getByRole('button', { name: /Коммунальные услуги/ }));
+    expect(parent).toHaveTextContent('подкатегорий: 1');
+    expect(screen.queryByRole('button', { name: /^Вода/ })).toBeNull();
+    // у обычной категории значка «›» нет, а нажатие выбирает сразу
+    expect(screen.getByRole('button', { name: 'Еда' })).not.toHaveTextContent('подкатегорий');
+    await user.click(parent);
+    expect(onPick).not.toHaveBeenCalled();
+    const water = await waitFor(() => screen.getByRole('button', { name: 'Вода' }));
+    expect(screen.queryByRole('button', { name: 'Еда' })).toBeNull(); // видны только подкатегории
     await user.click(water);
     expect(onPick).toHaveBeenCalledWith('water');
   });

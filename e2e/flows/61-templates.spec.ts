@@ -55,11 +55,11 @@ test.describe('61. Шаблоны операций', () => {
     await goSection(page, 'Операции');
     await expect(page.getByRole('button', { name: /обед в столовой/ })).toHaveCount(2);
 
-    // в панели категорий формы шаблон стоит первым
+    // в панели категорий — только категории: полосы шаблонов над сеткой нет (шаблоны — на «Главной»)
     const form = await fillTx(page, { amount: '10' });
     await form.getByRole('button', { name: /^Категория:/ }).click();
-    const strip = form.getByRole('group', { name: 'Шаблоны и частые операции' });
-    await expect(strip.getByRole('button').first()).toContainText('Обед');
+    await expect(form.getByRole('group', { name: 'Категория' })).toBeVisible();
+    await expect(form.getByRole('group', { name: 'Шаблоны и частые операции' })).toHaveCount(0);
     await shot(page, '61-templates-panel', testInfo);
     await page.keyboard.press('Escape'); // первый Esc закрывает панель категорий, второй — саму форму (с вопросом о несохранённом)
     await page.keyboard.press('Escape');
