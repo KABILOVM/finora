@@ -48,8 +48,8 @@ function Block({ id, children }: { id: string; children: ReactNode }) {
 export const SETTINGS_BLOCKS = ['account', 'security', 'accounting', 'data', 'appearance', 'about'] as const;
 
 /**
- * Настройки: только то, чем человек пользуется. Блоки по порядку: аккаунт → безопасность и уведомления → учёт (валюта, курсы,
- * категории) → данные (копия, импорт) → оформление → о приложении. Синхронизация показывается сверху только когда с ней что-то не так.
+ * Настройки: только то, чем человек пользуется. Блоки по порядку: аккаунт → безопасность и уведомления → учёт (валюта, курсы) →
+ * данные (копия, импорт) → оформление → о приложении. Синхронизация показывается сверху только когда с ней что-то не так.
  */
 export default function SettingsPage() {
   const [news, setNews] = useState(false);
@@ -78,8 +78,6 @@ export default function SettingsPage() {
       <Block id="accounting">
         <CurrencySection />
         <RatesSection />
-        <Card padding="none" className="mb-6">
-          <NavRow to="/settings/categories" icon="i:tag" color="#4f46e5" title="Категории" />        </Card>
       </Block>
 
       <Block id="data">

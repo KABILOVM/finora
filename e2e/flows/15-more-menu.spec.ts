@@ -5,6 +5,7 @@ import { expect, goSection, isPhone, mainNav, openApp, openFromMore, shot, test 
 const MORE: ReadonlyArray<readonly [string, string, string]> = [
   ['Кошельки', 'Кошельки', '#/wallets'],
   ['Долги', 'Долги', '#/debts'],
+  ['Категории', 'Категории', '#/categories'],
   ['Бюджеты', 'Бюджеты', '#/budgets'],
   ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
   ['Поездки', 'Поездки', '#/trips'],
@@ -12,7 +13,6 @@ const MORE: ReadonlyArray<readonly [string, string, string]> = [
   ['Продукты', 'Продукты', '#/products'],
   ['Курсы валют', 'Курсы валют', '#/rates'],
   ['Погода', 'Погода', '#/weather'],
-  ['Категории', 'Категории', '#/settings/categories'],
   ['Импорт из Дзен-мани', 'Импорт из Дзен-мани', '#/import'],
   ['Настройки', 'Настройки', '#/settings'],
 ];
@@ -71,7 +71,7 @@ test.describe('15. Меню «Ещё»', () => {
 
   test('телефон: на всех разделах из «Ещё» подсвечен «Ещё»; на «Главной» нет', async ({ page }) => {
     test.skip(!isPhone(page), 'нижняя панель только на телефоне');
-    for (const hash of ['/more', '/wallets', '/budgets', '/recurring', '/debts', '/import', '/settings', '/settings/categories']) {
+    for (const hash of ['/more', '/wallets', '/budgets', '/recurring', '/debts', '/import', '/settings', '/categories', '/settings/categories']) {
       await openApp(page, hash);
       expect(await lit(page), hash).toEqual(['Ещё']);
     }
@@ -90,6 +90,7 @@ test.describe('15. Меню «Ещё»', () => {
       ['Регулярные платежи', 'Регулярные платежи', '#/recurring'],
       ['Долги', 'Долги', '#/debts'],
       ['Кошельки', 'Кошельки', '#/wallets'],
+      ['Категории', 'Категории', '#/categories'],
       ['Настройки', 'Настройки', '#/settings'],
     ] as const) {
       await mainNav(page).getByRole('link', { name, exact: true }).click();
@@ -110,15 +111,15 @@ test.describe('15. Меню «Ещё»', () => {
     }
   });
 
-  test('ПК: пункта «Ещё» в боковой панели нет, категории и импорт — внутри «Настроек»', async ({ page }) => {
+  test('ПК: пункта «Ещё» в боковой панели нет, «Категории» — свой пункт, импорт — внутри «Настроек»', async ({ page }) => {
     test.skip(isPhone(page), 'боковая панель только на ПК');
     await openApp(page);
     await expect(mainNav(page).getByRole('link', { name: 'Ещё' })).toHaveCount(0);
+    await goSection(page, 'Категории');
+    expect(hashOf(page)).toBe('#/categories');
+    expect(await lit(page)).toEqual(['Категории']);
     await goSection(page, 'Настройки');
-    await page.getByRole('main').getByRole('link', { name: 'Категории', exact: true }).click();
-    await expect(h1(page, 'Категории')).toBeVisible();
-    expect(await lit(page)).toEqual(['Настройки']);
-    await goSection(page, 'Настройки');
+    await expect(page.getByRole('main').getByRole('link', { name: 'Категории', exact: true })).toHaveCount(0);
     await page.getByRole('main').getByRole('link', { name: 'Импорт из Дзен-мани', exact: true }).click();
     await expect(h1(page, 'Импорт из Дзен-мани')).toBeVisible();
     expect(await lit(page)).toEqual(['Настройки']);

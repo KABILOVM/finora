@@ -266,7 +266,7 @@ test.describe('CSP в настоящем браузере', () => {
       const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name }).click()]);
       expect(dl.suggestedFilename()).toMatch(/^sumoima-/);
     }
-    await page.getByRole('link', { name: 'Категории' }).click();
+    await goSection(page, 'Категории');
     await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
     await page.getByRole('button', { name: 'Добавить', exact: true }).click();
     await expect(sheet(page, /категори/i)).toBeVisible();

@@ -94,7 +94,6 @@ export default function CategoriesPage() {
   return (
     <>
       <PageHeader
-        back={{ to: '/settings', label: 'Настройки' }}
         title="Категории"
         actions={
           <Button icon="plus" onClick={() => setSheet({ kind: 'new' })} disabled={all === undefined}>

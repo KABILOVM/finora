@@ -219,7 +219,7 @@ export default function BudgetTemplateSheet({ base, budgets, onClose }: BudgetTe
               {result.missing.length > 0 && (
                 <p className="rounded-2xl bg-surface-2 p-3 text-sm text-muted" data-testid="template-missing">
                   Нет подходящей категории для {result.missing.length} {pluralRu(result.missing.length, 'набора', 'наборов', 'наборов')}: {result.missing.map((m) => m.name).join(', ')}. Добавьте их из
-                  «Настройки → Категории → Готовые категории», и шаблон поставит и на них.
+                  «Категории → Готовые категории», и шаблон поставит и на них.
                 </p>
               )}
             </>

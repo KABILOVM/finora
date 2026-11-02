@@ -49,7 +49,8 @@ describe('подсветка нижней панели: «Ещё» горит н
     ['/debts', 'Долги'],
     ['/import', 'Импорт из Дзен-мани'],
     ['/settings', 'Настройки'],
-    ['/settings/categories', 'Категории'],
+    ['/categories', 'Категории'],
+    ['/settings/categories', 'Категории'], // старый адрес ведёт на новый
   ])('%s', async (path, title) => {
     renderAt(path);
     await findByRole('heading', { name: title, level: 1 });
@@ -75,7 +76,8 @@ describe('подсветка боковой панели', () => {
     ['/debts', 'Долги', 'Долги'],
     ['/wallets', 'Кошельки', 'Кошельки'],
     ['/import', 'Импорт из Дзен-мани', 'Настройки'],
-    ['/settings/categories', 'Категории', 'Настройки'],
+    ['/categories', 'Категории', 'Категории'],
+    ['/settings/categories', 'Категории', 'Категории'], // старый адрес ведёт на новый
     ['/settings', 'Настройки', 'Настройки'],
   ])('%s: горит один пункт «%s»', async (path, title, label) => {
     renderAt(path);
@@ -113,12 +115,19 @@ describe('переходы из страницы «Ещё»', () => {
     expect(links.map((a) => a.textContent)).not.toContain('Аналитика');
   });
 
-  it('в «Настройках» есть категории и импорт', async () => {
+  it('в «Настройках» есть импорт, а категорий нет: они — отдельный раздел меню', async () => {
     renderAt('/settings');
     await findByRole('heading', { name: 'Настройки', level: 1 });
     const main = screen.getByRole('main');
-    expect(linkIn(main, 'Категории').getAttribute('href')).toMatch(/\/settings\/categories$/);
     expect(linkIn(main, 'Импорт из Дзен-мани').getAttribute('href')).toMatch(/\/import$/);
+    expect(screen.queryAllByRole('link', { name: /Категории/ }).filter((a) => main.contains(a))).toHaveLength(0);
+  });
+
+  it('«Категории» есть и в боковой панели ПК (группа «Деньги»), и в «Ещё» на телефоне', async () => {
+    renderAt('/more');
+    await findByRole('heading', { name: 'Ещё', level: 1 });
+    expect(linkIn(sideNav(), 'Категории').getAttribute('href')).toMatch(/\/categories$/);
+    expect(linkIn(screen.getByRole('main'), 'Категории').getAttribute('href')).toMatch(/\/categories$/);
   });
 });
 

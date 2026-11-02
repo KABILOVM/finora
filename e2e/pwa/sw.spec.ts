@@ -120,7 +120,7 @@ test('ХОЛОДНЫЙ ОФЛАЙН-СТАРТ: после полного пер
   // никаких запросов к нашему серверу: всё из кэша воркера
   expect(offlineSrv.log.length).toBe(before);
   // глубокие ссылки и перезагрузка тоже работают офлайн
-  await page.goto(`${srv.url}#/settings/categories`);
+  await page.goto(`${srv.url}#/categories`);
   await page.reload();
   await ready(page);
   await expect(page.getByRole('heading', { name: /Категории/ }).first()).toBeVisible();
@@ -163,7 +163,7 @@ test('Сеть пропала ПОСЛЕ загрузки страницы: вс
   await nav.getByRole('link', { name: 'Ещё' }).click();
   await page.getByRole('main').getByRole('link', { name: 'Настройки', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Настройки' }).first()).toBeVisible();
-  await page.goto(`${srv.url}#/settings/categories`);
+  await page.goto(`${srv.url}#/categories`);
   await expect(page.getByRole('heading', { name: /Категории/ }).first()).toBeVisible();
   await page.getByRole('link', { name: 'Добавить операцию' }).first().click();
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -229,7 +229,7 @@ test('Внешние хосты при старте и обходе всех с�
   await page.goto(srv.url);
   await ready(page);
   await waitForSw(page);
-  for (const hash of ['#/', '#/transactions', '#/wallets', '#/settings', '#/settings/categories']) {
+  for (const hash of ['#/', '#/transactions', '#/wallets', '#/settings', '#/categories']) {
     await page.goto(srv.url + hash);
     await ready(page);
   }
@@ -266,7 +266,7 @@ test('Раздача из ПОДПАПКИ домена: воркер встаё
   await page.goto(`${sub.url}#/transactions`);
   await ready(page);
   await expect(page.getByText('−42 с.').first()).toBeVisible();
-  await page.goto(`${sub.url}#/settings/categories`);
+  await page.goto(`${sub.url}#/categories`);
   await page.reload();
   await ready(page);
   await expect(page.getByRole('heading', { name: /Категории/ }).first()).toBeVisible();

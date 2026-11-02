@@ -18,17 +18,16 @@ async function addDebt(page: Page, name: string, amount: string): Promise<void> 
 }
 
 test.describe('40. «Назад» на вложенных экранах и в окнах', () => {
-  test('«‹ Настройки» на экране «Категории» ведёт в Настройки, в том числе после прямого захода по ссылке', async ({ page }) => {
+  test('«Категории» — отдельный раздел: без «‹ Настройки»; старый адрес из закладки ведёт на новый', async ({ page }) => {
     await openApp(page);
     await openCategories(page);
-    await main(page).getByRole('link', { name: 'Настройки', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Настройки' })).toBeVisible();
+    expect(hashOf(page)).toBe('#/categories');
+    await expect(main(page).getByRole('link', { name: 'Настройки', exact: true })).toHaveCount(0);
 
-    // прямой заход: истории в приложении нет, но кнопка ведёт на нужный экран, а не из приложения
+    // закладка на старый адрес не ломается
     await openApp(page, '/settings/categories');
-    await main(page).getByRole('link', { name: 'Настройки', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Настройки' })).toBeVisible();
-    expect(hashOf(page)).toBe('#/settings');
+    await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
+    expect(hashOf(page)).toBe('#/categories');
   });
 
   test('на странице долга «‹ Долги» ведёт в список, а браузерный «назад» — туда же, откуда пришли', async ({ page }) => {

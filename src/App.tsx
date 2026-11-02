@@ -153,8 +153,10 @@ export function AppRoutes() {
             <Route path="/weather" element={<WeatherPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/settings/categories" element={<CategoriesPage />} />
-            {/* «Проверка данных» и «Шаблоны операций» переехали в «Операции»: старые адреса (закладка, ссылка) ведут туда */}
+            <Route path="/categories" element={<CategoriesPage />} />
+            {/* «Категории» вышли из «Настроек» в отдельный раздел; «Проверка данных» и «Шаблоны операций» переехали в «Операции»:
+                старые адреса (закладка, ссылка, уведомление) ведут на новые места */}
+            <Route path="/settings/categories" element={<Navigate to="/categories" replace />} />
             <Route path="/settings/data-check" element={<Navigate to="/transactions/check" replace />} />
             <Route path="/settings/templates" element={<Navigate to="/transactions/templates" replace />} />
           </Route>

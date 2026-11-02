@@ -41,13 +41,14 @@ afterEach(() => {
 });
 
 describe('Настройки: общий вид (локальный режим)', () => {
-  it('только нужное: оформление, валюта, копия, категории; версия берётся из package.json', async () => {
+  it('только нужное: оформление, валюта, копия; версия берётся из package.json', async () => {
     await openSettings();
     for (const name of ['Оформление', 'Валюта учёта', 'Резервная копия']) {
       expect(screen.getByRole('heading', { name, level: 2 })).toBeInTheDocument();
     }
     expect(screen.getByText(new RegExp(`Sumoima ${version.replace(/\./g, '\\.')} `))).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Категории/ })).toHaveAttribute('href', '/settings/categories');
+    // «Категории» вышли в отдельный раздел меню: в «Настройках» ссылки на них нет
+    expect(screen.queryByRole('link', { name: /Категории/ })).toBeNull();
   });
 
   it('лишнего нет: облака и входа в локальном режиме не видно, технических разделов нет вовсе', async () => {

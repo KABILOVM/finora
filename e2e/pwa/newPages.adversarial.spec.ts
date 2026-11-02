@@ -15,7 +15,7 @@ test.beforeEach(({ browserName: _b }, info) => {
 
 const ready = async (page: Page) => page.getByRole('navigation').first().waitFor();
 
-test('офлайн: /more, /budgets, /recurring, /debts, /import, /settings/categories открываются из precache; прямой заход по адресу тоже', async ({ browser }) => {
+test('офлайн: /more, /budgets, /recurring, /debts, /import, /categories открываются из precache; прямой заход по адресу тоже', async ({ browser }) => {
   const ctx = await browser.newContext({ locale: 'ru-RU', viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
   await page.goto(srv.url);
@@ -34,7 +34,7 @@ test('офлайн: /more, /budgets, /recurring, /debts, /import, /settings/cate
     ['#/recurring', 'Регулярные платежи'],
     ['#/debts', 'Долги'],
     ['#/import', 'Импорт из Дзен-мани'],
-    ['#/settings/categories', 'Категории'],
+    ['#/categories', 'Категории'],
     ['#/settings', 'Настройки'],
   ] as const) {
     await page.goto(`${srv.url}${hash}`);
