@@ -24,7 +24,7 @@ import { TransactionFilters } from './TransactionFilters';
 import { TransactionRow } from './TransactionRow';
 import { toastWithUndo } from './txActions';
 import { useCategoryIndex, useWalletIndex } from './txData';
-import { dayTotal, matchesAmountRange, matchesSearch, matchesSource, toTxFilter, totalsByCurrency } from './txFilters';
+import { dayTotal, matchesAmountRange, matchesSearch, matchesSource, matchesTag, toTxFilter, totalsByCurrency } from './txFilters';
 import { useListFilters } from './useListFilters';
 
 /** Сколько операций показываем сразу (целыми днями) и сколько добавляет «Показать ещё». */
@@ -51,10 +51,10 @@ export default function TransactionsPage() {
   const filter = useMemo(() => toTxFilter(filters, '', today, categories ?? []), [filters, today, categories]);
   const found = useTransactions(filter);
   const anyRow = useHasTransactions();
-  const { amountFrom, amountTo, source } = filters;
+  const { amountFrom, amountTo, source, tag } = filters;
   const rows = useMemo(() => {
     if (!found) return found;
-    const bySource = source === '' ? found : found.filter((t) => matchesSource(t, source));
+    const bySource = (source === '' ? found : found.filter((t) => matchesSource(t, source))).filter((t) => matchesTag(t.note, tag));
     const needSearch = search.trim() !== '';
     const needAmount = amountFrom !== '' || amountTo !== '';
     if (!needSearch && !needAmount) return bySource;
@@ -69,11 +69,11 @@ export default function TransactionsPage() {
     return bySource.filter(
       (t) => matchesAmountRange(t, amountFrom, amountTo, currencyOf) && (!needSearch || matchesSearch(t, search, look)),
     );
-  }, [found, search, source, amountFrom, amountTo, walletIndex, categoryIndex]);
+  }, [found, search, source, tag, amountFrom, amountTo, walletIndex, categoryIndex]);
 
   // другой список (фильтр, поиск, вкладка «Операции», «Показать всё») — снова с первой страницы
   const filterKey = JSON.stringify(filter);
-  useEffect(() => setLimit(PAGE_SIZE), [filterKey, search, source, amountFrom, amountTo]);
+  useEffect(() => setLimit(PAGE_SIZE), [filterKey, search, source, tag, amountFrom, amountTo]);
 
   const { groups, shown } = useMemo(() => {
     const byDay = new Map<string, LocalRow<Transaction>[]>();

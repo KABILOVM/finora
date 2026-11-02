@@ -7,6 +7,7 @@ import type { Category, IsoDate, LocalRow, Wallet } from '@/domain/types';
 import { monthKey } from '@/lib/dates';
 import { cn } from '@/lib/cn';
 import { FiltersSheet } from './FiltersSheet';
+import { useKnownTags } from './knownTags';
 import { MonthSwitcher } from './MonthSwitcher';
 import {
   activeFilterCount,
@@ -104,7 +105,9 @@ export function TransactionFilters({ filters, onChange, wallets, categories, tod
     amountFrom: filters.amountFrom,
     amountTo: filters.amountTo,
     source: filters.source,
+    tag: filters.tag,
   };
+  const tags = useKnownTags() ?? [];
   const count = activeFilterCount(inSheet);
 
   return (
@@ -164,7 +167,7 @@ export function TransactionFilters({ filters, onChange, wallets, categories, tod
         <div className="flex items-center gap-2 pl-1" data-testid="active-filters">
           <p className="min-w-0 flex-1 truncate text-sm text-muted">
             <span className="sr-only">Включены фильтры: </span>
-            {activeFilterLabels(inSheet, wallets, categories).join(' · ')}
+            {activeFilterLabels(inSheet, wallets, categories, tags).join(' · ')}
           </p>
           <button
             type="button"
@@ -181,6 +184,7 @@ export function TransactionFilters({ filters, onChange, wallets, categories, tod
           initial={inSheet}
           wallets={wallets}
           categories={categories}
+          tags={tags}
           onApply={(next) => {
             setSheetOpen(false);
             // фильтры лежат в адресе: правим его, когда запись окна в истории уже снята (иначе replace затёр бы её)

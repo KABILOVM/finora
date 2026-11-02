@@ -114,5 +114,8 @@ export function spendByWallet(txs: readonly SpendTx[], month: string, base: Curr
   return acc.result((id) => walletName(id));
 }
 
+/** Строка запроса для ссылки на расходы с этой меткой за месяц: `/transactions?${tagSpendQuery(…)}` (key — ключ группы: без регистра и «ё»). */
+export const tagSpendQuery = (month: string, key: string): string => new URLSearchParams({ month, tag: key, kind: 'expense' }).toString();
+
 /** Строка запроса для ссылки на расходы этого кошелька за месяц: `/transactions?${walletSpendQuery(…)}` (адрес в самой ссылке фиксирован). */
 export const walletSpendQuery = (month: string, walletId: string): string => new URLSearchParams({ month, wallet: walletId, kind: 'expense' }).toString();

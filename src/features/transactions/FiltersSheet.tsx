@@ -6,6 +6,7 @@ import { Sheet } from "@/components/Sheet";
 import type { Category, LocalRow, TxKind, Wallet } from "@/domain/types";
 import { groupUnderParents, pathLabel } from "@/features/categories/categoryTree";
 import { FieldGroup } from "./FieldGroup";
+import type { KnownTag } from "./knownTags";
 import { rankByPopularity, usePopularity } from "./popularity";
 import {
   activeFilterCount,
@@ -53,6 +54,8 @@ export interface FiltersSheetProps {
   initial: SheetFilters;
   wallets: readonly LocalRow<Wallet>[];
   categories: readonly LocalRow<Category>[];
+  /** Метки, что уже встречались в заметках: из них выбирается «Метка» (нет меток — поля нет). */
+  tags?: readonly KnownTag[];
   /** «Применить»: выбранное попадает в список. Закрытие без «Применить» ничего не меняет. */
   onApply: (next: SheetFilters) => void;
   onClose: () => void;
@@ -66,6 +69,7 @@ export function FiltersSheet({
   initial,
   wallets,
   categories,
+  tags = [],
   onApply,
   onClose,
 }: FiltersSheetProps) {
@@ -199,6 +203,26 @@ export function FiltersSheet({
             )}
           </select>
         </Field>
+
+        {(tags.length > 0 || draft.tag !== "") && (
+          <Field id="filter-tag" label="Метка" hint="Слово с #, написанное в заметке операции.">
+            <select
+              id="filter-tag"
+              value={draft.tag}
+              onChange={(e) => setDraft((cur) => ({ ...cur, tag: e.target.value }))}
+              className={`${inputClasses(false)} min-h-[48px]`}
+            >
+              <option value="">Все метки</option>
+              {/* выбранная метка, которой уже нет ни в одной операции (их удалили), остаётся в списке: иначе её нечем снять */}
+              {draft.tag !== "" && !tags.some((t) => t.key === draft.tag) && <option value={draft.tag}>{`#${draft.tag}`}</option>}
+              {tags.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {`#${t.label} (${t.count})`}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
 
         <FieldGroup label="Сумма">
           <div ref={amountRef} className="grid grid-cols-2 gap-2">

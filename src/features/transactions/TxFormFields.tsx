@@ -14,7 +14,10 @@ import { ContextRow, type CategoryState } from './ContextRow';
 import type { FrequentChoice } from './FrequentPanel';
 import { FeeField, applyPctKey } from './FeeField';
 import { FxNotice } from './FxNotice';
+import type { KnownTag } from './knownTags';
 import { NoteSuggestions, type NoteChoice } from './NoteSuggestions';
+import { NoteTags } from './NoteTags';
+import { noteTagChips, pickTag, tagPartial } from './noteTags';
 import { ReceivedField } from './ReceivedField';
 import { NO_FEE, NOTE_MAX } from './txForm';
 import type { TxFormController } from './useTxFormController';
@@ -58,6 +61,8 @@ export interface TxFormFieldsProps {
   /** Новая операция: похожие записи для набираемой заметки (под полем заметки) и что делать при нажатии. */
   noteSuggestions?: readonly NoteChoice[];
   onPickNote?: (key: string) => void;
+  /** Метки, что уже встречались в заметках: полоса чипов под полем заметки (нажал — метка добавилась или убралась). Нет меток — полосы нет. */
+  noteTags?: readonly KnownTag[];
   /** Новая операция: кнопка «Что куплено» у поля суммы (только у расхода в «Продуктах»); нет — кнопки нет. */
   onOpenPurchases?: () => void;
   /** Сколько продуктов уже внесено в «Что куплено»: точка на кнопке. */
@@ -101,10 +106,15 @@ function SideButton({
 }
 
 /** Поля операции: вид, сумма, категория или перевод, кошелёк, дата, заметка. Состояние — в контроллере. */
-export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote, onOpenPurchases, purchasesCount = 0, amountLocked = false, purchasesSummary }: TxFormFieldsProps) {
+export function TxFormFields({ c, wallets, categories, kindAction, categoryState, onCategorySkip, onSubmit, frequent, onPickFrequent, onSaveTemplate, noteSuggestions, onPickNote, noteTags, onOpenPurchases, purchasesCount = 0, amountLocked = false, purchasesSummary }: TxFormFieldsProps) {
   const { form, errors } = c;
   const isTransfer = form.kind === 'transfer';
   const noteLength = form.note.trim().length;
+  const tagChips = noteTags && noteTags.length > 0 ? noteTagChips(noteTags, form.note) : null;
+  const hasTagChips = tagChips !== null && tagChips.items.length > 0;
+  // Пока в конце заметки метка или её начало, человек расставляет метки: полоса меток главнее «Похожих записей» (заметка вроде «#Самарканд»
+  // совпала бы с прошлыми и вытеснила чипы, вторую метку не отметить). Иначе подсказки по тексту идут первыми, а метки — когда подсказок нет.
+  const tagsFirst = hasTagChips && tagPartial(form.note) !== null;
   // Комиссия и заметка живут во всплывающих панелях над суммой: в форме не появляется ни новых полей, ни прокрутки
   const [noteOpen, setNoteOpen] = useState(false);
   const showNote = noteOpen || !!errors.note;
@@ -259,7 +269,7 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
                     placeholder="Например, хлеб и молоко"
                     error={errors.note}
                   />
-                  {noteSuggestions && noteSuggestions.length > 0 && onPickNote ? (
+                  {noteSuggestions && noteSuggestions.length > 0 && onPickNote && !tagsFirst ? (
                     // Подсказки занимают место «Готово» (такой же высоты): панель не растёт. Закрыть — Enter, тап мимо или Esc.
                     <NoteSuggestions
                       items={noteSuggestions}
@@ -269,6 +279,9 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
                         focusAmount();
                       }}
                     />
+                  ) : hasTagChips && tagChips !== null ? (
+                    // Метки тоже занимают место «Готово»; панель остаётся открытой, чтобы можно было отметить несколько.
+                    <NoteTags chips={tagChips} note={form.note} onPick={(tag) => c.set({ note: pickTag(form.note, tag, tagChips.mode) })} />
                   ) : (
                     <Button size="md" fullWidth onClick={() => setNoteOpen(false)}>
                       Готово
