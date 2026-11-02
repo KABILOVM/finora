@@ -54,6 +54,8 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     look: ['color', 'icon', 'sortOrder'],
     /** «Обязательная» категория (цели накопления её не урезают): правится отдельно от названия и вида. */
     essential: ['essential'],
+    /** «Ежедневная» категория и её дневной лимит — одной группой: лимит без отметки сервер не примет. */
+    daily: ['daily', 'dailyLimitMinor'],
     archived: ['archivedAt'],
     deleted: ['deletedAt'],
   },

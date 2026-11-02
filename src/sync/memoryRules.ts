@@ -208,6 +208,9 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (charLength(String(r['icon'])) > SHORT_MAX) fail('icon_len');
       // «обязательная» категория (раздел 16 supabase/schema.sql): 0 или 1
       if (r['essential'] !== 0 && r['essential'] !== 1) fail('essential');
+      // «ежедневная» категория и дневной лимит (раздел 20): daily — 0 или 1; лимит — пусто либо от 1 до 1e15 и только при daily = 1
+      if (r['daily'] !== 0 && r['daily'] !== 1) fail('daily');
+      if (r['daily_limit_minor'] != null && (!inBound(r['daily_limit_minor'], 1) || r['daily'] !== 1)) fail('daily_limit');
       break;
     }
     case 'transactions': {

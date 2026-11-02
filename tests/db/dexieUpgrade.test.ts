@@ -681,6 +681,79 @@ describe('обновление базы с версии 9 до 10: сумма в
   });
 });
 
+describe('обновление базы с версии 10 до 11: «ежедневные» категории и дневной лимит', () => {
+  const stores10 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions: 'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    savings_goals: 'id, dirty, walletId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const D_SEEN = '0a3a28c0-5fdc-4385-8fca-7c24d9aaee41';
+  const D_EDITED = '0a3a28c0-5fdc-4385-8fca-7c24d9aaee42';
+  const D_NEW = '0a3a28c0-5fdc-4385-8fca-7c24d9aaee43';
+  const category = (id: string, local: object) => ({
+    ...sync, id, name: 'Еда', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, essential: 0, syncError: null, ...local,
+  });
+
+  it('у старых категорий daily = 0 и dailyLimitMinor = null (а не undefined); категории забираются заново; правки и память о них на месте', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(10).stores(stores10);
+    await old.open();
+    const memory = { dirtyGroups: ['name'], dirtyBase: { name: { b: { name: 'Еда' }, at: '2026-10-02T00:00:00.000Z' } } };
+    await old.table('categories').bulkAdd([
+      category(D_SEEN, { dirty: 0, serverSeq: 4 }),
+      category(D_EDITED, { dirty: 1, serverSeq: 5, name: 'Еда вне дома', ...memory }), // название правлено, ещё не отправлено
+      category(D_NEW, { dirty: 1, serverSeq: null }), // создана здесь, сервер её ещё не видел
+    ]);
+    await old.table('meta').bulkPut([
+      { key: 'cursor:categories', value: 5 },
+      { key: 'cursor:wallets', value: 9 },
+      { key: 'initialPullDone', value: true },
+    ]);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      expect(await store.db.meta.get('cursor:categories')).toBeUndefined();
+      expect(await store.sync.getCursor('categories')).toBe(0);
+      expect(await store.sync.needsResync('categories')).toBe(true); // метка держит повтор, даже если вкладка со старым кодом запишет курсор
+      expect(await store.sync.getCursor('wallets')).toBe(9); // остальные таблицы не забираются заново
+      expect(await store.sync.needsResync('wallets')).toBe(false);
+
+      const seen = await store.db.categories.get(D_SEEN);
+      expect(seen).toMatchObject({ dirty: 0, serverSeq: 0, daily: 0, dailyLimitMinor: null });
+      expect('daily' in seen! && 'dailyLimitMinor' in seen!).toBe(true);
+      expect(await store.db.categories.get(D_EDITED)).toMatchObject({ dirty: 1, serverSeq: 0, name: 'Еда вне дома', daily: 0, ...memory });
+      expect(await store.db.categories.get(D_NEW)).toMatchObject({ dirty: 1, serverSeq: null, daily: 0, dailyLimitMinor: null });
+      expect(await store.sync.hasMergeableEdits()).toBe(true); // правка существующей категории перед отправкой сверится с сервером
+    } finally {
+      store.close();
+    }
+  });
+
+  it('пустая правка старой строки (без ключей daily / dailyLimitMinor) не помечает её изменённой', async () => {
+    const factory = new IDBFactory();
+    const store = await open(factory);
+    try {
+      // как вкладка со старым кодом: новых полей в строке нет совсем
+      await store.db.categories.add(category(D_SEEN, { dirty: 0, serverSeq: 4 }) as never);
+      expect((await store.db.categories.get(D_SEEN))!.daily).toBeUndefined();
+      expect((await store.categories.update(D_SEEN, { name: 'Еда' })).dirty).toBe(0);
+      expect((await store.categories.setDaily(D_SEEN, false)).dirty).toBe(0); // повтор безопасен: «выключено» и так
+      expect((await store.categories.setDailyLimit(D_SEEN, null)).dirty).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+});
+
 /**
  * Страж. Версия приложения, ещё не знающая новой колонки, получает строки без неё (select('*') + отбор по TABLE_SPECS) и
  * запоминает их серверную версию и курсор. После обновления строка выглядит «без значения», с сервера она больше не придёт,
@@ -688,14 +761,14 @@ describe('обновление базы с версии 9 до 10: сумма в
  * в src/db/database.ts). Поэтому колонка в TABLE_SPECS добавляется ВМЕСТЕ с версией базы, которая заново забирает её таблицу.
  */
 describe('новая колонка договора требует версии базы, которая заново забирает таблицу', () => {
-  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции), версии 7 и 8 (долги), версия 9 (категории, долги). */
+  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции), версии 7 и 8 (долги), версия 9 (категории, долги), версия 11 (категории). */
   const SNAPSHOT: Record<SyncTableName, string[]> = {
     settings: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather'],
     wallets: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'currency', 'kind', 'openingBalanceMinor', 'color', 'icon',
       'sortOrder', 'archivedAt', 'goalMinor', 'goalOn',
     ],
-    categories: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'kind', 'parentId', 'color', 'icon', 'sortOrder', 'archivedAt', 'essential'],
+    categories: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'kind', 'parentId', 'color', 'icon', 'sortOrder', 'archivedAt', 'essential', 'daily', 'dailyLimitMinor'],
     transactions: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor',
       'categoryId', 'occurredOn', 'note', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource', 'debtId', 'recurringRuleId',

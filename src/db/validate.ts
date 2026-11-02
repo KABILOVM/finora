@@ -283,6 +283,10 @@ export interface CategoryData {
   archivedAt: IsoDateTime | null;
   /** 1 — обязательная категория (цели накопления её не урезают); у доходных всегда 0. */
   essential: 0 | 1;
+  /** 1 — «ежедневная» категория (её траты входят в среднюю трату в день); у доходных всегда 0. */
+  daily: 0 | 1;
+  /** Лимит в день для ежедневной категории; null — лимита нет. Бывает только при daily = 1. */
+  dailyLimitMinor: Minor | null;
 }
 
 /**
@@ -295,8 +299,30 @@ export function parseEssential(v: unknown, kind: CategoryKind): 0 | 1 {
   return fail('Обязательная категория: ожидалось «да» или «нет»');
 }
 
+/**
+ * «Ежедневная» категория: нет поля (старые строки, копии и устройства до этой возможности) — нет; true/1 — да, false/0 — нет.
+ * Доходная категория не бывает ежедневной: у неё всегда 0.
+ */
+export function parseDaily(v: unknown, kind: CategoryKind): 0 | 1 {
+  if (v === undefined || v === null || v === false || v === 0) return 0;
+  if (v === true || v === 1) return kind === 'expense' ? 1 : 0;
+  return fail('Ежедневная категория: ожидалось «да» или «нет»');
+}
+
+/**
+ * Лимит в день: нет поля или null — лимита нет; иначе целое от 1 до предела суммы и только у ежедневной категории
+ * (лимит без отметки «ежедневная» в среднюю трату в день не попадёт, поэтому считается ошибкой, а не молча теряется).
+ */
+export function parseDailyLimit(v: unknown, daily: 0 | 1): Minor | null {
+  if (v === undefined || v === null) return null;
+  const n = reqPositiveMinor(v, 'Дневной лимит');
+  if (daily !== 1) return fail('Дневной лимит бывает только у ежедневной категории');
+  return n;
+}
+
 export function parseCategoryData(raw: Record<string, unknown>): CategoryData {
   const kind = reqEnum(raw['kind'], 'Вид категории', CATEGORY_KINDS);
+  const daily = parseDaily(raw['daily'], kind);
   return {
     name: reqText(raw['name'], 'Название категории', LIMITS.name),
     kind,
@@ -306,6 +332,8 @@ export function parseCategoryData(raw: Record<string, unknown>): CategoryData {
     sortOrder: reqSafeInt(raw['sortOrder'], 'Порядок категории', SORT_ORDER_MIN, SORT_ORDER_MAX),
     archivedAt: optStamp(raw['archivedAt'], 'Дата архивации категории'),
     essential: parseEssential(raw['essential'], kind),
+    daily,
+    dailyLimitMinor: parseDailyLimit(raw['dailyLimitMinor'], daily),
   };
 }
 

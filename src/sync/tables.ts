@@ -103,6 +103,8 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'sortOrder', column: 'sort_order', type: 'int' },
       { field: 'archivedAt', column: 'archived_at', type: 'ts', nullable: true },
       { field: 'essential', column: 'essential', type: 'int', fallback: 0 },
+      { field: 'daily', column: 'daily', type: 'int', fallback: 0 },
+      { field: 'dailyLimitMinor', column: 'daily_limit_minor', type: 'int', nullable: true },
     ],
   },
   transactions: {
@@ -205,14 +207,14 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
   },
 };
 
-/** Колонки поздней схемы со значением по умолчанию (essential, category): колонка → её значение по умолчанию. */
+/** Колонки поздней схемы со значением по умолчанию (essential, daily, category): колонка → её значение по умолчанию. */
 const LATE_DEFAULTS: ReadonlyMap<string, string | number> = new Map(
   Object.values(TABLE_SPECS).flatMap((spec) => spec.columns.flatMap((c) => (c.fallback !== undefined ? [[c.column, c.fallback] as const] : []))),
 );
 
 /**
  * В строке задано значение хотя бы в одной из колонок: такую строку без этих колонок не отправить, не потеряв значение.
- * Пустое значение и значение по умолчанию (essential = 0, category = '') не в счёт: сервер без колонки и так отдаёт его при чтении.
+ * Пустое значение и значение по умолчанию (essential = 0, daily = 0, category = '') не в счёт: сервер без колонки и так отдаёт его при чтении.
  */
 export function hasLateValue(row: WireRow, columns: readonly string[]): boolean {
   return columns.some((c) => {
