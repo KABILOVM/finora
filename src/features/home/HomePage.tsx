@@ -17,6 +17,7 @@ import MissedDaysCard from './MissedDaysCard';
 import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
+import { inMonthlyWindow } from './monthlyWindow';
 import { RecentOps } from './RecentOps';
 import SaveRemainderCard from './SaveRemainderCard';
 import TemplatesRow from './TemplatesRow';
@@ -26,6 +27,8 @@ import WeeklyCard from './WeeklyCard';
 
 // Карточка «Запишите первую трату» нужна только тому, у кого нет операций: остальным она в основной файл не грузится
 const FirstOperationCard = lazy(() => import('./FirstOperationCard'));
+// «Итоги месяца» нужны только в первые дни месяца: в остальные дни их код не грузится
+const MonthlyCard = lazy(() => import('./MonthlyCard'));
 
 /** Затвор: карточку подгружаем, только когда операций нет совсем. */
 function FirstOperation({ wallets }: { wallets: readonly LocalRow<Wallet>[] }) {
@@ -114,6 +117,11 @@ export default function HomePage() {
         <AttentionRow />
         <MissedDaysCard />
         <WeeklyCard today={today} categories={categoryIndex} />
+        {inMonthlyWindow(today) && (
+          <Suspense fallback={null}>
+            <MonthlyCard today={today} categories={categoryIndex} />
+          </Suspense>
+        )}
         <SaveRemainderCard today={today} />
         <TripCard />
         <GlanceStrip base={base} />
