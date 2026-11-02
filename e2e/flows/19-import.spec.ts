@@ -40,10 +40,9 @@ const rateField = (page: Page, cur: string): Locator => page.getByRole('textbox'
 const walletSelect = (page: Page, account: string): Locator => page.getByRole('combobox', { name: `Кошелёк для счёта «${account}»` });
 const selectedText = (select: Locator): Promise<string> => select.evaluate((el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent ?? '');
 
-/** Импорт лежит внутри «Настроек» (и на телефоне, и на ПК): Настройки → строка «Импорт из Дзен-мани». */
+/** Импорт — отдельный раздел меню (на ПК — боковая панель, на телефоне — «Ещё»). */
 async function openImport(page: Page): Promise<void> {
-  await goSection(page, 'Настройки');
-  await page.getByRole('main').getByRole('link', { name: 'Импорт из Дзен-мани', exact: true }).click();
+  await goSection(page, 'Импорт');
   await expect(heading1(page)).toBeVisible();
 }
 

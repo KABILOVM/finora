@@ -75,7 +75,7 @@ describe('подсветка боковой панели', () => {
     ['/shopping', 'Покупки', 'Покупки'],
     ['/debts', 'Долги', 'Долги'],
     ['/wallets', 'Кошельки', 'Кошельки'],
-    ['/import', 'Импорт из Дзен-мани', 'Настройки'],
+    ['/import', 'Импорт из Дзен-мани', 'Импорт из Дзен-мани'],
     ['/categories', 'Категории', 'Категории'],
     ['/settings/categories', 'Категории', 'Категории'], // старый адрес ведёт на новый
     ['/settings', 'Настройки', 'Настройки'],
@@ -115,12 +115,18 @@ describe('переходы из страницы «Ещё»', () => {
     expect(links.map((a) => a.textContent)).not.toContain('Аналитика');
   });
 
-  it('в «Настройках» есть импорт, а категорий нет: они — отдельный раздел меню', async () => {
+  it('в «Настройках» нет ни импорта, ни категорий: это отдельные разделы меню', async () => {
     renderAt('/settings');
     await findByRole('heading', { name: 'Настройки', level: 1 });
     const main = screen.getByRole('main');
-    expect(linkIn(main, 'Импорт из Дзен-мани').getAttribute('href')).toMatch(/\/import$/);
-    expect(screen.queryAllByRole('link', { name: /Категории/ }).filter((a) => main.contains(a))).toHaveLength(0);
+    expect(screen.queryAllByRole('link', { name: /Категории|Импорт из Дзен-мани/ }).filter((a) => main.contains(a))).toHaveLength(0);
+  });
+
+  it('«Импорт из Дзен-мани» есть и в боковой панели ПК (группа «Инструменты»), и в «Ещё» на телефоне', async () => {
+    renderAt('/more');
+    await findByRole('heading', { name: 'Ещё', level: 1 });
+    expect(linkIn(sideNav(), 'Импорт из Дзен-мани').getAttribute('href')).toMatch(/\/import$/);
+    expect(linkIn(screen.getByRole('main'), 'Импорт из Дзен-мани').getAttribute('href')).toMatch(/\/import$/);
   });
 
   it('«Категории» есть и в боковой панели ПК (группа «Деньги»), и в «Ещё» на телефоне', async () => {

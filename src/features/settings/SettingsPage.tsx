@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Glyph } from '@/components/Glyph';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
@@ -16,16 +16,6 @@ import { CurrencySection } from './CurrencySection';
 import { RatesSection } from './RatesSection';
 import { RemindersSection } from './RemindersSection';
 import { SyncSection } from './SyncSection';
-
-function NavRow({ to, icon, color, title }: { to: string; icon: string; color: string; title: string }) {
-  return (
-    <Link to={to} className="flex min-h-[56px] items-center gap-3 rounded-2xl px-4 py-2 transition-colors hover:bg-surface-2 active:bg-border/60">
-      <Glyph value={icon} color={color} size={40} />
-      <span className="min-w-0 flex-1 text-base font-medium">{title}</span>
-      <Icon name="chevron" size={18} className="shrink-0 text-muted" />
-    </Link>
-  );
-}
 
 /** Сообщает о синхронизации только когда с ней что-то не так; в обычной жизни она идёт сама и статус виден в шапке. */
 function SyncProblems() {
@@ -49,7 +39,7 @@ export const SETTINGS_BLOCKS = ['account', 'security', 'accounting', 'data', 'ap
 
 /**
  * Настройки: только то, чем человек пользуется. Блоки по порядку: аккаунт → безопасность и уведомления → учёт (валюта, курсы) →
- * данные (копия, импорт) → оформление → о приложении. Синхронизация показывается сверху только когда с ней что-то не так.
+ * данные (копия) → оформление → о приложении. Синхронизация показывается сверху только когда с ней что-то не так.
  */
 export default function SettingsPage() {
   const [news, setNews] = useState(false);
@@ -82,8 +72,6 @@ export default function SettingsPage() {
 
       <Block id="data">
         <BackupSection />
-        <Card padding="none" className="mb-6">
-          <NavRow to="/import" icon="i:box" color="#0891b2" title="Импорт из Дзен-мани" />        </Card>
       </Block>
 
       <Block id="appearance">
