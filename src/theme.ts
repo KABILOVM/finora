@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { GENERATED_ACCENTS } from './lib/accentSpecs';
 import { isPalette, normalizeHex, PALETTE_KEYS, triple, type Palette } from './lib/paletteBase';
-import { DEFAULT_SKIN, isSkinId, skinBar, type SkinId } from './skinCore';
+import { setSkinIconPack } from './components/skinIconStore';
+import { DEFAULT_SKIN, isSkinId, SKIN_ICON_PACKS, skinBar, type SkinId } from './skinCore';
 
 /**
  * Тема оформления: «светлая» (по умолчанию), «тёмная» или «как в системе». Хранится на самом устройстве (localStorage),
@@ -256,6 +257,20 @@ export function applySkin(id: SkinId): void {
   if (id === DEFAULT_SKIN) root.removeAttribute('data-skin');
   else root.setAttribute('data-skin', id);
   applyAccent(readAccentPref());
+  loadSkinIcons(id);
+}
+
+/** Свой набор значков образа: грузится лениво и ставится, если образ за это время не сменили; у образов без набора — прежние значки. */
+function loadSkinIcons(id: SkinId): void {
+  if (!SKIN_ICON_PACKS.includes(id)) {
+    setSkinIconPack(null, null);
+    return;
+  }
+  void import('./skinIcons')
+    .then((m) => {
+      if (document.documentElement.getAttribute('data-skin') === id) setSkinIconPack(m.skinIconPack(id) ?? null, id);
+    })
+    .catch(() => undefined); // файл не загрузился (нет сети): остаются обычные значки
 }
 
 export function saveSkinPref(id: SkinId): void {
