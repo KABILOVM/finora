@@ -11,6 +11,7 @@ import {
   matchesAmountRange,
   matchesSearch,
   matchesSource,
+  matchesTag,
   NO_CATEGORY,
   normalizeAmountText,
   periodRange,
@@ -511,5 +512,44 @@ describe('сумма и «откуда» в адресе', () => {
     'min=&max=',
   ])('из адреса: %s — пропускается', (query) => {
     expect(filtersFromParams(q(query), today)).toEqual({});
+  });
+});
+
+describe('фильтр по метке', () => {
+  const today = '2026-10-15';
+  const q = (s: string) => new URLSearchParams(s);
+
+  it('считается в числе фильтров шита и называется «#Метка»: по списку известных меток, иначе по ключу', () => {
+    expect(activeFilterCount(sf({ tag: 'самарканд' }))).toBe(1);
+    expect(activeFilterCount(sf({ walletId: 'w1', kind: 'expense', categoryId: 'c1', amountTo: '5', source: 'debt', tag: 'х1' }))).toBe(6);
+    const known = [{ key: 'поездка_в_самарканд', label: 'Поездка в Самарканд' }];
+    expect(activeFilterLabels(sf({ tag: 'поездка_в_самарканд' }), [], [], known)).toEqual(['#Поездка в Самарканд']);
+    expect(activeFilterLabels(sf({ tag: 'поездка_в_самарканд' }), [], [])).toEqual(['#поездка в самарканд']); // метки уже нет среди известных
+    expect(activeFilterLabels(sf({ source: 'debt', tag: 'х1' }), [], [], [])).toEqual(['По долгам', '#х1']);
+  });
+
+  it('matchesTag: пустая метка подходит всему; без регистра и «ё»; метка — целиком, а не часть слова', () => {
+    expect(matchesTag('что угодно', '')).toBe(true);
+    expect(matchesTag('кофе #Самарканд', 'самарканд')).toBe(true);
+    expect(matchesTag('кофе #самарканд', 'самарканд')).toBe(true);
+    expect(matchesTag('ёлка #Ёлка', 'елка')).toBe(true);
+    expect(matchesTag('кофе #Самарканд2', 'самарканд')).toBe(false);
+    expect(matchesTag('кофе Самарканд', 'самарканд')).toBe(false); // без «#» это не метка
+    expect(matchesTag('кофе', 'самарканд')).toBe(false);
+  });
+
+  it('в адресе: туда и обратно, читаемый адрес', () => {
+    const f = { ...defaultFilters(today), tag: 'самарканд' };
+    expect(filtersToParams(f, today).toString()).toBe('tag=%D1%81%D0%B0%D0%BC%D0%B0%D1%80%D0%BA%D0%B0%D0%BD%D0%B4');
+    expect({ ...defaultFilters(today), ...filtersFromParams(filtersToParams(f, today), today) }).toEqual(f);
+  });
+
+  it('из адреса: метка приводится к ключу (без регистра и «ё»); мусор пропускается', () => {
+    expect(filtersFromParams(q('tag=Самарканд'), today)).toEqual({ tag: 'самарканд' });
+    expect(filtersFromParams(q('tag=ЁЛКА'), today)).toEqual({ tag: 'елка' });
+    expect(filtersFromParams(q('period=all&tag=a_b-1'), today)).toEqual({ period: 'all', tag: 'a_b-1' });
+    for (const bad of ['tag=', 'tag=a', 'tag=с%20пробелом', 'tag=%23метка', `tag=${'я'.repeat(41)}`, 'tag=a/b']) {
+      expect(filtersFromParams(q(bad), today), bad).toEqual({});
+    }
   });
 });

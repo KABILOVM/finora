@@ -687,6 +687,15 @@ describe('экран «Аналитика»: куда уходят деньги'
     expect(text(section())).toContain('Метки могут пересекаться');
   });
 
+  it('строка метки — ссылка на «Операции» с этой меткой за месяц; нажатие открывает список', async () => {
+    await openPage({ setup: seedWhere });
+    await user.click(tab('Метки'));
+    const link = section()?.querySelector<HTMLAnchorElement>('ul[aria-label="Расходы: метки"] a');
+    expect(link?.getAttribute('href')).toBe('/transactions?month=2026-10&tag=%D1%81%D0%B0%D0%BC%D0%B0%D1%80%D0%BA%D0%B0%D0%BD%D0%B4&kind=expense');
+    await user.click(link!);
+    await waitFor(() => expect(currentPath()).toBe('/transactions'));
+  });
+
   it('одна метка — без пояснения про пересечение', async () => {
     await openPage({
       setup: async (s) => {

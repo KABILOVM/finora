@@ -17,6 +17,7 @@ import { TxLinkNotice } from '@/features/debts/TxLinkNotice';
 import { useDebtTxRole } from '@/features/debts/useDebtTxRole';
 import { Receipt } from '@/features/shopping/Receipt';
 import { ADD_PATH } from '@/layout/nav';
+import { useKnownTags } from './knownTags';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from './popularity';
 import { useSaveTemplate } from '@/features/templates/useSaveTemplate';
 import { prefillOfForm } from './prefill';
@@ -134,6 +135,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
     [wallets, orig],
   );
   const c = useTxFormController({ mode: 'edit', initial, orig, wallets: selectable, allWallets: wallets, base: settings.baseCurrency });
+  const knownTags = useKnownTags();
 
   const kind = c.form.kind;
   const categoryOptions = useMemo(() => {
@@ -301,7 +303,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
           {tx.kind === 'expense' && (
             <Receipt txId={tx.id} currency={wallets.find((w) => w.id === tx.walletId)?.currency ?? tx.baseCurrency} />
           )}
-          <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} onSubmit={() => void save()} />
+          <TxFormFields c={c} wallets={selectableRanked} categories={categoryOptions} onSubmit={() => void save()} {...(knownTags ? { noteTags: knownTags } : {})} />
           {/* как и «Повторить»: операция по долгу шаблоном не бывает */}
           {canRepeat && c.form.amountMinor !== null && c.form.amountMinor > 0 && c.form.walletId && (
             <Button

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasTag, listTrips, tagFromName, tagKey, tagLabel, tagsOf, tripReport, withTag, withoutTags, type TripTx } from './trips';
+import { hasTag, listTrips, tagFromName, tagKey, tagLabel, tagsOf, tripReport, withTag, withoutTag, withoutTags, type TripTx } from './trips';
 
 const BASE = 'TJS';
 let seq = 0;
@@ -76,6 +76,37 @@ describe('метки в заметках', () => {
   it('withTag: если метка не влезает в заметку — заметка как есть', () => {
     const long = 'я'.repeat(495);
     expect(withTag(long, 'Самарканд_и_ещё_длинная_метка')).toBe(long);
+  });
+});
+
+describe('withoutTag: убрать одну метку из заметки', () => {
+  it('убирает метку в конце, в середине и в начале; остальные слова и метки остаются', () => {
+    expect(withoutTag('кофе #Самарканд', 'Самарканд')).toBe('кофе');
+    expect(withoutTag('кофе #Самарканд #работа', 'Самарканд')).toBe('кофе #работа');
+    expect(withoutTag('#Самарканд кофе', 'Самарканд')).toBe('кофе');
+    expect(withoutTag('кофе #Самарканд с молоком', 'Самарканд')).toBe('кофе с молоком');
+    expect(withoutTag('#Самарканд', 'Самарканд')).toBe('');
+  });
+
+  it('без учёта регистра и «ё»; все вхождения', () => {
+    expect(withoutTag('кофе #самарканд', 'Самарканд')).toBe('кофе');
+    expect(withoutTag('ёлка #Ёлка', 'елка')).toBe('ёлка');
+    expect(withoutTag('a #работа b #Работа', 'работа')).toBe('a b');
+  });
+
+  it('другая метка с тем же началом не трогается; метка — только целиком', () => {
+    expect(withoutTag('кофе #Самарканд2 #Самарканд', 'Самарканд')).toBe('кофе #Самарканд2');
+    expect(withoutTag('кофе #Самарканд', 'Сам')).toBe('кофе #Самарканд');
+  });
+
+  it('нет такой метки — заметка прежняя (кроме свёрнутых пробелов); «#» без слова не метка', () => {
+    expect(withoutTag('кофе', 'Самарканд')).toBe('кофе');
+    expect(withoutTag('кофе # 5', 'Самарканд')).toBe('кофе # 5');
+  });
+
+  it('withTag и withoutTag обратимы', () => {
+    expect(withoutTag(withTag('кофе', 'Самарканд'), 'Самарканд')).toBe('кофе');
+    expect(withTag(withoutTag('кофе #Самарканд', 'Самарканд'), 'Самарканд')).toBe('кофе #Самарканд');
   });
 });
 
