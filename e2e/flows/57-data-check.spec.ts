@@ -10,16 +10,16 @@ async function noHorizontalScroll(page: Page, where: string): Promise<void> {
 }
 
 test.describe('57. Проверка данных', () => {
-  test('из «Настроек»: дубль, операция без категории, дата в будущем; «Удалить лишнюю», «Это нормально», «Отменить»; на 320 px без прокрутки вбок', async ({ page }, testInfo) => {
+  test('из «Операций»: дубль, операция без категории, дата в будущем; «Удалить лишнюю», «Это нормально», «Отменить»; на 320 px без прокрутки вбок', async ({ page }, testInfo) => {
     if (testInfo.project.name === 'iphone') await page.setViewportSize({ width: 320, height: 568 });
     await page.clock.install({ time: NOW });
     await openApp(page);
 
-    // пока ничего нет — «Проблем не найдено»
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Проверка данных' }).click();
+    // пока ничего нет — «Проблем не найдено»; открываем по старому адресу «Настроек»: он ведёт в «Операции»
+    await page.goto('/#/settings/data-check');
     await expect(page.getByRole('heading', { level: 1, name: 'Проверка данных' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Проблем не найдено' })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Операции' }), '«Назад» ведёт в «Операции»').toBeVisible();
 
     // деньги на кошельке есть, чтобы остаток не ушёл в минус; два одинаковых кофе, расход без категории и операция в 2062 году (опечатка в годе)
     await addTx(page, { kind: 'income', amount: '1000', category: 'Зарплата', date: '2026-10-01' });
@@ -32,8 +32,16 @@ test.describe('57. Проверка данных', () => {
     await page.getByRole('alertdialog', { name: 'Дата в будущем' }).getByRole('button', { name: 'Сохранить', exact: true }).click();
     await expect(future).toBeHidden();
     await dismissToasts(page);
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Проверка данных' }).click();
+    // в «Операциях» наверху плашка «Проверка данных» с числом находок: по ней и заходим
+    await goSection(page, 'Операции');
+    const banner = page.getByTestId('datacheck-banner');
+    await expect(banner).toContainText('Проверка данных');
+    await expect(banner).toContainText('3 пункта: дубли, без категории, дата в будущем');
+    await noHorizontalScroll(page, 'Операции с плашкой');
+    expect((await banner.boundingBox())?.height ?? 0, 'плашка не ниже 44 px').toBeGreaterThanOrEqual(44);
+    await shot(page, '57-data-check-banner', testInfo);
+    await banner.click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Проверка данных' })).toBeVisible();
 
     await expect(page.getByTestId('datacheck-summary')).toContainText('Найдено: 3 пункта');
     await expect(page.getByTestId('check-dupes')).toContainText('кофе');

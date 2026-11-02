@@ -66,10 +66,15 @@ test.describe('61. Шаблоны операций', () => {
     await confirmDiscard(page);
     await expect(form).toBeHidden();
 
-    // «Настройки» → «Шаблоны операций»
-    await goSection(page, 'Настройки');
-    await page.getByRole('link', { name: 'Шаблоны операций' }).click();
+    // «Операции» → «⋯» → «Шаблоны операций»; заголовок «Операции» рядом с тремя кнопками шапки не обрезан даже на 320 px
+    await goSection(page, 'Операции');
+    const title = page.getByRole('heading', { level: 1, name: 'Операции' });
+    expect(await title.evaluate((h) => h.scrollWidth <= h.clientWidth), 'заголовок «Операции» не обрезан').toBe(true);
+    await page.getByRole('button', { name: 'Шаблоны и проверка данных' }).click();
+    await shot(page, '61-templates-menu', testInfo);
+    await page.getByRole('dialog', { name: 'Операции' }).getByRole('button', { name: 'Шаблоны операций' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Шаблоны операций' })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Операции' }), '«Назад» ведёт в «Операции»').toBeVisible();
     const item = page.getByTestId('template-row');
     await expect(item).toHaveCount(1);
     await expect(item).toContainText('Расход · Еда · Наличные');
