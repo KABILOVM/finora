@@ -1957,6 +1957,10 @@ html[data-skin] :is(h1, h2, h3) {
   /* у «низкого» шрифта (Cormorant) строчные мельче, чем у Onest: подгоняем по высоте строчных, где браузер это умеет */
   font-size-adjust: var(--skin-head-adjust, none);
 }
+/* Значки «Пикселя» рисуются квадратами: без сглаживания краёв они остаются чёткими. */
+html[data-skin='pixel'] svg {
+  shape-rendering: crispEdges;
+}
 /* Узор образа поверх пятен фона: лежит под содержимым, касаний не принимает. */
 html[data-skin] body::after {
   content: '';
