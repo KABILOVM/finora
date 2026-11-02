@@ -84,12 +84,19 @@ function dayList(from: IsoDate, to: IsoDate): IsoDate[] {
 /**
  * Дни поездок для skipDays: от первой до последней операции каждой поездки включительно (поездка — метка в заметках,
  * см. features/trips/trips.ts; сюда передают её firstOn / lastOn). Некорректные и перевёрнутые диапазоны пропускаются.
+ * `within` — окно, которое вообще считается: дни считаются только внутри него, поэтому метка, забытая включённой на год, не растягивает
+ * расчёт (без окна диапазон длиннее MAX_WINDOW_DAYS — RangeError).
  */
-export function tripDaysOf(ranges: readonly { firstOn: IsoDate; lastOn: IsoDate }[]): Set<IsoDate> {
+export function tripDaysOf(
+  ranges: readonly { firstOn: IsoDate; lastOn: IsoDate }[],
+  within?: { from: IsoDate; to: IsoDate },
+): Set<IsoDate> {
   const out = new Set<IsoDate>();
   for (const r of ranges) {
     if (!isValidIsoDate(r.firstOn) || !isValidIsoDate(r.lastOn) || r.lastOn < r.firstOn) continue;
-    for (const d of dayList(r.firstOn, r.lastOn)) out.add(d);
+    const from = within && within.from > r.firstOn ? within.from : r.firstOn;
+    const to = within && within.to < r.lastOn ? within.to : r.lastOn;
+    for (const d of dayList(from, to)) out.add(d);
   }
   return out;
 }
@@ -207,12 +214,17 @@ export interface PeriodAverageArgs {
   rules: DailyRules;
   /** Дневной лимит этой области: для «в скольких днях уложились». */
   limitPerDayMinor?: Minor | undefined;
+  /**
+   * Дата самой ранней операции человека (historyStart). Не задана — берётся из `txs`. Экран, считающий много областей подряд по
+   * одним и тем же операциям, передаёт её сам и в `txs` оставляет только недавние.
+   */
+  historyStartOn?: IsoDate | null | undefined;
 }
 
 /** Средняя трата в день за период по области. */
 export function periodAverage(args: PeriodAverageArgs): PeriodAverage {
   const { txs, period, scope, rules, limitPerDayMinor } = args;
-  const { days, skippedDays, from } = countedDays(period, rules, historyStart(txs));
+  const { days, skippedDays, from } = countedDays(period, rules, args.historyStartOn !== undefined ? args.historyStartOn : historyStart(txs));
   const amounts = amountsByDay(txs, scope, rules, days);
   let total = 0;
   for (const a of amounts) {
@@ -268,6 +280,8 @@ export interface PlanFactArgs {
   limitPerDayMinor: Minor;
   today: IsoDate;
   rules: DailyRules;
+  /** См. PeriodAverageArgs.historyStartOn. */
+  historyStartOn?: IsoDate | null | undefined;
 }
 
 /** План / факт на сегодня и накопленный запас месяца. */
@@ -276,7 +290,7 @@ export function planFact(args: PlanFactArgs): PlanFact {
   if (!isMinor(limitPerDayMinor) || limitPerDayMinor <= 0) throw new RangeError(`Некорректный дневной лимит: ${String(limitPerDayMinor)}`);
   const period = periodOf('month', today);
   if (rules.skipDays?.has(today)) return { kind: 'unavailable', reason: 'trip' };
-  const start = historyStart(txs);
+  const start = args.historyStartOn !== undefined ? args.historyStartOn : historyStart(txs);
   if (start === null || start > today) return { kind: 'unavailable', reason: 'no-history' };
 
   const { days } = countedDays(period, rules, start);

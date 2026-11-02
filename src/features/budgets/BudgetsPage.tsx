@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
@@ -30,6 +30,7 @@ import { BudgetSheet } from './BudgetSheet';
 import { budgetLabel, excludedText, paceNote } from './budgetText';
 import { ForecastCard } from './ForecastCard';
 import { GoalsSection } from './goals/GoalsSection';
+import { DailySection } from '@/features/daily/DailySection';
 import { useBudgetsData } from './useBudgetsData';
 import { useDailyForecast } from './useDailyForecast';
 
@@ -85,6 +86,7 @@ type SheetState = { kind: 'new' } | { kind: 'edit'; budget: LocalRow<Budget> };
 export default function BudgetsPage() {
   const store = useStore();
   const toast = useToast();
+  const navigate = useNavigate();
   const currentMonth = monthKey(useToday());
   // Выбранный вручную месяц; null — «текущий»: он сам переезжает на новый месяц, если экран простоял через полночь 1-го числа.
   const [picked, setPicked] = useState<string | null>(null);
@@ -304,6 +306,7 @@ export default function BudgetsPage() {
       <PageHeader title="Бюджеты" actions={addButton} />
       <div className="flex flex-col gap-4">
         <ForecastCard forecast={forecast} />
+        <DailySection onEditCategory={(id) => navigate(`/categories?edit=${encodeURIComponent(id)}`)} />
         {ready && <GoalsSection base={data.base} forecast={forecast} />}
         <section aria-labelledby="budgets-title">
           <SectionHeader id="budgets-title">Лимиты на месяц</SectionHeader>

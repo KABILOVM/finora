@@ -1,12 +1,18 @@
 import { useState } from 'react';
+import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/Button';
 import { GlyphPicker } from '@/components/GlyphPicker';
 import { IconSelect } from '@/components/IconSelect';
 import { Sheet } from '@/components/Sheet';
 import { TextInput } from '@/components/Field';
+import { ToggleRow } from '@/components/ToggleRow';
 import { useToast } from '@/components/Toast';
-import { ValidationError, useStore } from '@/db';
-import type { Category, CategoryKind, LocalRow } from '@/domain/types';
+import { ValidationError, useSettings, useStore } from '@/db';
+import { monthlyFromDaily } from '@/domain/dailyAverage';
+import { formatMinor } from '@/domain/money';
+import type { Category, CategoryKind, LocalRow, Minor } from '@/domain/types';
+import { looksDaily } from '@/features/daily/dailyHints';
+import { monthKey, todayLocal } from '@/lib/dates';
 import { ColorSwatches } from '@/features/wallets/ColorSwatches';
 import { cleanName, COLOR_CHOICES, sameName } from '@/features/wallets/walletUi';
 
@@ -36,7 +42,8 @@ export interface CategorySheetProps {
 }
 
 /**
- * Создание и правка категории: название, «Входит в…» (подкатегория), значок, цвет. Вид (расход/доход) задан вкладкой и не меняется.
+ * Создание и правка категории: название, «Входит в…» (подкатегория), для расходов — «Ежедневная категория» с лимитом в день, значок, цвет.
+ * Вид (расход/доход) задан вкладкой и не меняется.
  * Цвет новой подкатегории сам берётся от родителя, пока его не выбрали вручную: так диаграммы и списки не пестрят.
  */
 export function CategorySheet({
@@ -52,6 +59,7 @@ export function CategorySheet({
 }: CategorySheetProps) {
   const store = useStore();
   const toast = useToast();
+  const base = useSettings()?.baseCurrency ?? null;
   const parentById = new Map(parents.map((p) => [p.id, p] as const));
   // Родитель, которого уже нет среди кандидатов (в архиве, удалён), оставляем как есть, пока человек его не сменит.
   const initialParent = category ? category.parentId : defaultParentId !== null && parentById.has(defaultParentId) ? defaultParentId : null;
@@ -65,6 +73,19 @@ export function CategorySheet({
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // «Ежедневная» категория: её траты входят в среднюю трату в день; лимит в день необязателен
+  const [daily, setDaily] = useState(category?.daily === 1);
+  const [dailyLimit, setDailyLimit] = useState<Minor | null>(category?.dailyLimitMinor ?? null);
+
+  // «≈ 1 240 с. в этом месяце»; сумма, не помещающаяся в безопасное целое, подсказки не даёт (а не роняет окно)
+  let monthlyHint: string | null = null;
+  if (dailyLimit !== null && base !== null) {
+    try {
+      monthlyHint = formatMinor(monthlyFromDaily(dailyLimit, monthKey(todayLocal())), base);
+    } catch (e) {
+      if (!(e instanceof RangeError)) throw e;
+    }
+  }
 
   const pickParent = (value: string) => {
     const next = value === NO_PARENT ? null : value;
@@ -89,14 +110,26 @@ export function CategorySheet({
     setError(null);
     setSaving(true);
     try {
+      const dailyLimitNext = daily ? dailyLimit : null;
       if (!category) {
-        await store.categories.create({ name: clean, kind, color, icon, parentId });
+        await store.categories.create({
+          name: clean,
+          kind,
+          color,
+          icon,
+          parentId,
+          ...(kind === 'expense' && daily ? { daily: true, dailyLimitMinor: dailyLimitNext } : {}),
+        });
       } else {
         const patch: Parameters<typeof store.categories.update>[1] = {};
         if (clean !== category.name) patch.name = clean;
         if (icon !== category.icon) patch.icon = icon;
         if (color !== category.color) patch.color = color;
         if (parentId !== category.parentId) patch.parentId = parentId;
+        if (kind === 'expense') {
+          if (daily !== (category.daily === 1)) patch.daily = daily;
+          if (dailyLimitNext !== (category.dailyLimitMinor ?? null)) patch.dailyLimitMinor = dailyLimitNext;
+        }
         if (Object.keys(patch).length > 0) await store.categories.update(category.id, patch);
       }
       toast.success(category ? 'Категория сохранена' : parentId !== null ? 'Подкатегория добавлена' : 'Категория добавлена');
@@ -185,6 +218,35 @@ export function CategorySheet({
         )}
         {hasChildren && (
           <p className="text-sm text-muted">У этой категории есть подкатегории, поэтому она не может входить в другую категорию.</p>
+        )}
+        {kind === 'expense' && (
+          <div className="flex flex-col gap-2">
+            <ToggleRow
+              label="Ежедневная категория"
+              hint="Её траты входят в среднюю трату в день: еда, дорога, продукты. Крупные покупки отмечать не нужно."
+              checked={daily}
+              onChange={(on) => {
+                setDaily(on);
+                if (!on) setDailyLimit(null);
+              }}
+            />
+            {!daily && looksDaily(name) && <p className="px-1 text-sm text-muted">Похоже на ежедневные траты. Если это так, включите отметку.</p>}
+            {parentId !== null && parentById.get(parentId)?.daily === 1 && (
+              <p className="px-1 text-sm text-muted">
+                Родительская категория уже ежедневная, поэтому эта считается ежедневной и без отметки. Включите её, только чтобы поставить отдельный лимит.
+              </p>
+            )}
+            {daily && base !== null && (
+              <div className="flex flex-col gap-1">
+                <AmountInput label="Лимит в день (необязательно)" currency={base} value={dailyLimit} onChange={setDailyLimit} />
+                <p className="text-center text-sm text-muted">
+                  {monthlyHint === null
+                    ? `Сумма в основной валюте (${base}). «В среднем не больше»: если сегодня потратили меньше, остаток переходит на завтра в пределах месяца.`
+                    : `≈ ${monthlyHint} в этом месяце. «В среднем не больше»: сэкономленное переходит на завтра в пределах месяца.`}
+                </p>
+              </div>
+            )}
+          </div>
         )}
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold">Значок</span>
