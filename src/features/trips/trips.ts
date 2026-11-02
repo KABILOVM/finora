@@ -18,7 +18,14 @@ export const TAG_MIN = 2;
 export const TAG_MAX = 40;
 const TAG_RE = /(^|\s)#([\p{L}\p{N}_-]{2,40})(?![\p{L}\p{N}_-])/gu;
 
-export type TripTx = AnomalyTx & Pick<Transaction, 'amountMinor' | 'toWalletId' | 'createdAt'>;
+export type TripTx = AnomalyTx &
+  Pick<Transaction, 'amountMinor' | 'toWalletId' | 'createdAt'> & {
+    /** Сколько зачислено на кошелёк «куда» (у перевода). Нет — как у старых строк: считаем равным списанию. */
+    toAmountMinor?: Minor | null | undefined;
+    /** «Сумма в валюте» траты, оплаченной картой в другой валюте (например, 50 AED, а карта в сомони). */
+    foreignCurrency?: CurrencyCode | null | undefined;
+    foreignAmountMinor?: Minor | null | undefined;
+  };
 
 /** Ключ метки: без регистра и «ё», чтобы `#Самарканд` и `#самарканд` были одной поездкой. */
 export const tagKey = (tag: string): string => tag.toLocaleLowerCase('ru').replace(/ё/g, 'е');
@@ -128,8 +135,11 @@ export interface TripReport extends TripInfo {
   byDay: TripDay[];
   /** Самые крупные траты (до пяти). */
   biggest: { txId: UUID; categoryId: UUID | null; note: string; amountMinor: Minor; occurredOn: IsoDate }[];
-  /** Расходы в валютах кошельков («в долларах 120»): то, что человек реально платил. */
-  byCurrency: { currency: CurrencyCode; minor: Minor }[];
+  /**
+   * Расходы по валютам («в долларах 120»): то, что человек реально платил. Оплата картой в другой валюте считается в валюте чека
+   * («50 AED»), а сколько с карты списано — в `charged` (есть только у таких валют).
+   */
+  byCurrency: { currency: CurrencyCode; minor: Minor; charged?: { currency: CurrencyCode; minor: Minor }[] }[];
   /** Операций с меткой, но в другой основной валюте (в сумму не вошли). */
   excludedCount: number;
 }
@@ -147,13 +157,24 @@ export function tripReport(txs: readonly TripTx[], key: string, base: CurrencyCo
   for (const t of spends) byDayMap.set(t.occurredOn, addMinor(byDayMap.get(t.occurredOn) ?? 0, t.baseAmountMinor));
   const byDay = [...byDayMap.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([date, expenseMinor]) => ({ date, expenseMinor }));
 
-  const currencies = new Map<CurrencyCode, Minor>();
+  const currencies = new Map<CurrencyCode, { minor: Minor; charged: Map<CurrencyCode, Minor> }>();
   for (const t of spends) {
-    const c = currencyOf.get(t.walletId) ?? base;
-    currencies.set(c, addMinor(currencies.get(c) ?? 0, t.amountMinor));
+    const walletCurrency = currencyOf.get(t.walletId) ?? base;
+    const fc = t.foreignCurrency ?? null;
+    const fa = t.foreignAmountMinor ?? null;
+    const onReceipt = fc !== null && fa !== null;
+    const currency = onReceipt ? fc : walletCurrency;
+    const entry = currencies.get(currency) ?? { minor: 0, charged: new Map<CurrencyCode, Minor>() };
+    entry.minor = addMinor(entry.minor, onReceipt ? fa : t.amountMinor);
+    if (onReceipt) entry.charged.set(walletCurrency, addMinor(entry.charged.get(walletCurrency) ?? 0, t.amountMinor));
+    currencies.set(currency, entry);
   }
   const byCurrency = [...currencies.entries()]
-    .map(([currency, minor]) => ({ currency, minor }))
+    .map(([currency, e]) => ({
+      currency,
+      minor: e.minor,
+      ...(e.charged.size > 0 ? { charged: [...e.charged.entries()].map(([c, minor]) => ({ currency: c, minor })) } : {}),
+    }))
     .sort((a, b) => Number(b.currency === base) - Number(a.currency === base) || (a.currency < b.currency ? -1 : 1));
 
   const biggest = [...spends]

@@ -32,7 +32,7 @@ export const NON_MERGED_FIELDS: readonly string[] = ['id', 'createdAt', 'clientU
 
 export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupName, readonly string[]>>>> = {
   transactions: {
-    money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
+    money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource', 'foreignCurrency', 'foreignAmountMinor'],
     date: ['occurredOn'],
     note: ['note'],
     /** Происхождение (регулярный платёж, по которому создана операция); задаётся при создании и не правится. */

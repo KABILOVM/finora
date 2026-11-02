@@ -436,3 +436,92 @@ describe('futureDateNotice: дата позже сегодняшней — во�
     expect(futureDateNotice('2026-13-40', today)).toBeNull();
   });
 });
+
+describe('сумма на чеке (оплата картой в другой валюте)', () => {
+  const orig: Transaction = {
+    id: 't1',
+    createdAt: '2026-10-05T10:00:00.000Z',
+    clientUpdatedAt: '2026-10-05T10:00:00.000Z',
+    deviceId: 'dev-1',
+    deletedAt: null,
+    kind: 'expense',
+    walletId: 'a',
+    toWalletId: null,
+    amountMinor: 13_500,
+    toAmountMinor: null,
+    categoryId: 'c1',
+    occurredOn: '2026-10-05',
+    note: 'кафе',
+    baseCurrency: 'TJS',
+    baseAmountMinor: 13_500,
+    fxRate: 1,
+    fxSource: 'same',
+    debtId: null,
+    recurringRuleId: null,
+    foreignCurrency: 'AED',
+    foreignAmountMinor: 5_000,
+  };
+  const input = (over: Record<string, unknown> = {}) => ({
+    kind: 'expense' as const,
+    walletId: 'a',
+    toWalletId: null,
+    toAmountMinor: null,
+    amountMinor: 13_500,
+    categoryId: 'c1',
+    occurredOn: '2026-10-05',
+    note: 'кафе',
+    foreignCurrency: 'AED',
+    foreignAmountMinor: 5_000,
+    ...over,
+  });
+
+  it('пустая форма: поле закрыто, валюты и суммы нет', () => {
+    expect(emptyForm('a')).toMatchObject({ foreignOpen: false, foreignCurrency: null, foreignAmount: null });
+  });
+
+  it('formFromTx: операция с суммой на чеке открывает поле и заполняет его; без неё — закрыто', () => {
+    expect(formFromTx(orig, () => 'TJS')).toMatchObject({ foreignOpen: true, foreignCurrency: 'AED', foreignAmount: 5_000 });
+    expect(formFromTx({ ...orig, foreignCurrency: null, foreignAmountMinor: null }, () => 'TJS')).toMatchObject({ foreignOpen: false, foreignCurrency: null });
+    // старая строка без этих полей
+    const { foreignCurrency: _c, foreignAmountMinor: _a, ...old } = orig;
+    void _c;
+    void _a;
+    expect(formFromTx(old as Transaction, () => 'TJS')).toMatchObject({ foreignOpen: false, foreignCurrency: null, foreignAmount: null });
+  });
+
+  it('changedFields: не менял — ничего; изменил или убрал — уходит пара; другое поле пару не трогает', () => {
+    expect(changedFields(input(), orig)).toEqual({});
+    expect(changedFields(input({ note: 'кафе у отеля' }), orig)).toEqual({ note: 'кафе у отеля' });
+    expect(changedFields(input({ foreignAmountMinor: 6_000 }), orig)).toEqual({ foreignCurrency: 'AED', foreignAmountMinor: 6_000 });
+    expect(changedFields(input({ foreignCurrency: null, foreignAmountMinor: null }), orig)).toEqual({ foreignCurrency: null, foreignAmountMinor: null });
+    // операция без суммы на чеке и форма без неё — различия нет (undefined у старых строк = null)
+    const { foreignCurrency: _c, foreignAmountMinor: _a, ...old } = orig;
+    void _c;
+    void _a;
+    expect(changedFields(input({ foreignCurrency: null, foreignAmountMinor: null }), old as Transaction)).toEqual({});
+  });
+
+  it('isFormDirty: ввод суммы на чеке считается несохранённым', () => {
+    const initial = emptyForm('a');
+    expect(isFormDirty({ ...initial, foreignAmount: 100 }, initial, false)).toBe(true);
+    expect(isFormDirty({ ...initial, foreignOpen: true }, initial, false)).toBe(false);
+  });
+
+  it('errorField: ошибки репозитория про сумму в валюте идут к своему полю, а не к «Сумма»', () => {
+    expect(errorField('Сумма в валюте: укажите и валюту, и сумму')).toBe('foreign');
+    expect(errorField('Сумма в валюте: валюта должна отличаться от валюты кошелька (TJS)')).toBe('foreign');
+    expect(errorField('Сумма: ожидалось целое')).toBe('amount');
+  });
+
+  it('describeTx: под суммой «на чеке 50 AED»; трата в валюте кошелька — «≈ в основной валюте»; обычная трата — ничего', () => {
+    const wallets = new Map([
+      ['a', { name: 'Карта', currency: 'TJS' }],
+      ['u', { name: 'Доллары', currency: 'USD' }],
+    ]);
+    const cats = new Map([['c1', { name: 'Еда', icon: '🍽️', color: '#f97316' }]]);
+    expect(describeTx(orig, wallets, cats).second).toMatch(/^на чеке 50\s*AED$/);
+    const usd = { ...orig, walletId: 'u', foreignCurrency: null, foreignAmountMinor: null, amountMinor: 1_000, baseAmountMinor: 11_000, fxRate: 11, fxSource: 'trip' };
+    expect(describeTx(usd, wallets, cats).second).toMatch(/^≈ 110\s*с\.$/);
+    expect(describeTx({ ...orig, foreignCurrency: null, foreignAmountMinor: null }, wallets, cats).second).toBeNull();
+  });
+});

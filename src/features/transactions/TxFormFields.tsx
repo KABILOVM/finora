@@ -13,6 +13,7 @@ import { Segmented, type SegmentOption } from '@/components/Segmented';
 import type { LocalRow, TxKind, Wallet } from '@/domain/types';
 import { ContextRow, type CategoryState } from './ContextRow';
 import { FeeField, applyPctKey } from './FeeField';
+import { ForeignAmountField } from './ForeignAmountField';
 import { FxNotice } from './FxNotice';
 import type { KnownTag } from './knownTags';
 import { NoteSuggestions, type NoteChoice } from './NoteSuggestions';
@@ -293,6 +294,8 @@ export function TxFormFields({ c, wallets, categories, kindAction, categoryState
       </div>
 
       {amountLocked && purchasesSummary}
+
+      <ForeignAmountField c={c} />
 
       {isTransfer && c.received && c.received.mode === 'cross' && (
         <ReceivedField

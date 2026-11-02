@@ -24,7 +24,7 @@ export const CATEGORY_KINDS: readonly CategoryKind[] = ['expense', 'income'];
 export const TX_KINDS: readonly TxKind[] = ['expense', 'income', 'transfer'];
 
 /** Откуда может быть взят курс при ручной/сетевой передаче. 'same' ставит только сама база (валюта кошелька = базовая). */
-export const FX_SOURCES: readonly string[] = ['nbt', 'server', 'api', 'manual', 'cached'];
+export const FX_SOURCES: readonly string[] = ['nbt', 'server', 'api', 'manual', 'cached', 'trip'];
 
 export const LIMITS = {
   name: 60,
@@ -322,6 +322,9 @@ export interface TxFields {
   debtId: UUID | null;
   /** Регулярный платёж, по которому создана операция. */
   recurringRuleId: UUID | null;
+  /** «Сумма в валюте» (оплата картой в другой валюте): оба поля вместе или оба пусты; у перевода их нет. */
+  foreignCurrency: CurrencyCode | null;
+  foreignAmountMinor: Minor | null;
 }
 
 /**
@@ -342,6 +345,12 @@ export function parseTxFields(raw: Record<string, unknown>, opts: { requireToAmo
     toAmountRaw === null || toAmountRaw === undefined ? null : reqPositiveMinor(toAmountRaw, 'Сумма зачисления');
   const debtId = optId(raw['debtId'], 'Долг');
   const recurringRuleId = optId(raw['recurringRuleId'], 'Регулярный платёж');
+  const foreignCurrencyRaw = raw['foreignCurrency'];
+  const foreignAmountRaw = raw['foreignAmountMinor'];
+  const foreignCurrency = foreignCurrencyRaw === null || foreignCurrencyRaw === undefined ? null : reqCurrency(foreignCurrencyRaw, 'Валюта суммы в валюте');
+  const foreignAmountMinor =
+    foreignAmountRaw === null || foreignAmountRaw === undefined ? null : reqPositiveMinor(foreignAmountRaw, 'Сумма в валюте');
+  if ((foreignCurrency === null) !== (foreignAmountMinor === null)) fail('Сумма в валюте: укажите и валюту, и сумму');
 
   if (kind === 'transfer') {
     if (toWalletId === null) fail('Перевод: укажите кошелёк зачисления');
@@ -349,11 +358,12 @@ export function parseTxFields(raw: Record<string, unknown>, opts: { requireToAmo
     if (categoryId !== null) fail('У перевода не бывает категории');
     if (opts.requireToAmount && toAmountMinor === null) fail('Перевод: не указана сумма зачисления');
     if (debtId !== null) fail('У перевода не бывает долга: долг связывают только с расходом или доходом');
+    if (foreignCurrency !== null) fail('У перевода не бывает суммы в валюте');
   } else {
     if (toWalletId !== null) fail('Кошелёк зачисления бывает только у перевода');
     if (toAmountMinor !== null) fail('Сумма зачисления бывает только у перевода');
   }
-  return { kind, walletId, toWalletId, amountMinor, toAmountMinor, categoryId, occurredOn, note, debtId, recurringRuleId };
+  return { kind, walletId, toWalletId, amountMinor, toAmountMinor, categoryId, occurredOn, note, debtId, recurringRuleId, foreignCurrency, foreignAmountMinor };
 }
 
 /**

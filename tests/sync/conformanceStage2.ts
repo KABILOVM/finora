@@ -79,6 +79,14 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         ['операция с несуществующим регулярным платежом', 'transactions', () => tx({ recurringRuleId: newId() })],
         ['комиссия перевода меньше нуля', 'transactions', () => tx({ kind: 'transfer', toWalletId: ctx.w2.id, baseAmountMinor: -1 })],
         ['комиссия перевода больше допустимой', 'transactions', () => tx({ kind: 'transfer', toWalletId: ctx.w2.id, baseAmountMinor: 1_000_000_000_000_001 })],
+        // «сумма в валюте» у операций (раздел 19 схемы)
+        ['операция: валюта суммы без самой суммы', 'transactions', () => tx({ foreignCurrency: 'AED', foreignAmountMinor: null })],
+        ['операция: сумма в валюте без валюты', 'transactions', () => tx({ foreignCurrency: null, foreignAmountMinor: 5000 })],
+        ['операция: валюта суммы строчными буквами', 'transactions', () => tx({ foreignCurrency: 'aed', foreignAmountMinor: 5000 })],
+        ['операция: сумма в валюте 0', 'transactions', () => tx({ foreignCurrency: 'AED', foreignAmountMinor: 0 })],
+        ['операция: отрицательная сумма в валюте', 'transactions', () => tx({ foreignCurrency: 'AED', foreignAmountMinor: -1 })],
+        ['операция: сумма в валюте больше допустимой', 'transactions', () => tx({ foreignCurrency: 'AED', foreignAmountMinor: 1_000_000_000_000_001 })],
+        ['перевод с суммой в валюте', 'transactions', () => tx({ kind: 'transfer', toWalletId: ctx.w2.id, foreignCurrency: 'AED', foreignAmountMinor: 5000 })],
         // долги
         ['долг: пустой контрагент', 'debts', () => deb({ counterparty: '' })],
         ['долг: контрагент длиннее 80 символов', 'debts', () => deb({ counterparty: 'я'.repeat(81) })],
@@ -309,5 +317,37 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
       await t.push('debts', [{ ...stripped('debts', { ...debt, note: 'правка' }, 'category', 10) }]);
       expect(must(await find(t, 'categories', cat.id), 'категория')).toMatchObject({ essential: 1, name: 'Переименована' });
       expect(must(await find(t, 'debts', debt.id), 'долг')).toMatchObject({ category: 'Кредит', note: 'правка' });
+    });
+
+    it('17. «сумма в валюте» у операций: границы принимаются и приходят обратно; старое приложение (без колонок) её не затирает', async () => {
+      const { t } = fresh();
+      const t0 = h.now().getTime();
+      const sync = { createdAt: iso(t0 - HOUR), clientUpdatedAt: iso(t0 - HOUR), deviceId: 'device-a' };
+      const w = makeWallet({ ...sync });
+      await t.push('wallets', [toWire('wallets', w)]);
+      const MAX = 1_000_000_000_000_000;
+      const plain = makeTransaction({ ...sync, walletId: w.id });
+      const small = makeTransaction({ ...sync, walletId: w.id, foreignCurrency: 'AED', foreignAmountMinor: 1 });
+      const big = makeTransaction({ ...sync, walletId: w.id, kind: 'income', categoryId: null, foreignCurrency: 'USD', foreignAmountMinor: MAX });
+      await t.push('transactions', [plain, small, big].map((e) => toWire('transactions', e)));
+      const got = new Map((await pullAll(t, 'transactions')).map((r) => [r.id as string, fromWire('transactions', r).entity]));
+      for (const e of [plain, small, big]) expect(got.get(e.id), e.id).toEqual(e);
+      expect(got.get(plain.id)).toMatchObject({ foreignCurrency: null, foreignAmountMinor: null });
+
+      // старое приложение правит заметку и колонок не присылает: сумма в валюте остаётся
+      const { foreign_currency: _c, foreign_amount_minor: _a, ...rest } = toWire('transactions', {
+        ...small,
+        note: 'правка со старого приложения',
+        clientUpdatedAt: iso(t0 - HOUR + 10),
+        deviceId: 'device-old',
+      });
+      void _c;
+      void _a;
+      await t.push('transactions', [rest]);
+      expect(must(await find(t, 'transactions', small.id), 'операция')).toMatchObject({
+        foreign_currency: 'AED',
+        foreign_amount_minor: 1,
+        note: 'правка со старого приложения',
+      });
     });
 }

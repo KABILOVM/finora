@@ -68,7 +68,7 @@ describe('страж: поля договора и группы слияния',
 describe('состав групп (как в договоре задачи)', () => {
   it('transactions', () => {
     expect(MERGE_GROUPS.transactions).toEqual({
-      money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource'],
+      money: ['kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor', 'categoryId', 'debtId', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource', 'foreignCurrency', 'foreignAmountMinor'],
       date: ['occurredOn'],
       note: ['note'],
       origin: ['recurringRuleId'],
@@ -160,7 +160,7 @@ describe('состав групп (как в договоре задачи)', ()
 const BASE: Record<SyncTableName, Record<string, unknown>> = {
   transactions: {
     kind: 'expense', walletId: 'w1', toWalletId: null, amountMinor: 100, toAmountMinor: null, categoryId: 'c1', occurredOn: '2026-10-05',
-    note: 'n', baseCurrency: 'TJS', baseAmountMinor: 100, fxRate: 1, fxSource: 'same', debtId: null, recurringRuleId: null, deletedAt: null,
+    note: 'n', baseCurrency: 'TJS', baseAmountMinor: 100, fxRate: 1, fxSource: 'same', debtId: null, recurringRuleId: null, foreignCurrency: null, foreignAmountMinor: null, deletedAt: null,
   },
   budgets: { categoryId: null, amountMinor: 100, currency: 'TJS', period: 'month', archivedAt: null, deletedAt: null },
   debts: {

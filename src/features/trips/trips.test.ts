@@ -203,3 +203,20 @@ describe('tripReport', () => {
     expect(r.expenseMinor).toBe(74_000);
   });
 });
+
+describe('оплата картой в другой валюте в отчёте поездки', () => {
+  it('считается в валюте чека, а сколько списано с карты — в charged; обычные траты как раньше', () => {
+    const txs = [
+      tx({ occurredOn: '2026-10-01', amountMinor: 13_500, note: '#Дубай', foreignCurrency: 'AED', foreignAmountMinor: 5_000 }),
+      tx({ occurredOn: '2026-10-01', amountMinor: 2_700, note: 'кофе #Дубай', foreignCurrency: 'AED', foreignAmountMinor: 1_000 }),
+      tx({ occurredOn: '2026-10-02', amountMinor: 1_000, note: 'вода #Дубай' }),
+    ];
+    const r = tripReport(txs, 'дубай', BASE, currencies)!;
+    expect(r.byCurrency).toEqual([
+      { currency: 'TJS', minor: 1_000 },
+      { currency: 'AED', minor: 6_000, charged: [{ currency: 'TJS', minor: 16_200 }] },
+    ]);
+    // расходы в основной валюте — по снимку (карта списала сомони)
+    expect(r.expenseMinor).toBe(17_200);
+  });
+});
