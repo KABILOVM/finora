@@ -93,7 +93,7 @@ export default function SettingsPage() {
           </Card>
         )}
         <p className="pb-2 text-center text-xs text-muted">
-          Sumoima {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Manrope (SIL OFL)
+          Sumoima {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Onest (SIL OFL)
         </p>
       </Block>
 

@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { render, screen, user } from '@/components/testUtils';
-import { ACCENTS, applyAccent, applyTheme, readAccentPref, readCustomAccent, readCustomPalette, readThemePref, resolveTheme, saveAccentPref, saveCustomAccent, saveThemePref, useAccentPref, useCustomAccent, type AccentId } from './theme';
+import { ACCENTS, applyAccent, applySkin, applyTheme, readAccentPref, readCustomAccent, readCustomPalette, readSkinPref, readThemePref, resolveTheme, saveAccentPref, saveCustomAccent, saveSkinPref, saveThemePref, useAccentPref, useCustomAccent, useSkinPref, type AccentId } from './theme';
+import { SKINS } from './skins';
 import { paletteFromHex, PALETTE_KEYS, type Palette } from './lib/palette';
 
 const reset = () => {
   localStorage.clear();
   document.documentElement.removeAttribute('data-theme');
   document.documentElement.removeAttribute('data-accent');
+  document.documentElement.removeAttribute('data-skin');
+  document.documentElement.removeAttribute('style');
   document.head.innerHTML = '';
 };
 /** Как это делают настройки: палитру строит генератор, тема её запоминает вместе с цветом. */
@@ -282,5 +285,118 @@ describe('цвет акцента', () => {
     await user.click(screen.getByRole('button', { name: 'violet' }));
     expect(screen.getByRole('button', { name: 'teal' })).toBeInTheDocument();
     expect(document.documentElement.getAttribute('data-accent')).toBe('teal');
+  });
+});
+
+describe('образ оформления', () => {
+  const root = document.documentElement;
+  const bars = () => [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute('content'));
+  const metas = () => {
+    document.head.innerHTML =
+      '<meta name="theme-color" content="#eceefb" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#080a18" media="(prefers-color-scheme: dark)">';
+  };
+
+  it('по умолчанию «Классика», даже если ничего не сохранено или значение испорчено', () => {
+    expect(readSkinPref()).toBe('classic');
+    localStorage.setItem('finora-skin', 'зелёный-слон');
+    expect(readSkinPref()).toBe('classic');
+  });
+
+  it('выбор сохраняется на устройстве и ставит data-skin на <html>; «Классика» атрибут убирает', () => {
+    saveSkinPref('barca');
+    expect(readSkinPref()).toBe('barca');
+    expect(localStorage.getItem('finora-skin')).toBe('barca');
+    expect(root.getAttribute('data-skin')).toBe('barca');
+    saveSkinPref('real');
+    expect(root.getAttribute('data-skin')).toBe('real');
+    saveSkinPref('classic');
+    expect(readSkinPref()).toBe('classic');
+    expect(root.hasAttribute('data-skin')).toBe(false);
+  });
+
+  it('все образы из списка применяются, и каждый можно прочитать обратно', () => {
+    for (const skin of SKINS) {
+      saveSkinPref(skin.id);
+      expect(readSkinPref()).toBe(skin.id);
+    }
+  });
+
+  it('при запуске применяется сохранённый образ (как тема и акцент)', () => {
+    localStorage.setItem('finora-skin', 'real');
+    applySkin(readSkinPref());
+    expect(root.getAttribute('data-skin')).toBe('real');
+  });
+
+  it('образ, тема и акцент независимы: смена образа не стирает выбранный акцент и тему', () => {
+    saveThemePref('dark');
+    saveAccentPref('blue');
+    saveSkinPref('barca');
+    expect(readThemePref()).toBe('dark');
+    expect(readAccentPref()).toBe('blue');
+    expect(root.getAttribute('data-theme')).toBe('dark');
+    saveSkinPref('classic');
+    expect(readAccentPref()).toBe('blue');
+    expect(root.getAttribute('data-accent')).toBe('blue');
+  });
+
+  it('под образом «свой цвет» на <html> не ставится (он перекрыл бы палитру образа), а в «Классике» возвращается', () => {
+    expect(saveCustom('#3a7bd5')).toBe(true);
+    expect(root.style.getPropertyValue('--ac-brand-l')).not.toBe('');
+    saveSkinPref('barca');
+    for (const key of PALETTE_KEYS) expect(root.style.getPropertyValue(`--ac-${key}`), key).toBe('');
+    expect(readAccentPref()).toBe('custom'); // выбор не потерян
+    saveSkinPref('classic');
+    expect(root.style.getPropertyValue('--ac-brand-l')).not.toBe('');
+    expect(root.getAttribute('data-accent')).toBe('custom');
+  });
+
+  it('цвет строки состояния браузера — фон образа в светлой и тёмной теме; «Классика» возвращает цвет акцента', () => {
+    metas();
+    saveSkinPref('barca');
+    expect(bars()).toEqual(['#eef2fb', '#08122e']);
+    saveSkinPref('real');
+    expect(bars()).toEqual(['#f7f5ef', '#071028']);
+    saveThemePref('dark');
+    expect(bars()).toEqual(['#071028', '#071028']);
+    saveSkinPref('classic');
+    expect(bars()).toEqual(['#080a18', '#080a18']);
+  });
+
+  it('не сохранилось в хранилище (закрытый режим, переполнение) — образ всё равно применяется', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    expect(() => saveSkinPref('real')).not.toThrow();
+    expect(root.getAttribute('data-skin')).toBe('real');
+  });
+
+  it('хранилище недоступно при чтении — берётся «Классика», ошибки наружу не идут', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    expect(readSkinPref()).toBe('classic');
+  });
+
+  it('useSkinPref: компонент сразу показывает новый выбор и ставит атрибут', async () => {
+    function Probe() {
+      const [id, setId] = useSkinPref();
+      return (
+        <button type="button" onClick={() => setId('barca')}>
+          {id}
+        </button>
+      );
+    }
+    render(<Probe />);
+    expect(screen.getByRole('button', { name: 'classic' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'classic' }));
+    expect(screen.getByRole('button', { name: 'barca' })).toBeInTheDocument();
+    expect(root.getAttribute('data-skin')).toBe('barca');
+  });
+
+  it('applyAccent под образом не ломает атрибут образа', () => {
+    saveSkinPref('real');
+    applyAccent('teal');
+    expect(root.getAttribute('data-skin')).toBe('real');
+    expect(root.getAttribute('data-accent')).toBe('teal');
   });
 });

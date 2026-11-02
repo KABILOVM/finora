@@ -82,7 +82,7 @@ export function HomeHero({ total, base }: HomeHeroProps) {
     <section
       aria-label="Всего денег"
       data-testid="home-total"
-      className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-hero-from to-hero p-4 text-white shadow-[0_24px_50px_-22px_rgb(var(--brand)/0.9)] md:p-6"
+      className="skin-hero relative overflow-hidden rounded-3xl bg-gradient-to-br from-hero-from to-hero p-4 text-white shadow-[0_24px_50px_-22px_rgb(var(--brand)/0.9)] md:p-6"
     >
       {/* Декор: два больших полупрозрачных круга (не мешают тексту и касаниям). */}
       <span aria-hidden="true" className="pointer-events-none absolute -right-16 -top-28 h-64 w-64 animate-[backdrop-drift_9s_ease-in-out_infinite_alternate] rounded-full bg-white/15" />

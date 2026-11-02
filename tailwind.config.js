@@ -31,9 +31,9 @@ export default {
       borderRadius: { control: '0.75rem', card: '1.5rem', pill: '9999px' },
       fontSize: { caption: ['0.75rem', { lineHeight: '1rem' }] },
       fontFamily: {
-        // Manrope вшит в приложение (src/assets/fonts), системные шрифты — запасные.
+        // Onest вшит в приложение (src/assets/fonts) и содержит таджикские буквы; системные шрифты — запасные.
         sans: [
-          'Manrope',
+          'Onest',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
