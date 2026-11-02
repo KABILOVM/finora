@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { GENERATED_ACCENTS } from './lib/accentSpecs';
 import { isPalette, normalizeHex, PALETTE_KEYS, triple, type Palette } from './lib/paletteBase';
-import { DEFAULT_SKIN, skinById, type SkinId } from './skins';
+import { DEFAULT_SKIN, isSkinId, skinBar, type SkinId } from './skinCore';
 
 /**
  * Тема оформления: «светлая» (по умолчанию), «тёмная» или «как в системе». Хранится на самом устройстве (localStorage),
@@ -146,8 +146,8 @@ function paintBar(): void {
   const theme = root.getAttribute('data-theme'); // атрибута нет — тема «как в системе»
   const accent = root.getAttribute('data-accent');
   // у клубного образа свой фон страницы, акцент на него не влияет
-  const skinBar = skinById(root.getAttribute('data-skin'))?.bar ?? null;
-  const bar = skinBar ?? (accent === CUSTOM_ACCENT ? customBar(root) : (accentById(accent) ?? VIOLET).bar);
+  const forSkin = skinBar(root.getAttribute('data-skin'));
+  const bar = forSkin ?? (accent === CUSTOM_ACCENT ? customBar(root) : (accentById(accent) ?? VIOLET).bar);
   // В index.html два meta theme-color (для светлой и тёмной системы). Явный выбор темы перекрывает оба.
   document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
     const systemDark = (m.getAttribute('media') ?? '').includes('dark');
@@ -239,8 +239,8 @@ export function saveAccentPref(id: AccentId): void {
 /** Выбранный образ; «Классика», если ничего не выбрано или значение испорчено. */
 export function readSkinPref(): SkinId {
   try {
-    const found = skinById(localStorage.getItem(SKIN_KEY));
-    if (found) return found.id;
+    const stored = localStorage.getItem(SKIN_KEY);
+    if (isSkinId(stored)) return stored;
   } catch {
     /* хранилище недоступно — берём «Классику» */
   }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, user } from '@/components/testUtils';
-import { SKINS } from '@/skins';
+import { SKIN_GROUPS, SKINS } from '@/skins';
 import { AppearanceSection } from './AppearanceSection';
 import { SkinPicker } from './SkinPicker';
 
@@ -27,11 +27,28 @@ describe('выбор образа', () => {
     expect(screen.getByRole('radiogroup', { name: 'Образ' })).toBeInTheDocument();
   });
 
-  it('у каждого образа есть название и пояснение', () => {
+  it('у каждого образа есть название и пояснение (внутри его карточки: название «Футбол» есть и у раздела)', () => {
     render(<SkinPicker value="classic" onChange={() => undefined} />);
     for (const skin of SKINS) {
-      expect(screen.getByText(skin.label)).toBeInTheDocument();
-      expect(screen.getByText(skin.hint)).toBeInTheDocument();
+      const card = document.querySelector(`[data-skin-option="${skin.id}"]`);
+      expect(card?.textContent, skin.id).toContain(skin.label);
+      expect(card?.textContent, skin.id).toContain(skin.hint);
+    }
+  });
+
+  it('образов много, они разложены по разделам: «Футбол», «Кино и аниме», «Национальные», «Стили»; у каждого образа своя группа', () => {
+    render(<SkinPicker value="classic" onChange={() => undefined} />);
+    expect(SKINS.length).toBeGreaterThan(15);
+    for (const group of SKIN_GROUPS) {
+      const box = document.querySelector(`[data-skin-group="${group.id}"]`);
+      expect(box, group.id).not.toBeNull();
+      if (group.id !== 'classic') expect(box?.textContent).toContain(group.label);
+      const inside = [...(box?.querySelectorAll('[data-skin-option]') ?? [])].map((b) => b.getAttribute('data-skin-option'));
+      expect(inside, group.id).toEqual(SKINS.filter((s) => s.group === group.id).map((s) => s.id));
+    }
+    // в списке все нужные образы
+    for (const id of ['barca', 'real', 'argentina', 'messi', 'spain', 'cr7', 'football', 'shinobi', 'akatsuki', 'spider', 'comic', 'tajik', 'pamir', 'kawaii', 'aesthetic', 'racing', 'cyber', 'pixel']) {
+      expect(SKINS.map((s) => s.id), id).toContain(id);
     }
   });
 
@@ -45,13 +62,13 @@ describe('выбор образа', () => {
   it('в группу заходят одним Tab (выбранный образ), внутри — стрелками, по кругу', async () => {
     const seen: string[] = [];
     render(<SkinPicker value="classic" onChange={(id) => seen.push(id)} />);
-    expect(options().map((o) => o.tabIndex)).toEqual([0, -1, -1]);
+    expect(options().map((o) => o.tabIndex)).toEqual([0, ...SKINS.slice(1).map(() => -1)]);
     options()[0]?.focus();
     await user.keyboard('{ArrowRight}');
     expect(seen).toEqual(['barca']);
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{ArrowLeft}');
-    expect(seen).toEqual(['barca', 'classic', 'real']); // назад с первого — на последний
+    expect(seen).toEqual(['barca', 'classic', SKINS[SKINS.length - 1]?.id]); // назад с первого — на последний (по всему списку, через разделы)
   });
 });
 
@@ -87,5 +104,14 @@ describe('«Оформление»: образ и цвет акцента', () =
     render(<AppearanceSection />);
     expect(checked()).toEqual(['real']);
     expect(note()?.textContent).toContain('«Реал Мадрид»');
+  });
+
+  it('каждый образ из списка можно выбрать в настройках: атрибут data-skin и сохранённое значение совпадают', async () => {
+    render(<AppearanceSection />);
+    for (const skin of SKINS.slice(1)) {
+      await user.click(screen.getByRole('radio', { name: new RegExp(`^${skin.label}`) }));
+      expect(document.documentElement.getAttribute('data-skin'), skin.id).toBe(skin.id);
+      expect(localStorage.getItem('finora-skin'), skin.id).toBe(skin.id);
+    }
   });
 });

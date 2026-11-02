@@ -12,6 +12,15 @@ import { ACCENTS, DEFAULT_ACCENT } from './theme';
  * с таблицей ACCENTS (src/theme.ts) и index.html, здесь не пройдёт.
  */
 const read = (relative: string): string => readFileSync(new URL(relative, import.meta.url), 'utf8');
+/** Файл рядом с тестом есть (читается так же, как index.css: existsSync с адресом из jsdom не работает). */
+const exists = (relative: string): boolean => {
+  try {
+    readFileSync(new URL(relative, import.meta.url));
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 type Rgb = readonly [number, number, number];
 type Decls = Record<string, string>;
@@ -44,7 +53,7 @@ for (const [selector, decls] of rules) {
 /** Блок палитры каждого образа (src/skins.ts): `:root[data-skin='…']`. Шрифты и украшения лежат в других блоках, `html[data-skin]`. */
 const SKIN_BLOCKS = new Map<string, Decls>();
 for (const [selector, decls] of rules) {
-  const m = /^:root\[data-skin='([a-z]+)'\]$/.exec(selector);
+  const m = /^:root\[data-skin='([a-z0-9]+)'\]$/.exec(selector);
   if (m?.[1]) SKIN_BLOCKS.set(m[1], decls);
 }
 
@@ -228,7 +237,7 @@ describe('цвета акцентов (src/index.css)', () => {
     });
 
     it('образ перекрывает акцент: селектор :root[data-skin] сильнее [data-accent] (иначе выбранный раньше акцент испортил бы образ)', () => {
-      expect([...rules.keys()].some((sel) => /^:root\[data-skin='[a-z]+'\]$/.test(sel))).toBe(true);
+      expect([...rules.keys()].some((sel) => /^:root\[data-skin='[a-z0-9]+'\]$/.test(sel))).toBe(true);
       expect([...rules.keys()].filter((sel) => /data-accent/.test(sel) && /data-skin/.test(sel))).toEqual([]);
     });
 
@@ -239,19 +248,43 @@ describe('цвета акцентов (src/index.css)', () => {
       }
     });
 
-    it('шрифты и украшения образа заданы отдельным блоком html[data-skin]: таджикские буквы у шрифта заголовков есть (файлы cyrillic-ext подключены)', () => {
-      const css = read('./index.css');
+    it('шрифты и украшения образа заданы отдельным блоком html[data-skin]: шрифт заголовков, узор и цвет рамки есть', () => {
       for (const skin of SKINS.filter((s) => s.id !== 'classic')) {
         const decls = rules.get(`html[data-skin='${skin.id}']`);
         expect(decls?.['skin-head'], `--skin-head у ${skin.id}`).toBeTruthy();
-        expect(decls?.['skin-mark'], `--skin-mark у ${skin.id}`).toContain('url(');
+        expect(decls?.['skin-pattern'], `--skin-pattern у ${skin.id}`).toBeTruthy();
+        expect(decls?.['skin-line'], `--skin-line у ${skin.id}`).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/);
+        // украшение — рисунок или цифра; у части образов его нет
+        const mark = decls?.['skin-mark'];
+        const text = decls?.['skin-mark-text'];
+        if (mark !== undefined) expect(mark, `--skin-mark у ${skin.id}`).toContain('url(');
+        if (text !== undefined) expect(text, `--skin-mark-text у ${skin.id}`).toMatch(/^'[^']{1,3}'$/);
       }
-      for (const family of ['Montserrat', 'Cormorant Garamond']) {
+    });
+
+    it('шрифт заголовков каждого образа подключён: три файла (кириллица, её расширение с таджикскими буквами, латиница) и @font-face', () => {
+      const css = read('./index.css');
+      const families = new Set<string>();
+      for (const skin of SKINS.filter((s) => s.id !== 'classic')) {
+        const first = /^'([^']+)'/.exec(rules.get(`html[data-skin='${skin.id}']`)?.['skin-head'] ?? '')?.[1];
+        if (first && first !== 'Onest') families.add(first);
+      }
+      expect(families.size, 'у образов должны быть свои шрифты').toBeGreaterThan(4);
+      for (const family of families) {
+        const stem = family.toLowerCase().replace(/ /g, '-');
         for (const subset of ['cyrillic-ext', 'cyrillic', 'latin']) {
-          const file = `${family.toLowerCase().replace(' ', '-')}-${subset}-`;
-          expect(css, `@font-face ${family} ${subset}`).toContain(file);
+          expect(css, `@font-face ${family} ${subset}`).toContain(`${stem}-${subset}-`);
+          expect(exists(`./assets/skins/fonts/${stem}-${subset}-${stem === 'cormorant-garamond' ? '700' : 'wght'}.woff2`), `файл ${stem} ${subset}`).toBe(true);
         }
+        expect(exists(`./assets/skins/fonts/LICENSE-${family.replace(/ /g, '-')}-OFL.txt`), `лицензия ${family}`).toBe(true);
       }
+    });
+
+    it('все картинки и шрифты, на которые ссылается index.css в src/assets/skins, существуют (иначе сборка упадёт или образ останется без узора)', () => {
+      const css = read('./index.css');
+      const urls = [...css.matchAll(/url\('\.\/(assets\/skins\/[^']+)'\)/g)].map((m) => m[1] ?? '');
+      expect(urls.length).toBeGreaterThan(20);
+      for (const u of new Set(urls)) expect(exists(`./${u}`), u).toBe(true);
     });
   });
 });
