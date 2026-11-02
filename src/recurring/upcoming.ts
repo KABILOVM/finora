@@ -5,8 +5,13 @@ import { pluralRu } from '@/lib/plural';
 
 /** Чистая работа со списком «Предстоящих»: разбивка по разделам, подписи дат, строки виджета. */
 
-/** Сколько дней вперёд показывает раздел «Скоро». */
+/**
+ * Сколько дней вперёд берётся из расписания для экрана «Регулярные платежи» (с запасом): по нему же считается «Следующий платёж»
+ * и отсеиваются уже проведённые даты. Сам раздел «Скоро» показывает меньше — до конца месяца (см. `soonUntil`).
+ */
 export const SOON_DAYS = 30;
+/** Ближайшая неделя в «Скоро» видна всегда: в последние дни месяца раздел не пустеет, хотя до начала следующего рукой подать. */
+export const SOON_MIN_DAYS = 7;
 /** Сколько дней вперёд показывает виджет на «Главной». */
 export const WIDGET_DAYS = 7;
 /** Строк в виджете. */
@@ -34,6 +39,42 @@ export function groupUpcoming(items: readonly UpcomingItem[] | undefined): Upcom
     else out.soon.push(it);
   }
   return out;
+}
+
+/** Последний день месяца, в котором лежит `date` («2026-11-02» → «2026-11-30»). Нечитаемая дата возвращается как есть. */
+export function monthEnd(date: IsoDate): IsoDate {
+  if (!isValidIsoDate(date)) return date;
+  const y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  const last = new Date(0);
+  last.setUTCFullYear(y, m, 0); // нулевой день следующего месяца — последний день этого
+  const pad = (n: number, w: number) => String(n).padStart(w, '0');
+  return `${pad(last.getUTCFullYear(), 4)}-${pad(last.getUTCMonth() + 1, 2)}-${pad(last.getUTCDate(), 2)}`;
+}
+
+/**
+ * До какой даты (включительно) раздел «Скоро» показывает платежи: до конца текущего месяца, но не ближе чем на неделю вперёд.
+ * Так 2 ноября в «Скоро» нет декабрьской даты ежемесячного платежа, а 29 ноября ещё видно, что будет 1–6 декабря.
+ */
+export function soonUntil(today: IsoDate): IsoDate {
+  if (!isValidIsoDate(today)) return today;
+  const week = addDays(today, SOON_MIN_DAYS);
+  const end = monthEnd(today);
+  return end > week ? end : week;
+}
+
+/**
+ * Подписи раздела «Скоро»: заголовок-подсказка, оборот для фраз («… платежей нет») и готовая фраза пустого состояния.
+ * До конца месяца; в последние дни месяца, когда действует «неделя вперёд», — «ближайшие 7 дней».
+ */
+export function soonSpan(today: IsoDate): { hint: string; within: string; empty: string } {
+  const toMonthEnd = isValidIsoDate(today) && soonUntil(today) === monthEnd(today);
+  const within = toMonthEnd ? 'до конца месяца' : `на ближайшие ${SOON_MIN_DAYS} дней`;
+  return {
+    hint: toMonthEnd ? 'До конца месяца' : `Ближайшие ${SOON_MIN_DAYS} дней`,
+    within,
+    empty: `${within.charAt(0).toUpperCase()}${within.slice(1)} платежей нет.`,
+  };
 }
 
 const DAY_MS = 86_400_000;

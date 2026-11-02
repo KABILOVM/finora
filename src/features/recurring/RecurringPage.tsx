@@ -20,7 +20,7 @@ import { monthlyTotals } from '@/recurring/monthly';
 import type { RuleFormState } from '@/recurring/ruleForm';
 import { AUTO_POST_MAX_AGE_DAYS } from '@/recurring/plan';
 import { findSalaryCategoryId, hasSalaryRule, salaryPrefill } from '@/recurring/salary';
-import { groupUpcoming, itemKey, SOON_DAYS } from '@/recurring/upcoming';
+import { groupUpcoming, itemKey, SOON_DAYS, soonSpan, soonUntil } from '@/recurring/upcoming';
 import { useSkipped } from '@/recurring/useSkipped';
 import { useToday } from '@/recurring/useToday';
 import { PostSheet } from './PostSheet';
@@ -75,7 +75,7 @@ function Collapsible({ title, open, onToggle, children }: { title: string; open:
 }
 
 /**
- * Регулярные платежи: «Просроченные», «Сегодня», «Скоро» (30 дней), пропущенные и «Все правила».
+ * Регулярные платежи: «Просроченные», «Сегодня», «Скоро» (до конца месяца), пропущенные и «Все правила».
  * Провести — окно с суммой и заметкой (без двойных нажатий: кнопка блокируется на время записи). Пропустить — с подтверждением,
  * обратимо. Платежи «Проводить само» записываются при открытии приложения (AutoPostRunner); если не получилось — пометка у платежа.
  */
@@ -161,7 +161,8 @@ export default function RecurringPage() {
   const groups = {
     overdue: allGroups.overdue.filter((it) => fits(it.rule)),
     due: allGroups.due.filter((it) => fits(it.rule)),
-    soon: allGroups.soon.filter((it) => fits(it.rule)),
+    // «Скоро» — до конца текущего месяца (не скользящие 30 дней: иначе 2 ноября в списке уже декабрьские даты)
+    soon: allGroups.soon.filter((it) => it.date <= soonUntil(today) && fits(it.rule)),
   };
   const visibleRules = rules.filter(fits);
   const active = visibleRules.filter((r) => r.archivedAt === null);
@@ -359,13 +360,13 @@ export default function RecurringPage() {
             </Section>
           )}
           {groups.soon.length > 0 && (
-            <Section id="rec-soon" title="Скоро" hint={`Ближайшие ${SOON_DAYS} дней`}>
+            <Section id="rec-soon" title="Скоро" hint={soonSpan(today).hint}>
               {groups.soon.map(row)}
             </Section>
           )}
           {empty && (
             <Card className="mb-6 text-muted" role="status">
-              {filtering ? `${searching ? 'По поиску и фильтрам' : 'По выбранным фильтрам'} на ближайшие ${SOON_DAYS} дней платежей нет.` : `На ближайшие ${SOON_DAYS} дней платежей нет.`}
+              {filtering ? `${searching ? 'По поиску и фильтрам' : 'По выбранным фильтрам'} ${soonSpan(today).within} платежей нет.` : soonSpan(today).empty}
             </Card>
           )}
 

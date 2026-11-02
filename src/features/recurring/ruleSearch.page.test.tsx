@@ -104,7 +104,7 @@ describe('экран «Регулярные платежи»: поиск', () =>
     await user.type(field(), 'космос');
     await waitFor(() => expect(soon()).toEqual([]));
     expect(document.querySelector('[data-testid="recurring-filter-empty"]')?.textContent).toContain('Нет платежей, подходящих под поиск и фильтры.');
-    expect(screen.getByText(/По поиску и фильтрам на ближайшие \d+ дней платежей нет\./)).toBeInTheDocument();
+    expect(screen.getByText(/По поиску и фильтрам до конца месяца платежей нет\./)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Сбросить поиск и фильтры' }));
     await waitFor(() => expect(soon()).toHaveLength(6));
     expect(field().value).toBe('');
