@@ -1842,7 +1842,8 @@ html[data-skin='argentina'] {
   --skin-head-ls: 0.02em;
   --skin-pattern: repeating-linear-gradient(90deg, rgb(117 170 219 / 0.16) 0 26px, transparent 26px 52px);
   --skin-line: 246 180 14;
-  --skin-mark: url('./assets/skins/marks/sun.svg');
+  --skin-art: url('./assets/skins/art/argentina-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='messi'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1871,7 +1872,8 @@ html[data-skin='football'] {
   --skin-head-ls: 0.02em;
   --skin-pattern: repeating-linear-gradient(0deg, rgb(20 112 58 / 0.1) 0 46px, transparent 46px 92px);
   --skin-line: 255 210 63;
-  --skin-mark: url('./assets/skins/marks/ball.svg');
+  --skin-art: url('./assets/skins/art/football-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='shinobi'] {
   --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1907,14 +1909,14 @@ html[data-skin='comic'] {
   --skin-pattern: radial-gradient(rgb(227 23 44 / 0.22) 1.6px, transparent 1.9px);
   --skin-pattern-size: 14px 14px;
   --skin-line: 255 212 0;
-  --skin-mark: url('./assets/skins/marks/burst.svg');
+  --skin-art: url('./assets/skins/art/comic-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='tajik'] {
   --skin-head: 'Podkova', 'Onest', Georgia, serif;
   --skin-pattern: url('./assets/skins/tajik/svg/gulduzi-tile-dim.svg');
   --skin-pattern-opacity: 0.6;
   --skin-line: 217 162 43;
-  --skin-mark: url('./assets/skins/art/tajik-mark.webp');
   --skin-art: url('./assets/skins/art/tajik-hero.webp');
   --skin-art-content: '';
 }
@@ -1930,7 +1932,8 @@ html[data-skin='kawaii'] {
   --skin-pattern: radial-gradient(rgb(255 159 207 / 0.38) 2.2px, transparent 2.6px);
   --skin-pattern-size: 24px 24px;
   --skin-line: 255 159 207;
-  --skin-mark: url('./assets/skins/marks/heart.svg');
+  --skin-art: url('./assets/skins/art/kawaii-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='aesthetic'] {
   --skin-head: 'Cormorant Garamond', 'Onest', Georgia, serif;
@@ -1938,6 +1941,8 @@ html[data-skin='aesthetic'] {
   --skin-head-ls: 0.01em;
   --skin-pattern: repeating-linear-gradient(90deg, rgb(140 63 93 / 0.08) 0 1px, transparent 1px 28px);
   --skin-line: 232 200 140;
+  --skin-art: url('./assets/skins/art/aesthetic-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='racing'] {
   --skin-head: 'Exo 2', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1945,7 +1950,8 @@ html[data-skin='racing'] {
   --skin-head-ls: 0.05em;
   --skin-pattern: repeating-linear-gradient(45deg, rgb(120 126 140 / 0.12) 0 2px, transparent 2px 6px);
   --skin-line: 225 6 0;
-  --skin-mark: url('./assets/skins/marks/checker.svg');
+  --skin-art: url('./assets/skins/art/racing-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='cyber'] {
   --skin-head: 'Exo 2', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -1954,6 +1960,8 @@ html[data-skin='cyber'] {
   --skin-pattern: linear-gradient(rgb(255 43 214 / 0.1) 1px, transparent 1px), linear-gradient(90deg, rgb(32 227 255 / 0.08) 1px, transparent 1px);
   --skin-pattern-size: 28px 28px;
   --skin-line: 32 227 255;
+  --skin-art: url('./assets/skins/art/cyber-hero.webp');
+  --skin-art-content: '';
 }
 html[data-skin='pixel'] {
   --skin-head: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
@@ -1961,6 +1969,8 @@ html[data-skin='pixel'] {
   --skin-head-ls: 0.04em;
   --skin-pattern: repeating-linear-gradient(0deg, rgb(15 56 15 / 0.1) 0 2px, transparent 2px 4px);
   --skin-line: 15 56 15;
+  --skin-art: url('./assets/skins/art/pixel-hero.webp');
+  --skin-art-content: '';
 }
 /* Заголовки экранов и карточек — шрифтом образа (суммы и мелкий текст остаются Onest: у него табличные цифры). */
 html[data-skin] :is(h1, h2, h3) {
@@ -2000,8 +2010,9 @@ html[data-skin] .skin-hero::before {
   text-align: right;
   opacity: 0.24;
 }
-/* Картинка образа (--skin-art) — фоном карточки «Всего», справа: слева она уходит в прозрачность (под ней обычный цвет карточки), а яркость каждой точки заранее
-   ограничена (scripts/skin-art/build.py), поэтому белый текст читается поверх любой её части. Нет картинки (--skin-art-content не задан) — слоя нет совсем.
+/* Картинка образа (--skin-art) — фоном карточки «Всего», справа, по высоте карточки (холст 2:1). Это либо «кадр» (фото или арт: слева уходит в прозрачность,
+   а яркость каждой точки заранее ограничена, поэтому белый текст читается поверх любой его части), либо «вырез» (герой или значок на прозрачном фоне в правом
+   нижнем углу, не выше двух третей карточки, под суммой за месяц). Всё делает scripts/skin-art/build.py. Нет картинки (--skin-art-content не задан) — слоя нет совсем.
    Картинки грузятся только когда образ выбран и в офлайн-кэш не входят: без сети остаётся обычный цвет карточки. */
 html[data-skin] .skin-hero {
   isolation: isolate;
@@ -2012,7 +2023,7 @@ html[data-skin] .skin-hero::after {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: var(--skin-art, none) right center / cover no-repeat;
+  background: var(--skin-art, none) right center / auto 100% no-repeat;
 }
 /* Форма углов: у «технических» образов углы острые, у «Кавая» самые округлые. Остальные образы оставляют обычные скругления. Круги (rounded-full) не трогаем. */
 html[data-skin='pixel'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {

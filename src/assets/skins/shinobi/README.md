@@ -10,6 +10,7 @@
 | `sprites/` | 25 пиксельных спрайтов 32×32: оружие (`kunai`, `kunai-fire`, `kunai-fire-red`, `shuriken`, `weapon-blade`, `weapon-chain`, `meteor`) и персонажи `char-NN` | [Naruto Sprites [16x16]](https://nogardlab.itch.io/naruto-themed-sprites-16x16), nogardlab, itch.io. Название обещает 16×16, на деле 32×32. Лицензия на странице не указана |
 | `icons-48/` | 14 значков 48×48, сделаны из `.ico` (`konoha`, `kunai`, портреты) | [Ninja Naruto Icons](https://softradar.com/ninja-naruto-icons/), автор Marcelo Paiva (deskmundo). Лицензия не указана |
 | `folder-icons/` | 20 иконок-папок ~230×170 (`sharingan`, `mangekyo`, портреты) | [Naruto Folder Icons](https://softradar.com/naruto-folder-icons/). Автор на странице не назван, лицензия не указана |
+| `png/` | `rasengan.png` (Наруто с расенганом, 800×600) и `face.png` (лицо, 500×500): PNG с прозрачным фоном. Сейчас это картинка и значок образа | [pngimg.com/images/anime/naruto](https://pngimg.com/images/anime/naruto) (файлы `naruto_PNG31`, `naruto_PNG57`). Сайт отдаёт их для личного некоммерческого использования |
 | `art/` | `naruto-pixel.png`: большой пиксельный Наруто 873×1671 | [Naruto Pixel Art](https://martins22.itch.io/naruto-pixel-art), martins22, itch.io. Лицензия не указана |
 
 ## Права

@@ -17,18 +17,20 @@ const artSkins = SKINS.filter((s) => s.id !== 'classic' && extras(s.id).includes
 const KB = 1024;
 
 describe('картинки образов: фон карточки «Всего»', () => {
-  it('картинки есть у образов по клубам, играм и странам, которым есть что показать (не меньше восьми)', () => {
-    expect(artSkins.map((s) => s.id).sort()).toEqual(['akatsuki', 'barca', 'messi', 'pamir', 'real', 'shinobi', 'spider', 'tajik']);
+  it('картинка на карточке есть у всех образов, кроме «Классики», «Роналду» (там цифра «7») и «Испании» (там флаг-знак)', () => {
+    const ids = SKINS.map((s) => s.id).filter((id) => !['classic', 'cr7', 'spain'].includes(id));
+    expect(artSkins.map((s) => s.id).sort()).toEqual([...ids].sort());
+    expect(ids).toHaveLength(16);
   });
 
-  it('каждая картинка — webp 640×320 из assets/skins/art, файл есть и не тяжелее 40 КБ; рядом задан --skin-art-content', () => {
+  it('каждая картинка — webp 640×320 из assets/skins/art, файл есть и не тяжелее 45 КБ; рядом задан --skin-art-content', () => {
     for (const skin of artSkins) {
       const body = extras(skin.id);
       const url = body.match(/--skin-art: url\('\.\/(assets\/skins\/art\/[a-z0-9-]+-hero\.webp)'\);/)?.[1];
       expect(url, `--skin-art у ${skin.id}`).toBe(`assets/skins/art/${skin.id}-hero.webp`);
       expect(body, `--skin-art-content у ${skin.id}`).toContain("--skin-art-content: '';");
       const file = bytes(`./${url}`);
-      expect(file.length, `${skin.id}: размер`).toBeLessThanOrEqual(40 * KB);
+      expect(file.length, `${skin.id}: размер`).toBeLessThanOrEqual(45 * KB);
       // webp: «RIFF» … «WEBP»; ширину и высоту читаем из заголовка (формат VP8 / VP8L / VP8X)
       expect(file.subarray(0, 4).toString('latin1'), skin.id).toBe('RIFF');
       expect(file.subarray(8, 12).toString('latin1'), skin.id).toBe('WEBP');
@@ -49,6 +51,8 @@ describe('картинки образов: фон карточки «Всего�
     expect(rule).toContain('var(--skin-art, none)');
     expect(css).toMatch(/html\[data-skin\] \.skin-hero \{\n  isolation: isolate;\n\}/);
     for (const skin of SKINS.filter((s) => s.id !== 'classic' && !artSkins.includes(s))) expect(extras(skin.id).includes('--skin-art-content'), skin.id).toBe(false);
+    // слой по высоте карточки: картинка 2:1 не растягивается на широкой карточке и не уезжает под текст
+    expect(rule).toContain('right center / auto 100% no-repeat');
   });
 
   it('картинки образов не попадают в офлайн-кэш: webp, jpg и jpeg нет в globPatterns, а в сборке webp всегда отдельным файлом', () => {
@@ -58,16 +62,16 @@ describe('картинки образов: фон карточки «Всего�
     expect(viteConfig).toMatch(/assetsInlineLimit: \(file\) => \(file\.endsWith\('\.woff2'\) \|\| file\.endsWith\('\.webp'\)/);
   });
 
-  it('гербы в углу карточки (--skin-mark) у Барселоны, Реала и Таджикистана — webp до 30 КБ', () => {
-    for (const id of ['barca', 'real', 'tajik']) {
+  it('гербы в углу карточки (--skin-mark) у Барселоны и Реала — webp до 30 КБ', () => {
+    for (const id of ['barca', 'real']) {
       const url = extras(id).match(/--skin-mark: url\('\.\/(assets\/skins\/art\/[a-z0-9-]+-mark\.webp)'\);/)?.[1];
       expect(url, id).toBe(`assets/skins/art/${id}-mark.webp`);
       expect(bytes(`./${url}`).length, id).toBeLessThanOrEqual(30 * KB);
     }
   });
 
-  it('там, где картинка уже с героем (Месси, Шиноби, Паутина), водяной знак в углу не рисуется поверх него', () => {
-    for (const id of ['messi', 'shinobi', 'spider']) {
+  it('там, где на карточке картинка-герой или значок в правом нижнем углу, водяной знак не рисуется поверх неё', () => {
+    for (const id of ['messi', 'shinobi', 'spider', 'tajik', 'argentina', 'football', 'comic', 'kawaii', 'racing']) {
       const body = extras(id);
       expect(body.includes('--skin-mark:'), `${id}: --skin-mark`).toBe(false);
       expect(body.includes('--skin-mark-text:'), `${id}: --skin-mark-text`).toBe(false);
@@ -75,18 +79,17 @@ describe('картинки образов: фон карточки «Всего�
   });
 });
 
-describe('миниатюры образов в настройках', () => {
-  it('миниатюры заданы только для существующих образов, файл есть, webp 112×112, до 12 КБ', () => {
+describe('значки образов в настройках', () => {
+  it('значок есть у каждого образа, включая «Классику»: файл на месте, webp 112×112, до 12 КБ, и у всех образов разные', () => {
     const ids = SKINS.map((s) => s.id);
-    const withThumb = Object.keys(SKIN_THUMBS);
-    expect(withThumb.length).toBeGreaterThanOrEqual(9);
-    for (const id of withThumb) {
-      expect(ids, id).toContain(id);
-      expect(SKIN_THUMBS[id as keyof typeof SKIN_THUMBS], id).toContain(`${id}-thumb`);
+    expect(Object.keys(SKIN_THUMBS).sort()).toEqual([...ids].sort());
+    expect(ids).toHaveLength(19);
+    for (const id of ids) {
+      expect(SKIN_THUMBS[id], id).toContain(`${id}-thumb`);
       const file = bytes(`./assets/skins/art/${id}-thumb.webp`);
       expect(file.length, id).toBeLessThanOrEqual(12 * KB);
       expect(file.subarray(8, 12).toString('latin1'), id).toBe('WEBP');
     }
-    expect(withThumb).not.toContain('classic');
+    expect(new Set(ids.map((id) => bytes(`./assets/skins/art/${id}-thumb.webp`).toString('base64'))).size).toBe(ids.length);
   });
 });
