@@ -1,6 +1,6 @@
 import type { ChipOption } from '@/components/ChipPicker';
 import type { Category, LocalRow } from '@/domain/types';
-import { isSearching, matchesQuery } from '@/lib/search';
+import { isSearching, matchesQuery, searchKey } from '@/lib/search';
 
 /**
  * Подкатегории («Коммунальные услуги → Вода, Свет»). Данные хранят родителя у каждой категории (поле parentId, проверки — в categoriesRepo:
@@ -121,4 +121,29 @@ export function buildCategoryOptions<T extends OptionRow>(rows: readonly T[], la
     const parent = parentIn(r, byId);
     return { value: r.id, label: labelOf(r), icon: r.icon, color: r.color, ...(parent ? { sub: parent.name } : {}) };
   });
+}
+
+/** Слова названия без знаков препинания, в виде для сравнения. */
+const wordsOf = (text: string): string[] => searchKey(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/**
+ * Варианты выбора под поиск при вводе операции. Подходит то, что содержит все слова запроса в названии или в «Родитель Название»
+ * (запрос «коммун» находит и родителя, и все его подкатегории; «вода» — подкатегорию «Вода»). Лучшие совпадения — выше: сначала те, где слова
+ * запроса — начала слов названия («так» → «Такси»), потом любые вхождения в название, потом совпавшие только по родителю; внутри
+ * одной ступени порядок исходный (самые частые первыми). Пустой запрос возвращает всё как есть.
+ */
+export function searchOptions(options: readonly ChipOption[], query: string): ChipOption[] {
+  if (!isSearching(query)) return [...options];
+  const queryWords = searchKey(query).split(/\s+/).filter(Boolean);
+  const rank = (o: ChipOption): number | null => {
+    if (!matchesQuery(o.sub ? `${o.sub} ${o.label}` : o.label, query)) return null;
+    if (!matchesQuery(o.label, query)) return 2;
+    const words = wordsOf(o.label);
+    return queryWords.every((q) => words.some((w) => w.startsWith(q))) ? 0 : 1;
+  };
+  return options
+    .map((o, i) => ({ o, i, r: rank(o) }))
+    .filter((x): x is { o: ChipOption; i: number; r: number } => x.r !== null)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.o);
 }

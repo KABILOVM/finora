@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildCategoryOptions, childrenOf, groupUnderParents, hasChildren, parentIn, pathLabel, searchCategories, withDescendants } from './categoryTree';
+import type { ChipOption } from '@/components/ChipPicker';
+import { buildCategoryOptions, childrenOf, groupUnderParents, hasChildren, parentIn, pathLabel, searchCategories, searchOptions, withDescendants } from './categoryTree';
 
 const row = (id: string, parentId: string | null = null, extra: Record<string, string> = {}) => ({
   id,
@@ -163,5 +164,66 @@ describe('searchCategories: поиск по названию', () => {
   it('подкатегория с родителем не из списка (он в архиве) ищется как обычная и сама', () => {
     const orphan = [named('a', 'Вода', 'gone'), named('b', 'Еда')];
     expect(ids(searchCategories(orphan, 'вода'))).toEqual(['a']);
+  });
+});
+
+describe('searchOptions: поиск категории при вводе операции', () => {
+  const opt = (value: string, label: string, sub?: string): ChipOption => ({ value, label, ...(sub ? { sub } : {}) });
+  // порядок как в панели: самые частые первыми, подкатегории под родителем
+  const options: ChipOption[] = [
+    opt('eda', 'Еда'),
+    opt('zhile', 'Жильё'),
+    opt('voda', 'Вода', 'Жильё'),
+    opt('svet', 'Свет', 'Жильё'),
+    opt('transport', 'Транспорт'),
+    opt('taxi', 'Такси', 'Транспорт'),
+    opt('avto', 'Автотранспорт и такси'),
+  ];
+  const values = (found: readonly ChipOption[]) => found.map((o) => o.value);
+
+  it('пустой запрос и одни пробелы возвращают всё как есть', () => {
+    expect(values(searchOptions(options, ''))).toEqual(values(options));
+    expect(values(searchOptions(options, '   '))).toEqual(values(options));
+  });
+
+  it('регистр и «ё» не важны', () => {
+    expect(values(searchOptions(options, 'ЖИЛЬЕ'))).toEqual(['zhile', 'voda', 'svet']);
+  });
+
+  it('«такси»: «Такси» и «Автотранспорт и такси» — оба с начала слова, порядок исходный', () => {
+    expect(values(searchOptions(options, 'такси'))).toEqual(['taxi', 'avto']);
+  });
+
+  it('ступени: начало слова, потом вхождение внутри слова, потом совпавшее только по родителю', () => {
+    // «тра»: «Транспорт» — начало слова; «Автотранспорт и такси» — внутри слова; «Такси» совпало лишь через родителя «Транспорт»
+    expect(values(searchOptions(options, 'тра'))).toEqual(['transport', 'avto', 'taxi']);
+  });
+
+  it('вхождение внутри слова — после начала слова', () => {
+    const found = values(searchOptions([opt('a', 'Автотранспорт'), opt('b', 'Транспорт')], 'транс'));
+    expect(found).toEqual(['b', 'a']); // «Транспорт» начинается с «транс», в «Автотранспорте» — внутри слова
+  });
+
+  it('запрос по родителю находит родителя первым, потом все его подкатегории', () => {
+    expect(values(searchOptions(options, 'жил'))).toEqual(['zhile', 'voda', 'svet']);
+  });
+
+  it('путь «родитель название»: «жильё вода» — только «Вода»', () => {
+    expect(values(searchOptions(options, 'жильё вода'))).toEqual(['voda']);
+  });
+
+  it('несколько слов — все должны найтись, в любом порядке', () => {
+    expect(values(searchOptions(options, 'такси авто'))).toEqual(['avto']);
+    expect(values(searchOptions(options, 'вода еда'))).toEqual([]);
+  });
+
+  it('ничего не нашлось — пусто', () => {
+    expect(searchOptions(options, 'космос')).toEqual([]);
+  });
+
+  it('исходный список не меняется', () => {
+    const copy = [...options];
+    searchOptions(options, 'такси');
+    expect(options).toEqual(copy);
   });
 });

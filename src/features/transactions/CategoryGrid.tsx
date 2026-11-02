@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { isCoarsePointer } from '@/components/AmountInput';
 import type { ChipOption } from '@/components/ChipPicker';
 import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
+import { SearchField } from '@/components/SearchField';
 import type { CategoryKind } from '@/domain/types';
+import { searchOptions } from '@/features/categories/categoryTree';
 import { cn } from '@/lib/cn';
+import { isSearching, showsSearch } from '@/lib/search';
 import { FrequentStrip, type FrequentChoice } from './FrequentPanel';
 import { NewCategoryForm } from './NewCategoryForm';
 
@@ -35,11 +39,21 @@ const cellClass = (selected: boolean) =>
 /**
  * Категории сеткой (3 в ряд на узком телефоне, 4 — от 420 px): значок крупно, название под ним, чтобы слова не рвались. Видно сразу много, выбор — одно касание. «Новая» создаёт категорию
  * прямо здесь, «Без категории» — кнопка над сеткой (не прячется при прокрутке длинного списка).
+ * Когда категорий много, над сеткой — поиск: лучшие совпадения первыми, Enter выбирает первое найденное, а не найденное можно тут же создать
+ * («Новая» подставит набранное название). На ПК курсор в поле сразу; на телефоне — нет, чтобы экранная клавиатура не закрыла сетку.
  */
 export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequent = [], onPickFrequent, onSaveTemplate }: CategoryGridProps) {
   const [adding, setAdding] = useState(false);
+  // название для «Новой»: то, что искали и не нашли
+  const [seed, setSeed] = useState('');
+  const [query, setQuery] = useState('');
+  const [focusSearch] = useState(() => !isCoarsePointer());
+  const searching = isSearching(query);
+  const found = useMemo(() => searchOptions(options, query), [options, query]);
+  const withSearch = showsSearch(options.length, query);
   const hasFrequent = frequent.length > 0 && onPickFrequent !== undefined;
-  const hasStrip = hasFrequent || onSaveTemplate !== undefined;
+  // при поиске полоса частых мешает: ищут конкретную категорию
+  const hasStrip = !searching && (hasFrequent || onSaveTemplate !== undefined);
 
   return (
     <div className="flex flex-col gap-2">
@@ -61,13 +75,34 @@ export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequ
           Без категории
         </button>
       </div>
+      {withSearch && (
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          label="Поиск категории"
+          placeholder="Найти категорию"
+          autoFocus={focusSearch}
+          onKeyDown={(e) => {
+            // Enter в поиске выбирает лучшее совпадение (при пустом запросе — ничего) и не отправляет форму
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            const first = searching ? found[0] : undefined;
+            if (first) onPick(first.value);
+          }}
+        />
+      )}
+      {searching && (
+        <p role="status" className={found.length === 0 ? 'px-1 text-sm text-muted' : 'sr-only'}>
+          {found.length === 0 ? 'Такой категории нет. Нажмите «Новая», чтобы добавить её.' : `Найдено: ${found.length}`}
+        </p>
+      )}
       <div
         role="group"
         aria-label="Категория"
         className={cn(
           'grid grid-cols-3 gap-1.5 min-[420px]:grid-cols-4 overflow-y-auto overscroll-contain p-0.5 [scrollbar-width:thin]',
-          // полоса «Частые» занимает место сверху: сетке остаётся чуть меньше, чтобы панель не вылезала за экран
-          hasStrip ? 'max-h-[min(30vh,240px)]' : 'max-h-[min(40vh,300px)]',
+          // полоса «Частые» и поле поиска занимают место сверху: сетке остаётся чуть меньше, чтобы панель не вылезала за экран
+          hasStrip ? (withSearch ? 'max-h-[min(24vh,192px)]' : 'max-h-[min(30vh,240px)]') : withSearch ? 'max-h-[min(32vh,252px)]' : 'max-h-[min(40vh,300px)]',
         )}
       >
         <button
@@ -75,13 +110,16 @@ export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequ
           aria-label="Новая категория"
           title="Новая категория"
           aria-expanded={adding}
-          onClick={() => setAdding((a) => !a)}
+          onClick={() => {
+            setSeed(searching ? query.trim() : '');
+            setAdding((a) => !a);
+          }}
           className={cn(cellClass(false), 'border-dashed text-brand')}
         >
           <Icon name="plus" size={32} />
           <span className="text-caption font-medium leading-tight">Новая</span>
         </button>
-        {options.map((opt) => {
+        {found.map((opt) => {
           const selected = opt.value === value;
           return (
             <button key={opt.value} type="button" aria-pressed={selected} onClick={() => onPick(opt.value)} className={cellClass(selected)}>
@@ -94,7 +132,7 @@ export function CategoryGrid({ options, value, onPick, onSkip, kind, hint, frequ
           );
         })}
       </div>
-      {adding && <NewCategoryForm options={options} kind={kind} onPick={onPick} onClose={() => setAdding(false)} />}
+      {adding && <NewCategoryForm options={options} kind={kind} initialName={seed} onPick={onPick} onClose={() => setAdding(false)} />}
       {options.length === 0 && !adding && <p className="px-1 text-sm text-muted">Категорий пока нет — создайте первую или сохраните без категории.</p>}
     </div>
   );

@@ -16,16 +16,18 @@ export interface NewCategoryFormProps {
   onPick: (id: string) => void;
   /** Закрыть форму (после добавления или «Отмена»). */
   onClose: (created: boolean) => void;
+  /** Название заранее (например, то, что искали и не нашли). */
+  initialName?: string;
 }
 
 /**
  * Строка «Новая категория»: достаточно написать название, значок и цвет подберутся сами. Enter добавляет категорию, а не
  * сохраняет всю операцию.
  */
-export function NewCategoryForm({ options, kind, onPick, onClose }: NewCategoryFormProps) {
+export function NewCategoryForm({ options, kind, onPick, onClose, initialName = '' }: NewCategoryFormProps) {
   const store = useStore();
   const toast = useToast();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
