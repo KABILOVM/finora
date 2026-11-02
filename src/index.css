@@ -1983,6 +1983,22 @@ html[data-skin] .skin-hero::before {
   text-align: right;
   opacity: 0.24;
 }
+/* Форма углов: у «технических» образов углы острые, у «Кавая» самые округлые. Остальные образы оставляют обычные скругления. Круги (rounded-full) не трогаем. */
+html[data-skin='pixel'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 2px;
+}
+html[data-skin='cyber'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 3px;
+}
+html[data-skin='racing'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill), html[data-skin='comic'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 5px;
+}
+html[data-skin='akatsuki'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 7px;
+}
+html[data-skin='kawaii'] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-control) {
+  border-radius: 1.5rem;
+}
 /* Рамка карточки «Всего» цвета образа (--skin-line). */
 html[data-skin] .skin-hero {
   border: 2px solid rgb(var(--skin-line, 255 255 255) / 0.85);
