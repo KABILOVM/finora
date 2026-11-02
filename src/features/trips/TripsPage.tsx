@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { useStore } from '@/db';
+import { formatMinor } from '@/domain/money';
 import { percentOf } from '@/domain/budgetLevels';
 import type { Category, CurrencyCode, IsoDate, LocalRow, Transaction } from '@/domain/types';
 import { budgetLabel, excludedText } from '@/features/budgets/budgetText';
@@ -20,6 +21,11 @@ import { formatDayLabel } from '@/lib/dates';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
 import { useActiveTrip } from './activeTrip';
+import { tidyTripWallets } from './endTrip';
+import { ExchangeSheet } from './ExchangeSheet';
+import { setTripPlan, parseDays } from './tripPlan';
+import { TripMoneyCard, type ExchangePreset } from './TripMoneyCard';
+import { useTripMoney, type TripMoney } from './useTripMoney';
 import { tagFromName, tagKey, tagsOf, withoutTags, TAG_MAX, TAG_MIN, type TripInfo, type TripReport, type TripTx } from './trips';
 import { useTripReport, useTrips } from './useTrips';
 
@@ -137,13 +143,21 @@ function ByDay({ report, base, today }: { report: TripReport; base: CurrencyCode
 }
 
 function ByCurrency({ report }: { report: TripReport }) {
-  if (report.byCurrency.length < 2) return null;
+  // одна валюта — отдельный блок не нужен, если только не платили картой в другой валюте (тогда видно, сколько списано)
+  if (report.byCurrency.length < 2 && !report.byCurrency.some((c) => c.charged !== undefined)) return null;
   return (
     <Block id="trip-currencies" title="Чем платили">
       <ul className="flex flex-col divide-y divide-border">
         {report.byCurrency.map((c) => (
           <li key={c.currency} className="flex min-h-[44px] items-center justify-between gap-3 py-2" data-testid="trip-currency">
-            <span className="text-muted">{c.currency}</span>
+            <span className="min-w-0">
+              <span className="text-muted">{c.currency}</span>
+              {c.charged && (
+                <span className="block text-sm text-muted" data-testid="trip-currency-charged">
+                  картой списано {c.charged.map((x) => formatMinor(x.minor, x.currency)).join(' + ')}
+                </span>
+              )}
+            </span>
             <MoneyText minor={c.minor} currency={c.currency} tone="none" className="font-semibold" />
           </li>
         ))}
@@ -157,6 +171,11 @@ function OperationRow({ t, categories, base, today, currencyOf }: { t: TripTx; c
   const look = lookup(t, categories);
   const note = withoutTags(t.note);
   const currency = currencyOf.get(t.walletId) ?? base;
+  const toCurrency = t.toWalletId === null ? undefined : currencyOf.get(t.toWalletId);
+  const exchange = t.kind === 'transfer' && toCurrency !== undefined && toCurrency !== currency && t.toAmountMinor != null;
+  // трата в валюте: рядом — сколько это в сомони по курсу, записанному в операции
+  const onReceipt = t.kind !== 'transfer' && (t.foreignCurrency ?? null) !== null && (t.foreignAmountMinor ?? null) !== null;
+  const second = t.kind !== 'transfer' && !onReceipt && currency !== base && t.baseCurrency === base ? t.baseAmountMinor : null;
   return (
     <li data-testid="trip-op">
       <Link
@@ -171,13 +190,31 @@ function OperationRow({ t, categories, base, today, currencyOf }: { t: TripTx; c
             {formatDayLabel(t.occurredOn, today)} · {look.name}
           </span>
         </span>
-        <MoneyText
-          minor={t.kind === 'expense' ? -t.amountMinor : t.amountMinor}
-          currency={currency}
-          tone={t.kind === 'income' ? 'income' : t.kind === 'expense' ? 'expense' : 'none'}
-          sign={t.kind === 'income' ? 'always' : t.kind === 'transfer' ? 'never' : 'auto'}
-          className="shrink-0 font-semibold"
-        />
+        <span className="flex shrink-0 flex-col items-end">
+          {exchange && toCurrency !== undefined && t.toAmountMinor != null ? (
+            <span className="font-semibold" data-testid="trip-op-exchange">
+              <MoneyText minor={t.amountMinor} currency={currency} tone="none" sign="never" /> → <MoneyText minor={t.toAmountMinor} currency={toCurrency} tone="none" sign="never" />
+            </span>
+          ) : (
+            <MoneyText
+              minor={t.kind === 'expense' ? -t.amountMinor : t.amountMinor}
+              currency={currency}
+              tone={t.kind === 'income' ? 'income' : t.kind === 'expense' ? 'expense' : 'none'}
+              sign={t.kind === 'income' ? 'always' : t.kind === 'transfer' ? 'never' : 'auto'}
+              className="font-semibold"
+            />
+          )}
+          {second !== null && (
+            <span className="text-sm text-muted" data-testid="trip-op-base">
+              ≈ <MoneyText minor={second} currency={base} tone="none" />
+            </span>
+          )}
+          {onReceipt && t.foreignCurrency != null && t.foreignAmountMinor != null && (
+            <span className="text-sm text-muted" data-testid="trip-op-receipt">
+              на чеке <MoneyText minor={t.foreignAmountMinor} currency={t.foreignCurrency} tone="none" />
+            </span>
+          )}
+        </span>
       </Link>
     </li>
   );
@@ -191,12 +228,14 @@ interface DetailProps {
   today: IsoDate;
   currencyOf: ReadonlyMap<string, CurrencyCode>;
   active: boolean;
+  money: TripMoney | null | undefined;
+  onExchange: (preset?: ExchangePreset) => void;
   onStart: () => void;
   onEnd: () => void;
   onBack: () => void;
 }
 
-function TripDetail({ report, txs, categories, base, today, currencyOf, active, onStart, onEnd, onBack }: DetailProps) {
+function TripDetail({ report, txs, categories, base, today, currencyOf, active, money, onExchange, onStart, onEnd, onBack }: DetailProps) {
   const location = useLocation();
   const ops = useMemo(
     () =>
@@ -214,6 +253,7 @@ function TripDetail({ report, txs, categories, base, today, currencyOf, active, 
       <PageHeader title={report.label} subtitle={`#${report.tag}`} className="!pt-0" />
       <div className="flex flex-col gap-4">
         <Summary report={report} base={base} today={today} />
+        {money && (active || money.exchanges.length > 0) && <TripMoneyCard money={money} expenseMinor={report.expenseMinor} active={active} onExchange={onExchange} />}
         <div>
           {active ? (
             <Button variant="secondary" fullWidth onClick={onEnd}>
@@ -265,19 +305,23 @@ function TripDetail({ report, txs, categories, base, today, currencyOf, active, 
   );
 }
 
-function StartForm({ trips, onStart }: { trips: readonly TripInfo[]; onStart: (tag: string) => void }) {
+function StartForm({ trips, onStart }: { trips: readonly TripInfo[]; onStart: (tag: string, days: number | null) => void }) {
   const [name, setName] = useState('');
+  const [daysText, setDaysText] = useState('');
   const [touched, setTouched] = useState(false);
   const tag = tagFromName(name);
   const error = touched && name.trim() !== '' && tag === null ? `Название — от ${TAG_MIN} до ${TAG_MAX} букв или цифр` : null;
+  const days = parseDays(daysText);
+  const daysError = daysText.trim() !== '' && days === null ? 'Дни — целое число от 1 до 365' : null;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (tag === null) return;
+    if (tag === null || daysError !== null) return;
     // та же поездка, записанная иначе (#самарканд и #Самарканд), остаётся одной: берём уже принятое написание
     const known = trips.find((t) => t.key === tagKey(tag));
-    onStart(known?.tag ?? tag);
+    onStart(known?.tag ?? tag, days);
     setName('');
+    setDaysText('');
     setTouched(false);
   };
   return (
@@ -296,6 +340,16 @@ function StartForm({ trips, onStart }: { trips: readonly TripInfo[]; onStart: (t
           autoComplete="off"
           error={error}
           hint={tag ? `Новые операции получат метку #${tag}` : 'Пока поездка идёт, новые операции получают её метку в заметке'}
+        />
+        <TextInput
+          label="Сколько дней (по желанию)"
+          value={daysText}
+          onChange={(e) => setDaysText(e.target.value)}
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="Например, 10"
+          error={daysError}
+          hint="Тогда приложение подскажет, сколько можно тратить в день"
         />
         <Button type="submit" icon="plane" disabled={name.trim() === ''}>
           Начать
@@ -319,16 +373,26 @@ export default function TripsPage() {
   const [params, setParams] = useSearchParams();
   const key = params.get('trip');
   const report = useTripReport(data, key);
+  // деньги открытой поездки; на списке — начатой (у неё может ещё не быть операций, а обменять валюту уже нужно)
+  const money = useTripMoney(report?.tag ?? active.tag);
+  const [exchange, setExchange] = useState<{ preset?: ExchangePreset | undefined } | null>(null);
 
   const open = (k: string | null) => setParams(k === null ? {} : { trip: k });
-  const start = (tag: string) => {
+  const start = (tag: string, days: number | null = null) => {
     active.start(tag);
+    if (days !== null) setTripPlan(store.userId, tag, { startOn: today, days });
     toast.success(`Поездка «${tag.replace(/_/g, ' ')}» идёт: новые операции получат метку #${tag}`);
   };
   const end = () => {
+    const tag = active.tag;
     active.end();
     toast.show('Поездка завершена: новые операции без метки');
+    if (tag === null) return;
+    // пустые кошельки поездки уходят в архив; если деньги остались — напоминаем, что их можно вернуть в сомони
+    void tidyTripWallets(store, toast, tag, today);
   };
+  const exchangeSheet =
+    exchange !== null && money ? <ExchangeSheet money={money} preset={exchange.preset} onClose={() => setExchange(null)} /> : null;
 
   if (data === undefined || categories === undefined) {
     return (
@@ -349,7 +413,10 @@ export default function TripsPage() {
 
   if (report) {
     return (
+      <>
       <TripDetail
+        money={money}
+        onExchange={(preset) => setExchange({ preset })}
         report={report}
         txs={data.txs}
         categories={categories}
@@ -361,6 +428,8 @@ export default function TripsPage() {
         onEnd={end}
         onBack={() => open(null)}
       />
+      {exchangeSheet}
+      </>
     );
   }
 
@@ -396,6 +465,7 @@ export default function TripsPage() {
         ) : (
           <StartForm trips={data.trips} onStart={start} />
         )}
+        {active.tag !== null && money && <TripMoneyCard money={money} expenseMinor={current?.expenseMinor ?? null} active onExchange={(preset) => setExchange({ preset })} />}
         {data.trips.length === 0 ? (
           <EmptyState icon="plane" title="Поездок пока нет" text="Начните поездку, и все новые операции получат её метку. Или допишите #метку в заметку любой операции." />
         ) : (
@@ -420,6 +490,7 @@ export default function TripsPage() {
           </Card>
         )}
       </div>
+      {exchangeSheet}
     </>
   );
 }

@@ -607,6 +607,80 @@ describe('обновление базы с версии 8 до 9: обязате
   });
 });
 
+describe('обновление базы с версии 9 до 10: сумма в валюте у операций', () => {
+  const stores9 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions: 'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    savings_goals: 'id, dirty, walletId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const X_SEEN = '0a3a28c0-5fdc-4385-8fca-7c24d9aadd41';
+  const X_EDITED = '0a3a28c0-5fdc-4385-8fca-7c24d9aadd42';
+  const X_NEW = '0a3a28c0-5fdc-4385-8fca-7c24d9aadd43';
+  const tx = (id: string, local: object) => ({
+    ...sync, id, kind: 'expense', walletId: WALLET, toWalletId: null, amountMinor: 1200, toAmountMinor: null, categoryId: CAT, occurredOn: '2026-10-05',
+    note: 'плов', baseCurrency: 'TJS', baseAmountMinor: 1200, fxRate: 1, fxSource: 'same', debtId: null, recurringRuleId: null, syncError: null, ...local,
+  });
+
+  it('у старых операций сумма в валюте = null (а не undefined); операции забираются с сервера заново; правки и память о них на месте', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(9).stores(stores9);
+    await old.open();
+    const memory = { dirtyGroups: ['note'], dirtyBase: { note: { b: { note: '' }, at: '2026-10-02T00:00:00.000Z' } } };
+    await old.table('transactions').bulkAdd([
+      tx(X_SEEN, { dirty: 0, serverSeq: 4 }),
+      tx(X_EDITED, { dirty: 1, serverSeq: 5, note: 'плов у Али', ...memory }), // заметка правлена, ещё не отправлена
+      tx(X_NEW, { dirty: 1, serverSeq: null }), // создана здесь, сервер её ещё не видел
+    ]);
+    await old.table('meta').bulkPut([
+      { key: 'cursor:transactions', value: 5 },
+      { key: 'cursor:wallets', value: 9 },
+      { key: 'initialPullDone', value: true },
+    ]);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      expect(await store.db.meta.get('cursor:transactions')).toBeUndefined();
+      expect(await store.sync.getCursor('transactions')).toBe(0);
+      expect(await store.sync.needsResync('transactions')).toBe(true); // метка держит повтор, даже если вкладка со старым кодом запишет курсор
+      expect(await store.sync.getCursor('wallets')).toBe(9); // остальные таблицы не забираются заново
+      expect(await store.sync.needsResync('wallets')).toBe(false);
+
+      const seen = await store.db.transactions.get(X_SEEN);
+      expect(seen).toMatchObject({ dirty: 0, serverSeq: 0, foreignCurrency: null, foreignAmountMinor: null });
+      expect('foreignCurrency' in seen! && 'foreignAmountMinor' in seen!).toBe(true);
+      expect(await store.db.transactions.get(X_EDITED)).toMatchObject({ dirty: 1, serverSeq: 0, note: 'плов у Али', foreignCurrency: null, ...memory });
+      expect(await store.db.transactions.get(X_NEW)).toMatchObject({ dirty: 1, serverSeq: null, foreignCurrency: null, foreignAmountMinor: null });
+      expect(await store.sync.hasMergeableEdits()).toBe(true); // правка существующей операции перед отправкой сверится с сервером
+    } finally {
+      store.close();
+    }
+  });
+
+  it('пустая правка старой строки (без ключей суммы в валюте) не помечает её изменённой', async () => {
+    const factory = new IDBFactory();
+    const store = await open(factory);
+    try {
+      await store.db.wallets.add({ ...sync, id: WALLET, name: 'Нал', currency: 'TJS', kind: 'cash', openingBalanceMinor: 5000, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, goalMinor: null, goalOn: null, dirty: 0, serverSeq: 2, syncError: null } as never);
+      await store.db.categories.add({ ...sync, id: CAT, name: 'Еда', kind: 'expense', parentId: null, color: '#000000', icon: 'x', sortOrder: 0, archivedAt: null, essential: 0, dirty: 0, serverSeq: 3, syncError: null } as never);
+      // как вкладка со старым кодом: новых полей в строке нет совсем
+      await store.db.transactions.add(tx(X_SEEN, { dirty: 0, serverSeq: 4 }) as never);
+      expect((await store.db.transactions.get(X_SEEN))!.foreignCurrency).toBeUndefined();
+      expect((await store.transactions.update(X_SEEN, { note: 'плов' })).dirty).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+});
+
 /**
  * Страж. Версия приложения, ещё не знающая новой колонки, получает строки без неё (select('*') + отбор по TABLE_SPECS) и
  * запоминает их серверную версию и курсор. После обновления строка выглядит «без значения», с сервера она больше не придёт,
@@ -625,6 +699,7 @@ describe('новая колонка договора требует версии
     transactions: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'kind', 'walletId', 'toWalletId', 'amountMinor', 'toAmountMinor',
       'categoryId', 'occurredOn', 'note', 'baseCurrency', 'baseAmountMinor', 'fxRate', 'fxSource', 'debtId', 'recurringRuleId',
+      'foreignCurrency', 'foreignAmountMinor',
     ],
     debts: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'direction', 'counterparty', 'principalMinor', 'interestMinor',

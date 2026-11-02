@@ -60,6 +60,19 @@ export function FxNotice({ fx, amountMinor, rateText, onRateText, error }: FxNot
     const base = basePreview(amountMinor, fx.from, fx.to, lookup.rate);
     const source = entered ? enteredLabel(lookup.asOf) : `${lookup.manual ? 'задан вручную' : rateSourceLabel(lookup.source)}, ${ruDate(lookup.asOf)}`;
     const showField = entered && (changing || rateText.trim() !== '' || !!error);
+    if (lookup.source === 'trip') {
+      // Курс вашего обмена в поездке: главное — сколько это в сомони, пока вы вводите сумму
+      return (
+        <div className={NOTE} data-testid="fx-notice">
+          <p>
+            Курс вашего обмена: {rateLine(fx.from, fx.to, lookup.rate)} ({rateSourceLabel('trip')}, {ruDate(lookup.asOf)})
+          </p>
+          <p className="text-base font-semibold text-text" data-testid="fx-trip-preview">
+            {base ? `≈ ${base}` : `В ${currencyInfo(fx.to).symbol} получится после ввода суммы`}
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col gap-2" data-testid="fx-notice">
         <div className={NOTE}>

@@ -28,6 +28,7 @@ import { TxFormFields } from './TxFormFields';
 import { useCloseDuplicateEntry } from './useCloseDuplicateEntry';
 import { buildCategoryOptions } from '@/features/categories/categoryTree';
 import { useScrollToError } from './useScrollToError';
+import { tagsOf } from '@/features/trips/trips';
 import { useTxFormController } from './useTxFormController';
 
 export interface EditTransactionSheetProps {
@@ -134,7 +135,8 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
     () => wallets.filter((w) => w.archivedAt === null || w.id === orig.walletId || w.id === orig.toWalletId),
     [wallets, orig],
   );
-  const c = useTxFormController({ mode: 'edit', initial, orig, wallets: selectable, allWallets: wallets, base: settings.baseCurrency });
+  // операции из поездки (с меткой в заметке) предлагают «Сумму на чеке в другой валюте»; у остальных она видна, только если уже есть
+  const c = useTxFormController({ mode: 'edit', initial, orig, wallets: selectable, allWallets: wallets, base: settings.baseCurrency, foreignAvailable: tagsOf(orig.note).length > 0 });
   const knownTags = useKnownTags();
 
   const kind = c.form.kind;

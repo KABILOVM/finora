@@ -1202,3 +1202,43 @@ create policy savings_goals_insert_own on public.savings_goals for insert to aut
 drop policy if exists savings_goals_update_own on public.savings_goals;
 create policy savings_goals_update_own on public.savings_goals for update to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+
+-- 19. «Сумма в валюте» у операций ---------------------------------------------------------------
+-- Оплата картой в другой валюте: банк списал 135 с. (amount_minor, в валюте кошелька), а на чеке было 50 AED. Эти 50 AED клиент хранит в двух
+-- колонках: foreign_currency (код валюты, три заглавные буквы) и foreign_amount_minor (сумма в минимальных единицах, от 1 до 1e15). Они не
+-- влияют на остаток кошелька, курс и отчёты в основной валюте: это память о том, сколько было на чеке («Поездки» показывают по ним, сколько
+-- потрачено в каждой валюте). Оба поля вместе или оба пусты; у перевода их нет.
+-- Блок идемпотентен, как разделы 11, 16 и 17: колонки «add column if not exists», ограничения — только если их ещё нет (старые строки колонки
+-- не имеют, поэтому нарушить ограничение не могут). Данные не трогаются, триггер sync_guard, права и политики остаются прежними. Старые
+-- приложения колонки не знают: при записи они их не присылают, и сохранённая сумма в валюте не затирается.
+-- Выполнять до выкладки приложения; повторный запуск безопасен.
+alter table public.transactions add column if not exists foreign_currency text;
+alter table public.transactions add column if not exists foreign_amount_minor bigint;
+
+do $$
+declare
+  r record;
+begin
+  for r in
+    select * from (values
+      ('transactions', 'transactions_foreign_shape', '(foreign_currency is null) = (foreign_amount_minor is null)'),
+      ('transactions', 'transactions_foreign_currency_fmt', 'foreign_currency is null or foreign_currency ~ ''^[A-Z]{3}$'''),
+      ('transactions', 'transactions_foreign_amount', 'foreign_amount_minor is null or foreign_amount_minor between 1 and 1000000000000000'),
+      ('transactions', 'transactions_foreign_plain', 'kind <> ''transfer'' or foreign_currency is null')
+    ) as c (tbl, cname, expr)
+  loop
+    if not exists (
+      select 1 from pg_constraint
+       where conname = r.cname and conrelid = format('public.%I', r.tbl)::regclass
+    ) then
+      execute format('alter table public.%I add constraint %I check (%s) not valid', r.tbl, r.cname, r.expr);
+      begin
+        execute format('alter table public.%I validate constraint %I', r.tbl, r.cname);
+      exception when check_violation then
+        raise warning 'В таблице % есть старые строки, нарушающие ограничение %; новые и изменённые строки оно проверяет', r.tbl, r.cname;
+      end;
+    end if;
+  end loop;
+end
+$$;

@@ -49,6 +49,8 @@ export function dbNameFor(userId: string): string {
  *  - 7: у долгов проценты (interestMinor, interestRateBp, termMonths — без индексов). Старым долгам в upgrade() проставляется null,
  *    а долги забираются с сервера заново (как в версии 6): прежняя версия получала их, отбрасывая незнакомые колонки.
  *  - 8: у долгов mergedIntoId (объединение с составляющими, без индекса). Старым долгам null, долги забираются с сервера заново.
+ *  - 10: у операций «сумма в валюте» (foreignCurrency, foreignAmountMinor — без индексов). Старым операциям в upgrade() проставляется
+ *    null, а операции забираются с сервера заново (как в версии 6): прежняя версия получала их, отбрасывая незнакомые колонки.
  *  - 9: + savings_goals (цели накопления в «Бюджетах»); у категорий essential («обязательная»: 0 старым), у долгов category
  *    (категория долга: '' старым, без индексов). Категории и долги забираются с сервера заново (как в версии 8).
  */
@@ -190,6 +192,22 @@ export class FinoraDB extends Dexie {
           .modify((d: Record<string, unknown>) => {
             if (d['category'] === undefined) d['category'] = '';
             if (typeof d['serverSeq'] === 'number') d['serverSeq'] = 0;
+          });
+      });
+    // «Сумма в валюте» у операций (оплата картой в другой валюте): тот же порядок, что в версии 6. Прежняя версия получала операции,
+    // отбрасывая незнакомые колонки, и без повторного получения первая же правка стёрла бы сумму в валюте на сервере.
+    this.version(10)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('meta').bulkDelete([cursorKey('transactions')]);
+        await tx.table('meta').bulkPut([{ key: resyncKey('transactions'), value: true }]);
+        await tx
+          .table('transactions')
+          .toCollection()
+          .modify((t: Record<string, unknown>) => {
+            if (t['foreignCurrency'] === undefined) t['foreignCurrency'] = null;
+            if (t['foreignAmountMinor'] === undefined) t['foreignAmountMinor'] = null;
+            if (typeof t['serverSeq'] === 'number') t['serverSeq'] = 0;
           });
       });
   }

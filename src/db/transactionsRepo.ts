@@ -60,6 +60,13 @@ export interface TransactionInput {
    * правила; без явного id он выводится сам. Обычно такие операции создаёт createFromRule.
    */
   recurringRuleId?: UUID | null;
+  /**
+   * «Сумма в валюте»: оплата картой в другой валюте (банк списал 135 с. — amountMinor, на чеке было 50 AED — эти два поля). Только
+   * расход/доход; оба поля вместе или оба null (в правке null очищает); валюта отличается от валюты кошелька. На остаток и курс
+   * не влияет: это память о том, сколько было на чеке.
+   */
+  foreignCurrency?: CurrencyCode | null;
+  foreignAmountMinor?: Minor | null;
 }
 
 export type TransactionPatch = Partial<TransactionInput>;
@@ -145,6 +152,8 @@ const KEYS = [
   'fx',
   'debtId',
   'recurringRuleId',
+  'foreignCurrency',
+  'foreignAmountMinor',
 ] as const;
 
 const COMPARED: readonly (keyof Transaction)[] = [
@@ -161,6 +170,8 @@ const COMPARED: readonly (keyof Transaction)[] = [
   'fxRate',
   'fxSource',
   'debtId',
+  'foreignCurrency',
+  'foreignAmountMinor',
 ];
 
 function fieldsOf(t: Transaction): Record<string, unknown> {
@@ -175,7 +186,17 @@ function fieldsOf(t: Transaction): Record<string, unknown> {
     note: t.note,
     debtId: t.debtId ?? null,
     recurringRuleId: t.recurringRuleId ?? null,
+    // строки, записанные до появления «суммы в валюте», хранят undefined: без ?? null правка стёрла бы или пометила изменённым
+    foreignCurrency: t.foreignCurrency ?? null,
+    foreignAmountMinor: t.foreignAmountMinor ?? null,
   };
+}
+
+/** «Сумма в валюте» бывает только в валюте, отличной от валюты кошелька: иначе это просто сумма операции. */
+function checkForeign(f: Pick<TxFields, 'foreignCurrency'>, wallet: Wallet): void {
+  if (f.foreignCurrency !== null && f.foreignCurrency === wallet.currency) {
+    throw new ValidationError(`Сумма в валюте: валюта должна отличаться от валюты кошелька (${wallet.currency})`);
+  }
 }
 
 export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
@@ -319,6 +340,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
     await checkCategoryOf(ctx, fields);
     await checkDebtLink(ctx, fields, wallet);
     await checkRule(fields, scheduledOn);
+    checkForeign(fields, wallet);
     const f: TxFields = { ...fields, toAmountMinor: resolveToAmount(fields, wallet, toWallet, true) };
     checkTransferAmounts(f, wallet, toWallet);
     const snap = buildSnapshot(f, wallet, toWallet, settings.baseCurrency, fx);
@@ -483,6 +505,8 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
           if (clean.kind === 'transfer') {
             merged['categoryId'] = clean.categoryId ?? null;
             merged['debtId'] = clean.debtId ?? null;
+            merged['foreignCurrency'] = clean.foreignCurrency ?? null;
+            merged['foreignAmountMinor'] = clean.foreignAmountMinor ?? null;
           } else {
             merged['toWalletId'] = clean.toWalletId ?? null;
             merged['toAmountMinor'] = clean.toAmountMinor ?? null;
@@ -502,6 +526,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
 
         const { wallet, toWallet } = await loadWallets(ctx, fields, cur);
         await checkCategoryOf(ctx, fields);
+        checkForeign(fields, wallet);
         const walletChanged = fields.walletId !== cur.walletId;
         const kindChanged = fields.kind !== cur.kind;
         if (fields.debtId !== null && (fields.debtId !== (cur.debtId ?? null) || walletChanged || kindChanged)) {
@@ -530,7 +555,7 @@ export function createTransactionsRepo(ctx: RepoContext): TransactionsRepo {
         }
 
         const probe = { ...cur, ...f, ...snap } as Transaction;
-        if (COMPARED.every((k) => Object.is(probe[k], cur[k]))) return cur;
+        if (COMPARED.every((k) => Object.is(probe[k] ?? null, cur[k] ?? null))) return cur;
         checkTransferAmounts(f, wallet, toWallet);
         const row = assemble(cur, f, snap);
         await db.transactions.put(row);

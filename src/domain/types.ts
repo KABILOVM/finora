@@ -114,7 +114,7 @@ export interface Transaction extends SyncFields {
   baseAmountMinor: Minor;
   /** Единиц базовой валюты за 1 единицу валюты кошелька, использованных для снимка (1 если валюты совпадают). null для перевода. */
   fxRate: number | null;
-  /** 'same' | 'nbt' | 'server' | 'api' | 'manual' | 'cached' — откуда взят курс. null для перевода. */
+  /** 'same' | 'nbt' | 'server' | 'api' | 'manual' | 'cached' | 'trip' — откуда взят курс ('trip' — по обменам валюты в поездке). null для перевода. */
   fxSource: string | null;
   /**
    * Долг, к которому относится движение денег (выдача/получение долга или платёж по нему). Только для расхода/дохода.
@@ -123,6 +123,13 @@ export interface Transaction extends SyncFields {
   debtId: UUID | null;
   /** Регулярный платёж, по которому операция создана (id операции тогда детерминирован: v5(ruleId, дата)). */
   recurringRuleId: UUID | null;
+  /**
+   * «Сумма в валюте»: оплата картой в другой валюте (банк списал 135 с., а на чеке было 50 AED). Только расход/доход; оба поля вместе
+   * или оба пусты, валюта отличается от валюты кошелька. Остаток и отчёты считаются по amountMinor (в валюте кошелька), эти поля
+   * лишь помнят, сколько было на чеке. Нет поля (старые строки) — то же, что null.
+   */
+  foreignCurrency?: CurrencyCode | null;
+  foreignAmountMinor?: Minor | null;
 }
 
 export type Frequency = 'daily' | 'weekly' | 'monthly' | 'yearly';

@@ -14,7 +14,10 @@ export interface TxView {
   /** Знаковая сумма для показа: расход отрицательный, доход положительный, перевод — как есть. */
   signedMinor: Minor;
   tone: 'income' | 'expense' | 'none';
-  /** Перевод между разными валютами: «→ 1 090 с.» */
+  /**
+   * Вторая строка под суммой: перевод между валютами «→ 1 090 с.», комиссия, «на чеке 50 AED» (оплата картой в другой валюте)
+   * или «≈ 495 с.» (трата в валюте кошелька: сколько это в основной валюте по курсу, записанному в операции).
+   */
   second: string | null;
 }
 
@@ -27,6 +30,11 @@ type TxLike = Pick<
   recurringRuleId?: Transaction['recurringRuleId'] | undefined;
   /** 'adjust' — «Корректировка остатка» (domain/adjustment.ts). */
   fxSource?: Transaction['fxSource'] | undefined;
+  /** Снимок в основной валюте (для «≈ 495 с.»); нет поля (тестовые заготовки) — такой строки нет. */
+  baseAmountMinor?: Transaction['baseAmountMinor'] | undefined;
+  /** «Сумма на чеке» (оплата картой в другой валюте). */
+  foreignCurrency?: Transaction['foreignCurrency'] | undefined;
+  foreignAmountMinor?: Transaction['foreignAmountMinor'] | undefined;
 };
 
 /** Метка на строке операции: связь с долгом или с регулярным платежом. */
@@ -121,6 +129,17 @@ export function describeTx(
     currency,
     signedMinor: isExpense ? -tx.amountMinor : tx.amountMinor,
     tone: isExpense ? 'expense' : 'income',
-    second: null,
+    second: secondLine(tx, wallet?.currency),
   };
+}
+
+/** Под суммой обычной операции: сумма на чеке, а у траты в валюте кошелька — сколько это в основной валюте. */
+function secondLine(tx: TxLike, walletCurrency: CurrencyCode | undefined): string | null {
+  const fc = tx.foreignCurrency ?? null;
+  const fa = tx.foreignAmountMinor ?? null;
+  if (fc !== null && fa !== null) return `на чеке ${formatMinor(fa, fc)}`;
+  if (walletCurrency !== undefined && walletCurrency !== tx.baseCurrency && typeof tx.baseAmountMinor === 'number') {
+    return `≈ ${formatMinor(tx.baseAmountMinor, tx.baseCurrency)}`;
+  }
+  return null;
 }
