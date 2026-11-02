@@ -53,6 +53,8 @@ export function dbNameFor(userId: string): string {
  *    null, а операции забираются с сервера заново (как в версии 6): прежняя версия получала их, отбрасывая незнакомые колонки.
  *  - 9: + savings_goals (цели накопления в «Бюджетах»); у категорий essential («обязательная»: 0 старым), у долгов category
  *    (категория долга: '' старым, без индексов). Категории и долги забираются с сервера заново (как в версии 8).
+ *  - 11: у категорий daily («ежедневная»: 0 старым) и dailyLimitMinor (дневной лимит: null старым), без индексов. Категории забираются
+ *    с сервера заново (как в версии 9): прежняя версия получала их, отбрасывая незнакомые колонки daily и daily_limit_minor.
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -208,6 +210,22 @@ export class FinoraDB extends Dexie {
             if (t['foreignCurrency'] === undefined) t['foreignCurrency'] = null;
             if (t['foreignAmountMinor'] === undefined) t['foreignAmountMinor'] = null;
             if (typeof t['serverSeq'] === 'number') t['serverSeq'] = 0;
+          });
+      });
+    // «Ежедневные» категории и дневной лимит: тот же порядок, что в версии 9. Прежняя версия получала категории, отбрасывая незнакомые
+    // колонки daily и daily_limit_minor, и без повторного получения первая же правка стёрла бы их значения на сервере.
+    this.version(11)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('meta').bulkDelete([cursorKey('categories')]);
+        await tx.table('meta').bulkPut([{ key: resyncKey('categories'), value: true }]);
+        await tx
+          .table('categories')
+          .toCollection()
+          .modify((c: Record<string, unknown>) => {
+            if (c['daily'] === undefined) c['daily'] = 0;
+            if (c['dailyLimitMinor'] === undefined) c['dailyLimitMinor'] = null;
+            if (typeof c['serverSeq'] === 'number') c['serverSeq'] = 0;
           });
       });
   }

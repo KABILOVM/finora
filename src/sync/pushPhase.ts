@@ -87,7 +87,7 @@ export function describeRejection(err: TransportError): string {
 /** Что ждёт обновления схемы (по таблице строк из PushCtx.waiting) и какой раздел supabase/schema.sql добавляет нужные колонки. */
 const SCHEMA_WAIT: ReadonlyArray<{ table: SyncTableName; section: string; what: string }> = [
   { table: 'wallets', section: 'раздел 11 — цели накопления', what: 'кошельки с целью и их операции' },
-  { table: 'categories', section: 'раздел 16 — обязательные категории', what: 'категории, помеченные обязательными, и их операции' },
+  { table: 'categories', section: 'раздел 16 — обязательные категории; раздел 20 — ежедневные категории', what: 'категории, помеченные обязательными или ежедневными, и их операции' },
   { table: 'settings', section: 'раздел 13 — города для погоды', what: 'настройки' },
   { table: 'transactions', section: 'раздел 19 — сумма в валюте', what: 'операции с суммой в другой валюте' },
   { table: 'debts', section: 'раздел 14 — проценты по долгам; раздел 15 — объединение долгов; раздел 17 — категории долгов', what: 'долги с процентами, объединённые или с категорией и их операции' },

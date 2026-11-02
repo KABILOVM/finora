@@ -1,4 +1,4 @@
-import type { Category, CategoryKind, LocalRow, UUID } from '@/domain/types';
+import type { Category, CategoryKind, LocalRow, Minor, UUID } from '@/domain/types';
 import { ValidationError } from './errors';
 import { newId } from './ids';
 import {
@@ -24,6 +24,16 @@ export interface CategoryInput {
    * Только для расходных: у доходной true — ошибка.
    */
   essential?: boolean;
+  /**
+   * «Ежедневная» категория (еда, дорога, продукты): её траты входят в среднюю трату в день. Не задано — нет (при правке — как было).
+   * Только для расходных: у доходной true — ошибка. Выключение снимает и дневной лимит.
+   */
+  daily?: boolean;
+  /**
+   * Лимит в день для ежедневной категории (целое > 0, основная валюта); null — лимит снять. Не задано — как было. Без daily: true
+   * (в этой же правке или раньше) лимит — ошибка.
+   */
+  dailyLimitMinor?: Minor | null;
 }
 
 export type CategoryPatch = Partial<CategoryInput & { sortOrder: number }>;
@@ -36,9 +46,16 @@ export interface CategoriesRepo {
   restore(id: UUID): Promise<LocalRow<Category>>;
   /** Отметить категорию расходов обязательной (on = true) или снять отметку. У доходной категории — ошибка. Повтор безопасен. */
   setEssential(id: UUID, on: boolean): Promise<LocalRow<Category>>;
+  /** Отметить категорию расходов «ежедневной» (on = true) или снять отметку (вместе с дневным лимитом). У доходной — ошибка. Повтор безопасен. */
+  setDaily(id: UUID, on: boolean): Promise<LocalRow<Category>>;
+  /**
+   * Поставить дневной лимит (целое > 0; категория при этом становится ежедневной) или снять его (null; отметка «ежедневная» остаётся).
+   * У доходной категории — ошибка. Повтор безопасен.
+   */
+  setDailyLimit(id: UUID, limitMinor: Minor | null): Promise<LocalRow<Category>>;
 }
 
-const INPUT_KEYS = ['name', 'kind', 'color', 'icon', 'parentId', 'essential'] as const;
+const INPUT_KEYS = ['name', 'kind', 'color', 'icon', 'parentId', 'essential', 'daily', 'dailyLimitMinor'] as const;
 const PATCH_KEYS = [...INPUT_KEYS, 'sortOrder'] as const;
 const DATA_KEYS: readonly (keyof CategoryData)[] = [
   'name',
@@ -49,6 +66,8 @@ const DATA_KEYS: readonly (keyof CategoryData)[] = [
   'sortOrder',
   'archivedAt',
   'essential',
+  'daily',
+  'dailyLimitMinor',
 ];
 const MAX_DEPTH = 8;
 
@@ -63,10 +82,13 @@ function dataOf(c: Category): CategoryData {
     archivedAt: c.archivedAt,
     // строки, записанные до появления отметки, хранят undefined: без ?? 0 пустая правка пометила бы категорию изменённой
     essential: c.essential ?? 0,
+    daily: c.daily ?? 0,
+    dailyLimitMinor: c.dailyLimitMinor ?? null,
   };
 }
 
 const INCOME_ESSENTIAL_TEXT = 'Обязательной можно сделать только категорию расходов';
+const INCOME_DAILY_TEXT = 'Ежедневной можно сделать только категорию расходов';
 
 export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
   const { db } = ctx;
@@ -94,6 +116,7 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
       const cur = await getLiveCategory(ctx, id);
       const next = change(cur);
       if (next.essential === 1 && next.kind !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
+      if (next.daily === 1 && next.kind !== 'expense') throw new ValidationError(INCOME_DAILY_TEXT);
       if (sameFields(dataOf(cur), next, DATA_KEYS)) return cur;
       if (next.kind !== cur.kind) {
         const used = await db.transactions
@@ -130,6 +153,7 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
       const id = opts?.id;
       if (id !== undefined) reqId(id, 'Категория: id');
       if (clean.essential === true && clean.kind !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
+      if (clean.daily === true && clean.kind !== 'expense') throw new ValidationError(INCOME_DAILY_TEXT);
       return writeTx(ctx, [db.categories], async () => {
         const data = parseCategoryData({
           parentId: null,
@@ -161,8 +185,14 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
       const clean = cleanPatch(patch, PATCH_KEYS, 'Категория');
       return save(id, (cur) => {
         // при смене вида на доходный отметка «обязательная» снимается сама (parseEssential); явное true у доходной — ошибка
-        if (clean.essential === true && (clean.kind ?? cur.kind) !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
-        return parseCategoryData({ ...dataOf(cur), ...clean });
+        const kind = clean.kind ?? cur.kind;
+        if (clean.essential === true && kind !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
+        if (clean.daily === true && kind !== 'expense') throw new ValidationError(INCOME_DAILY_TEXT);
+        const merged: Record<string, unknown> = { ...dataOf(cur), ...clean };
+        // отметка снята (или категория стала доходной): прежний дневной лимит уходит вместе с ней, а не остаётся «осиротевшим»
+        const stillDaily = (merged['daily'] === true || merged['daily'] === 1) && kind === 'expense';
+        if (!stillDaily && clean.dailyLimitMinor === undefined) merged['dailyLimitMinor'] = null;
+        return parseCategoryData(merged);
       });
     },
 
@@ -171,6 +201,22 @@ export function createCategoriesRepo(ctx: RepoContext): CategoriesRepo {
       return save(id, (cur) => {
         if (on && cur.kind !== 'expense') throw new ValidationError(INCOME_ESSENTIAL_TEXT);
         return { ...dataOf(cur), essential: on ? 1 : 0 };
+      });
+    },
+
+    async setDaily(id, on) {
+      if (typeof on !== 'boolean') throw new ValidationError('Ежедневная категория: ожидалось «да» или «нет»');
+      return save(id, (cur) => {
+        if (on && cur.kind !== 'expense') throw new ValidationError(INCOME_DAILY_TEXT);
+        return { ...dataOf(cur), daily: on ? 1 : 0, dailyLimitMinor: on ? (cur.dailyLimitMinor ?? null) : null };
+      });
+    },
+
+    async setDailyLimit(id, limitMinor) {
+      return save(id, (cur) => {
+        if (limitMinor === null) return { ...dataOf(cur), dailyLimitMinor: null };
+        if (cur.kind !== 'expense') throw new ValidationError(INCOME_DAILY_TEXT);
+        return parseCategoryData({ ...dataOf(cur), daily: 1, dailyLimitMinor: limitMinor });
       });
     },
 

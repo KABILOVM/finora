@@ -118,6 +118,13 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
         // «обязательная» категория (раздел 16 схемы)
         ['категория: «обязательная» = 2', 'categories', () => cat({ essential: 2 as 0 })],
         ['категория: «обязательная» отрицательная', 'categories', () => cat({ essential: -1 as 0 })],
+        // «ежедневная» категория и дневной лимит (раздел 20 схемы)
+        ['категория: «ежедневная» = 2', 'categories', () => cat({ daily: 2 as 0 })],
+        ['категория: «ежедневная» отрицательная', 'categories', () => cat({ daily: -1 as 0 })],
+        ['категория: дневной лимит без отметки «ежедневная»', 'categories', () => cat({ daily: 0, dailyLimitMinor: 100 })],
+        ['категория: дневной лимит 0', 'categories', () => cat({ daily: 1, dailyLimitMinor: 0 })],
+        ['категория: дневной лимит отрицательный', 'categories', () => cat({ daily: 1, dailyLimitMinor: -1 })],
+        ['категория: дневной лимит больше допустимого', 'categories', () => cat({ daily: 1, dailyLimitMinor: 1_000_000_000_000_001 })],
         // категория долга (раздел 17 схемы)
         ['долг: категория длиннее 40 символов', 'debts', () => deb({ category: 'я'.repeat(41) })],
         ['долг: категория длиннее 40 символов (эмодзи)', 'debts', () => deb({ category: '😀'.repeat(41) })],
@@ -275,7 +282,14 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
       const w1 = makeWallet({ ...sync, kind: 'savings' });
       await t.push('wallets', [toWire('wallets', w1)]);
       const MAX = 1_000_000_000_000_000;
-      const categories = [makeCategory({ ...sync, essential: 0 }), makeCategory({ ...sync, essential: 1 })];
+      const categories = [
+        makeCategory({ ...sync, essential: 0 }),
+        makeCategory({ ...sync, essential: 1 }),
+        // «ежедневная» категория: без лимита, с наименьшим и с наибольшим допустимым лимитом
+        makeCategory({ ...sync, daily: 1 }),
+        makeCategory({ ...sync, daily: 1, dailyLimitMinor: 1 }),
+        makeCategory({ ...sync, daily: 1, dailyLimitMinor: MAX }),
+      ];
       const debts = [makeDebt({ ...sync, category: '' }), makeDebt({ ...sync, category: 'я'.repeat(40) }), makeDebt({ ...sync, category: '😀'.repeat(40) })];
       const goals = [
         makeSavingsGoal({ ...sync, name: 'я', targetMinor: 1, dueOn: '2000-01-01' }),
@@ -296,26 +310,28 @@ export function runStage2Conformance(getHarness: () => ServerHarness): void {
       const { t } = fresh();
       const t0 = h.now().getTime();
       const sync = { createdAt: iso(t0 - HOUR), clientUpdatedAt: iso(t0 - HOUR), deviceId: 'device-a' };
-      const cat = makeCategory({ ...sync, essential: 1 });
+      const cat = makeCategory({ ...sync, essential: 1, daily: 1, dailyLimitMinor: 4000 });
       const debt = makeDebt({ ...sync, category: 'Кредит' });
-      const stripped = (table: 'categories' | 'debts', e: Category | Debt, column: string, stamp: number): WireRow => {
-        const { [column]: _dropped, ...rest } = toWire(table, { ...e, clientUpdatedAt: iso(t0 - HOUR + stamp), deviceId: 'device-old' });
-        void _dropped;
-        return rest;
+      const stripped = (table: 'categories' | 'debts', e: Category | Debt, column: string | readonly string[], stamp: number): WireRow => {
+        const wire = toWire(table, { ...e, clientUpdatedAt: iso(t0 - HOUR + stamp), deviceId: 'device-old' });
+        for (const c of typeof column === 'string' ? [column] : column) delete wire[c];
+        return wire;
       };
       // новая запись без колонки — значение по умолчанию (0 и пустой текст)
-      await t.push('categories', [stripped('categories', makeCategory({ ...sync }), 'essential', 1)]);
+      await t.push('categories', [stripped('categories', makeCategory({ ...sync }), ['essential', 'daily', 'daily_limit_minor'], 1)]);
       await t.push('debts', [stripped('debts', makeDebt({ ...sync }), 'category', 1)]);
       const freshCat = (await pullAll(t, 'categories'))[0] as Record<string, unknown>;
       const freshDebt = (await pullAll(t, 'debts'))[0] as Record<string, unknown>;
       expect(freshCat['essential']).toBe(0);
+      expect(freshCat['daily']).toBe(0);
+      expect(freshCat['daily_limit_minor'] ?? null).toBeNull();
       expect(freshDebt['category']).toBe('');
       // запись с настоящим значением, потом правка «старым» приложением без колонки: значение остаётся
       await t.push('categories', [toWire('categories', cat)]);
       await t.push('debts', [toWire('debts', debt)]);
-      await t.push('categories', [{ ...stripped('categories', { ...cat, name: 'Переименована' }, 'essential', 10) }]);
+      await t.push('categories', [{ ...stripped('categories', { ...cat, name: 'Переименована' }, ['essential', 'daily', 'daily_limit_minor'], 10) }]);
       await t.push('debts', [{ ...stripped('debts', { ...debt, note: 'правка' }, 'category', 10) }]);
-      expect(must(await find(t, 'categories', cat.id), 'категория')).toMatchObject({ essential: 1, name: 'Переименована' });
+      expect(must(await find(t, 'categories', cat.id), 'категория')).toMatchObject({ essential: 1, daily: 1, daily_limit_minor: 4000, name: 'Переименована' });
       expect(must(await find(t, 'debts', debt.id), 'долг')).toMatchObject({ category: 'Кредит', note: 'правка' });
     });
 

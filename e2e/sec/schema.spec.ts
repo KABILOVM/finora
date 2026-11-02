@@ -446,6 +446,49 @@ test.describe('schema.sql: права и RLS (PGlite)', () => {
     expect('error' in nullEssential && nullEssential.code, 'essential = null').toBe('23502');
   });
 
+  test('«ежедневная» категория и дневной лимит: значения по умолчанию, границы отвергаются по имени', async () => {
+    const asA: Who = { role: 'authenticated', sub: A };
+    const id = (n: number) => `77777777-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const cat = (n: number, cols: Record<string, string> = {}) => {
+      const names = Object.keys(cols);
+      return `insert into public.categories (id, created_at, client_updated_at, device_id, name, kind, color, icon, sort_order${names.map((c) => `, ${c}`).join('')})
+       values ('${id(n)}', '${NOW}', '${NOW}', 'd', 'Еда', 'expense', '#fff', 'x', 0${names.map((c) => `, ${cols[c]}`).join('')})`;
+    };
+    // без колонок (старое приложение) — значения по умолчанию: не ежедневная, лимита нет
+    await commit(asA, cat(1));
+    const defaults = await db.query<{ daily: string | number; daily_limit_minor: string | number | null }>(
+      `select daily, daily_limit_minor from public.categories where id = '${id(1)}'`,
+    );
+    expect(defaults.rows[0]).toEqual({ daily: 0, daily_limit_minor: null });
+    for (const [name, sql] of [
+      ['categories_daily', cat(2, { daily: '2' })],
+      ['categories_daily', cat(3, { daily: '-1' })],
+      ['categories_daily_limit', cat(4, { daily_limit_minor: '100' })], // лимит без отметки «ежедневная»
+      ['categories_daily_limit', cat(5, { daily: '1', daily_limit_minor: '0' })],
+      ['categories_daily_limit', cat(6, { daily: '1', daily_limit_minor: '-1' })],
+      ['categories_daily_limit', cat(7, { daily: '1', daily_limit_minor: '1000000000000001' })],
+      ['categories_daily_limit', cat(8, { daily: '0', daily_limit_minor: '100' })],
+    ] as const) {
+      const r = await run(asA, sql);
+      expect('error' in r && r.code, name).toBe('23514');
+      expect('error' in r && r.error, name).toContain(name);
+    }
+    for (const [n, cols] of [
+      [9, { daily: '0' }],
+      [10, { daily: '1' }],
+      [11, { daily: '1', daily_limit_minor: '1' }],
+      [12, { daily: '1', daily_limit_minor: '1000000000000000' }],
+    ] as const) {
+      const r = await run(asA, cat(n, cols));
+      expect('error' in r ? r.error : 'ok', `запись ${n}`).toBe('ok');
+    }
+    // отметка не может быть пустой (колонка not null), а лимит — может
+    const nullDaily = await run(asA, cat(13, { daily: 'null' }));
+    expect('error' in nullDaily && nullDaily.code, 'daily = null').toBe('23502');
+    const nullLimit = await run(asA, cat(14, { daily: '1', daily_limit_minor: 'null' }));
+    expect('error' in nullLimit ? nullLimit.error : 'ok', 'лимит = null').toBe('ok');
+  });
+
   test('этап 2: ограничения долгов, бюджетов и платежей отвергаются по имени; комиссия перевода принимается', async () => {
     const asA: Who = { role: 'authenticated', sub: A };
     const id = (n: number) => `33333333-0000-4000-8000-${String(n).padStart(12, '0')}`;
