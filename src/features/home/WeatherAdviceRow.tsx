@@ -1,24 +1,15 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Forecast } from '@/features/weather/api';
 import { weatherAdvice } from '@/features/weather/advice';
+import { useNow } from '@/features/weather/useNow';
 import { WeatherIcon } from '@/features/weather/WeatherIcon';
-
-/** Как часто пересчитываем совет: за это время «сейчас» в прогнозе из памяти успевает сдвинуться. */
-const TICK_MS = 5 * 60 * 1000;
 
 /**
  * Нижняя строка полосы «Курсы и погода»: «возьмите зонт» при дожде, «оденьтесь потеплее» при снеге. Показывается, только когда в
  * ближайшие часы есть осадки; ясно или облачно — строки нет вовсе. Нажатие открывает «Погоду».
  */
 export default function WeatherAdviceRow({ forecast }: { forecast: Forecast }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), TICK_MS);
-    return () => clearInterval(t);
-  }, []);
-
-  const advice = weatherAdvice(forecast, now);
+  const advice = weatherAdvice(forecast, useNow());
   if (!advice) return null;
 
   return (

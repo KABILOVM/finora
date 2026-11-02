@@ -1,5 +1,6 @@
 import type { Forecast } from './api';
 import { conditionOf, type SkyKind } from './conditions';
+import { slotIndex } from './slots';
 
 /** Совет по погоде для «Главной»: значок, как у погоды, и короткая фраза. */
 export interface WeatherAdvice {
@@ -13,8 +14,6 @@ export const ADVICE_HOURS = 6;
 export const ADVICE_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 /** Не выше этой температуры (°C) под дождём советуем одеться потеплее. */
 export const COLD_C = 10;
-
-const HOUR_MS = 60 * 60 * 1000;
 
 type Wet = 'rain' | 'snow';
 
@@ -37,9 +36,7 @@ export function weatherAdvice(forecast: Forecast, now: Date = new Date()): Weath
   if (!Number.isFinite(age) || age > ADVICE_MAX_AGE_MS) return null;
 
   // hours[0] — час, в который прогноз загружен; «сейчас» — тот слот, куда мы к этому моменту дошли
-  const minutes = Number(forecast.current.time.slice(14, 16));
-  const into = Number.isFinite(minutes) ? minutes : 0;
-  const first = Math.floor((into * 60_000 + Math.max(0, age)) / HOUR_MS);
+  const first = slotIndex(forecast, now);
 
   const slots: { time: string; code: number; temp: number; now: boolean }[] = [];
   for (let i = first; i < first + ADVICE_HOURS; i += 1) {

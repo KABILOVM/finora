@@ -57,7 +57,15 @@ export interface Forecast {
   sunset: string | null;
 }
 
-export class WeatherError extends Error {}
+export class WeatherError extends Error {
+  /** Сбой временный (нет связи, не ответили вовремя, ответ 5xx): через время запрос может получиться. Ответ 4xx и мусор в ответе — нет. */
+  readonly transient: boolean;
+
+  constructor(message: string, opts: { transient?: boolean } = {}) {
+    super(message);
+    this.transient = opts.transient ?? false;
+  }
+}
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -155,12 +163,13 @@ async function getJson(url: string, signal?: AbortSignal, fetchFn: typeof fetch 
   signal?.addEventListener('abort', onAbort);
   try {
     const res = await fetchFn(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new WeatherError(`Сервис погоды ответил ошибкой ${res.status}`);
+    // 5xx — сервис перегружен или обновляется, это проходит; 4xx (в том числе 429 «слишком часто») повторами только ухудшим
+    if (!res.ok) throw new WeatherError(`Сервис погоды ответил ошибкой ${res.status}`, { transient: res.status >= 500 });
     return await res.json();
   } catch (e) {
     if (signal?.aborted) throw e;
     if (e instanceof WeatherError) throw e;
-    throw new WeatherError(ctrl.signal.aborted ? 'Сервис погоды не ответил вовремя' : 'Нет связи с сервисом погоды');
+    throw new WeatherError(ctrl.signal.aborted ? 'Сервис погоды не ответил вовремя' : 'Нет связи с сервисом погоды', { transient: true });
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);
