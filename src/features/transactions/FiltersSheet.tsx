@@ -205,7 +205,7 @@ export function FiltersSheet({
         </Field>
 
         {(tags.length > 0 || draft.tag !== "") && (
-          <Field id="filter-tag" label="Метка" hint="Метка в заметке: #Самарканд, #работа.">
+          <Field id="filter-tag" label="Метка" hint="Слово с #, написанное в заметке операции.">
             <select
               id="filter-tag"
               value={draft.tag}

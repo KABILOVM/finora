@@ -41,6 +41,7 @@ import type { NoteChoice } from '@/features/transactions/NoteSuggestions';
 import { formFromPrefill, prefillOfForm } from '@/features/transactions/prefill';
 import { emptyForm, futureDateNotice, GENERIC_SAVE_ERROR, isFormDirty, MIN_DATE, NO_FEE, pickDefaultWallet, resolveDate, ruDate } from '@/features/transactions/txForm';
 import type { CategoryState } from '@/features/transactions/ContextRow';
+import { useKnownTags } from '@/features/transactions/knownTags';
 import { rankCategories, rankWallets, usePopularity, type Popularity } from '@/features/transactions/popularity';
 import { TxFormFields } from '@/features/transactions/TxFormFields';
 import { buildCategoryOptions } from '@/features/categories/categoryTree';
@@ -141,6 +142,8 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
   const toast = useToast();
   // «Режим поездки»: пока он включён, новые операции получают метку поездки в заметке
   const trip = useActiveTrip(store.userId);
+  // метки, что уже встречались в заметках: полоса чипов под полем заметки
+  const knownTags = useKnownTags();
   const { templates } = useTemplates(store.userId);
   const saveTemplate = useSaveTemplate();
   const formRef = useRef<HTMLDivElement>(null);
@@ -590,6 +593,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
             : {})}
           noteSuggestions={quickChoice ? [quickChoice, ...noteMatches.map((m) => m.choice)] : noteMatches.map((m) => m.choice)}
           onPickNote={pickNote}
+          {...(knownTags ? { noteTags: knownTags } : {})}
           amountLocked={purchasesActive}
           purchasesCount={purchasesActive ? lines.length : 0}
           {...(groceryNow ? { onOpenPurchases: openPurchases } : {})}
