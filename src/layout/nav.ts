@@ -39,11 +39,9 @@ export const PHONE_ITEMS: readonly NavItem[] = [...SECTIONS.filter((s) => s.bott
 
 /**
  * Боковая панель ПК: группы из реестра. Основная (без заголовка) сверху, потом «Деньги», «Планирование», «Инструменты»; «Настройки»
- * внизу под чертой. Пункта «Ещё» на ПК нет. Импорт лежит внутри «Настроек» (там же подсвечивается).
+ * внизу под чертой. Пункта «Ещё» на ПК нет; все разделы реестра — отдельные пункты.
  */
-export const SIDE_ITEMS: readonly NavItem[] = SECTIONS.filter((s) => s.side !== false).map((s) =>
-  s.id === 'settings' ? { ...toItem(s), sideActiveOn: ['/settings', '/import'] } : toItem(s),
-);
+export const SIDE_ITEMS: readonly NavItem[] = SECTIONS.map(toItem);
 
 /** Путь без хвостовых «/» и в нижнем регистре (маршруты регистр не различают, подсветка тоже). */
 const normalize = (path: string): string => path.toLowerCase().replace(/\/+$/, '') || '/';

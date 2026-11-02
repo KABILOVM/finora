@@ -188,7 +188,7 @@ export default function ImportPage() {
 
   return (
     <>
-      <PageHeader back={{ to: '/settings', label: 'Настройки' }} title="Импорт из Дзен-мани" subtitle={SUBTITLE[stage.name]} />
+      <PageHeader title="Импорт из Дзен-мани" subtitle={SUBTITLE[stage.name]} />
       {(settings === undefined || dbRows === undefined) && <Loading text="Загрузка…" />}
       {settings === null && <Notice tone="danger">Настройки ещё не созданы: дождитесь первой загрузки данных и откройте импорт снова.</Notice>}
       {base && dbRows && (

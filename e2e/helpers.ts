@@ -245,11 +245,12 @@ export type Section =
   | 'Продукты'
   | 'Курсы'
   | 'Погода'
+  | 'Импорт'
   | 'Ещё'
   | 'Настройки';
 
 /** Короткие имена в тестах → разделы реестра (src/app/sections.ts): название в меню и заголовок страницы там одно. */
-const REGISTRY_ID: Partial<Record<Section, string>> = { Платежи: 'recurring', Курсы: 'rates' };
+const REGISTRY_ID: Partial<Record<Section, string>> = { Платежи: 'recurring', Курсы: 'rates', Импорт: 'import' };
 
 /** Название раздела (оно же заголовок h1 и название пункта меню). */
 const SECTION_TITLE = (section: Section): string => {
@@ -268,7 +269,7 @@ export const mainNav = (page: Page): Locator => page.getByRole('navigation', { n
 
 /**
  * Перейти в раздел через меню. ПК: пункт боковой панели. Телефон: пункт нижней панели (Главная, Операции, Аналитика, Ещё), а
- * остальное (Кошельки, Долги, Категории, Бюджеты, Платежи, Покупки, Курсы, Погода, Настройки) открывается в два шага: «Ещё», затем строка списка.
+ * остальное (Кошельки, Долги, Категории, Бюджеты, Платежи, Покупки, Курсы, Погода, Импорт, Настройки) открывается в два шага: «Ещё», затем строка списка.
  */
 export async function goSection(page: Page, section: Section): Promise<void> {
   const title = SECTION_TITLE(section);

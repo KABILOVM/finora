@@ -111,18 +111,19 @@ test.describe('15. Меню «Ещё»', () => {
     }
   });
 
-  test('ПК: пункта «Ещё» в боковой панели нет, «Категории» — свой пункт, импорт — внутри «Настроек»', async ({ page }) => {
+  test('ПК: пункта «Ещё» в боковой панели нет, «Категории» и импорт — свои пункты', async ({ page }) => {
     test.skip(isPhone(page), 'боковая панель только на ПК');
     await openApp(page);
     await expect(mainNav(page).getByRole('link', { name: 'Ещё' })).toHaveCount(0);
     await goSection(page, 'Категории');
     expect(hashOf(page)).toBe('#/categories');
     expect(await lit(page)).toEqual(['Категории']);
+    await goSection(page, 'Импорт');
+    expect(hashOf(page)).toBe('#/import');
+    expect(await lit(page)).toEqual(['Импорт из Дзен-мани']);
+    // в «Настройках» ни категорий, ни импорта больше нет
     await goSection(page, 'Настройки');
-    await expect(page.getByRole('main').getByRole('link', { name: 'Категории', exact: true })).toHaveCount(0);
-    await page.getByRole('main').getByRole('link', { name: 'Импорт из Дзен-мани', exact: true }).click();
-    await expect(h1(page, 'Импорт из Дзен-мани')).toBeVisible();
-    expect(await lit(page)).toEqual(['Настройки']);
+    await expect(page.getByRole('main').getByRole('link', { name: /^(Категории|Импорт из Дзен-мани)$/ })).toHaveCount(0);
   });
 
   test('кнопка «Назад» из раздела возвращает на «Ещё»', async ({ page }) => {
