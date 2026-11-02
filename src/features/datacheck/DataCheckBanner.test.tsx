@@ -4,7 +4,7 @@ import type { Store } from '@/db';
 import { currentPath, LocationProbe, opsDeps, pinToday, showApp, storeOf, table, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
 import TransactionsPage from '@/features/transactions/TransactionsPage';
 import { dismissKey, forgetDismissedCache } from '@/lib/dismissedKeys';
-import { DATACHECK_NAMESPACE } from './constants';
+import { DATACHECK_NAMESPACE } from './dataCheck';
 
 beforeEach(() => {
   localStorage.clear();

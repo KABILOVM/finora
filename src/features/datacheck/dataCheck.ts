@@ -158,6 +158,9 @@ export function checkData(i: { txs: readonly CheckTx[]; wallets: readonly Wallet
 /** Сколько находок всего (без «нормально» отмеченных: их отсекает экран). */
 export const issueCount = (c: DataCheck): number => c.dupes.length + c.uncategorized.total + c.future.total + c.outliers.length + c.negative.length;
 
+/** Вид подсказок для «Это нормально» (на этом устройстве). */
+export const DATACHECK_NAMESPACE = 'datacheck';
+
 export interface OpenFindings {
   dupes: DataCheck['dupes'];
   uncategorized: DataCheck['uncategorized'];

@@ -3,7 +3,6 @@ import { Glyph } from '@/components/Glyph';
 import { Icon } from '@/components/Icon';
 import { useCategories, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
-import { TEMPLATES_PATH } from '@/features/templates/constants';
 import { useTemplates } from '@/features/templates/templateStore';
 import { resolveTemplate, type ResolvedTemplate, type Template } from '@/features/templates/templates';
 import { useAddLink } from '@/layout/nav';
@@ -49,7 +48,7 @@ export default function TemplatesRow() {
         <h2 id="home-templates" className="text-sm font-semibold text-muted">
           Шаблоны
         </h2>
-        <Link to={TEMPLATES_PATH} className="-mr-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-sm font-semibold text-brand">
+        <Link to="/transactions/templates" className="-mr-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-sm font-semibold text-brand">
           Все
           <Icon name="chevron" size={14} />
         </Link>

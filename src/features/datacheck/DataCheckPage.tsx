@@ -18,8 +18,7 @@ import { formatDayLabel } from '@/lib/dates';
 import { useDismissedKeys } from '@/lib/dismissedKeys';
 import { pluralRu } from '@/lib/plural';
 import { useToday } from '@/recurring/useToday';
-import { DATACHECK_NAMESPACE } from './constants';
-import { openCount, openFindings } from './dataCheck';
+import { DATACHECK_NAMESPACE, openCount, openFindings } from './dataCheck';
 import { useDataCheck } from './useDataCheck';
 
 function Block({ id, title, hint, children }: { id: string; title: string; hint?: string; children: ReactNode }) {
@@ -74,7 +73,7 @@ const NoteIcon = ({ kind }: { kind: keyof typeof NOTE_ICON }) => (
  * «Проверка данных»: что в операциях и кошельках похоже на ошибку внесения (dataCheck.ts) — возможные дубли, операции без категории,
  * даты в будущем, слишком крупные траты и отрицательные остатки. Ничего не правит само: у каждой находки «Открыть», где есть что исправить, и
  * «Это нормально» (помнится на этом устройстве). Дубль можно убрать кнопкой «Удалить лишнюю» (с «Отменить»).
- * Лежит внутри «Операций» (DATACHECK_PATH): туда ведут плашка и значок в шапке списка, а «Назад» возвращает в список.
+ * Лежит внутри «Операций» (#/transactions/check): туда ведут плашка и меню «⋯» в шапке списка, а «Назад» возвращает в список.
  */
 export default function DataCheckPage() {
   const store = useStore();

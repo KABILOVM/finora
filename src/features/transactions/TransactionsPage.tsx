@@ -12,10 +12,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { exportTransactionsCsv, useCategories, useHasTransactions, useSettings, useStore, useTransactions, useWallets, ValidationError } from '@/db';
 import type { LocalRow, Transaction } from '@/domain/types';
 import { useToast } from '@/components/Toast';
-import { DATACHECK_PATH } from '@/features/datacheck/constants';
 import { DataCheckBanner } from '@/features/datacheck/DataCheckBanner';
 import { downloadTextFile } from '@/features/settings/download';
-import { TEMPLATES_PATH } from '@/features/templates/constants';
 import { useAddLink } from '@/layout/nav';
 import { formatMinor } from '@/domain/money';
 import { formatDayLabel, todayLocal } from '@/lib/dates';
@@ -184,10 +182,9 @@ export default function TransactionsPage() {
   const open = (id: string) => navigate(`/edit/${id}`, { state: { background: location } });
 
   // Меню «⋯»: страницы, которые лежат внутри «Операций». Переход из окна-меню — без лишней записи в истории (runWithoutModalAnchor).
-  const goTo = (path: string) => () => runWithoutModalAnchor(() => navigate(path));
   const tools: ActionMenuItem[] = [
-    { key: 'templates', label: 'Шаблоны операций', hint: 'Готовые операции в один тап', icon: 'star', onSelect: goTo(TEMPLATES_PATH) },
-    { key: 'datacheck', label: 'Проверка данных', hint: 'Дубли и лишние нули', icon: 'shield', onSelect: goTo(DATACHECK_PATH) },
+    { key: 'templates', label: 'Шаблоны операций', hint: 'Готовые операции в один тап', icon: 'star', onSelect: () => runWithoutModalAnchor(() => navigate('/transactions/templates')) },
+    { key: 'datacheck', label: 'Проверка данных', hint: 'Дубли и лишние нули', icon: 'shield', onSelect: () => runWithoutModalAnchor(() => navigate('/transactions/check')) },
   ];
   const toolsMenu = <ActionMenu items={tools} label="Шаблоны и проверка данных" title="Операции" />;
 
