@@ -49,6 +49,10 @@ export interface TxFormState {
   note: string;
   /** Ручной курс, как набрал человек (когда курса нет совсем). */
   rateText: string;
+  /** «Сумма на чеке в другой валюте» (оплата картой в сомони за границей): раскрыто ли поле, валюта и сумма. */
+  foreignOpen: boolean;
+  foreignCurrency: CurrencyCode | null;
+  foreignAmount: Minor | null;
 }
 
 export type FeeMode = 'amount' | 'percent';
@@ -68,6 +72,9 @@ export function emptyForm(walletId: string | null, kind: TxKind = 'expense'): Tx
     date: { mode: 'today' },
     note: '',
     rateText: '',
+    foreignOpen: false,
+    foreignCurrency: null,
+    foreignAmount: null,
   };
 }
 
@@ -91,6 +98,9 @@ export function formFromTx(tx: Transaction, currencyOf: (walletId: string) => Cu
     date: { mode: 'date', value: tx.occurredOn },
     note: tx.note,
     rateText: '',
+    foreignOpen: !isTransfer && (tx.foreignCurrency ?? null) !== null,
+    foreignCurrency: isTransfer ? null : (tx.foreignCurrency ?? null),
+    foreignAmount: isTransfer ? null : (tx.foreignAmountMinor ?? null),
   };
 }
 
@@ -114,6 +124,11 @@ export function changedFields(input: TransactionInput, orig: Transaction): Trans
     input.kind === 'transfer' &&
     (patch.kind !== undefined || patch.walletId !== undefined || patch.toWalletId !== undefined || patch.amountMinor !== undefined);
   if (pairMoved || (input.toAmountMinor ?? null) !== orig.toAmountMinor) patch.toAmountMinor = input.toAmountMinor ?? null;
+  // «сумма в валюте» правится парой: репозиторий принимает оба поля или ни одного
+  if ((input.foreignCurrency ?? null) !== (orig.foreignCurrency ?? null) || (input.foreignAmountMinor ?? null) !== (orig.foreignAmountMinor ?? null)) {
+    patch.foreignCurrency = input.foreignCurrency ?? null;
+    patch.foreignAmountMinor = input.foreignAmountMinor ?? null;
+  }
   // курс нужен, только если сумма, кошелёк или вид меняются (иначе контроллер его не даёт)
   if (input.fx !== undefined) patch.fx = input.fx;
   return patch;
@@ -151,7 +166,9 @@ export function isFormDirty(form: TxFormState, initial: TxFormState, editing: bo
     form.toAmountOverride !== initial.toAmountOverride ||
     form.feeAmount !== initial.feeAmount ||
     form.feePct !== initial.feePct ||
-    form.rateText !== initial.rateText;
+    form.rateText !== initial.rateText ||
+    form.foreignCurrency !== initial.foreignCurrency ||
+    form.foreignAmount !== initial.foreignAmount;
   if (!editing) return typed;
   const sameDate = form.date.mode === initial.date.mode && (form.date.mode === 'today' || form.date.value === (initial.date as { value: string }).value);
   return (
@@ -219,7 +236,7 @@ export function formatRate(rate: number): string {
   return frac ? `${grouped},${frac}` : grouped;
 }
 
-const KNOWN_FX_SOURCES: readonly string[] = ['nbt', 'server', 'api', 'manual', 'cached'];
+const KNOWN_FX_SOURCES: readonly string[] = ['nbt', 'server', 'api', 'manual', 'cached', 'trip'];
 
 /** Источник курса для записи в операцию (репозиторий принимает только известные значения). */
 export function fxSourceOf(lookup: Pick<RateLookup, 'source' | 'manual'>): string {
@@ -233,6 +250,7 @@ const SOURCE_LABELS: Record<string, string> = {
   api: 'интернет-курс',
   manual: 'задан вручную',
   cached: 'сохранённый курс',
+  trip: 'по вашему обмену',
   same: 'одна валюта',
 };
 
@@ -274,6 +292,7 @@ export interface FormErrors {
   note?: string;
   rate?: string;
   category?: string;
+  foreign?: string;
   form?: string;
 }
 
@@ -285,7 +304,8 @@ export function errorField(message: string, isShown: (field: keyof FormErrors) =
   const m = message.trim();
   let field: keyof FormErrors = 'form';
   // \w не знает кириллицу, поэтому окончания слов ловим диапазоном букв
-  if (/сумм[а-яё]* зачисления/i.test(m)) field = 'toAmount';
+  if (/^Сумма в валюте|^Валюта суммы в валюте/.test(m)) field = 'foreign';
+  else if (/сумм[а-яё]* зачисления/i.test(m)) field = 'toAmount';
   else if (/кошел[её]к зачисления/i.test(m)) field = 'toWallet';
   else if (/^Сумма|слишком велика/.test(m)) field = 'amount';
   else if (/^Заметка/.test(m)) field = 'note';

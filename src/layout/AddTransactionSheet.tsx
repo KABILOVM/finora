@@ -21,6 +21,7 @@ import { useTemplates } from '@/features/templates/templateStore';
 import { resolveTemplate, type Template } from '@/features/templates/templates';
 import { useActiveTrip } from '@/features/trips/activeTrip';
 import { withTag } from '@/features/trips/trips';
+import { useTripRateLookup } from '@/features/trips/useTripMoney';
 import { useRates } from '@/rates/hooks';
 import { addDays, isValidIsoDate, todayLocal } from '@/lib/dates';
 import { EmptyState } from '@/components/EmptyState';
@@ -31,7 +32,7 @@ import { useToast } from '@/components/Toast';
 import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import { pluralRu } from '@/lib/plural';
-import type { Category, LocalRow, Settings, Wallet } from '@/domain/types';
+import type { Category, CurrencyCode, LocalRow, Settings, Wallet } from '@/domain/types';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
 import type { FrequentChoice } from '@/features/transactions/FrequentPanel';
@@ -182,7 +183,9 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
     () => categories.filter((x) => x.kind === 'income').map((x) => ({ id: x.id, name: x.name, icon: x.icon, color: x.color })),
     [categories],
   );
-  const c = useTxFormController({ mode: 'add', initial, wallets, allWallets: wallets, base: settings.baseCurrency });
+  // В поездке валюта, обменянная по своему курсу, пересчитывается по нему, а не по курсу Нацбанка
+  const tripLookup = useTripRateLookup(trip.tag);
+  const c = useTxFormController({ mode: 'add', initial, wallets, allWallets: wallets, base: settings.baseCurrency, tripLookup, foreignAvailable: trip.tag !== null });
 
   // Номер операции выдаётся при открытии: повторное нажатие или повтор после сбоя не создаст дубль.
   const idRef = useRef(newId());
@@ -485,7 +488,8 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       categories: known,
       incomeCategories: knownIncome,
       base: settings.baseCurrency,
-      getRate,
+      // диктовка в поездке считает валюту поездки по курсу вашего обмена, как и обычная форма
+      getRate: (from: CurrencyCode, to: CurrencyCode) => (to === settings.baseCurrency ? (tripLookup?.(from) ?? null) : null) ?? getRate(from, to),
       txIds: dictation.current.txIds,
       tripTag: trip.tag,
     });

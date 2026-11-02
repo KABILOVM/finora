@@ -77,6 +77,8 @@ export function tx(over: Partial<Transaction> & { id: string }): Transaction {
     fxSource: 'same',
     debtId: null,
     recurringRuleId: null,
+    foreignCurrency: null,
+    foreignAmountMinor: null,
     createdAt: '2026-10-05T10:00:00.000Z',
     clientUpdatedAt: '2026-10-05T10:00:00.000Z',
     deviceId: 'device-x-test',

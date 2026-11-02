@@ -69,6 +69,16 @@ export interface ControllerArgs {
   /** Все кошельки, включая архивные (валюта старой операции). */
   allWallets: readonly LocalRow<Wallet>[];
   base: CurrencyCode;
+  /**
+   * «Режим поездки»: курс, по которому человек обменял деньги в поездке (источник 'trip'). Для валюты с таким курсом он главнее
+   * курса Нацбанка: трата записывается по тому, во сколько сомони эта валюта вам реально обошлась. Нет курса — обычный порядок.
+   */
+  tripLookup?: ((currency: CurrencyCode) => RateLookup | null) | undefined;
+  /**
+   * Предлагать ли «Сумму на чеке в другой валюте» (оплата картой в сомони за границей): в поездке и у операций из поездки.
+   * Уже раскрытое поле (у операции есть сумма в валюте) показывается всегда.
+   */
+  foreignAvailable?: boolean | undefined;
 }
 
 export interface TxFormController {
@@ -83,6 +93,8 @@ export interface TxFormController {
   received: ReceivedView | null;
   /** Комиссия в минорных единицах валюты кошелька (null — поле комиссии заполнено неверно) и итог списания. */
   fee: { minor: Minor | null; total: Minor | null };
+  /** Показывать ли блок «Сумма на чеке в другой валюте» (расход/доход, а не перевод). */
+  foreignAvailable: boolean;
   /** Правка существующей операции (комиссию к уже внесённому расходу не добавляем). */
   editing: boolean;
   /** Правка операции по долгу: вид не меняется (платёж и выдача считаются по-разному, репозиторий такую правку не примет). */
@@ -115,10 +127,13 @@ const CLEARS: Partial<Record<keyof TxFormState, (keyof FormErrors)[]>> = {
   date: ['date'],
   note: ['note'],
   rateText: ['rate'],
+  foreignOpen: ['foreign'],
+  foreignCurrency: ['foreign'],
+  foreignAmount: ['foreign'],
 };
 
 function computeFx(
-  args: Pick<ControllerArgs, 'mode' | 'orig' | 'allWallets' | 'base'>,
+  args: Pick<ControllerArgs, 'mode' | 'orig' | 'allWallets' | 'base' | 'tripLookup'>,
   form: TxFormState,
   wallet: Wallet | undefined,
   getRate: (a: CurrencyCode, b: CurrencyCode) => RateLookup | null,
@@ -141,7 +156,7 @@ function computeFx(
     }
   }
 
-  const lookup = getRate(wallet.currency, base);
+  const lookup = args.tripLookup?.(wallet.currency) ?? getRate(wallet.currency, base);
   return lookup
     ? { kind: 'rate', lookup, from: wallet.currency, to: base }
     : { kind: 'missing', from: wallet.currency, to: base };
@@ -188,10 +203,10 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
   const toWallet = form.kind === 'transfer' ? wallets.find((w) => w.id === form.toWalletId) : undefined;
   const currency = wallet?.currency ?? base;
 
-  const { mode, orig, allWallets } = args;
+  const { mode, orig, allWallets, tripLookup } = args;
   const fx = useMemo(
-    () => computeFx({ mode, orig, allWallets, base }, form, wallet, getRate),
-    [mode, orig, allWallets, base, form, wallet, getRate],
+    () => computeFx({ mode, orig, allWallets, base, tripLookup }, form, wallet, getRate),
+    [mode, orig, allWallets, base, tripLookup, form, wallet, getRate],
   );
   const feeBase = form.amountMinor !== null && form.amountMinor > 0 ? form.amountMinor : null;
   const feeMinor = form.feeOpen ? computeFee(form, feeBase) : 0;
@@ -201,6 +216,9 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
   );
   // Расход: комиссия добавляется к списанию. Перевод: вычитается из зачисления (см. received).
   const total = form.kind === 'expense' && feeMinor !== null && feeBase !== null ? feeBase + feeMinor : feeBase;
+
+  // «Сумма на чеке» бывает у расхода и дохода; предлагается в поездке, а раскрытое поле не прячем
+  const foreignShown = form.kind !== 'transfer' && (args.foreignAvailable === true || form.foreignOpen);
 
   const clearErrors = (keys: (keyof FormErrors)[]) =>
     setErrorsState((e) => {
@@ -244,7 +262,9 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         kind === 'transfer' && (f.toWalletId === null || f.toWalletId === f.walletId)
           ? firstOtherWallet(wallets, f.walletId)
           : f.toWalletId;
-      return { ...f, kind, categoryId: null, toWalletId, toAmountOverride: undefined, ...NO_FEE };
+      // у перевода суммы на чеке не бывает
+      const noForeign = kind === 'transfer' ? { foreignOpen: false, foreignCurrency: null, foreignAmount: null } : {};
+      return { ...f, kind, categoryId: null, toWalletId, toAmountOverride: undefined, ...NO_FEE, ...noForeign };
     });
     clearErrors(CLEARS.kind ?? []);
   };
@@ -265,6 +285,8 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         ...(keepFee ? {} : NO_FEE),
         // Расход в той же валюте: набранный курс остаётся (он зависит от валюты, а не от кошелька)
         rateText: keepFee ? f.rateText : '',
+        // валюта чека не может совпасть с валютой кошелька
+        foreignCurrency: f.foreignCurrency !== null && f.foreignCurrency === wallets.find((w) => w.id === id)?.currency ? null : f.foreignCurrency,
       };
     });
     clearErrors(CLEARS.walletId ?? []);
@@ -284,6 +306,8 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
       toAmountOverride: undefined,
       ...NO_FEE,
       rateText: '',
+      // серия трат картой: валюта чека остаётся, сумма — заново
+      foreignAmount: null,
     }));
     setErrorsState({});
   };
@@ -300,6 +324,8 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         return form.kind !== 'transfer';
       case 'rate':
         return fx.kind === 'missing' || (fx.kind === 'rate' && fx.lookup.entered === true);
+      case 'foreign':
+        return foreignShown;
       default:
         return true;
     }
@@ -346,6 +372,16 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
           e.toAmount = 'Получено не может быть больше списанного: разница — это комиссия';
         }
       }
+    }
+
+    // «Сумма на чеке в другой валюте»: валюта и сумма вместе, валюта чека не совпадает с валютой кошелька
+    let foreign: { currency: CurrencyCode; amountMinor: Minor } | null = null;
+    // (раскрыли поле, но сумму не ввели — это не ошибка: валюта подставляется сама, и операция просто без суммы на чеке)
+    if (foreignShown && form.foreignOpen && form.foreignAmount !== null) {
+      if (form.foreignAmount <= 0) e.foreign = 'Сумма на чеке должна быть больше нуля';
+      else if (form.foreignCurrency === null) e.foreign = 'Выберите валюту чека';
+      else if (wallet && form.foreignCurrency === wallet.currency) e.foreign = `Валюта чека должна отличаться от валюты кошелька (${wallet.currency})`;
+      else foreign = { currency: form.foreignCurrency, amountMinor: form.foreignAmount };
     }
 
     let fxInput: { rate: number; source: string } | null = null;
@@ -417,6 +453,9 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
         categoryId: form.categoryId,
         occurredOn,
         note,
+        // всегда явно: в правке null очищает прежнюю сумму в валюте
+        foreignCurrency: foreign?.currency ?? null,
+        foreignAmountMinor: foreign?.amountMinor ?? null,
         ...(fxInput ? { fx: fxInput } : {}),
       },
     };
@@ -434,6 +473,7 @@ export function useTxFormController(args: ControllerArgs): TxFormController {
     fee: { minor: feeMinor, total },
     editing: mode === 'edit',
     kindLocked,
+    foreignAvailable: foreignShown,
     set,
     setKind,
     setWallet,

@@ -93,6 +93,8 @@ export function makeTransaction(overrides: Partial<Transaction> = {}): Transacti
     fxSource: transfer ? null : 'same',
     debtId: null,
     recurringRuleId: null,
+    foreignCurrency: null,
+    foreignAmountMinor: null,
     ...overrides,
   };
 }

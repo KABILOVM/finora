@@ -238,6 +238,13 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       }
       // долг бывает только у расхода/дохода (этап 2)
       if (kind === 'transfer' && r['debt_id'] != null) fail('debt_shape');
+      // «сумма в валюте» (раздел 19 supabase/schema.sql): валюта и сумма вместе, у перевода их нет
+      const foreignCur = r['foreign_currency'] ?? null;
+      const foreignAmount = r['foreign_amount_minor'] ?? null;
+      if ((foreignCur === null) !== (foreignAmount === null)) fail('foreign_shape');
+      if (foreignCur !== null && !CURRENCY_RE.test(String(foreignCur))) fail('foreign_currency_fmt');
+      if (foreignAmount !== null && !inBound(foreignAmount, 1)) fail('foreign_amount');
+      if (kind === 'transfer' && foreignCur !== null) fail('foreign_shape');
       break;
     }
     case 'debts': {

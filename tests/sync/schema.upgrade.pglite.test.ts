@@ -110,7 +110,7 @@ const stamps = (offsetMs = -HOUR) => {
 
 /** Строка в виде, понятном схеме этапа 1: без колонок, которых там ещё нет. */
 const asStage1 = (table: SyncTableName, row: Record<string, unknown>): Record<string, unknown> => {
-  const { debt_id: _d, recurring_rule_id: _r, ...rest } = row;
+  const { debt_id: _d, recurring_rule_id: _r, foreign_currency: _fc, foreign_amount_minor: _fa, ...rest } = row; // «сумма в валюте» — ещё позже (раздел 19 схемы)
   const { goal_minor: _gm, goal_on: _go, ...withoutGoal } = row;
   const { weather: _w, ...withoutWeather } = row;
   const { essential: _e, ...withoutEssential } = row;
@@ -152,12 +152,12 @@ describe('схема: обновление с этапа 1 на этап 2 по�
     await s.applySchema(); // обновление
     const after = await dumpAll(s, STAGE1_TABLES);
     for (const t of STAGE1_TABLES) {
-      // новые колонки пусты: у всех старых таблиц — служебная base_seq (проверка версии), у операций — ещё debt_id и recurring_rule_id,
+      // новые колонки пусты: у всех старых таблиц — служебная base_seq (проверка версии), у операций — ещё debt_id, recurring_rule_id и «сумма в валюте» (foreign_currency, foreign_amount_minor),
       // у кошельков — цель накопления (goal_minor, goal_on), у настроек — города для погоды (weather)
       const expected = before[t]!.map((r) => ({
         ...r,
         base_seq: null,
-        ...(t === 'transactions' ? { debt_id: null, recurring_rule_id: null } : {}),
+        ...(t === 'transactions' ? { debt_id: null, recurring_rule_id: null, foreign_currency: null, foreign_amount_minor: null } : {}),
         ...(t === 'wallets' ? { goal_minor: null, goal_on: null } : {}),
         ...(t === 'settings' ? { weather: null } : {}),
         // существующие категории получают «не обязательная» (0), а не пустое значение

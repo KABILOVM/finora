@@ -123,6 +123,8 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'fxSource', column: 'fx_source', type: 'text', nullable: true },
       { field: 'debtId', column: 'debt_id', type: 'uuid', nullable: true },
       { field: 'recurringRuleId', column: 'recurring_rule_id', type: 'uuid', nullable: true },
+      { field: 'foreignCurrency', column: 'foreign_currency', type: 'text', nullable: true },
+      { field: 'foreignAmountMinor', column: 'foreign_amount_minor', type: 'int', nullable: true },
     ],
   },
   debts: {
