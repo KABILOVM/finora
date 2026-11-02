@@ -55,5 +55,5 @@ export const isSkinId = (v: string | null): v is SkinId => v === DEFAULT_SKIN ||
 /** Цвета строки состояния для образа; null — «Классика» или неизвестное значение. */
 export const skinBar = (id: string | null): { light: string; dark: string } | null => (isSkinId(id) && id !== DEFAULT_SKIN ? SKIN_BARS[id] : null);
 
-/** Образы, у которых есть свой набор значков (src/skinIcons.ts, грузится лениво). */
-export const SKIN_ICON_PACKS: readonly SkinId[] = ['pixel'];
+/** Образы, у которых есть свой набор значков (src/skinIcons.ts, грузится лениво): все, кроме «Классики». */
+export const SKIN_ICON_PACKS = Object.keys(SKIN_BARS) as readonly SkinId[];
