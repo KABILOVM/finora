@@ -34,12 +34,21 @@ const FORECAST = {
   },
 };
 
+/** Тот же прогноз, но с осадками: сейчас идёт дождь (и ближайшие часы тоже) или снег. */
+const wet = (code: number, temp: number) => ({
+  ...FORECAST,
+  current: { ...FORECAST.current, weather_code: code, temperature_2m: temp, apparent_temperature: temp },
+  hourly: { ...FORECAST.hourly, weather_code: [code, code, 3], temperature_2m: [temp, temp, temp] },
+});
+const FORECASTS = { ok: FORECAST, rain: wet(63, 14), snow: wet(73, -2) };
+
 const glance = (page: Page) => page.getByTestId('home-glance');
+const advice = (page: Page) => page.getByTestId('weather-advice');
 const ratesWidget = (page: Page) => page.getByTestId('rates-widget');
 const weatherWidget = (page: Page) => page.getByTestId('weather-widget');
 
 /** Курсы кладём на устройство заранее; всё внешнее, кроме подменённого прогноза, закрыто (как без интернета). */
-async function prepare(page: Page, opts: { forecast?: 'ok' | 'down' } = {}): Promise<{ forecastCalls: () => number }> {
+async function prepare(page: Page, opts: { forecast?: 'ok' | 'down' | 'rain' | 'snow' } = {}): Promise<{ forecastCalls: () => number }> {
   await page.addInitScript((rates) => {
     try {
       if (localStorage.getItem('finora:rates:v1') === null) localStorage.setItem('finora:rates:v1', JSON.stringify(rates));
@@ -57,7 +66,7 @@ async function prepare(page: Page, opts: { forecast?: 'ok' | 'down' } = {}): Pro
         status: 200,
         contentType: 'application/json',
         headers: { 'access-control-allow-origin': '*' },
-        body: JSON.stringify(FORECAST),
+        body: JSON.stringify(FORECASTS[opts.forecast ?? 'ok']),
       });
     },
   );
@@ -124,6 +133,54 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await expect(page).toHaveURL(/#\/weather$/);
     await expect(page.getByRole('heading', { name: 'По часам' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'На неделю' })).toBeVisible();
+  });
+
+  /** Человек уже выбирал Худжанд на этом устройстве. */
+  const chooseKhujand = (page: Page) =>
+    page.addInitScript(() => {
+      try {
+        localStorage.setItem('finora:weather:selected:v1', JSON.stringify('40.28,69.62'));
+      } catch {
+        /* без хранилища выбора не будет — тест сам об этом скажет */
+      }
+    });
+
+  test('дождь: под полосой «Курсы и погода» совет «возьмите зонт» → нажатие открывает «Погоду»; в ясную погоду совета нет', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    await prepare(page, { forecast: 'rain' });
+    await chooseKhujand(page);
+    await openApp(page);
+    await expect(weatherWidget(page)).toContainText('+14°');
+    await expect(advice(page)).toBeVisible();
+    await expect(advice(page)).toHaveText('Сейчас дождь — возьмите зонт');
+    await noHorizontalScroll(page);
+    await advice(page).scrollIntoViewIfNeeded();
+    await shot(page, '38-home-weather-advice-rain', testInfo);
+
+    await advice(page).click();
+    await expect(page).toHaveURL(/#\/weather$/);
+    await expect(page.getByRole('heading', { name: 'По часам' })).toBeVisible();
+  });
+
+  test('снег: совет «оденьтесь потеплее»', async ({ page }, testInfo) => {
+    await page.clock.install({ time: NOW });
+    await prepare(page, { forecast: 'snow' });
+    await chooseKhujand(page);
+    await openApp(page);
+    await expect(advice(page)).toHaveText('Сейчас снег — оденьтесь потеплее');
+    await noHorizontalScroll(page);
+    await advice(page).scrollIntoViewIfNeeded();
+    await shot(page, '38-home-weather-advice-snow', testInfo);
+  });
+
+  test('ясно: строки с советом нет, полоса на месте', async ({ page }) => {
+    await page.clock.install({ time: NOW });
+    await prepare(page);
+    await chooseKhujand(page);
+    await openApp(page);
+    await expect(weatherWidget(page)).toContainText('+23°');
+    await expect(glance(page)).toBeVisible();
+    await expect(advice(page)).toHaveCount(0);
   });
 
   test('нет связи с сервисом погоды: на главной «Погода недоступна», страница и курсы работают', async ({ page }) => {
