@@ -8,7 +8,7 @@ async function openCategories(page: Parameters<typeof addLink>[0]) {
   return dlg;
 }
 
-test.describe('71. Поиск категории в окне «Новая операция»', () => {
+test.describe('72. Поиск категории в окне «Новая операция»', () => {
   test('набор сужает список, найденное выбирается одним касанием и сохраняется с операцией', async ({ page }, testInfo) => {
     await openApp(page);
     const dlg = await openCategories(page);
@@ -22,7 +22,7 @@ test.describe('71. Поиск категории в окне «Новая опе
     const grid = dlg.getByRole('group', { name: 'Категория' });
     await expect(grid.getByRole('button', { name: 'Здоровье' })).toBeVisible();
     await expect(grid.getByRole('button', { name: 'Транспорт' })).toHaveCount(0);
-    await shot(page, '71-category-search', testInfo);
+    await shot(page, '72-category-search', testInfo);
 
     await grid.getByRole('button', { name: 'Здоровье' }).click();
     await expect(dlg.getByRole('button', { name: 'Категория: Здоровье' })).toBeVisible();

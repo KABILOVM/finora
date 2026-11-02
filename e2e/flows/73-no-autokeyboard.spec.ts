@@ -9,7 +9,7 @@ const focusInfo = (page: Page) =>
     return { tag: el?.tagName ?? '', typing };
   });
 
-test.describe('72. Экранная клавиатура не выезжает сама (телефон)', () => {
+test.describe('73. Экранная клавиатура не выезжает сама (телефон)', () => {
   test('«Новый кошелёк»: на телефоне курсора в «Названии» нет, пока не нажали на поле; на ПК он там сразу', async ({ page }) => {
     await openApp(page);
     await goSection(page, 'Кошельки');
