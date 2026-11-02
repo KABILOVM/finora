@@ -9,7 +9,8 @@ const DIR = process.argv[2] ?? 'dist/assets';
 const KB = 1000;
 const BUDGET = [
   // 176: «сумма на чеке» у операций (проверки, обновление локальной базы, поля синхронизации) добавила ~0,9 КБ в основной файл
-  { match: /^index-.*\.js$/, max: 176 * KB, name: 'основной файл' },
+  // 177: после выпусков 0.9.2 и 0.9.3 основной файл вырос до 176,3 КБ (на 0.9.1 ещё помещался в 176)
+  { match: /^index-.*\.js$/, max: 177 * KB, name: 'основной файл' },
   { match: /^vendor-supabase-.*\.js$/, max: 65 * KB, name: 'vendor: supabase' },
   { match: /^vendor-react-.*\.js$/, max: 60 * KB, name: 'vendor: react' },
   { match: /^vendor-dexie-.*\.js$/, max: 38 * KB, name: 'vendor: dexie' },
