@@ -263,7 +263,7 @@ describe('цвета акцентов (src/index.css)', () => {
     });
 
     /** У этих шрифтов одно начертание, и в имени файла стоит оно, а не «wght» (переменная ось). */
-    const SINGLE_WEIGHT: Record<string, string> = { 'cormorant-garamond': '700', marmelad: '400', forum: '400' };
+    const SINGLE_WEIGHT: Record<string, string> = { 'cormorant-garamond': '700', marmelad: '400', forum: '400', 'bad-script': '400' };
 
     it('шрифт заголовков каждого образа подключён: три файла (кириллица, её расширение с таджикскими буквами, латиница) и @font-face', () => {
       const css = read('./index.css');

@@ -243,6 +243,103 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+@font-face {
+  font-family: 'Commissioner';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/commissioner-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Commissioner';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/commissioner-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Commissioner';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/commissioner-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Shantell Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/shantell-sans-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Shantell Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/shantell-sans-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Shantell Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/shantell-sans-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Alegreya';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/alegreya-cyrillic-wght.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Alegreya';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/alegreya-cyrillic-ext-wght.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Alegreya';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  src: url('./assets/skins/fonts/alegreya-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Bad Script';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 900;
+  src: url('./assets/skins/fonts/bad-script-cyrillic-400.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Bad Script';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 900;
+  src: url('./assets/skins/fonts/bad-script-cyrillic-ext-400.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Bad Script';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 900;
+  src: url('./assets/skins/fonts/bad-script-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -2071,6 +2168,187 @@
   --ac-logo-glyph: 233 238 247;
 }
 
+/* Ретро 70–80-х */
+:root[data-skin='retro'] {
+  --ac-bg-l: 247 234 208;
+  --ac-surface-2-l: 240 220 180;
+  --ac-text-l: 47 28 16;
+  --ac-muted-l: 95 81 67;
+  --ac-border-l: 221 207 183;
+  --ac-border-strong-l: 131 117 100;
+  --ac-brand-l: 147 59 29;
+  --ac-brand-hover-l: 120 49 23;
+  --ac-accent-l: 58 107 90;
+  --ac-hero-l: 138 58 26;
+  --ac-orb-1-l: 212 177 164;
+  --ac-orb-2-l: 176 196 189;
+  --ac-orb-3-l: 244 214 163;
+  --ac-glass-shadow-l: 88 35 17;
+  --ac-bg-d: 35 23 16;
+  --ac-surface-d: 47 32 24;
+  --ac-surface-2-d: 59 41 31;
+  --ac-text-d: 249 238 219;
+  --ac-muted-d: 180 170 157;
+  --ac-border-d: 73 59 49;
+  --ac-border-strong-d: 138 125 112;
+  --ac-brand-d: 240 138 75;
+  --ac-brand-hover-d: 243 161 111;
+  --ac-on-brand-d: 35 23 16;
+  --ac-accent-d: 230 165 50;
+  --ac-hero-from-d: 184 72 31;
+  --ac-hero-d: 74 42 24;
+  --ac-orb-1-d: 116 52 28;
+  --ac-orb-2-d: 45 61 49;
+  --ac-orb-3-d: 103 73 28;
+  --ac-logo-from: 147 59 29;
+  --ac-logo-to: 58 107 90;
+  --ac-logo-glyph: 244 235 232;
+}
+/* Баухаус */
+:root[data-skin='bauhaus'] {
+  --ac-bg-l: 242 239 230;
+  --ac-surface-2-l: 232 227 212;
+  --ac-text-l: 22 22 26;
+  --ac-muted-l: 88 87 87;
+  --ac-border-l: 213 211 203;
+  --ac-border-strong-l: 124 123 120;
+  --ac-brand-l: 168 42 34;
+  --ac-brand-hover-l: 138 35 28;
+  --ac-accent-l: 29 79 216;
+  --ac-hero-l: 29 63 168;
+  --ac-orb-1-l: 220 170 166;
+  --ac-orb-2-l: 165 185 239;
+  --ac-orb-3-l: 249 223 142;
+  --ac-glass-shadow-l: 101 25 20;
+  --ac-bg-d: 18 18 20;
+  --ac-surface-d: 28 28 32;
+  --ac-surface-2-d: 38 38 44;
+  --ac-text-d: 242 239 230;
+  --ac-muted-d: 165 164 158;
+  --ac-border-d: 56 55 58;
+  --ac-border-strong-d: 124 123 121;
+  --ac-brand-d: 255 108 96;
+  --ac-brand-hover-d: 255 138 127;
+  --ac-on-brand-d: 18 18 20;
+  --ac-accent-d: 242 183 5;
+  --ac-hero-from-d: 192 40 30;
+  --ac-hero-d: 27 60 160;
+  --ac-orb-1-d: 113 36 32;
+  --ac-orb-2-d: 23 45 108;
+  --ac-orb-3-d: 96 76 15;
+  --ac-logo-from: 168 42 34;
+  --ac-logo-to: 29 79 216;
+  --ac-logo-glyph: 246 234 233;
+}
+/* Скрапбук */
+:root[data-skin='sticker'] {
+  --ac-bg-l: 255 246 214;
+  --ac-surface-2-l: 251 233 176;
+  --ac-text-l: 51 36 54;
+  --ac-muted-l: 99 89 89;
+  --ac-border-l: 228 219 193;
+  --ac-border-strong-l: 135 124 118;
+  --ac-brand-l: 143 68 94;
+  --ac-brand-hover-l: 117 56 77;
+  --ac-accent-l: 45 147 203;
+  --ac-hero-l: 192 63 110;
+  --ac-orb-1-l: 210 180 191;
+  --ac-orb-2-l: 171 212 234;
+  --ac-orb-3-l: 255 235 169;
+  --ac-glass-shadow-l: 86 41 56;
+  --ac-bg-d: 34 26 46;
+  --ac-surface-d: 45 35 61;
+  --ac-surface-2-d: 58 46 77;
+  --ac-text-d: 255 250 240;
+  --ac-muted-d: 185 179 179;
+  --ac-border-d: 72 63 84;
+  --ac-border-strong-d: 140 132 141;
+  --ac-brand-d: 255 158 192;
+  --ac-brand-hover-d: 255 177 205;
+  --ac-on-brand-d: 34 26 46;
+  --ac-accent-d: 94 199 255;
+  --ac-hero-from-d: 188 66 111;
+  --ac-hero-d: 74 47 122;
+  --ac-orb-1-d: 133 69 101;
+  --ac-orb-2-d: 40 84 122;
+  --ac-orb-3-d: 111 90 52;
+  --ac-logo-from: 143 68 94;
+  --ac-logo-to: 45 147 203;
+  --ac-logo-glyph: 245 246 249;
+}
+/* Школьная тетрадь */
+:root[data-skin='notebook'] {
+  --ac-bg-l: 246 247 242;
+  --ac-surface-2-l: 233 236 224;
+  --ac-text-l: 27 30 43;
+  --ac-muted-l: 89 91 97;
+  --ac-border-l: 218 219 216;
+  --ac-border-strong-l: 126 127 131;
+  --ac-brand-l: 54 83 199;
+  --ac-brand-hover-l: 44 68 163;
+  --ac-accent-l: 224 49 49;
+  --ac-hero-l: 47 75 181;
+  --ac-orb-1-l: 174 186 233;
+  --ac-orb-2-l: 243 173 173;
+  --ac-orb-3-l: 241 162 162;
+  --ac-glass-shadow-l: 32 50 120;
+  --ac-bg-d: 17 21 31;
+  --ac-surface-d: 26 32 48;
+  --ac-surface-2-d: 35 43 64;
+  --ac-text-d: 233 237 248;
+  --ac-muted-d: 166 170 180;
+  --ac-border-d: 53 59 74;
+  --ac-border-strong-d: 119 124 138;
+  --ac-brand-d: 138 164 255;
+  --ac-brand-hover-d: 161 182 255;
+  --ac-on-brand-d: 17 21 31;
+  --ac-accent-d: 255 138 138;
+  --ac-hero-from-d: 59 85 196;
+  --ac-hero-d: 36 58 138;
+  --ac-orb-1-d: 36 52 116;
+  --ac-orb-2-d: 110 34 39;
+  --ac-orb-3-d: 89 31 37;
+  --ac-logo-from: 54 83 199;
+  --ac-logo-to: 224 49 49;
+  --ac-logo-glyph: 235 238 249;
+}
+/* Подземелье */
+:root[data-skin='dungeon'] {
+  --ac-bg-l: 243 233 210;
+  --ac-surface-2-l: 234 223 191;
+  --ac-text-l: 42 29 18;
+  --ac-muted-l: 93 83 71;
+  --ac-border-l: 217 206 185;
+  --ac-border-strong-l: 128 118 103;
+  --ac-brand-l: 122 46 46;
+  --ac-brand-hover-l: 100 38 38;
+  --ac-accent-l: 178 129 30;
+  --ac-hero-l: 74 42 26;
+  --ac-orb-1-l: 202 171 171;
+  --ac-orb-2-l: 224 205 165;
+  --ac-orb-3-l: 230 208 161;
+  --ac-glass-shadow-l: 73 28 28;
+  --ac-bg-d: 26 20 16;
+  --ac-surface-d: 36 27 21;
+  --ac-surface-2-d: 48 36 27;
+  --ac-text-d: 241 229 201;
+  --ac-muted-d: 172 163 145;
+  --ac-border-d: 63 53 44;
+  --ac-border-strong-d: 128 118 102;
+  --ac-brand-d: 224 176 74;
+  --ac-brand-hover-d: 230 192 110;
+  --ac-on-brand-d: 26 20 16;
+  --ac-accent-d: 200 150 46;
+  --ac-hero-from-d: 138 46 46;
+  --ac-hero-d: 59 36 18;
+  --ac-orb-1-d: 69 32 30;
+  --ac-orb-2-d: 97 71 23;
+  --ac-orb-3-d: 87 66 26;
+  --ac-logo-from: 122 46 46;
+  --ac-logo-to: 178 129 30;
+  --ac-logo-glyph: 248 243 240;
+}
+
 html[data-skin='barca'] {
   --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
   --skin-pattern: url('./assets/skins/barca/svg/stripes-tile-dim.svg');
@@ -2271,6 +2549,52 @@ html[data-skin='chrome'] {
   --skin-art: url('./assets/skins/art/chrome-hero.webp');
   --skin-art-content: '';
 }
+html[data-skin='retro'] {
+  --skin-head: 'Marmelad', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(180deg, rgb(216 87 42 / 0.1) 0 6px, rgb(230 165 50 / 0.1) 6px 12px, rgb(58 107 90 / 0.1) 12px 18px, transparent 18px 96px);
+  --skin-line: 230 165 50;
+  --skin-art: url('./assets/skins/art/retro-hero.webp');
+  --skin-art-content: '';
+}
+html[data-skin='bauhaus'] {
+  --skin-head: 'Commissioner', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: url('./assets/skins/bauhaus/svg/pattern-tile.svg');
+  --skin-pattern-size: 140px 140px;
+  --skin-line: 242 183 5;
+  --skin-art: url('./assets/skins/art/bauhaus-hero.webp');
+  --skin-art-content: '';
+}
+html[data-skin='sticker'] {
+  --skin-head: 'Shantell Sans', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: url('./assets/skins/sticker/svg/pattern-tile.svg');
+  --skin-pattern-size: 96px 96px;
+  --skin-line: 255 210 63;
+  --skin-art: url('./assets/skins/art/sticker-hero.webp');
+  --skin-art-content: '';
+}
+html[data-skin='notebook'] {
+  --skin-head: 'Bad Script', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.01em;
+  --skin-pattern: linear-gradient(rgb(59 91 219 / 0.14) 1px, transparent 1px), linear-gradient(90deg, rgb(59 91 219 / 0.14) 1px, transparent 1px), linear-gradient(90deg, transparent 38px, rgb(224 49 49 / 0.4) 38px 40px, transparent 40px);
+  --skin-pattern-size: 22px 22px, 22px 22px, 100% 100%;
+  --skin-line: 224 49 49;
+  --skin-art: url('./assets/skins/art/notebook-hero.webp');
+  --skin-art-content: '';
+}
+html[data-skin='dungeon'] {
+  --skin-head: 'Alegreya', 'Onest', Georgia, serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.05em;
+  --skin-pattern: url('./assets/skins/dungeon/svg/bricks-tile.svg');
+  --skin-pattern-size: 96px 48px;
+  --skin-line: 200 150 46;
+  --skin-art: url('./assets/skins/art/dungeon-hero.webp');
+  --skin-art-content: '';
+}
 /* Заголовки экранов и карточек — шрифтом образа (суммы и мелкий текст остаются Onest: у него табличные цифры). */
 html[data-skin] :is(h1, h2, h3) {
   font-family: var(--skin-head);
@@ -2383,6 +2707,45 @@ html[data-skin='chrome'] .shadow-card {
   :root:not([data-theme])[data-skin='chrome'] .shadow-card {
     box-shadow: 0 10px 24px -12px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.14);
   }
+}
+/* Стилевые образы, партия 2 (Ретро, Баухаус, Скрапбук, Тетрадь, Подземелье): форма углов и вид карточек. */
+html[data-skin='bauhaus'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 2px;
+}
+html[data-skin='notebook'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill),
+html[data-skin='dungeon'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 4px;
+}
+html[data-skin='retro'] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-control) {
+  border-radius: 1.25rem;
+}
+html[data-skin='sticker'] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-control) {
+  border-radius: 1.1rem;
+}
+/* Ретро: карточки с тёплой рамкой и «жёсткой» тенью, как у плакатов 70-х. */
+html[data-skin='retro'] .rounded-card {
+  border: 2px solid rgb(var(--skin-line) / 0.7);
+  box-shadow: 3px 3px 0 rgb(var(--skin-line) / 0.45);
+}
+/* Баухаус: чёрная линия под карточкой и цветная полоска сверху. */
+html[data-skin='bauhaus'] .rounded-card {
+  border: 2px solid rgb(var(--text) / 0.85);
+  box-shadow: 4px 4px 0 rgb(var(--skin-line) / 0.9);
+}
+/* Скрапбук: наклейка с белой кромкой и мягкой тенью. */
+html[data-skin='sticker'] .rounded-card {
+  border: 3px solid #fff;
+  box-shadow: 0 5px 12px -3px rgb(59 42 63 / 0.35);
+}
+/* Тетрадь: листок с синей линией слева, как поля. */
+html[data-skin='notebook'] .rounded-card {
+  border: 1px solid rgb(59 91 219 / 0.35);
+  border-left: 3px solid rgb(224 49 49 / 0.7);
+}
+/* Подземелье: золотая рамка и тёмная внутренняя кромка. */
+html[data-skin='dungeon'] .rounded-card {
+  border: 2px solid rgb(var(--skin-line) / 0.6);
+  box-shadow: inset 0 0 0 2px rgb(0 0 0 / 0.12), 0 6px 14px -8px rgb(0 0 0 / 0.5);
 }
 /* Рамка карточки «Всего» цвета образа (--skin-line). */
 html[data-skin] .skin-hero {

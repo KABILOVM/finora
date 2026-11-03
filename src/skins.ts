@@ -63,6 +63,11 @@ export const SKINS: readonly SkinOption[] = [
   { id: 'clay', label: 'Глина', hint: 'Мягкие объёмные фигурки и пастель', group: 'style', bar: SKIN_BARS.clay },
   { id: 'liquid', label: 'Жидкое стекло', hint: 'Прозрачные шары и синие блики', group: 'style', bar: SKIN_BARS.liquid },
   { id: 'chrome', label: 'Y2K-хром', hint: 'Серебро, блеск и пузыри нулевых', group: 'style', bar: SKIN_BARS.chrome },
+  { id: 'retro', label: 'Ретро 70–80-х', hint: 'Закат, пластинка и тёплые полосы', group: 'style', bar: SKIN_BARS.retro },
+  { id: 'bauhaus', label: 'Баухаус', hint: 'Красный, синий, жёлтый и геометрия', group: 'style', bar: SKIN_BARS.bauhaus },
+  { id: 'sticker', label: 'Скрапбук', hint: 'Бумага, наклейки и скотч', group: 'style', bar: SKIN_BARS.sticker },
+  { id: 'notebook', label: 'Школьная тетрадь', hint: 'Клетка, синяя ручка и красные поля', group: 'style', bar: SKIN_BARS.notebook },
+  { id: 'dungeon', label: 'Подземелье', hint: 'Тёмное дерево, золото и сундук', group: 'style', bar: SKIN_BARS.dungeon },
 ];
 
 export { DEFAULT_SKIN };
