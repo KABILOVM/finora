@@ -6,7 +6,7 @@ import type { SkinId } from '../skinCore';
  * Файлы грузятся лениво и по одному, только когда образ выбран (основные) и когда на экране появился значок раздела (дополнительные). В основной файл приложения они
  * не входят, а в офлайн-кэш не кладутся (см. globIgnores в vite.config.ts): иначе при установке все скачали бы мегабайты рисунков образов, которых никогда не выберут.
  */
-export type IconPackId = 'wi-anime' | 'wi-brutal' | 'wi-kawaii' | 'wi-luxe' | 'wi-coquette' | 'wi-gothic' | 'wi-clay' | 'wi-liquid' | 'wi-chrome' | 'wi-retro' | 'wi-bauhaus' | 'wi-sticker' | 'pp-pencil' | 'game-icons' | 'wi-pastel' | 'wi-soft3d' | 'pixelarticons' | 'sl-cyber' | 'ph-fill';
+export type IconPackId = 'wi-anime' | 'wi-brutal' | 'wi-kawaii' | 'wi-luxe' | 'wi-coquette' | 'wi-gothic' | 'wi-clay' | 'wi-liquid' | 'wi-chrome' | 'wi-retro' | 'wi-bauhaus' | 'wi-sticker' | 'pp-pencil' | 'game-icons' | 'wi-pastel' | 'wi-soft3d' | 'wi-bento' | 'wi-christmas' | 'wi-halloween' | 'wi-valentine' | 'pixelarticons' | 'sl-cyber' | 'ph-fill';
 
 /** Какой набор у какого образа. У образов, которых здесь нет, значки рисуются линией их стиля (src/skinIcons.ts). */
 export const SKIN_ICONIFY: Readonly<Partial<Record<SkinId, IconPackId>>> = {
@@ -30,6 +30,10 @@ export const SKIN_ICONIFY: Readonly<Partial<Record<SkinId, IconPackId>>> = {
   graffiti: 'wi-brutal', // тот же набор, что у «Героя»: те же файлы, второй раз ничего не скачивается
   cafe: 'wi-pastel',
   nowruz: 'wi-soft3d',
+  christmas: 'wi-christmas',
+  halloween: 'wi-halloween',
+  valentine: 'wi-valentine',
+  bento: 'wi-bento',
 };
 
 type PackFile = { ICONS: Readonly<Record<string, string>> };

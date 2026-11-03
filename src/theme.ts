@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { GENERATED_ACCENTS } from './lib/accentSpecs';
 import { isPalette, normalizeHex, PALETTE_KEYS, triple, type Palette } from './lib/paletteBase';
 import { setSkinIconPack } from './components/skinIconStore';
-import { DEFAULT_SKIN, isSkinId, SKIN_ICON_PACKS, skinBar, type SkinId } from './skinCore';
+import { DEFAULT_SKIN, isSkinId, resolveSkin, SKIN_ICON_PACKS, skinBar, type SkinId } from './skinCore';
 
 /**
  * Тема оформления: «светлая» (по умолчанию), «тёмная» или «как в системе». Хранится на самом устройстве (localStorage),
@@ -249,15 +249,16 @@ export function readSkinPref(): SkinId {
 }
 
 /**
- * Ставит атрибут data-skin на <html> («Классика» — без атрибута) и заново применяет акцент: под образом «свой цвет» не ставится,
+ * Ставит атрибут data-skin на <html> («Классика» — без атрибута; у «Сезонных» — праздничный образ по дате) и заново применяет акцент: под образом «свой цвет» не ставится,
  * а при возврате к «Классике» возвращается. Заодно перекрашивает строку состояния браузера.
  */
 export function applySkin(id: SkinId): void {
   const root = document.documentElement;
-  if (id === DEFAULT_SKIN) root.removeAttribute('data-skin');
-  else root.setAttribute('data-skin', id);
+  const shown = resolveSkin(id); // «Сезонные» превращаются в праздничный образ по сегодняшней дате
+  if (shown === DEFAULT_SKIN) root.removeAttribute('data-skin');
+  else root.setAttribute('data-skin', shown);
   applyAccent(readAccentPref());
-  loadSkinIcons(id);
+  loadSkinIcons(shown);
 }
 
 /** Свой набор значков образа: грузится лениво и ставится, если образ за это время не сменили; у образов без набора — прежние значки. */

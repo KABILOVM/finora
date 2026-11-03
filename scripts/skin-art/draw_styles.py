@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Рисует картинки «стилевых» образов (Кокетка, Готика, Глина, Жидкое стекло, Y2K-хром, Ретро, Баухаус, Скрапбук, Тетрадь, Подземелье, Граффити, Кофейня, Навруз) векторными рисунками: ничьих чужих материалов в них нет, всё нарисовано здесь.
+Рисует картинки «стилевых» образов (Кокетка, Готика, Глина, Жидкое стекло, Y2K-хром, Ретро, Баухаус, Скрапбук, Тетрадь, Подземелье, Граффити, Кофейня, Навруз, Новый год, Хэллоуин, 14 февраля, Бенто) векторными рисунками: ничьих чужих материалов в них нет, всё нарисовано здесь.
 Запуск из корня репозитория: python3 scripts/skin-art/draw_styles.py
 
 Что получается (src/assets/skins/<образ>/svg/):
@@ -363,6 +363,113 @@ def nowruz() -> tuple[str, str]:
     return defs, body
 
 
+# ---------------------------------------------------------------- Новый год: ёлка, подарки и снежинки
+def christmas() -> tuple[str, str]:
+    import math
+
+    defs = (
+        lin('xm-tree', [(0, '#3fb27a'), (1, '#14633c')], 0, 0, 0, 1)
+        + lin('xm-gold', [(0, '#fff0a0'), (0.5, '#f1c40f'), (1, '#c28f00')], 0, 0, 1, 1)
+        + lin('xm-gift1', [(0, '#ff6b64'), (1, '#b3261f')], 0, 0, 0, 1)
+        + lin('xm-gift2', [(0, '#5aa8ff'), (1, '#2b62c9')], 0, 0, 0, 1)
+    )
+    tier = lambda cx, top, bot, half: f'<path d="M{cx} {top} L{cx + half} {bot} Q{cx} {bot + 12} {cx - half} {bot} Z" fill="url(#xm-tree)" stroke="#0f4a2c" stroke-width="3" stroke-linejoin="round"/>'
+    ball = lambda x, y, r, c: f'<circle cx="{x}" cy="{y}" r="{r}" fill="{c}" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/><circle cx="{x - r * 0.3:.1f}" cy="{y - r * 0.3:.1f}" r="{r * 0.28:.1f}" fill="#fff" opacity=".7"/>'
+
+    def flake(x: float, y: float, r: float) -> str:
+        arms = ''.join(f'<path transform="rotate({a} {x} {y})" d="M{x} {y - r} V{y + r} M{x - r * 0.3} {y - r * 0.7} L{x} {y - r * 0.4} L{x + r * 0.3} {y - r * 0.7}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/>' for a in (0, 60, 120))
+        return arms
+
+    body = (
+        '<ellipse cx="160" cy="226" rx="140" ry="12" fill="#ffffff" opacity=".9"/>'
+        '<rect x="148" y="190" width="24" height="32" fill="#8a5a2b" stroke="#5b3519" stroke-width="3"/>'
+        + tier(160, 98, 150, 56) + tier(160, 64, 110, 46) + tier(160, 30, 74, 34) + tier(160, 128, 196, 70)
+        + '<path d="M118 150 Q160 168 204 150" fill="none" stroke="#f1c40f" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="1 7"/>'
+        '<path d="M126 110 Q160 124 196 110" fill="none" stroke="#f1c40f" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="1 7"/>'
+        + ball(140, 168, 7, '#ff6b64') + ball(184, 176, 7, '#5aa8ff') + ball(160, 140, 6, '#f1c40f') + ball(138, 120, 5, '#5aa8ff') + ball(178, 96, 5, '#ff6b64') + ball(160, 70, 5, '#f1c40f')
+        + '<path d="M160 6 L166 22 L184 22 L170 32 L175 48 L160 38 L145 48 L150 32 L136 22 L154 22 Z" fill="url(#xm-gold)" stroke="#a87a00" stroke-width="2.5" stroke-linejoin="round"/>'
+        # подарки
+        '<g><rect x="44" y="184" width="52" height="42" rx="4" fill="url(#xm-gift1)" stroke="#7a1612" stroke-width="2.5"/><rect x="66" y="184" width="8" height="42" fill="#f1c40f"/><rect x="44" y="200" width="52" height="8" fill="#f1c40f"/>'
+        '<path d="M70 184 C56 170 44 178 56 184 M70 184 C84 170 96 178 84 184" fill="none" stroke="#f1c40f" stroke-width="4" stroke-linecap="round"/></g>'
+        '<g><rect x="228" y="192" width="46" height="34" rx="4" fill="url(#xm-gift2)" stroke="#1c3f8a" stroke-width="2.5"/><rect x="246" y="192" width="8" height="34" fill="#fff"/><rect x="228" y="204" width="46" height="7" fill="#fff"/></g>'
+        + flake(48, 52, 14) + flake(276, 70, 12) + flake(262, 140, 9) + flake(70, 120, 8) + flake(296, 32, 8)
+    )
+    return defs, body
+
+
+# ---------------------------------------------------------------- Хэллоуин: тыква, луна и летучие мыши
+def halloween() -> tuple[str, str]:
+    defs = (
+        rad('hw-pump', [(0, '#ffb15a', 1), (0.6, '#ff7a18', 1), (1, '#c4510a', 1)], 0.4, 0.3, 0.85)
+        + rad('hw-moon', [(0, '#fffbe0', 1), (1, '#f0dc8a', 1)], 0.4, 0.35, 0.8)
+        + rad('hw-glow', [(0, '#ffe066', 0.9), (1, '#ffe066', 0)], 0.5, 0.5, 0.5)
+    )
+    bat = lambda x, y, sc: f'<g transform="translate({x} {y}) scale({sc})"><path d="M0 0 C-6 -10 -18 -12 -30 -6 C-24 -4 -22 2 -18 6 C-14 2 -8 2 -4 8 C-2 4 2 4 4 8 C8 2 14 2 18 6 C22 2 24 -4 30 -6 C18 -12 6 -10 0 0 Z" fill="#1a0f26" stroke="#7a3fd1" stroke-width="1.4"/><circle cx="-3" cy="-2" r="1.2" fill="#ffe066"/><circle cx="3" cy="-2" r="1.2" fill="#ffe066"/></g>'
+    body = (
+        '<circle cx="262" cy="62" r="46" fill="url(#hw-glow)"/><circle cx="262" cy="62" r="30" fill="url(#hw-moon)"/><circle cx="252" cy="54" r="5" fill="#e6d06a" opacity=".6"/><circle cx="272" cy="70" r="4" fill="#e6d06a" opacity=".5"/>'
+        + bat(214, 40, 1.0) + bat(70, 56, 0.8) + bat(290, 126, 0.6)
+        + '<ellipse cx="160" cy="224" rx="104" ry="10" fill="#000" opacity=".28"/>'
+        '<path d="M156 78 C154 62 164 50 176 44 C176 54 172 64 168 78 Z" fill="#3aa05a" stroke="#1f6a38" stroke-width="3" stroke-linejoin="round"/>'
+        '<ellipse cx="98" cy="146" rx="62" ry="68" fill="url(#hw-pump)" stroke="#8a3a06" stroke-width="3.5" transform="translate(62 0)"/>'
+        '<ellipse cx="124" cy="146" rx="38" ry="70" fill="none" stroke="#c4510a" stroke-opacity=".55" stroke-width="3" transform="translate(36 0)"/>'
+        '<ellipse cx="160" cy="146" rx="22" ry="70" fill="none" stroke="#c4510a" stroke-opacity=".55" stroke-width="3"/>'
+        '<ellipse cx="196" cy="146" rx="38" ry="70" fill="none" stroke="#c4510a" stroke-opacity=".55" stroke-width="3" transform="translate(-36 0)"/>'
+        # лицо
+        '<path d="M120 124 L140 108 L148 134 Z M200 124 L180 108 L172 134 Z" fill="#ffe066" stroke="#3b1f66" stroke-width="3" stroke-linejoin="round"/>'
+        '<path d="M158 150 L160 160 L162 150 Z" fill="#ffe066" stroke="#3b1f66" stroke-width="2.5"/>'
+        '<path d="M112 168 C130 198 190 198 208 168 L196 168 L190 180 L180 168 L170 182 L160 168 L150 182 L140 168 L130 180 L124 168 Z" fill="#ffe066" stroke="#3b1f66" stroke-width="3" stroke-linejoin="round"/>'
+        '<path d="M88 100 C86 128 90 160 98 182" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="5" stroke-linecap="round"/>'
+    )
+    spark = lambda x, y, r: f'<path transform="translate({x} {y}) scale({r})" d="M0 -8 C1 -2 2 -1 8 0 C2 1 1 2 0 8 C-1 2 -2 1 -8 0 C-2 -1 -1 -2 0 -8 Z" fill="#b78cff"/>'
+    return defs, body + spark(44, 120, 1.2) + spark(300, 200, 1.0) + spark(40, 200, 0.8)
+
+
+# ---------------------------------------------------------------- 14 февраля: сердце со стрелой и письмо
+def valentine() -> tuple[str, str]:
+    defs = (
+        lin('vl-h', [(0, '#ff8fb0'), (0.5, '#e0295a'), (1, '#a8123e')], 0, 0, 1, 1)
+        + lin('vl-env', [(0, '#fff6f8'), (1, '#f7c9d6')], 0, 0, 0, 1)
+        + lin('vl-gold', [(0, '#fff0a0'), (1, '#c28f00')], 0, 0, 1, 1)
+    )
+    heart = lambda x, y, sc, fill: f'<path transform="translate({x} {y}) scale({sc})" d="M0 44 C-70 -6 -38 -62 0 -22 C38 -62 70 -6 0 44 Z" fill="{fill}"/>'
+    body = (
+        heart(148, 112, 1.5, 'url(#vl-h)')
+        + '<path d="M82 86 Q96 56 128 62" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="7" stroke-linecap="round"/>'
+        # стрела
+        '<g transform="rotate(-28 160 118)"><rect x="40" y="114" width="240" height="7" rx="3.5" fill="url(#vl-gold)" stroke="#8a6212" stroke-width="2"/>'
+        '<path d="M280 117 L306 117 L292 106 Z M280 117 L306 117 L292 128 Z" fill="#fff" stroke="#8a6212" stroke-width="2" stroke-linejoin="round"/>'
+        '<path d="M40 117 L22 104 L22 130 Z" fill="#ffd0dc" stroke="#8a6212" stroke-width="2" stroke-linejoin="round"/></g>'
+        # письмо
+        '<g transform="translate(236 196) rotate(8)"><rect x="-44" y="-30" width="88" height="60" rx="6" fill="url(#vl-env)" stroke="#d6204f" stroke-width="3"/>'
+        '<path d="M-44 -26 L0 6 L44 -26" fill="none" stroke="#d6204f" stroke-width="3" stroke-linejoin="round"/>'
+        '<path transform="translate(0 4) scale(.5)" d="M0 44 C-70 -6 -38 -62 0 -22 C38 -62 70 -6 0 44 Z" fill="#d6204f"/></g>'
+        + heart(40, 56, 0.4, '#ff8fb0') + heart(286, 60, 0.5, '#ff5c8a') + heart(70, 206, 0.35, '#ff5c8a') + heart(180, 36, 0.3, '#ffb3c8') + heart(300, 120, 0.28, '#ff8fb0')
+    )
+    return defs, body
+
+
+# ---------------------------------------------------------------- Бенто: коробка с плитками разного размера
+def bento() -> tuple[str, str]:
+    body = (
+        '<rect x="14" y="20" width="292" height="204" rx="26" fill="#fff" fill-opacity=".14" stroke="#fff" stroke-opacity=".5" stroke-width="3"/>'
+        # большая коралловая плитка со столбиками
+        '<rect x="26" y="32" width="132" height="110" rx="20" fill="#ff7a59"/>'
+        '<g fill="#fff"><rect x="48" y="96" width="18" height="30" rx="5"/><rect x="74" y="78" width="18" height="48" rx="5"/><rect x="100" y="60" width="18" height="66" rx="5"/><rect x="126" y="48" width="14" height="78" rx="5" opacity=".75"/></g>'
+        # мятное кольцо
+        '<rect x="170" y="32" width="124" height="68" rx="20" fill="#3dd6a0"/><circle cx="214" cy="66" r="22" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="9"/><path d="M214 44 A22 22 0 1 1 194 76" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>'
+        '<rect x="248" y="56" width="32" height="8" rx="4" fill="#fff"/><rect x="248" y="72" width="22" height="8" rx="4" fill="#fff" opacity=".7"/>'
+        # тёмная плитка с сердцем
+        '<rect x="170" y="112" width="60" height="64" rx="20" fill="#1e293b"/><path transform="translate(200 146) scale(.42)" d="M0 44 C-70 -6 -38 -62 0 -22 C38 -62 70 -6 0 44 Z" fill="#ff7a59"/>'
+        # жёлтая монета
+        '<rect x="238" y="112" width="56" height="64" rx="20" fill="#ffd23f"/><circle cx="266" cy="144" r="16" fill="#fff" fill-opacity=".55"/><path d="M266 134 V154 M259 140 H273 M259 148 H273" stroke="#c28f00" stroke-width="3.5" stroke-linecap="round"/>'
+        # нижние плитки
+        '<rect x="26" y="154" width="64" height="58" rx="20" fill="#b79cf5"/><path d="M42 188 L52 174 L62 184 L74 166" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>'
+        '<rect x="98" y="154" width="60" height="58" rx="20" fill="#1e293b"/><circle cx="128" cy="183" r="16" fill="none" stroke="#3dd6a0" stroke-width="7"/><path d="M128 171 V183 L137 188" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>'
+        '<rect x="170" y="188" width="124" height="24" rx="12" fill="#fff" fill-opacity=".9"/><rect x="184" y="196" width="60" height="8" rx="4" fill="#1e293b" opacity=".75"/><circle cx="270" cy="200" r="6" fill="#ff7a59"/>'
+    )
+    return '', body
+
+
 # id -> (рисунок, фон значка: два цвета градиента)
 ART = {
     'coquette': (coquette, ('#ffe7ef', '#f6b6cb')),
@@ -378,6 +485,10 @@ ART = {
     'graffiti': (graffiti, ('#2e2e3a', '#17171c')),
     'cafe': (cafe, ('#3a3a55', '#1e1e2e')),
     'nowruz': (nowruz, ('#e5f6d8', '#f6e08a')),
+    'christmas': (christmas, ('#16315a', '#0b1d33')),
+    'halloween': (halloween, ('#2a1a42', '#140a1f')),
+    'valentine': (valentine, ('#ffd9e3', '#ff9ab6')),
+    'bento': (bento, ('#ff9a7e', '#1e293b')),
 }
 
 def main() -> None:

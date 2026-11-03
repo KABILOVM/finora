@@ -223,7 +223,7 @@ def sq(rel: str, fx: float, fy: float, zoom: float = 1.0) -> Image.Image:
 
 
 # «Стилевые» образы: свои векторные рисунки (draw_styles.py → rasterize.cjs), правым нижним «вырезом»
-for style_id, frac in (('coquette', 0.74), ('gothic', 0.8), ('clay', 0.72), ('liquid', 0.74), ('chrome', 0.78), ('retro', 0.76), ('bauhaus', 0.74), ('sticker', 0.76), ('notebook', 0.78), ('dungeon', 0.78), ('graffiti', 0.8), ('cafe', 0.76), ('nowruz', 0.78)):
+for style_id, frac in (('coquette', 0.74), ('gothic', 0.8), ('clay', 0.72), ('liquid', 0.74), ('chrome', 0.78), ('retro', 0.76), ('bauhaus', 0.74), ('sticker', 0.76), ('notebook', 0.78), ('dungeon', 0.78), ('graffiti', 0.8), ('cafe', 0.76), ('nowruz', 0.78), ('christmas', 0.8), ('halloween', 0.78), ('valentine', 0.78), ('bento', 0.8)):
     cutout(style_id, tmp(f'{style_id}-hero.png'), frac, pad=0.03)
 marks = {'barca': tmp('barca-crest.png'), 'real': tmp('real-crest.png')}
 for key, im in marks.items():
@@ -250,7 +250,7 @@ thumbs = {
     'racing': sq('photos/racing-f1.jpg', 0.65, 0.5, 2.2),
     'cyber': sq('photos/cyber-shibuya.jpg', 0.78, 0.3, 2.4),
     'pixel': sq('photos/pixel-scene.png', 0.76, 0.42, 2.2),
-    **{style_id: tmp(f'{style_id}-thumb.png') for style_id in ('coquette', 'gothic', 'clay', 'liquid', 'chrome', 'retro', 'bauhaus', 'sticker', 'notebook', 'dungeon', 'graffiti', 'cafe', 'nowruz')},
+    **{style_id: tmp(f'{style_id}-thumb.png') for style_id in ('coquette', 'gothic', 'clay', 'liquid', 'chrome', 'retro', 'bauhaus', 'sticker', 'notebook', 'dungeon', 'graffiti', 'cafe', 'nowruz', 'christmas', 'halloween', 'valentine', 'bento')},
 }
 FULL = {'classic', 'barca', 'real', 'shinobi', 'argentina'}  # значок-герб или картинка с прозрачным фоном: вписываем целиком
 def on_dark(im: Image.Image) -> Image.Image:
@@ -259,6 +259,22 @@ def on_dark(im: Image.Image) -> Image.Image:
     bg.alpha_composite(im.convert('RGBA'))
     return bg
 
+
+def tri_thumb(ids: tuple[str, ...]) -> Image.Image:
+    """Значок «Сезонных» образов: три праздничных значка косыми полосами (Новый год, Хэллоуин, 14 февраля)."""
+    from PIL import ImageDraw
+
+    out = Image.new('RGBA', (112, 112), (0, 0, 0, 255))
+    n, slant = len(ids), 12
+    for i, key in enumerate(ids):
+        x0, x1 = 112 * i / n, 112 * (i + 1) / n
+        mask = Image.new('L', (112, 112), 0)
+        ImageDraw.Draw(mask).polygon([(x0 + (slant if i else 0), 0), (x1 + (slant if i < n - 1 else 0), 0), (x1 - (slant if i < n - 1 else 0), 112), (x0 - (slant if i else 0), 112)], fill=255)
+        out.paste(thumbs[key].convert('RGBA').resize((112, 112), Image.LANCZOS), (0, 0), mask)
+    return out
+
+
+thumbs['seasonal'] = tri_thumb(('christmas', 'halloween', 'valentine'))
 
 thumbs['spider'] = on_dark(thumbs['spider'].resize((112, 112), Image.LANCZOS))
 for key, im in thumbs.items():

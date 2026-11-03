@@ -112,7 +112,7 @@ export default function HomePage() {
     <HideAmountsProvider>
       <InstallHint className="mb-2" />
       <PageHeader title="Главная" className={HEADER_CLASS} />
-      <div className="stagger flex flex-col gap-3 md:gap-4">
+      <div data-home-grid className="stagger flex flex-col gap-3 md:gap-4">
         <HomeHero total={total ?? null} base={base} />
         <FirstOperation wallets={wallets} />
         <TemplatesRow />
