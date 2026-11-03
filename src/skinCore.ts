@@ -31,7 +31,10 @@ export type SkinId =
   | 'bauhaus'
   | 'sticker'
   | 'notebook'
-  | 'dungeon';
+  | 'dungeon'
+  | 'graffiti'
+  | 'cafe'
+  | 'nowruz';
 
 export const DEFAULT_SKIN: SkinId = 'classic';
 
@@ -68,6 +71,9 @@ export const SKIN_BARS: Readonly<Record<Exclude<SkinId, 'classic'>, { light: str
   sticker: { light: '#fff6d6', dark: '#221a2e' },
   notebook: { light: '#f6f7f2', dark: '#11151f' },
   dungeon: { light: '#f3e9d2', dark: '#1a1410' },
+  graffiti: { light: '#ececf0', dark: '#1b1b1f' },
+  cafe: { light: '#eff1f5', dark: '#1e1e2e' },
+  nowruz: { light: '#f3faee', dark: '#0f1f16' },
 };
 
 export const isSkinId = (v: string | null): v is SkinId => v === DEFAULT_SKIN || (v !== null && Object.prototype.hasOwnProperty.call(SKIN_BARS, v));

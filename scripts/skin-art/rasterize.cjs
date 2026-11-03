@@ -16,7 +16,7 @@ const jobs = [
   ['classic-icon.png', '~/public/icon.svg'],
 ];
 // «Стилевые» образы (draw_styles.py): рисунок для карточки — 1280×960 на прозрачном фоне, значок — 224×224
-const STYLES = ['coquette', 'gothic', 'clay', 'liquid', 'chrome', 'retro', 'bauhaus', 'sticker', 'notebook', 'dungeon'];
+const STYLES = ['coquette', 'gothic', 'clay', 'liquid', 'chrome', 'retro', 'bauhaus', 'sticker', 'notebook', 'dungeon', 'graffiti', 'cafe', 'nowruz'];
 for (const id of STYLES) {
   jobs.push([`${id}-hero.png`, `${id}/svg/hero.svg`, 1280, 960]);
   jobs.push([`${id}-thumb.png`, `${id}/svg/thumb.svg`, 224, 224]);

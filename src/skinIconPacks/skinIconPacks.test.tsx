@@ -38,7 +38,8 @@ describe('наборы значков из Iconify: файлы', () => {
   it('набор для каждого образа, кроме «Классики»; названы в списке авторов; для каждого есть папка с основными значками', () => {
     expect(Object.keys(SKIN_ICONIFY).every((id) => id in SKIN_BARS)).toBe(true);
     for (const pack of Object.values(SKIN_ICONIFY)) expect(PACKS, pack).toContain(pack);
-    expect(new Set(Object.values(SKIN_ICONIFY)).size, 'у каждого образа свой набор').toBe(Object.values(SKIN_ICONIFY).length);
+    // каждый набор нужен хотя бы одному образу (лишних файлов нет); один набор может служить двум образам («Герой» и «Граффити»)
+    expect([...new Set(Object.values(SKIN_ICONIFY))].sort()).toEqual([...PACKS].sort());
     for (const pack of PACKS) expect(PACK_FILES, pack).toContain(`./${pack}/base.ts`);
     expect(meta.map((m) => m.id).sort()).toEqual([...PACKS].sort());
     // папки наборов — только те, что в списке (иначе скрипт оставил бы лишнее)
