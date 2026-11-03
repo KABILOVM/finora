@@ -141,6 +141,10 @@ export const SKIN_ICON_STYLE: Readonly<Partial<Record<SkinId, IconStyleId | 'pix
   graffiti: 'sharp',
   cafe: 'fine',
   nowruz: 'bubble',
+  christmas: 'sport',
+  halloween: 'sharp',
+  valentine: 'bubble',
+  bento: 'fine',
 };
 
 /** Линейный набор в выбранном стиле: все значки из ICON_GEOMETRY, штрих currentColor, у стиля с заливкой — мягкий оттенок внутри фигур. */

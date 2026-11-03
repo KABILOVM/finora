@@ -36,7 +36,7 @@ export default function WeeklyCard({ today, categories }: WeeklyCardProps) {
   const base: CurrencyCode = state.base;
   const detail = new URLSearchParams({ tab: 'periods', kind: 'custom', from: summary.from, to: summary.to }).toString();
   return (
-    <section aria-labelledby="home-weekly" data-testid="weekly-card" className="slide-down">
+    <section aria-labelledby="home-weekly" data-testid="weekly-card" data-bento="half" className="slide-down">
       <Card padding="none" className="p-3">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">

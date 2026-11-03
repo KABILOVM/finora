@@ -36,6 +36,11 @@ import thumbDungeon from './assets/skins/art/dungeon-thumb.webp';
 import thumbGraffiti from './assets/skins/art/graffiti-thumb.webp';
 import thumbCafe from './assets/skins/art/cafe-thumb.webp';
 import thumbNowruz from './assets/skins/art/nowruz-thumb.webp';
+import thumbChristmas from './assets/skins/art/christmas-thumb.webp';
+import thumbHalloween from './assets/skins/art/halloween-thumb.webp';
+import thumbValentine from './assets/skins/art/valentine-thumb.webp';
+import thumbBento from './assets/skins/art/bento-thumb.webp';
+import thumbSeasonal from './assets/skins/art/seasonal-thumb.webp';
 
 export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   classic: thumbClassic,
@@ -70,4 +75,9 @@ export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   graffiti: thumbGraffiti,
   cafe: thumbCafe,
   nowruz: thumbNowruz,
+  christmas: thumbChristmas,
+  halloween: thumbHalloween,
+  valentine: thumbValentine,
+  bento: thumbBento,
+  seasonal: thumbSeasonal,
 };

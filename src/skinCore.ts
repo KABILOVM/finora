@@ -34,7 +34,12 @@ export type SkinId =
   | 'dungeon'
   | 'graffiti'
   | 'cafe'
-  | 'nowruz';
+  | 'nowruz'
+  | 'christmas'
+  | 'halloween'
+  | 'valentine'
+  | 'bento'
+  | 'seasonal';
 
 export const DEFAULT_SKIN: SkinId = 'classic';
 
@@ -42,7 +47,7 @@ export const DEFAULT_SKIN: SkinId = 'classic';
  * Цвет строки состояния браузера (meta theme-color) в светлой и тёмной теме: это фон страницы образа, --ac-bg-l и --ac-bg-d его блока
  * в src/index.css (сверяет src/accents.test.ts). У «Классики» цвета здесь нет: он берётся из выбранного акцента.
  */
-export const SKIN_BARS: Readonly<Record<Exclude<SkinId, 'classic'>, { light: string; dark: string }>> = {
+export const SKIN_BARS: Readonly<Record<Exclude<SkinId, 'classic' | 'seasonal'>, { light: string; dark: string }>> = {
   barca: { light: '#eef2fb', dark: '#08122e' },
   real: { light: '#f7f5ef', dark: '#071028' },
   argentina: { light: '#eef6fc', dark: '#06141f' },
@@ -74,12 +79,43 @@ export const SKIN_BARS: Readonly<Record<Exclude<SkinId, 'classic'>, { light: str
   graffiti: { light: '#ececf0', dark: '#1b1b1f' },
   cafe: { light: '#eff1f5', dark: '#1e1e2e' },
   nowruz: { light: '#f3faee', dark: '#0f1f16' },
+  christmas: { light: '#f4f8fb', dark: '#0b1d33' },
+  halloween: { light: '#f6efe6', dark: '#140a1f' },
+  valentine: { light: '#fff1f4', dark: '#1f0d14' },
+  bento: { light: '#eef1f6', dark: '#0f1520' },
 };
 
-export const isSkinId = (v: string | null): v is SkinId => v === DEFAULT_SKIN || (v !== null && Object.prototype.hasOwnProperty.call(SKIN_BARS, v));
+/** «Сезонные»: образ-переключатель. Сам не рисуется: на странице стоит праздничный образ, ближайший к сегодняшней дате (seasonFor). */
+export const SEASONAL_SKIN: SkinId = 'seasonal';
 
-/** Цвета строки состояния для образа; null — «Классика» или неизвестное значение. */
-export const skinBar = (id: string | null): { light: string; dark: string } | null => (isSkinId(id) && id !== DEFAULT_SKIN ? SKIN_BARS[id] : null);
+export const isSkinId = (v: string | null): v is SkinId => v === DEFAULT_SKIN || v === SEASONAL_SKIN || (v !== null && Object.prototype.hasOwnProperty.call(SKIN_BARS, v));
 
-/** Образы, у которых есть свой набор значков (src/skinIcons.ts, грузится лениво): все, кроме «Классики». */
+export type SeasonId = 'valentine' | 'halloween' | 'christmas';
+
+/** Праздники и их день в году (в невисокосном): 14 февраля, 31 октября, 25 декабря. */
+const HOLIDAYS: readonly (readonly [SeasonId, number])[] = [
+  ['valentine', 45],
+  ['halloween', 304],
+  ['christmas', 359],
+];
+
+/** Праздничный образ для даты: тот праздник, до которого (или после которого) ближе всего дней, считая по кругу года. */
+export function seasonFor(now: Date): SeasonId {
+  const day = (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(now.getFullYear(), 0, 0)) / 864e5; // номер дня в году без влияния часового пояса и перехода на летнее время
+  let best: SeasonId = 'christmas';
+  let gap = 999;
+  for (const [id, at] of HOLIDAYS) {
+    const d = Math.abs(day - at);
+    if (Math.min(d, 365 - d) < gap) [best, gap] = [id, Math.min(d, 365 - d)];
+  }
+  return best;
+}
+
+/** Образ, который нужно поставить на страницу: сам выбранный, а у «Сезонных» — праздничный по дате. */
+export const resolveSkin = (id: SkinId, now: Date = new Date()): SkinId => (id === SEASONAL_SKIN ? seasonFor(now) : id);
+
+/** Цвета строки состояния для образа; null — «Классика», «Сезонные» (у них цвета берутся у праздничного образа на странице) или неизвестное значение. */
+export const skinBar = (id: string | null): { light: string; dark: string } | null => (isSkinId(id) && id !== DEFAULT_SKIN && id !== SEASONAL_SKIN ? SKIN_BARS[id] : null);
+
+/** Образы, у которых есть свой набор значков (src/skinIcons.ts, грузится лениво): все, кроме «Классики» и «Сезонных» (у тех значки праздничного образа). */
 export const SKIN_ICON_PACKS = Object.keys(SKIN_BARS) as readonly SkinId[];

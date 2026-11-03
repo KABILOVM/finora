@@ -2507,6 +2507,151 @@
   --ac-logo-glyph: 233 240 236;
 }
 
+/* Новый год */
+:root[data-skin='christmas'] {
+  --ac-bg-l: 244 248 251;
+  --ac-surface-2-l: 230 238 245;
+  --ac-text-l: 16 38 61;
+  --ac-muted-l: 80 94 107;
+  --ac-border-l: 214 221 226;
+  --ac-border-strong-l: 118 130 142;
+  --ac-brand-l: 178 44 40;
+  --ac-brand-hover-l: 146 36 33;
+  --ac-accent-l: 31 122 77;
+  --ac-hero-l: 15 43 74;
+  --ac-orb-1-l: 224 171 169;
+  --ac-orb-2-l: 165 202 184;
+  --ac-orb-3-l: 249 228 147;
+  --ac-glass-shadow-l: 107 27 24;
+  --ac-bg-d: 11 29 51;
+  --ac-surface-d: 16 37 66;
+  --ac-surface-2-d: 22 49 90;
+  --ac-text-d: 243 247 251;
+  --ac-muted-d: 169 177 187;
+  --ac-border-d: 46 64 90;
+  --ac-border-strong-d: 118 132 149;
+  --ac-brand-d: 255 131 125;
+  --ac-brand-hover-d: 255 156 151;
+  --ac-on-brand-d: 11 29 51;
+  --ac-accent-d: 241 196 15;
+  --ac-hero-from-d: 179 38 31;
+  --ac-hero-d: 15 43 74;
+  --ac-orb-1-d: 100 39 49;
+  --ac-orb-2-d: 20 71 63;
+  --ac-orb-3-d: 92 87 38;
+  --ac-logo-from: 178 44 40;
+  --ac-logo-to: 31 122 77;
+  --ac-logo-glyph: 247 234 233;
+}
+/* Хэллоуин */
+:root[data-skin='halloween'] {
+  --ac-bg-l: 246 239 230;
+  --ac-surface-2-l: 238 226 211;
+  --ac-text-l: 42 22 54;
+  --ac-muted-l: 96 83 98;
+  --ac-border-l: 219 211 207;
+  --ac-border-strong-l: 131 119 129;
+  --ac-brand-l: 151 62 8;
+  --ac-brand-hover-l: 124 51 6;
+  --ac-accent-l: 107 63 181;
+  --ac-hero-l: 59 31 102;
+  --ac-orb-1-l: 213 178 156;
+  --ac-orb-2-l: 196 178 225;
+  --ac-orb-3-l: 255 195 151;
+  --ac-glass-shadow-l: 91 37 5;
+  --ac-bg-d: 20 10 31;
+  --ac-surface-d: 30 18 48;
+  --ac-surface-2-d: 42 26 66;
+  --ac-text-d: 246 236 223;
+  --ac-muted-d: 168 158 157;
+  --ac-border-d: 58 46 71;
+  --ac-border-strong-d: 127 116 127;
+  --ac-brand-d: 255 138 46;
+  --ac-brand-hover-d: 255 161 88;
+  --ac-on-brand-d: 20 10 31;
+  --ac-accent-d: 183 140 255;
+  --ac-hero-from-d: 168 64 10;
+  --ac-hero-d: 59 31 102;
+  --ac-orb-1-d: 99 42 22;
+  --ac-orb-2-d: 59 34 98;
+  --ac-orb-3-d: 102 49 29;
+  --ac-logo-from: 151 62 8;
+  --ac-logo-to: 107 63 181;
+  --ac-logo-glyph: 245 236 230;
+}
+/* 14 февраля */
+:root[data-skin='valentine'] {
+  --ac-bg-l: 255 241 244;
+  --ac-surface-2-l: 253 227 234;
+  --ac-text-l: 74 20 36;
+  --ac-muted-l: 115 82 91;
+  --ac-border-l: 231 212 217;
+  --ac-border-strong-l: 150 119 127;
+  --ac-brand-l: 180 27 66;
+  --ac-brand-hover-l: 147 22 54;
+  --ac-accent-l: 192 48 106;
+  --ac-hero-l: 179 18 59;
+  --ac-orb-1-l: 225 164 180;
+  --ac-orb-2-l: 230 172 195;
+  --ac-orb-3-l: 255 205 219;
+  --ac-glass-shadow-l: 108 16 40;
+  --ac-bg-d: 31 13 20;
+  --ac-surface-d: 44 20 30;
+  --ac-surface-2-d: 58 26 40;
+  --ac-text-d: 255 234 240;
+  --ac-muted-d: 177 157 163;
+  --ac-border-d: 71 48 57;
+  --ac-border-strong-d: 139 116 124;
+  --ac-brand-d: 255 122 156;
+  --ac-brand-hover-d: 255 149 176;
+  --ac-on-brand-d: 31 13 20;
+  --ac-accent-d: 255 179 200;
+  --ac-hero-from-d: 179 18 59;
+  --ac-hero-d: 90 15 43;
+  --ac-orb-1-d: 113 22 47;
+  --ac-orb-2-d: 103 29 59;
+  --ac-orb-3-d: 109 58 75;
+  --ac-logo-from: 180 27 66;
+  --ac-logo-to: 192 48 106;
+  --ac-logo-glyph: 247 232 236;
+}
+/* Бенто */
+:root[data-skin='bento'] {
+  --ac-bg-l: 238 241 246;
+  --ac-surface-2-l: 226 231 240;
+  --ac-text-l: 29 39 57;
+  --ac-muted-l: 83 89 100;
+  --ac-border-l: 211 215 221;
+  --ac-border-strong-l: 119 125 135;
+  --ac-brand-l: 145 70 51;
+  --ac-brand-hover-l: 119 57 42;
+  --ac-accent-l: 15 157 119;
+  --ac-hero-l: 30 41 59;
+  --ac-orb-1-l: 211 181 173;
+  --ac-orb-2-l: 159 216 201;
+  --ac-orb-3-l: 255 195 180;
+  --ac-glass-shadow-l: 87 42 30;
+  --ac-bg-d: 15 21 32;
+  --ac-surface-d: 24 32 47;
+  --ac-surface-2-d: 34 44 64;
+  --ac-text-d: 238 241 246;
+  --ac-muted-d: 167 170 177;
+  --ac-border-d: 52 59 73;
+  --ac-border-strong-d: 120 126 137;
+  --ac-brand-d: 255 154 126;
+  --ac-brand-hover-d: 255 174 152;
+  --ac-on-brand-d: 15 21 32;
+  --ac-accent-d: 61 214 160;
+  --ac-hero-from-d: 192 72 41;
+  --ac-hero-d: 30 41 59;
+  --ac-orb-1-d: 123 66 58;
+  --ac-orb-2-d: 15 83 72;
+  --ac-orb-3-d: 99 56 52;
+  --ac-logo-from: 145 70 51;
+  --ac-logo-to: 15 157 119;
+  --ac-logo-glyph: 244 246 244;
+}
+
 html[data-skin='barca'] {
   --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
   --skin-pattern: url('./assets/skins/barca/svg/stripes-tile-dim.svg');
@@ -2779,6 +2924,42 @@ html[data-skin='nowruz'] {
   --skin-art: url('./assets/skins/art/nowruz-hero.webp');
   --skin-art-content: '';
 }
+html[data-skin='christmas'] {
+  --skin-head: 'Marmelad', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.02em;
+  --skin-pattern: url('./assets/skins/christmas/svg/snow-tile.svg');
+  --skin-pattern-size: 120px 120px;
+  --skin-line: 241 196 15;
+  --skin-art: url('./assets/skins/art/christmas-hero.webp');
+  --skin-art-content: '';
+}
+html[data-skin='halloween'] {
+  --skin-head: 'Alegreya', 'Onest', Georgia, serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.05em;
+  --skin-pattern: url('./assets/skins/halloween/svg/pattern-tile.svg');
+  --skin-pattern-size: 120px 120px;
+  --skin-line: 255 122 24;
+  --skin-art: url('./assets/skins/art/halloween-hero.webp');
+  --skin-art-content: '';
+}
+html[data-skin='valentine'] {
+  --skin-head: 'Lora', 'Onest', Georgia, serif;
+  --skin-pattern: url('./assets/skins/valentine/svg/hearts-tile.svg');
+  --skin-pattern-size: 100px 100px;
+  --skin-line: 255 143 176;
+  --skin-art: url('./assets/skins/art/valentine-hero.webp');
+  --skin-art-content: '';
+}
+html[data-skin='bento'] {
+  --skin-head: 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-ls: 0.01em;
+  --skin-pattern: radial-gradient(rgb(30 41 59 / 0.07) 1.4px, transparent 1.8px);
+  --skin-pattern-size: 18px 18px;
+  --skin-line: 255 122 89;
+  --skin-art: url('./assets/skins/art/bento-hero.webp');
+  --skin-art-content: '';
+}
 /* Заголовки экранов и карточек — шрифтом образа (суммы и мелкий текст остаются Onest: у него табличные цифры). */
 html[data-skin] :is(h1, h2, h3) {
   font-family: var(--skin-head);
@@ -2953,6 +3134,60 @@ html[data-skin='cafe'] .rounded-card {
 /* Навруз: рамка цвета солнца. */
 html[data-skin='nowruz'] .rounded-card {
   border: 2px solid rgb(var(--skin-line) / 0.7);
+}
+/* Праздничные образы и «Бенто»: форма углов, вид карточек и раскладка главной. */
+html[data-skin='valentine'] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-control),
+html[data-skin='christmas'] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-control) {
+  border-radius: 1.5rem;
+}
+html[data-skin='halloween'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-card, .rounded-control, .rounded-pill) {
+  border-radius: 8px;
+}
+html[data-skin='bento'] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-control) {
+  border-radius: 1.5rem;
+}
+/* Новый год: «стёжка» золотым пунктиром. */
+html[data-skin='christmas'] .rounded-card {
+  border: 2px dashed rgb(var(--skin-line) / 0.65);
+}
+/* Хэллоуин: оранжевая кромка с мягким свечением. */
+html[data-skin='halloween'] .rounded-card {
+  border: 2px solid rgb(var(--skin-line) / 0.55);
+  box-shadow: 0 0 16px -4px rgb(var(--skin-line) / 0.5);
+}
+/* 14 февраля: розовая рамка. */
+html[data-skin='valentine'] .rounded-card {
+  border: 2px solid rgb(var(--skin-line) / 0.75);
+}
+/* Бенто: крупные скруглённые плитки без рамки, с мягкой тенью и светлой кромкой сверху. */
+html[data-skin='bento'] .rounded-card {
+  border: 0;
+  box-shadow: 0 10px 22px -14px rgb(30 41 59 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.7);
+  border-radius: 1.75rem;
+}
+:root[data-theme='dark'][data-skin='bento'] .rounded-card {
+  box-shadow: 0 10px 22px -14px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme])[data-skin='bento'] .rounded-card {
+    box-shadow: 0 10px 22px -14px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.1);
+  }
+}
+/* Бенто: на экране от 560 px главная собирается «коробкой» в две колонки: итог и широкие блоки на всю ширину, компактные карточки (data-bento="half") парами.
+   На узком телефоне плитка вдвое уже суммы с копейками, поэтому там карточки остаются в один столбец. */
+@media (min-width: 560px) {
+  html[data-skin='bento'] [data-home-grid] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: dense;
+    align-items: stretch;
+  }
+  html[data-skin='bento'] [data-home-grid] > * {
+    grid-column: span 2;
+  }
+  html[data-skin='bento'] [data-home-grid] > [data-bento='half'] {
+    grid-column: span 1;
+  }
 }
 /* Рамка карточки «Всего» цвета образа (--skin-line). */
 html[data-skin] .skin-hero {

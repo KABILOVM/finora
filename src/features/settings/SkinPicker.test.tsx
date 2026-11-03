@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, user } from '@/components/testUtils';
 import { SKIN_THUMBS } from '@/skinThumbs';
+import { resolveSkin } from '@/skinCore';
 import { SKIN_GROUPS, SKINS } from '@/skins';
 import { AppearanceSection } from './AppearanceSection';
 import { SkinPicker } from './SkinPicker';
@@ -125,7 +126,7 @@ describe('«Оформление»: образ и цвет акцента', () =
     render(<AppearanceSection />);
     for (const skin of SKINS.slice(1)) {
       await user.click(screen.getByRole('radio', { name: new RegExp(`^${skin.label}`) }));
-      expect(document.documentElement.getAttribute('data-skin'), skin.id).toBe(skin.id);
+      expect(document.documentElement.getAttribute('data-skin'), skin.id).toBe(resolveSkin(skin.id)); // у «Сезонных» на странице праздничный образ по дате
       expect(localStorage.getItem('finora-skin'), skin.id).toBe(skin.id);
     }
   });

@@ -227,7 +227,7 @@ describe('цвета акцентов (src/index.css)', () => {
 
   describe('образы оформления (src/skins.ts)', () => {
     it('у каждого клубного образа есть блок палитры в index.css, и лишних блоков нет', () => {
-      expect([...SKIN_BLOCKS.keys()].sort()).toEqual(SKINS.filter((s) => s.id !== 'classic').map((s) => s.id).sort());
+      expect([...SKIN_BLOCKS.keys()].sort()).toEqual(SKINS.filter((s) => s.id !== 'classic' && !s.resolves).map((s) => s.id).sort());
     });
 
     it('«Классика» первая в списке и без своего блока: это прежний вид с выбираемым акцентом', () => {
@@ -249,7 +249,7 @@ describe('цвета акцентов (src/index.css)', () => {
     });
 
     it('шрифты и украшения образа заданы отдельным блоком html[data-skin]: шрифт заголовков, узор и цвет рамки есть', () => {
-      for (const skin of SKINS.filter((s) => s.id !== 'classic')) {
+      for (const skin of SKINS.filter((s) => s.id !== 'classic' && !s.resolves)) {
         const decls = rules.get(`html[data-skin='${skin.id}']`);
         expect(decls?.['skin-head'], `--skin-head у ${skin.id}`).toBeTruthy();
         expect(decls?.['skin-pattern'], `--skin-pattern у ${skin.id}`).toBeTruthy();
@@ -268,7 +268,7 @@ describe('цвета акцентов (src/index.css)', () => {
     it('шрифт заголовков каждого образа подключён: три файла (кириллица, её расширение с таджикскими буквами, латиница) и @font-face', () => {
       const css = read('./index.css');
       const families = new Set<string>();
-      for (const skin of SKINS.filter((s) => s.id !== 'classic')) {
+      for (const skin of SKINS.filter((s) => s.id !== 'classic' && !s.resolves)) {
         const first = /^'([^']+)'/.exec(rules.get(`html[data-skin='${skin.id}']`)?.['skin-head'] ?? '')?.[1];
         if (first && first !== 'Onest') families.add(first);
       }

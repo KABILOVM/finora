@@ -62,7 +62,7 @@ function ActiveTripCard({ tag, onEnd }: { tag: string; onEnd: () => void }) {
     ? data.txs.filter((t) => isSpend(t, data.base) && t.occurredOn === today && hasTag(t.note, tag)).reduce((sum, t) => addMinor(sum, t.baseAmountMinor), 0)
     : null;
   return (
-    <section aria-labelledby="home-trip" data-testid="trip-card" className="slide-down">
+    <section aria-labelledby="home-trip" data-testid="trip-card" data-bento="half" className="slide-down">
       <Card padding="none" className="p-3">
         <div className="flex items-center gap-2.5">
           <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand">

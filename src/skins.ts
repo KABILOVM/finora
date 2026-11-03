@@ -13,7 +13,7 @@ import { DEFAULT_SKIN, SKIN_BARS, type SkinId } from './skinCore';
 
 export type { SkinId };
 
-export type SkinGroupId = 'classic' | 'football' | 'story' | 'national' | 'style';
+export type SkinGroupId = 'classic' | 'football' | 'story' | 'national' | 'style' | 'holiday';
 
 /** Разделы списка образов в настройках, в порядке показа. */
 export const SKIN_GROUPS: readonly { id: SkinGroupId; label: string }[] = [
@@ -22,6 +22,7 @@ export const SKIN_GROUPS: readonly { id: SkinGroupId; label: string }[] = [
   { id: 'story', label: 'Кино и аниме' },
   { id: 'national', label: 'Национальные' },
   { id: 'style', label: 'Стили' },
+  { id: 'holiday', label: 'Праздники' },
 ];
 
 export interface SkinOption {
@@ -36,6 +37,8 @@ export interface SkinOption {
    * блока в index.css (сверяет src/accents.test.ts). У «Классики» цвет берётся из выбранного акцента, поэтому здесь его нет.
    */
   bar: { light: string; dark: string } | null;
+  /** Образ-переключатель («Сезонные»): сам не рисуется, на странице стоит другой образ по дате. Своих цветов, шрифта и картинки у него нет, только значок в настройках. */
+  resolves?: true;
 }
 
 export const SKINS: readonly SkinOption[] = [
@@ -71,6 +74,11 @@ export const SKINS: readonly SkinOption[] = [
   { id: 'graffiti', label: 'Граффити', hint: 'Кирпич, баллончик и яркие кляксы', group: 'style', bar: SKIN_BARS.graffiti },
   { id: 'cafe', label: 'Кофейня', hint: 'Мокко, сирень и тихий вечер', group: 'style', bar: SKIN_BARS.cafe },
   { id: 'nowruz', label: 'Навруз', hint: 'Тюльпаны, солнце и росток', group: 'style', bar: SKIN_BARS.nowruz },
+  { id: 'bento', label: 'Бенто', hint: 'Плитки разного размера, коралл и мята', group: 'style', bar: SKIN_BARS.bento },
+  { id: 'seasonal', label: 'Сезонные', hint: 'Сам выбирает праздник по дате', group: 'holiday', bar: null, resolves: true },
+  { id: 'christmas', label: 'Новый год', hint: 'Ёлка, снежинки и подарки', group: 'holiday', bar: SKIN_BARS.christmas },
+  { id: 'halloween', label: 'Хэллоуин', hint: 'Тыква, луна и летучие мыши', group: 'holiday', bar: SKIN_BARS.halloween },
+  { id: 'valentine', label: '14 февраля', hint: 'Сердце со стрелой и письмо', group: 'holiday', bar: SKIN_BARS.valentine },
 ];
 
 export { DEFAULT_SKIN };

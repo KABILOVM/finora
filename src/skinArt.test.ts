@@ -13,14 +13,16 @@ const extras = (id: string): string => {
   expect(m, `блок html[data-skin='${id}']`).not.toBeNull();
   return m?.[1] ?? '';
 };
-const artSkins = SKINS.filter((s) => s.id !== 'classic' && extras(s.id).includes('--skin-art:'));
+/** Образы, которые рисуются сами (у «Сезонных» своего блока нет: на странице стоит праздничный образ). */
+const drawn = SKINS.filter((s) => s.id !== 'classic' && !s.resolves);
+const artSkins = drawn.filter((s) => extras(s.id).includes('--skin-art:'));
 const KB = 1024;
 
 describe('картинки образов: фон карточки «Всего»', () => {
   it('картинка на карточке есть у всех образов, кроме «Классики» (там обычный цвет без картинки)', () => {
-    const ids = SKINS.map((s) => s.id).filter((id) => id !== 'classic');
+    const ids = drawn.map((s) => s.id);
     expect(artSkins.map((s) => s.id).sort()).toEqual([...ids].sort());
-    expect(ids).toHaveLength(31);
+    expect(ids).toHaveLength(35);
   });
 
   it('каждая картинка — webp 640×320 из assets/skins/art, файл есть и не тяжелее 45 КБ; рядом задан --skin-art-content', () => {
@@ -50,7 +52,7 @@ describe('картинки образов: фон карточки «Всего�
     expect(rule).toContain('pointer-events: none;');
     expect(rule).toContain('var(--skin-art, none)');
     expect(css).toMatch(/html\[data-skin\] \.skin-hero \{\n  isolation: isolate;\n\}/);
-    for (const skin of SKINS.filter((s) => s.id !== 'classic' && !artSkins.includes(s))) expect(extras(skin.id).includes('--skin-art-content'), skin.id).toBe(false);
+    for (const skin of drawn.filter((s) => !artSkins.includes(s))) expect(extras(skin.id).includes('--skin-art-content'), skin.id).toBe(false);
     // слой по высоте карточки: картинка 2:1 не растягивается на широкой карточке и не уезжает под текст
     expect(rule).toContain('right center / auto 100% no-repeat');
   });
@@ -84,7 +86,7 @@ describe('значки образов в настройках', () => {
   it('значок есть у каждого образа, включая «Классику»: файл на месте, webp 112×112, до 12 КБ, и у всех образов разные', () => {
     const ids = SKINS.map((s) => s.id);
     expect(Object.keys(SKIN_THUMBS).sort()).toEqual([...ids].sort());
-    expect(ids).toHaveLength(32);
+    expect(ids).toHaveLength(37);
     for (const id of ids) {
       expect(SKIN_THUMBS[id], id).toContain(`${id}-thumb`);
       const file = bytes(`./assets/skins/art/${id}-thumb.webp`);

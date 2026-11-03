@@ -359,5 +359,81 @@
    "transport",
    "work"
   ]
+ },
+ {
+  "id": "wi-bento",
+  "prefix": "withicons-bento",
+  "title": "with icons Bento (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-christmas",
+  "prefix": "withicons-christmas",
+  "title": "with icons Christmas (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-halloween",
+  "prefix": "withicons-halloween",
+  "title": "with icons Halloween (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-valentine",
+  "prefix": "withicons-valentine",
+  "title": "with icons Valentine (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
  }
 ]
