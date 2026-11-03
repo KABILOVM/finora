@@ -27,7 +27,7 @@ afterEach(reset);
 const CONTROLS = ['more', 'trash', 'edit', 'cloud', 'refresh', 'lock', 'download', 'upload', 'transfer', 'alert', 'info', 'backspace', 'income', 'expense', 'logout', 'settings', 'sliders', 'eye', 'eye-off', 'mic', 'search'];
 
 /** Теги, которые бывают в рисунках наборов: фигуры и градиенты (без filter, mask, use, image, style, script). */
-const DRAWING_TAGS = ['<svg', '<g', '<path', '<circle', '<rect', '<ellipse', '<defs', '<linearGradient', '<radialGradient', '<stop'];
+const DRAWING_TAGS = ['<svg', '<g', '<path', '<circle', '<rect', '<ellipse', '<defs', '<linearGradient', '<radialGradient', '<stop', '<use'];
 
 const FILES = import.meta.glob<{ ICONS: Readonly<Record<string, string>> }>('./*/*.ts', { eager: true });
 const PACKS = Object.keys(ICON_PACK_CREDITS) as IconPackId[];
@@ -49,7 +49,7 @@ describe('наборы значков из Iconify: файлы', () => {
   it('у наборов с лицензией CC BY указан автор, у остальных — MIT', () => {
     for (const [id, c] of Object.entries(ICON_PACK_CREDITS)) {
       expect(c.author.length, id).toBeGreaterThan(2);
-      expect(['MIT', 'CC BY 4.0'], id).toContain(c.license);
+      expect(['MIT', 'CC BY 4.0', 'CC BY 3.0'], id).toContain(c.license);
     }
     expect(ICON_PACK_CREDITS['sl-cyber'].license).toBe('CC BY 4.0');
     // подпись в «Настройках» называет каждый набор и автора набора с лицензией CC BY
@@ -90,6 +90,7 @@ describe('наборы значков из Iconify: файлы', () => {
           ids.set(id, at);
         }
         for (const ref of markup.match(/url\(#([^)]+)\)/g) ?? []) expect(markup, `${at}: ${ref}`).toContain(`id="${ref.slice(5, -1)}"`);
+        for (const ref of markup.match(/href="#([^"]+)"/g) ?? []) expect(markup, `${at}: ${ref}`).toContain(`id="${ref.slice(7, -1)}"`); // <use> ссылается только на фигуру из того же значка
       }
     }
   });
@@ -130,7 +131,7 @@ describe('градиенты в значках наборов', () => {
 
 describe('одинаковые значки с градиентами на одной странице', () => {
   it('у каждого экземпляра свои id, и заливка каждого ссылается на свой градиент (первый может быть в скрытом блоке и не рисоваться)', () => {
-    const markup = '<svg viewBox="0 0 24 24"><defs><linearGradient id="g1"><stop offset="0" stop-color="#f00"/></linearGradient></defs><rect width="20" height="20" fill="url(#g1)"/></svg>';
+    const markup = '<svg viewBox="0 0 24 24"><defs><linearGradient id="g1"><stop offset="0" stop-color="#f00"/></linearGradient><path id="p1" d="M0 0h4v4z"/></defs><rect width="20" height="20" fill="url(#g1)"/><use href="#p1"/></svg>';
     setSkinIconPack({ home: markup }, 'test');
     const { container } = render(
       <div>
@@ -140,12 +141,13 @@ describe('одинаковые значки с градиентами на од�
       </div>,
     );
     const ids = [...container.querySelectorAll('[id]')].map((e) => e.id);
-    expect(ids).toHaveLength(2);
-    expect(new Set(ids).size).toBe(2);
+    expect(ids).toHaveLength(4); // у каждого из двух значков градиент и фигура для <use>
+    expect(new Set(ids).size).toBe(4);
     for (const rect of container.querySelectorAll('rect')) {
       const ref = /url\(#([^)]+)\)/.exec(rect.getAttribute('fill') ?? '')?.[1] ?? '';
       expect(ids, `заливка ${rect.getAttribute('fill')}`).toContain(ref);
     }
+    for (const use of container.querySelectorAll('use')) expect(ids, 'ссылка <use>').toContain((use.getAttribute('href') ?? '').slice(1));
     // перерисовка не меняет id: градиент не мигает
     const before = container.innerHTML;
     act(() => setSkinIconPack({ home: markup }, 'test'));

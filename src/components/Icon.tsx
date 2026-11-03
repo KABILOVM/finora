@@ -45,13 +45,13 @@ function shapes(name: string, markup: string): ReactNode {
 }
 
 /**
- * Разметка значка. Если в ней есть id (градиенты у цветных наборов образов), одинаковые id у двух экземпляров значка на странице нельзя: браузер берёт первый, а он
+ * Разметка значка. Если в ней есть id (градиенты и повторно используемые фигуры у цветных наборов образов), одинаковые id у двух экземпляров значка на странице нельзя: браузер берёт первый, а он
  * может сидеть в скрытом блоке (боковое меню на телефоне, display:none), и заливка пропадает. Поэтому каждому экземпляру — свой суффикс id (useId), без общего кэша.
  */
 function useShapes(key: string, markup: string): ReactNode {
   const suffix = useId().replace(/:/g, '');
   return useMemo(
-    () => (markup.includes(' id="') ? parse(markup.replace(/\bid="([^"]+)"/g, `id="$1${suffix}"`).replace(/url\(#([^)]+)\)/g, `url(#$1${suffix})`)) : shapes(key, markup)),
+    () => (markup.includes(' id="') ? parse(markup.replace(/\bid="([^"]+)"/g, `id="$1${suffix}"`).replace(/(url\(#|href="#)([^)"]+)/g, `$1$2${suffix}`)) : shapes(key, markup)),
     [key, markup, suffix],
   );
 }

@@ -226,5 +226,100 @@
    "transport",
    "work"
   ]
+ },
+ {
+  "id": "wi-retro",
+  "prefix": "withicons-retro",
+  "title": "with icons Retro (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-bauhaus",
+  "prefix": "withicons-bauhaus",
+  "title": "with icons Bauhaus (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-sticker",
+  "prefix": "withicons-sticker",
+  "title": "with icons Sticker (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "game-icons",
+  "prefix": "game-icons",
+  "title": "Game-icons.net (Lorc, Delapouite и другие авторы)",
+  "license": "CC BY 3.0",
+  "count": 160,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "pp-pencil",
+  "prefix": "pepicons-pencil",
+  "title": "Pepicons Pencil (CyCraft)",
+  "license": "CC BY 4.0",
+  "count": 127,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
  }
 ]

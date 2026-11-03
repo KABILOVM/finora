@@ -133,6 +133,11 @@ export const SKIN_ICON_STYLE: Readonly<Partial<Record<SkinId, IconStyleId | 'pix
   clay: 'bubble',
   liquid: 'fine',
   chrome: 'tech',
+  retro: 'sport',
+  bauhaus: 'sharp',
+  sticker: 'bubble',
+  notebook: 'fine',
+  dungeon: 'sharp',
 };
 
 /** Линейный набор в выбранном стиле: все значки из ICON_GEOMETRY, штрих currentColor, у стиля с заливкой — мягкий оттенок внутри фигур. */

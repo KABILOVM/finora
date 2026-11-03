@@ -94,6 +94,26 @@ OVERRIDES: dict[str, dict[str, list[str]]] = {
         'business': ['business-laptop'], 'slides': ['presentation-2'], 'bell': ['alarm'], 'world': ['globe-1'], 'time': ['clock-1'], 'alarm': ['alarm'], 'deal': ['business-handshake-deal'],
         'magic': ['business-magic-rabbit'], 'lock': ['lock-close-1'], 'sofa': ['lamp-3'], 'hanger': ['dress'], 'dress': ['dress'],
     },
+    'game-icons': {
+        'home': ['castle'], 'list': ['scroll-unfurled'], 'wallet': ['wallet'], 'mail': ['envelope'], 'chart': ['chart'], 'cart': ['wheelbarrow'], 'food': ['roast-chicken'],
+        'cup': ['beer-stein'], 'car': ['caravan'], 'pills': ['health-potion'], 'hospital': ['apothecary'], 'gift': ['open-treasure-chest'], 'invest': ['growth'], 'banknote': ['money-stack'],
+        'salary': ['receive-money'], 'cash': ['money-stack'], 'card': ['two-coins'], 'tool': ['anvil'], 'star': ['flat-star'], 'safe': ['locked-chest'], 'box': ['chest'], 'repeat': ['cycle'], 'debt': ['take-my-money'],
+        'sale': ['price-tag'], 'user': ['person'], 'family': ['family-tree'], 'wife': ['person'], 'husband': ['person'], 'friends': ['three-friends'], 'charity': ['pay-money'],
+        'apartment': ['stone-tower'], 'lunch': ['bread'], 'place': ['compass'], 'cardtransfer': ['pay-money'], 'taxes': ['scroll-quill'], 'bills': ['tied-scroll'], 'print': ['quill-ink'],
+        'gym': ['weight-lifting-up'], 'wedding': ['diamond-ring'], 'diploma': ['diploma'], 'moneybag': ['piggy-bank'], 'university': ['graduate-cap'], 'bell': ['bell'], 'target': ['bullseye'],
+        'game': ['dice-twenty-faces-twenty'], 'stars': ['sparkles'], 'bowling': ['bowling-pin'], 'deal': ['crossed-swords'], 'document': ['tied-scroll'], 'euro': ['coins'], 'dollar': ['coins'],
+        'ruble': ['coins'], 'bag': ['swap-bag', 'shopping-bag'], 'bus': ['bus'], 'bulb': ['lantern'], 'kids': ['baby-face'], 'dress': ['robe'], 'shirt': ['shirt'], 'perfume': ['potion-ball'], 'vanity': ['sparkles'],
+    },
+    'pp-pencil': {
+        'wallet': ['money-note'], 'mail': ['letter'], 'banknote': ['money-note'], 'target': ['pinpoint'], 'food': ['knive-fork'], 'wine': ['coctail'], 'bus': ['taxi'],
+        'scooter': ['motorcycle'], 'bolt': ['electricity'], 'laptop': ['monitor'], 'game': ['controller'], 'tv': ['television'], 'party': ['hands-clapping'], 'invest': ['arrow-up-right'],
+        'salary': ['money-note'], 'safe': ['lock-closed'], 'tag': ['label'], 'stars': ['stars'], 'user': ['person'], 'family': ['people'], 'wife': ['person'], 'husband': ['person'],
+        'friends': ['persons'], 'kids': ['face-smiling'], 'baby': ['face-smiling'], 'wedding': ['heart'], 'takeaway': ['soft-drink'], 'cocktail': ['coctail'], 'evcharge': ['electricity'],
+        'place': ['pin'], 'doctor': ['person'], 'shop': ['building'], 'price': ['label'], 'medal': ['trophy'], 'dollar': ['dollar'], 'university': ['bank'], 'notebook': ['book'],
+        'library': ['book'], 'taxes': ['clipboard'], 'bills': ['file'], 'post': ['letter'], 'law': ['sword-shield'], 'alarm': ['alarm'], 'magic': ['stars'], 'debt': ['handshake'],
+        'sale': ['label'], 'lunch': ['knive-fork'], 'tea': ['cup'], 'cooking': ['knive-fork'], 'charity': ['hand-open'], 'cart': ['cart'], 'moneybag': ['coins'], 'ruble': ['peso'],
+        'sun': ['sun'], 'fire': ['fire'], 'heating': ['fire'], 'conditioner': ['cloud'], 'window': ['square'], 'garage': ['building'], 'bell': ['bell'], 'chart': ['bulletin-notice'], 'cup': ['cup'],
+    },
     'ph-fill': {
         'mail': ['envelope'], 'banknote': ['money'], 'sofa': ['couch'], 'tv': ['television'], 'gym': ['barbell'], 'party': ['confetti'], 'invest': ['trend-up'], 'question': ['question'],
         'bath': ['bathtub'], 'lunch': ['bowl-food'], 'road': ['road-horizon'], 'perfume': ['flask'], 'glasses': ['eyeglasses'], 'telescope': ['binoculars'], 'euro': ['currency-eur'],
@@ -113,13 +133,18 @@ PACKS = {
     'wi-clay': ('withicons-clay', '', 'with icons Clay (Evergrow)', 'MIT'),
     'wi-liquid': ('withicons-liquid', '', 'with icons Liquid (Evergrow)', 'MIT'),
     'wi-chrome': ('withicons-chrome', '', 'with icons Chrome (Evergrow)', 'MIT'),
+    'wi-retro': ('withicons-retro', '', 'with icons Retro (Evergrow)', 'MIT'),
+    'wi-bauhaus': ('withicons-bauhaus', '', 'with icons Bauhaus (Evergrow)', 'MIT'),
+    'wi-sticker': ('withicons-sticker', '', 'with icons Sticker (Evergrow)', 'MIT'),
+    'pp-pencil': ('pepicons-pencil', '', 'Pepicons Pencil (CyCraft)', 'CC BY 4.0'),
+    'game-icons': ('game-icons', '', 'Game-icons.net (Lorc, Delapouite и другие авторы)', 'CC BY 3.0'),
     'pixelarticons': ('pixelarticons', '', 'Pixelarticons (Gerrit Halfmann)', 'MIT'),
     'sl-cyber': ('streamline-cyber', '', 'Streamline Cyber (Streamline)', 'CC BY 4.0'),
     'ph-fill': ('ph', '-fill', 'Phosphor Fill (Phosphor Icons)', 'MIT'),
 }
 
 # Наборы с тяжёлыми значками (десятки КБ на значок) сжимаются svgo до одного знака после запятой: на размере значка в приложении разницы не видно, а файл втрое легче.
-OPTIMIZE = {'wi-anime': 1, 'wi-brutal': 1, 'wi-luxe': 1, 'wi-kawaii': 1, 'wi-coquette': 1, 'wi-gothic': 1, 'wi-clay': 1, 'wi-liquid': 1, 'wi-chrome': 1}
+OPTIMIZE = {'wi-anime': 1, 'wi-brutal': 1, 'wi-luxe': 1, 'wi-kawaii': 1, 'wi-coquette': 1, 'wi-gothic': 1, 'wi-clay': 1, 'wi-liquid': 1, 'wi-chrome': 1, 'wi-retro': 1, 'wi-bauhaus': 1, 'wi-sticker': 1}
 
 
 def curl(url: str) -> str:

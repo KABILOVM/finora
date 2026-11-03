@@ -20,7 +20,7 @@ describe('картинки образов: фон карточки «Всего�
   it('картинка на карточке есть у всех образов, кроме «Классики» (там обычный цвет без картинки)', () => {
     const ids = SKINS.map((s) => s.id).filter((id) => id !== 'classic');
     expect(artSkins.map((s) => s.id).sort()).toEqual([...ids].sort());
-    expect(ids).toHaveLength(23);
+    expect(ids).toHaveLength(28);
   });
 
   it('каждая картинка — webp 640×320 из assets/skins/art, файл есть и не тяжелее 45 КБ; рядом задан --skin-art-content', () => {
@@ -84,7 +84,7 @@ describe('значки образов в настройках', () => {
   it('значок есть у каждого образа, включая «Классику»: файл на месте, webp 112×112, до 12 КБ, и у всех образов разные', () => {
     const ids = SKINS.map((s) => s.id);
     expect(Object.keys(SKIN_THUMBS).sort()).toEqual([...ids].sort());
-    expect(ids).toHaveLength(24);
+    expect(ids).toHaveLength(29);
     for (const id of ids) {
       expect(SKIN_THUMBS[id], id).toContain(`${id}-thumb`);
       const file = bytes(`./assets/skins/art/${id}-thumb.webp`);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Рисует картинки «стилевых» образов (Кокетка, Готика, Глина, Жидкое стекло, Y2K-хром…) векторными рисунками: ничьих чужих материалов в них нет, всё нарисовано здесь.
+Рисует картинки «стилевых» образов (Кокетка, Готика, Глина, Жидкое стекло, Y2K-хром, Ретро, Баухаус, Скрапбук, Тетрадь, Подземелье) векторными рисунками: ничьих чужих материалов в них нет, всё нарисовано здесь.
 Запуск из корня репозитория: python3 scripts/skin-art/draw_styles.py
 
 Что получается (src/assets/skins/<образ>/svg/):
@@ -163,6 +163,120 @@ def chrome() -> tuple[str, str]:
     return defs, body
 
 
+# ---------------------------------------------------------------- Ретро: пластинка, закат и три полоски
+def retro() -> tuple[str, str]:
+    defs = (
+        lin('rt-sun', [(0, '#ffd24a'), (0.55, '#f0742f'), (1, '#d8402a')], 0, 0, 0, 1)
+        + lin('rt-lab', [(0, '#f0742f'), (1, '#e6a532')], 0, 0, 1, 1)
+        + rad('rt-sh', [(0, '#fff', 0.35), (1, '#fff', 0)], 0.3, 0.25, 0.7)
+        + '<mask id="rt-m"><rect width="320" height="240" fill="#fff"/>'
+        + ''.join(f'<rect x="0" y="{y}" width="320" height="{h}" fill="#000"/>' for y, h in [(112, 3), (126, 5), (141, 7), (157, 9), (174, 11)])
+        + '</mask>'
+    )
+    grooves = ''.join(f'<circle cx="104" cy="138" r="{r}" fill="none" stroke="#3a2a20" stroke-width="1.6"/>' for r in (80, 70, 60, 50, 42))
+    body = (
+        '<g mask="url(#rt-m)"><circle cx="226" cy="108" r="66" fill="url(#rt-sun)"/></g>'
+        '<circle cx="104" cy="138" r="90" fill="#1c1410"/>' + grooves
+        + '<path d="M104 138 L170 82 A90 90 0 0 1 188 118 Z" fill="#fff" opacity=".07"/>'
+        '<circle cx="104" cy="138" r="90" fill="url(#rt-sh)"/>'
+        '<circle cx="104" cy="138" r="30" fill="url(#rt-lab)"/><circle cx="104" cy="138" r="22" fill="none" stroke="#fff3d6" stroke-width="2" stroke-dasharray="3 4"/>'
+        '<circle cx="104" cy="138" r="5" fill="#f7ead0"/>'
+        '<rect x="34" y="208" width="262" height="9" rx="4.5" fill="#d8572a"/><rect x="34" y="221" width="262" height="9" rx="4.5" fill="#e6a532"/><rect x="34" y="234" width="262" height="6" rx="3" fill="#3a6b5a"/>'
+    )
+    star = lambda x, y, r, c: f'<path transform="translate({x} {y}) scale({r})" d="M0 -8 C1 -2 2 -1 8 0 C2 1 1 2 0 8 C-1 2 -2 1 -8 0 C-2 -1 -1 -2 0 -8 Z" fill="{c}"/>'
+    return defs, body + star(286, 40, 1.3, '#e6a532') + star(40, 44, 1.0, '#d8572a') + star(268, 176, 0.8, '#3a6b5a')
+
+
+# ---------------------------------------------------------------- Баухаус: круг, квадрат и треугольник
+def bauhaus() -> tuple[str, str]:
+    body = (
+        '<rect x="150" y="30" width="124" height="124" fill="#e63a2e"/>'
+        '<polygon points="170,228 244,104 318,228" fill="#f2b705"/>'
+        '<circle cx="118" cy="140" r="72" fill="#1d4fd8" style="mix-blend-mode:multiply"/>'
+        '<rect x="24" y="204" width="270" height="8" fill="#16161a"/>'
+        '<circle cx="52" cy="52" r="12" fill="#16161a"/>'
+        '<path d="M214 30 A62 62 0 0 1 276 92" fill="none" stroke="#16161a" stroke-width="6"/>'
+        '<rect x="26" y="226" width="40" height="8" fill="#e63a2e"/><rect x="72" y="226" width="40" height="8" fill="#f2b705"/><rect x="118" y="226" width="40" height="8" fill="#1d4fd8"/>'
+    )
+    return '', body
+
+
+# ---------------------------------------------------------------- Скрапбук: наклейки и скотч
+def sticker() -> tuple[str, str]:
+    defs = '<filter id="sk-sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#5b3a3f" flood-opacity=".35"/></filter>'
+    star_path = 'M0 -62 L18 -20 L62 -18 L28 10 L40 54 L0 30 L-40 54 L-28 10 L-62 -18 L-18 -20 Z'
+    heart_path = 'M0 52 C-74 -4 -40 -64 0 -24 C40 -64 74 -4 0 52 Z'
+    body = (
+        f'<g filter="url(#sk-sh)"><g transform="translate(98 112) rotate(-12)"><path d="{star_path}" fill="#fff" stroke="#fff" stroke-width="16" stroke-linejoin="round"/><path d="{star_path}" fill="#ffd23f" stroke="#e8a900" stroke-width="3" stroke-linejoin="round"/>'
+        '<circle cx="-12" cy="2" r="4.5" fill="#3b2a3f"/><circle cx="14" cy="2" r="4.5" fill="#3b2a3f"/><path d="M-10 16 Q1 26 12 16" fill="none" stroke="#3b2a3f" stroke-width="3.2" stroke-linecap="round"/></g></g>'
+        f'<g filter="url(#sk-sh)"><g transform="translate(214 98) rotate(10)"><path d="{heart_path}" fill="#fff" stroke="#fff" stroke-width="16" stroke-linejoin="round"/><path d="{heart_path}" fill="#ff7aa8" stroke="#e0457c" stroke-width="3" stroke-linejoin="round"/>'
+        '<path d="M-34 -22 Q-30 -34 -18 -34" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="5" stroke-linecap="round"/></g></g>'
+        '<g filter="url(#sk-sh)"><g transform="translate(160 178)"><circle r="46" fill="#fff"/><circle r="38" fill="#5ec7ff" stroke="#2f9bd6" stroke-width="3"/>'
+        '<circle cx="-13" cy="-6" r="5" fill="#3b2a3f"/><circle cx="13" cy="-6" r="5" fill="#3b2a3f"/><path d="M-16 8 Q0 24 16 8" fill="none" stroke="#3b2a3f" stroke-width="3.6" stroke-linecap="round"/>'
+        '<ellipse cx="-24" cy="6" rx="6" ry="4" fill="#ff7aa8" opacity=".7"/><ellipse cx="24" cy="6" rx="6" ry="4" fill="#ff7aa8" opacity=".7"/></g></g>'
+        # скотч
+        '<g transform="translate(60 26) rotate(-24)" opacity=".92"><rect width="96" height="26" rx="2" fill="#8fe3c8"/><path d="M0 0 l4 6 l-4 6 l4 6 l-4 6 l4 2 M96 0 l-4 6 l4 6 l-4 6 l4 6 l-4 2" fill="none" stroke="#8fe3c8" stroke-width="1"/>'
+        '<path d="M10 6 H86 M10 13 H86 M10 20 H86" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-dasharray="6 5"/></g>'
+    )
+    spark = lambda x, y, r, c: f'<path transform="translate({x} {y}) scale({r})" d="M0 -8 C1 -2 2 -1 8 0 C2 1 1 2 0 8 C-1 2 -2 1 -8 0 C-2 -1 -1 -2 0 -8 Z" fill="{c}"/>'
+    return defs, body + spark(286, 44, 1.3, '#5ec7ff') + spark(34, 200, 1.0, '#ff7aa8') + spark(292, 196, 0.9, '#ffd23f')
+
+
+# ---------------------------------------------------------------- Тетрадь: клетчатый лист, красное поле и ручка
+def notebook() -> tuple[str, str]:
+    defs = (
+        '<filter id="nb-sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#1b1e2b" flood-opacity=".3"/></filter>'
+        + lin('nb-pen', [(0, '#5f7cf0'), (1, '#2f4bb5')], 0, 0, 1, 0)
+    )
+    grid = ''.join(f'<path d="M0 {y} H190" stroke="#3b5bdb" stroke-opacity=".28" stroke-width="1"/>' for y in range(16, 176, 16)) + ''.join(f'<path d="M{x} 0 V176" stroke="#3b5bdb" stroke-opacity=".28" stroke-width="1"/>' for x in range(16, 190, 16))
+    rings = ''.join(f'<rect x="-6" y="{y}" width="20" height="9" rx="4.5" fill="#2a2e40"/><circle cx="6" cy="{y + 4.5}" r="2.4" fill="#f6f7f2"/>' for y in range(14, 170, 26))
+    body = (
+        '<g filter="url(#nb-sh)"><g transform="translate(66 28) rotate(-6)"><rect width="190" height="176" rx="6" fill="#fdfdfb"/>' + grid
+        + '<path d="M38 0 V176" stroke="#e03131" stroke-opacity=".75" stroke-width="2"/>' + rings
+        + '<path d="M52 36 q8 -10 16 0 t16 0 t16 0 t16 0 t16 0" fill="none" stroke="#3b5bdb" stroke-width="2.6" stroke-linecap="round"/>'
+        '<path d="M52 68 q8 -10 16 0 t16 0 t16 0 t16 0" fill="none" stroke="#3b5bdb" stroke-width="2.6" stroke-linecap="round"/>'
+        '<path d="M52 100 q8 -10 16 0 t16 0 t16 0 t16 0 t16 0 t16 0" fill="none" stroke="#3b5bdb" stroke-width="2.6" stroke-linecap="round"/>'
+        '<text x="112" y="150" font-family="Comic Sans MS, cursive, sans-serif" font-weight="700" font-size="30" fill="#e03131" transform="rotate(-8 112 150)">A+</text></g></g>'
+        # ручка
+        '<g transform="translate(176 206) rotate(-38)" filter="url(#nb-sh)"><rect x="0" y="-9" width="118" height="18" rx="9" fill="url(#nb-pen)"/><rect x="82" y="-9" width="10" height="18" fill="#fff" opacity=".85"/>'
+        '<rect x="96" y="-6" width="3" height="12" fill="#e03131"/><path d="M0 -9 L-22 0 L0 9 Z" fill="#dfe3f0"/><path d="M-22 0 L-30 0 L-22 -2 Z" fill="#2f4bb5"/><rect x="8" y="-5" width="60" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>'
+    )
+    return defs, body
+
+
+# ---------------------------------------------------------------- Подземелье: сундук с золотом и самоцветами
+def dungeon() -> tuple[str, str]:
+    defs = (
+        rad('dg-glow', [(0, '#ffd777', 0.85), (0.6, '#e0a030', 0.25), (1, '#e0a030', 0)], 0.5, 0.45, 0.55)
+        + lin('dg-wood', [(0, '#9a6532'), (1, '#5b3519')], 0, 0, 0, 1)
+        + lin('dg-lid', [(0, '#7a4a22'), (1, '#4a2b14')], 0, 0, 0, 1)
+        + lin('dg-gold', [(0, '#fff0a0'), (0.5, '#f1c23b'), (1, '#b8851f')], 0, 0, 1, 1)
+        + lin('dg-iron', [(0, '#5a6070'), (1, '#2a2e3a')], 0, 0, 0, 1)
+    )
+    coin = lambda x, y, r: f'<circle cx="{x}" cy="{y}" r="{r}" fill="url(#dg-gold)" stroke="#8a6212" stroke-width="2"/><circle cx="{x}" cy="{y}" r="{r * 0.55:.1f}" fill="none" stroke="#b8851f" stroke-width="1.6"/>'
+    coins = ''.join(coin(x, y, r) for x, y, r in [(112, 140, 11), (134, 132, 11), (156, 128, 11), (178, 130, 11), (200, 134, 11), (222, 142, 11), (124, 118, 10), (148, 112, 10), (172, 112, 10), (196, 118, 10), (160, 98, 10), (136, 100, 9), (184, 100, 9)])
+    body = (
+        '<circle cx="162" cy="122" r="112" fill="url(#dg-glow)"/>'
+        # открытая крышка (вид сзади)
+        '<path d="M96 138 L108 52 Q162 28 216 52 L228 138 Z" fill="url(#dg-lid)" stroke="#2a180b" stroke-width="3"/>'
+        '<path d="M130 40 L124 138 M194 40 L200 138" stroke="url(#dg-iron)" stroke-width="12"/>'
+        '<path d="M108 52 Q162 28 216 52" fill="none" stroke="url(#dg-iron)" stroke-width="10" stroke-linecap="round"/>'
+        + coins +
+        # самоцветы
+        '<path d="M150 82 l12 -14 l12 14 l-12 20 Z" fill="#e0457c" stroke="#7a1f3f" stroke-width="2"/><path d="M150 82 h24 M162 68 l-4 14 l4 20 l4 -20 Z" stroke="#fff" stroke-opacity=".45" stroke-width="1.5" fill="none"/>'
+        '<path d="M206 104 l9 -10 l9 10 l-9 14 Z" fill="#4a9dff" stroke="#1c3f9e" stroke-width="2"/>'
+        # корпус
+        '<rect x="86" y="140" width="152" height="78" rx="10" fill="url(#dg-wood)" stroke="#2a180b" stroke-width="3"/>'
+        '<path d="M86 164 H238 M86 190 H238" stroke="#2a180b" stroke-opacity=".5" stroke-width="2"/>'
+        '<rect x="86" y="140" width="18" height="78" rx="6" fill="url(#dg-iron)"/><rect x="220" y="140" width="18" height="78" rx="6" fill="url(#dg-iron)"/>'
+        '<rect x="86" y="140" width="152" height="14" rx="5" fill="url(#dg-iron)"/>'
+        '<rect x="148" y="150" width="28" height="34" rx="5" fill="url(#dg-gold)" stroke="#8a6212" stroke-width="2"/><circle cx="162" cy="164" r="4.5" fill="#2a180b"/><rect x="160" y="166" width="4" height="10" rx="2" fill="#2a180b"/>'
+        + ''.join(f'<circle cx="{x}" cy="{y}" r="2.6" fill="#d9c38a"/>' for x, y in [(95, 150), (95, 208), (229, 150), (229, 208)])
+    )
+    spark = lambda x, y, r: f'<path transform="translate({x} {y}) scale({r})" d="M0 -8 C1 -2 2 -1 8 0 C2 1 1 2 0 8 C-1 2 -2 1 -8 0 C-2 -1 -1 -2 0 -8 Z" fill="#ffe9a0"/>'
+    return defs, body + spark(44, 70, 1.3) + spark(282, 56, 1.1) + spark(272, 190, 0.9) + spark(48, 190, 0.8)
+
+
 # id -> (рисунок, фон значка: два цвета градиента)
 ART = {
     'coquette': (coquette, ('#ffe7ef', '#f6b6cb')),
@@ -170,8 +284,12 @@ ART = {
     'clay': (clay, ('#f3e9ff', '#d9c7fb')),
     'liquid': (liquid, ('#1a2650', '#0c1224')),
     'chrome': (chrome, ('#d8def0', '#aab6d6')),
+    'retro': (retro, ('#f7e0b0', '#e9b45a')),
+    'bauhaus': (bauhaus, ('#f2efe6', '#d9d3bd')),
+    'sticker': (sticker, ('#fff0b8', '#ffc6dc')),
+    'notebook': (notebook, ('#eef2ff', '#c9d3f5')),
+    'dungeon': (dungeon, ('#3b2412', '#140f0b')),
 }
-
 
 def main() -> None:
     for sid, (fn, (c1, c2)) in ART.items():

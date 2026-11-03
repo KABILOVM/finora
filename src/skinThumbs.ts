@@ -28,6 +28,11 @@ import thumbGothic from './assets/skins/art/gothic-thumb.webp';
 import thumbClay from './assets/skins/art/clay-thumb.webp';
 import thumbLiquid from './assets/skins/art/liquid-thumb.webp';
 import thumbChrome from './assets/skins/art/chrome-thumb.webp';
+import thumbRetro from './assets/skins/art/retro-thumb.webp';
+import thumbBauhaus from './assets/skins/art/bauhaus-thumb.webp';
+import thumbSticker from './assets/skins/art/sticker-thumb.webp';
+import thumbNotebook from './assets/skins/art/notebook-thumb.webp';
+import thumbDungeon from './assets/skins/art/dungeon-thumb.webp';
 
 export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   classic: thumbClassic,
@@ -54,4 +59,9 @@ export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   clay: thumbClay,
   liquid: thumbLiquid,
   chrome: thumbChrome,
+  retro: thumbRetro,
+  bauhaus: thumbBauhaus,
+  sticker: thumbSticker,
+  notebook: thumbNotebook,
+  dungeon: thumbDungeon,
 };
