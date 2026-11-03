@@ -262,6 +262,9 @@ describe('цвета акцентов (src/index.css)', () => {
       }
     });
 
+    /** У этих шрифтов одно начертание, и в имени файла стоит оно, а не «wght» (переменная ось). */
+    const SINGLE_WEIGHT: Record<string, string> = { 'cormorant-garamond': '700', marmelad: '400', forum: '400' };
+
     it('шрифт заголовков каждого образа подключён: три файла (кириллица, её расширение с таджикскими буквами, латиница) и @font-face', () => {
       const css = read('./index.css');
       const families = new Set<string>();
@@ -274,7 +277,7 @@ describe('цвета акцентов (src/index.css)', () => {
         const stem = family.toLowerCase().replace(/ /g, '-');
         for (const subset of ['cyrillic-ext', 'cyrillic', 'latin']) {
           expect(css, `@font-face ${family} ${subset}`).toContain(`${stem}-${subset}-`);
-          expect(exists(`./assets/skins/fonts/${stem}-${subset}-${stem === 'cormorant-garamond' ? '700' : 'wght'}.woff2`), `файл ${stem} ${subset}`).toBe(true);
+          expect(exists(`./assets/skins/fonts/${stem}-${subset}-${SINGLE_WEIGHT[stem] ?? 'wght'}.woff2`), `файл ${stem} ${subset}`).toBe(true);
         }
         expect(exists(`./assets/skins/fonts/LICENSE-${family.replace(/ /g, '-')}-OFL.txt`), `лицензия ${family}`).toBe(true);
       }

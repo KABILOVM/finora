@@ -26,6 +26,9 @@ afterEach(reset);
 /** Значки-органы управления остаются обычными: «плюс», корзина, замок, облако и так далее не должны меняться вместе с образом. */
 const CONTROLS = ['more', 'trash', 'edit', 'cloud', 'refresh', 'lock', 'download', 'upload', 'transfer', 'alert', 'info', 'backspace', 'income', 'expense', 'logout', 'settings', 'sliders', 'eye', 'eye-off', 'mic', 'search'];
 
+/** Теги, которые бывают в рисунках наборов: фигуры и градиенты (без filter, mask, use, image, style, script). */
+const DRAWING_TAGS = ['<svg', '<g', '<path', '<circle', '<rect', '<ellipse', '<defs', '<linearGradient', '<radialGradient', '<stop'];
+
 const FILES = import.meta.glob<{ ICONS: Readonly<Record<string, string>> }>('./*/*.ts', { eager: true });
 const PACKS = Object.keys(ICON_PACK_CREDITS) as IconPackId[];
 const sectionOf = new Map(EXTRA_ICONS.map((e) => [e.name, e.section]));
@@ -73,14 +76,14 @@ describe('наборы значков из Iconify: файлы', () => {
     expect(files.map((f) => f.group).sort(), pack).toEqual([...(meta.find((m) => m.id === pack)?.groups ?? [])].sort());
   });
 
-  it.each(PACKS)('%s: разметка — только рисунок (svg, g, path, circle), без скриптов, стилей и внешних ссылок; id внутри значков не повторяются между значками', (pack) => {
+  it.each(PACKS)('%s: разметка — только рисунок (фигуры и градиенты), без скриптов, стилей, фильтров и внешних ссылок; id внутри значков не повторяются между значками', (pack) => {
     const ids = new Map<string, string>();
     for (const { group, icons } of filesOf(pack)) {
       for (const [name, markup] of Object.entries(icons)) {
         const at = `${pack}/${group}/${name}`;
         expect(markup, at).toMatch(/^<svg viewBox="0 0 \d+ \d+">.*<\/svg>$/s);
         expect(markup, at).not.toMatch(/<script|<style|<image|<foreignObject|\sstyle=|\son[a-z]+=|javascript:|href="(?!#)|xlink:|data:/i);
-        for (const tag of markup.match(/<[a-zA-Z][a-zA-Z0-9]*/g) ?? []) expect(['<svg', '<g', '<path', '<circle'], `${at}: ${tag}`).toContain(tag);
+        for (const tag of markup.match(/<[a-zA-Z][a-zA-Z0-9]*/g) ?? []) expect(DRAWING_TAGS, `${at}: ${tag}`).toContain(tag);
         // каждый значок стоит на странице вместе с остальными: одинаковые id у разных значков склеили бы их градиенты и маски
         for (const id of markup.match(/\bid="([^"]+)"/g) ?? []) {
           expect(ids.has(id), `${at}: ${id} уже есть у ${ids.get(id)}`).toBe(false);
@@ -104,6 +107,49 @@ describe('наборы значков из Iconify: файлы', () => {
     act(() => setSkinIconPack(null, null));
     expect(container.querySelector('svg svg')).toBeNull();
     expect(container.querySelector('svg')).not.toHaveAttribute('data-skin-icon');
+  });
+});
+
+describe('градиенты в значках наборов', () => {
+  it('linearGradient и radialGradient попадают в страницу с прежним регистром имени, а заливка ссылается на них (иначе значки «Глины» и «Стекла» были бы прозрачными)', () => {
+    const markup =
+      '<svg viewBox="0 0 24 24"><defs><linearGradient id="t-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f00" stop-opacity=".5"/></linearGradient><radialGradient id="t-b" cx=".5" cy=".5" r=".5"><stop offset="1" stop-color="#00f"/></radialGradient></defs><rect x="2" y="2" width="20" height="20" rx="4" fill="url(#t-a)"/><circle cx="12" cy="12" r="5" fill="url(#t-b)"/></svg>';
+    setSkinIconPack({ home: markup }, 'test');
+    const { container } = render(<Icon name="home" />);
+    expect(container.getElementsByTagName('linearGradient')).toHaveLength(1);
+    expect(container.getElementsByTagName('radialGradient')).toHaveLength(1);
+    expect(container.getElementsByTagName('stop')[0]).toHaveAttribute('stop-color', '#f00');
+    expect(container.getElementsByTagName('stop')[0]).toHaveAttribute('stop-opacity', '.5');
+    const rect = container.querySelector('rect');
+    expect(rect).toHaveAttribute('width', '20'); // размеры у rect остаются: без них фигура не рисуется
+    const ref = /^url\(#(t-a\w+)\)$/.exec(rect?.getAttribute('fill') ?? '')?.[1]; // id получил суффикс экземпляра
+    expect(ref).toBeDefined();
+    expect(container.getElementsByTagName('linearGradient')[0]).toHaveAttribute('id', ref);
+  });
+});
+
+describe('одинаковые значки с градиентами на одной странице', () => {
+  it('у каждого экземпляра свои id, и заливка каждого ссылается на свой градиент (первый может быть в скрытом блоке и не рисоваться)', () => {
+    const markup = '<svg viewBox="0 0 24 24"><defs><linearGradient id="g1"><stop offset="0" stop-color="#f00"/></linearGradient></defs><rect width="20" height="20" fill="url(#g1)"/></svg>';
+    setSkinIconPack({ home: markup }, 'test');
+    const { container } = render(
+      <div>
+        <Icon name="home" />
+        <Icon name="home" />
+        <Glyph value="i:wife" />
+      </div>,
+    );
+    const ids = [...container.querySelectorAll('[id]')].map((e) => e.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    for (const rect of container.querySelectorAll('rect')) {
+      const ref = /url\(#([^)]+)\)/.exec(rect.getAttribute('fill') ?? '')?.[1] ?? '';
+      expect(ids, `заливка ${rect.getAttribute('fill')}`).toContain(ref);
+    }
+    // перерисовка не меняет id: градиент не мигает
+    const before = container.innerHTML;
+    act(() => setSkinIconPack({ home: markup }, 'test'));
+    expect(container.innerHTML).toBe(before);
   });
 });
 

@@ -6,7 +6,7 @@ import type { SkinId } from '../skinCore';
  * Файлы грузятся лениво и по одному, только когда образ выбран (основные) и когда на экране появился значок раздела (дополнительные). В основной файл приложения они
  * не входят, а в офлайн-кэш не кладутся (см. globIgnores в vite.config.ts): иначе при установке все скачали бы мегабайты рисунков образов, которых никогда не выберут.
  */
-export type IconPackId = 'wi-anime' | 'wi-brutal' | 'wi-kawaii' | 'wi-luxe' | 'pixelarticons' | 'sl-cyber' | 'ph-fill';
+export type IconPackId = 'wi-anime' | 'wi-brutal' | 'wi-kawaii' | 'wi-luxe' | 'wi-coquette' | 'wi-gothic' | 'wi-clay' | 'wi-liquid' | 'wi-chrome' | 'pixelarticons' | 'sl-cyber' | 'ph-fill';
 
 /** Какой набор у какого образа. У образов, которых здесь нет, значки рисуются линией их стиля (src/skinIcons.ts). */
 export const SKIN_ICONIFY: Readonly<Partial<Record<SkinId, IconPackId>>> = {
@@ -17,6 +17,11 @@ export const SKIN_ICONIFY: Readonly<Partial<Record<SkinId, IconPackId>>> = {
   pixel: 'pixelarticons',
   cyber: 'sl-cyber',
   racing: 'ph-fill',
+  coquette: 'wi-coquette',
+  gothic: 'wi-gothic',
+  clay: 'wi-clay',
+  liquid: 'wi-liquid',
+  chrome: 'wi-chrome',
 };
 
 type PackFile = { ICONS: Readonly<Record<string, string>> };

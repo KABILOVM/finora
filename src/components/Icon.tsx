@@ -1,4 +1,4 @@
-import { createElement, type ReactNode, type SVGProps } from 'react';
+import { createElement, useId, useMemo, type ReactNode, type SVGProps } from 'react';
 import { DUO, LINE } from './iconData';
 import { skinIconKey, skinIconMarkup, useSkinIconPack } from './skinIconStore';
 
@@ -28,17 +28,32 @@ const propName = (attr: string) => (/^(data|aria)-/.test(attr) ? attr : attr.rep
 function toReact(node: Element, key: number): ReactNode {
   const props: Record<string, string> = { key: String(key) };
   for (const a of Array.from(node.attributes)) props[propName(a.name)] = a.value;
-  return createElement(node.tagName.toLowerCase(), props, ...Array.from(node.children).map(toReact));
+  // имя тега как в разметке: у SVG оно чувствительно к регистру (linearGradient, radialGradient), в нижнем регистре браузер градиент не узнает
+  return createElement(node.tagName, props, ...Array.from(node.children).map(toReact));
 }
+
+const parse = (markup: string): ReactNode =>
+  Array.from(new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${markup}</svg>`, 'image/svg+xml').documentElement.children).map(toReact);
 
 function shapes(name: string, markup: string): ReactNode {
   let nodes = cache.get(name);
   if (nodes === undefined) {
-    const svg = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${markup}</svg>`, 'image/svg+xml').documentElement;
-    nodes = Array.from(svg.children).map(toReact);
+    nodes = parse(markup);
     cache.set(name, nodes);
   }
   return nodes;
+}
+
+/**
+ * Разметка значка. Если в ней есть id (градиенты у цветных наборов образов), одинаковые id у двух экземпляров значка на странице нельзя: браузер берёт первый, а он
+ * может сидеть в скрытом блоке (боковое меню на телефоне, display:none), и заливка пропадает. Поэтому каждому экземпляру — свой суффикс id (useId), без общего кэша.
+ */
+function useShapes(key: string, markup: string): ReactNode {
+  const suffix = useId().replace(/:/g, '');
+  return useMemo(
+    () => (markup.includes(' id="') ? parse(markup.replace(/\bid="([^"]+)"/g, `id="$1${suffix}"`).replace(/url\(#([^)]+)\)/g, `url(#$1${suffix})`)) : shapes(key, markup)),
+    [key, markup, suffix],
+  );
 }
 
 export function Icon({ name, size = 24, label, strokeWidth = 2.2, ...rest }: IconProps) {
@@ -46,6 +61,7 @@ export function Icon({ name, size = 24, label, strokeWidth = 2.2, ...rest }: Ico
   const custom = skinIconMarkup(name);
   const isLine = custom === null && name in LINE;
   const html = custom ?? (isLine ? LINE[name as keyof typeof LINE] : DUO[name as keyof typeof DUO]);
+  const shapesOf = useShapes(skinIconKey(name), html);
   return (
     <svg
       width={size}
@@ -63,7 +79,7 @@ export function Icon({ name, size = 24, label, strokeWidth = 2.2, ...rest }: Ico
       data-skin-icon={custom === null ? undefined : ''}
       {...rest}
     >
-      {shapes(skinIconKey(name), html)}
+      {shapesOf}
     </svg>
   );
 }
@@ -78,9 +94,10 @@ export interface DuoMarkupProps extends Omit<SVGProps<SVGSVGElement>, 'name' | '
 
 /** Значок по готовой разметке, не из iconData.ts: дополнительные значки приходят из ленивых файлов (см. glyphExtras.ts). Рисуется так же, как Icon. */
 export function DuoMarkup({ cacheKey, markup, size = 24, ...rest }: DuoMarkupProps) {
+  const children = useShapes(`extra:${cacheKey}`, markup);
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" {...rest}>
-      {shapes(`extra:${cacheKey}`, markup)}
+      {children}
     </svg>
   );
 }

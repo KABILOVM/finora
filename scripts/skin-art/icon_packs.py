@@ -108,13 +108,18 @@ PACKS = {
     'wi-brutal': ('withicons-brutal', '', 'with icons Brutal (Evergrow)', 'MIT'),
     'wi-kawaii': ('withicons-kawaii', '', 'with icons Kawaii (Evergrow)', 'MIT'),
     'wi-luxe': ('withicons-luxe', '', 'with icons Luxe (Evergrow)', 'MIT'),
+    'wi-coquette': ('withicons-coquette', '', 'with icons Coquette (Evergrow)', 'MIT'),
+    'wi-gothic': ('withicons-gothic', '', 'with icons Gothic (Evergrow)', 'MIT'),
+    'wi-clay': ('withicons-clay', '', 'with icons Clay (Evergrow)', 'MIT'),
+    'wi-liquid': ('withicons-liquid', '', 'with icons Liquid (Evergrow)', 'MIT'),
+    'wi-chrome': ('withicons-chrome', '', 'with icons Chrome (Evergrow)', 'MIT'),
     'pixelarticons': ('pixelarticons', '', 'Pixelarticons (Gerrit Halfmann)', 'MIT'),
     'sl-cyber': ('streamline-cyber', '', 'Streamline Cyber (Streamline)', 'CC BY 4.0'),
     'ph-fill': ('ph', '-fill', 'Phosphor Fill (Phosphor Icons)', 'MIT'),
 }
 
 # Наборы с тяжёлыми значками (десятки КБ на значок) сжимаются svgo до одного знака после запятой: на размере значка в приложении разницы не видно, а файл втрое легче.
-OPTIMIZE = {'wi-anime': 1, 'wi-brutal': 1, 'wi-luxe': 1, 'wi-kawaii': 1}
+OPTIMIZE = {'wi-anime': 1, 'wi-brutal': 1, 'wi-luxe': 1, 'wi-kawaii': 1, 'wi-coquette': 1, 'wi-gothic': 1, 'wi-clay': 1, 'wi-liquid': 1, 'wi-chrome': 1}
 
 
 def curl(url: str) -> str:
@@ -157,8 +162,7 @@ def resolve(prefix: str, suffix: str, names: set[str], over: dict[str, list[str]
 
 
 def clean_body(body: str, uid: str) -> str:
-    body = re.sub(r'\sclass="[^"]*"', '', body)  # служебные классы набора
-    body = re.sub(r'\s(width|height)="[^"]*"', '', body)
+    body = re.sub(r'\sclass="[^"]*"', '', body)  # служебные классы набора (width и height не трогаем: они нужны у rect)
     for i in set(re.findall(r'\bid="([^"]+)"', body)):  # id внутри рисунка делаем уникальными: значки стоят на одной странице
         nid = f'{uid}-{i}'
         body = body.replace(f'id="{i}"', f'id="{nid}"').replace(f'url(#{i})', f'url(#{nid})').replace(f'href="#{i}"', f'href="#{nid}"')

@@ -58,6 +58,11 @@ export const SKINS: readonly SkinOption[] = [
   { id: 'racing', label: 'Гонки', hint: 'Карбон и красная полоса', group: 'style', bar: SKIN_BARS.racing },
   { id: 'cyber', label: 'Киберпанк', hint: 'Неон, сетка и ночь', group: 'style', bar: SKIN_BARS.cyber },
   { id: 'pixel', label: 'Пиксель', hint: 'Оттенки зелёного, как на старой приставке', group: 'style', bar: SKIN_BARS.pixel },
+  { id: 'coquette', label: 'Кокетка', hint: 'Бантики, жемчуг и нежно-розовый', group: 'style', bar: SKIN_BARS.coquette },
+  { id: 'gothic', label: 'Готика', hint: 'Бордо, серебро и витраж', group: 'style', bar: SKIN_BARS.gothic },
+  { id: 'clay', label: 'Глина', hint: 'Мягкие объёмные фигурки и пастель', group: 'style', bar: SKIN_BARS.clay },
+  { id: 'liquid', label: 'Жидкое стекло', hint: 'Прозрачные шары и синие блики', group: 'style', bar: SKIN_BARS.liquid },
+  { id: 'chrome', label: 'Y2K-хром', hint: 'Серебро, блеск и пузыри нулевых', group: 'style', bar: SKIN_BARS.chrome },
 ];
 
 export { DEFAULT_SKIN };
