@@ -321,5 +321,43 @@
    "transport",
    "work"
   ]
+ },
+ {
+  "id": "wi-pastel",
+  "prefix": "withicons-pastel",
+  "title": "with icons Pastel (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-soft3d",
+  "prefix": "withicons-soft3d",
+  "title": "with icons Soft 3D (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
  }
 ]

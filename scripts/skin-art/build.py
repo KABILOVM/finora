@@ -223,7 +223,7 @@ def sq(rel: str, fx: float, fy: float, zoom: float = 1.0) -> Image.Image:
 
 
 # «Стилевые» образы: свои векторные рисунки (draw_styles.py → rasterize.cjs), правым нижним «вырезом»
-for style_id, frac in (('coquette', 0.74), ('gothic', 0.8), ('clay', 0.72), ('liquid', 0.74), ('chrome', 0.78), ('retro', 0.76), ('bauhaus', 0.74), ('sticker', 0.76), ('notebook', 0.78), ('dungeon', 0.78)):
+for style_id, frac in (('coquette', 0.74), ('gothic', 0.8), ('clay', 0.72), ('liquid', 0.74), ('chrome', 0.78), ('retro', 0.76), ('bauhaus', 0.74), ('sticker', 0.76), ('notebook', 0.78), ('dungeon', 0.78), ('graffiti', 0.8), ('cafe', 0.76), ('nowruz', 0.78)):
     cutout(style_id, tmp(f'{style_id}-hero.png'), frac, pad=0.03)
 marks = {'barca': tmp('barca-crest.png'), 'real': tmp('real-crest.png')}
 for key, im in marks.items():
@@ -250,7 +250,7 @@ thumbs = {
     'racing': sq('photos/racing-f1.jpg', 0.65, 0.5, 2.2),
     'cyber': sq('photos/cyber-shibuya.jpg', 0.78, 0.3, 2.4),
     'pixel': sq('photos/pixel-scene.png', 0.76, 0.42, 2.2),
-    **{style_id: tmp(f'{style_id}-thumb.png') for style_id in ('coquette', 'gothic', 'clay', 'liquid', 'chrome', 'retro', 'bauhaus', 'sticker', 'notebook', 'dungeon')},
+    **{style_id: tmp(f'{style_id}-thumb.png') for style_id in ('coquette', 'gothic', 'clay', 'liquid', 'chrome', 'retro', 'bauhaus', 'sticker', 'notebook', 'dungeon', 'graffiti', 'cafe', 'nowruz')},
 }
 FULL = {'classic', 'barca', 'real', 'shinobi', 'argentina'}  # значок-герб или картинка с прозрачным фоном: вписываем целиком
 def on_dark(im: Image.Image) -> Image.Image:

@@ -68,6 +68,9 @@ export const SKINS: readonly SkinOption[] = [
   { id: 'sticker', label: 'Скрапбук', hint: 'Бумага, наклейки и скотч', group: 'style', bar: SKIN_BARS.sticker },
   { id: 'notebook', label: 'Школьная тетрадь', hint: 'Клетка, синяя ручка и красные поля', group: 'style', bar: SKIN_BARS.notebook },
   { id: 'dungeon', label: 'Подземелье', hint: 'Тёмное дерево, золото и сундук', group: 'style', bar: SKIN_BARS.dungeon },
+  { id: 'graffiti', label: 'Граффити', hint: 'Кирпич, баллончик и яркие кляксы', group: 'style', bar: SKIN_BARS.graffiti },
+  { id: 'cafe', label: 'Кофейня', hint: 'Мокко, сирень и тихий вечер', group: 'style', bar: SKIN_BARS.cafe },
+  { id: 'nowruz', label: 'Навруз', hint: 'Тюльпаны, солнце и росток', group: 'style', bar: SKIN_BARS.nowruz },
 ];
 
 export { DEFAULT_SKIN };

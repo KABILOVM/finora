@@ -33,6 +33,9 @@ import thumbBauhaus from './assets/skins/art/bauhaus-thumb.webp';
 import thumbSticker from './assets/skins/art/sticker-thumb.webp';
 import thumbNotebook from './assets/skins/art/notebook-thumb.webp';
 import thumbDungeon from './assets/skins/art/dungeon-thumb.webp';
+import thumbGraffiti from './assets/skins/art/graffiti-thumb.webp';
+import thumbCafe from './assets/skins/art/cafe-thumb.webp';
+import thumbNowruz from './assets/skins/art/nowruz-thumb.webp';
 
 export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   classic: thumbClassic,
@@ -64,4 +67,7 @@ export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   sticker: thumbSticker,
   notebook: thumbNotebook,
   dungeon: thumbDungeon,
+  graffiti: thumbGraffiti,
+  cafe: thumbCafe,
+  nowruz: thumbNowruz,
 };

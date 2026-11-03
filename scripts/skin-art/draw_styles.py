@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Рисует картинки «стилевых» образов (Кокетка, Готика, Глина, Жидкое стекло, Y2K-хром, Ретро, Баухаус, Скрапбук, Тетрадь, Подземелье) векторными рисунками: ничьих чужих материалов в них нет, всё нарисовано здесь.
+Рисует картинки «стилевых» образов (Кокетка, Готика, Глина, Жидкое стекло, Y2K-хром, Ретро, Баухаус, Скрапбук, Тетрадь, Подземелье, Граффити, Кофейня, Навруз) векторными рисунками: ничьих чужих материалов в них нет, всё нарисовано здесь.
 Запуск из корня репозитория: python3 scripts/skin-art/draw_styles.py
 
 Что получается (src/assets/skins/<образ>/svg/):
@@ -277,6 +277,92 @@ def dungeon() -> tuple[str, str]:
     return defs, body + spark(44, 70, 1.3) + spark(282, 56, 1.1) + spark(272, 190, 0.9) + spark(48, 190, 0.8)
 
 
+# ---------------------------------------------------------------- Граффити: баллончик, корона и брызги
+def graffiti() -> tuple[str, str]:
+    defs = (
+        lin('gf-can', [(0, '#f4f5f8'), (0.5, '#c9ccd6'), (1, '#8d92a3')], 0, 0, 1, 0)
+        + rad('gf-spray', [(0, '#00e0b0', 0.85), (1, '#00e0b0', 0)], 0.5, 0.5, 0.5)
+    )
+    ink = '#17171c'
+    splat = 'M60 150 C40 130 52 100 80 104 C84 80 118 76 128 98 C152 92 170 112 158 134 C176 150 160 178 136 170 C124 190 92 190 84 170 C66 176 48 164 60 150 Z'
+    body = (
+        # бирюзовое облако и розовая клякса с потёками
+        '<circle cx="118" cy="120" r="84" fill="url(#gf-spray)"/>'
+        f'<path d="{splat}" fill="#ff3d71" stroke="{ink}" stroke-width="5" stroke-linejoin="round" transform="translate(-6 20)"/>'
+        f'<g fill="#ff3d71" stroke="{ink}" stroke-width="4"><rect x="54" y="176" width="12" height="38" rx="6"/><rect x="92" y="186" width="12" height="26" rx="6"/><rect x="128" y="174" width="12" height="44" rx="6"/></g>'
+        # корона
+        f'<path d="M58 118 L70 66 L96 96 L122 56 L148 96 L174 66 L186 118 Z" fill="#ffd400" stroke="{ink}" stroke-width="5" stroke-linejoin="round"/>'
+        f'<rect x="58" y="118" width="128" height="16" rx="3" fill="#ffd400" stroke="{ink}" stroke-width="5"/>'
+        f'<circle cx="70" cy="62" r="6" fill="#ff3d71" stroke="{ink}" stroke-width="3"/><circle cx="122" cy="52" r="6" fill="#00e0b0" stroke="{ink}" stroke-width="3"/><circle cx="174" cy="62" r="6" fill="#ff3d71" stroke="{ink}" stroke-width="3"/>'
+        # баллончик
+        f'<g transform="translate(236 122) rotate(18)"><rect x="-34" y="-8" width="68" height="110" rx="14" fill="url(#gf-can)" stroke="{ink}" stroke-width="5"/>'
+        f'<rect x="-34" y="30" width="68" height="26" fill="#ff3d71" stroke="{ink}" stroke-width="4"/>'
+        f'<rect x="-22" y="-32" width="44" height="30" rx="8" fill="{ink}"/><rect x="-6" y="-46" width="12" height="16" rx="3" fill="#ffd400" stroke="{ink}" stroke-width="3"/>'
+        '<path d="M-24 4 V92" stroke="#fff" stroke-opacity=".6" stroke-width="5" stroke-linecap="round"/></g>'
+        '<g fill="#00e0b0"><circle cx="196" cy="62" r="5"/><circle cx="178" cy="46" r="3.6"/><circle cx="206" cy="42" r="4"/><circle cx="188" cy="30" r="2.8"/><circle cx="212" cy="76" r="3"/></g>'
+        f'<path d="M26 210 C60 236 120 236 160 214 M146 202 L162 214 L142 224" fill="none" stroke="{ink}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+    )
+    return defs, body
+
+
+# ---------------------------------------------------------------- Кофейня: чашка, круассан и пар
+def cafe() -> tuple[str, str]:
+    defs = (
+        lin('cf-cup', [(0, '#e9dcff'), (1, '#b79cf5')], 0, 0, 1, 1)
+        + lin('cf-cof', [(0, '#8a5a3a'), (1, '#4a2b1a')], 0, 0, 0, 1)
+        + lin('cf-cro', [(0, '#ffd0a0'), (0.5, '#f5a05a'), (1, '#c8702a')], 0, 0, 0, 1)
+        + lin('cf-pl', [(0, '#ffffff'), (1, '#c8cdf0')], 0, 0, 0, 1)
+    )
+    steam = ''.join(f'<path d="M{x} 78 C{x - 14} 58 {x + 14} 46 {x} 24" fill="none" stroke="#cdd6f4" stroke-opacity=".75" stroke-width="6" stroke-linecap="round"/>' for x in (130, 160, 190))
+    body = (
+        steam
+        + '<ellipse cx="160" cy="206" rx="112" ry="20" fill="url(#cf-pl)" stroke="#9aa4d8" stroke-width="3"/><ellipse cx="160" cy="200" rx="86" ry="13" fill="#e3e6fb"/>'
+        '<path d="M96 96 H224 V150 C224 188 196 206 160 206 C124 206 96 188 96 150 Z" fill="url(#cf-cup)" stroke="#7c5bd0" stroke-width="4" stroke-linejoin="round"/>'
+        '<path d="M224 108 C262 100 266 160 222 160" fill="none" stroke="#7c5bd0" stroke-width="10" stroke-linecap="round"/><path d="M224 108 C258 102 262 156 222 156" fill="none" stroke="#b79cf5" stroke-width="5" stroke-linecap="round"/>'
+        '<ellipse cx="160" cy="96" rx="64" ry="14" fill="url(#cf-cof)" stroke="#7c5bd0" stroke-width="4"/>'
+        '<path d="M160 100 C132 88 146 74 160 86 C174 74 188 88 160 100 Z" fill="#fbe9d0" transform="translate(0 -3) scale(1 .8) translate(0 20)"/>'
+        '<path d="M110 120 C112 160 130 186 150 190" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="5" stroke-linecap="round"/>'
+        # круассан
+        '<g transform="translate(52 196) rotate(-14)"><path d="M-44 6 C-40 -30 -6 -42 0 -42 C6 -42 40 -30 44 6 C30 18 -30 18 -44 6 Z" fill="url(#cf-cro)" stroke="#9a5420" stroke-width="3.5" stroke-linejoin="round"/>'
+        '<path d="M-22 -26 C-18 -6 -16 4 -16 12 M0 -34 C2 -12 2 4 2 14 M22 -26 C18 -6 16 4 16 12" fill="none" stroke="#9a5420" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>'
+        # зёрна
+        + ''.join(f'<g transform="translate({x} {y}) rotate({r})"><ellipse rx="9" ry="12" fill="#5a3520" stroke="#2a180b" stroke-width="2"/><path d="M0 -10 C-4 -3 4 3 0 10" fill="none" stroke="#2a180b" stroke-width="2"/></g>' for x, y, r in [(272, 202, 30), (292, 180, -20), (256, 224, 60), (36, 70, 20), (292, 60, -40)])
+    )
+    return defs, body
+
+
+# ---------------------------------------------------------------- Навруз: тюльпаны, солнце и расписное яйцо
+def nowruz() -> tuple[str, str]:
+    defs = (
+        rad('nw-sun', [(0, '#fff3a0', 1), (1, '#f5c518', 1)], 0.4, 0.35, 0.8)
+        + lin('nw-leaf', [(0, '#6fdc95'), (1, '#2f9e5b')], 0, 0, 1, 1)
+        + lin('nw-egg', [(0, '#fff2d6'), (1, '#f1b8d0')], 0, 0, 0, 1)
+    )
+
+    def tulip(x: float, y: float, c1: str, c2: str, s: float = 1.0) -> str:
+        return (
+            f'<g transform="translate({x} {y}) scale({s})">'
+            f'<path d="M0 0 C-2 40 -2 70 0 110" fill="none" stroke="#2f9e5b" stroke-width="6" stroke-linecap="round"/>'
+            f'<path d="M0 108 C-30 96 -40 60 -34 34 C-14 50 -4 76 0 108 Z" fill="url(#nw-leaf)" stroke="#1f7a45" stroke-width="2"/>'
+            f'<path d="M0 108 C30 98 40 66 34 44 C14 56 4 80 0 108 Z" fill="url(#nw-leaf)" stroke="#1f7a45" stroke-width="2"/>'
+            f'<path d="M-24 -30 C-30 10 -12 30 0 30 C12 30 30 10 24 -30 L12 -12 L0 -34 L-12 -12 Z" fill="{c1}" stroke="{c2}" stroke-width="3" stroke-linejoin="round"/>'
+            f'<path d="M-6 -4 C-8 10 -4 22 0 26 C4 22 8 10 6 -4" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/></g>'
+        )
+
+    rays = ''.join(f'<path transform="rotate({a} 70 70)" d="M70 8 V24" stroke="#f5c518" stroke-width="6" stroke-linecap="round"/>' for a in range(0, 360, 30))
+    body = (
+        f'<g transform="translate(14 8)">{rays}<circle cx="70" cy="70" r="40" fill="url(#nw-sun)" stroke="#e0a800" stroke-width="3"/></g>'
+        + tulip(150, 100, '#ff5f8f', '#c2306a', 1.05) + tulip(210, 112, '#ffd23f', '#d89a00', 0.95) + tulip(104, 128, '#e63a2e', '#a01c14', 0.85)
+        # расписное яйцо
+        + '<g transform="translate(266 192) rotate(12)"><path d="M0 -40 C28 -40 38 -4 38 14 C38 40 20 50 0 50 C-20 50 -38 40 -38 14 C-38 -4 -28 -40 0 -40 Z" fill="url(#nw-egg)" stroke="#c2306a" stroke-width="3"/>'
+        '<path d="M-36 6 L-24 -6 L-12 6 L0 -6 L12 6 L24 -6 L36 6" fill="none" stroke="#2f9e5b" stroke-width="4" stroke-linejoin="round"/><path d="M-34 26 L-22 16 L-10 26 L2 16 L14 26 L26 16 L36 24" fill="none" stroke="#ff5f8f" stroke-width="4" stroke-linejoin="round"/>'
+        '<circle cx="-14" cy="-20" r="4" fill="#ffd23f"/><circle cx="12" cy="-22" r="3.4" fill="#2f9e5b"/></g>'
+        # цветки и росточки
+        + ''.join(f'<g transform="translate({x} {y})"><circle r="5" fill="#fff3a0"/>' + ''.join(f'<circle cx="{7 * __import__("math").cos(a):.1f}" cy="{7 * __import__("math").sin(a):.1f}" r="4.2" fill="#ffffff" stroke="#f1b8d0" stroke-width="1.2"/>' for a in [i * 1.2566 for i in range(5)]) + '</g>' for x, y in [(40, 190), (74, 214), (296, 70)])
+    )
+    return defs, body
+
+
 # id -> (рисунок, фон значка: два цвета градиента)
 ART = {
     'coquette': (coquette, ('#ffe7ef', '#f6b6cb')),
@@ -289,6 +375,9 @@ ART = {
     'sticker': (sticker, ('#fff0b8', '#ffc6dc')),
     'notebook': (notebook, ('#eef2ff', '#c9d3f5')),
     'dungeon': (dungeon, ('#3b2412', '#140f0b')),
+    'graffiti': (graffiti, ('#2e2e3a', '#17171c')),
+    'cafe': (cafe, ('#3a3a55', '#1e1e2e')),
+    'nowruz': (nowruz, ('#e5f6d8', '#f6e08a')),
 }
 
 def main() -> None:

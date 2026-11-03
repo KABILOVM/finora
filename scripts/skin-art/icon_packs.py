@@ -138,13 +138,15 @@ PACKS = {
     'wi-sticker': ('withicons-sticker', '', 'with icons Sticker (Evergrow)', 'MIT'),
     'pp-pencil': ('pepicons-pencil', '', 'Pepicons Pencil (CyCraft)', 'CC BY 4.0'),
     'game-icons': ('game-icons', '', 'Game-icons.net (Lorc, Delapouite и другие авторы)', 'CC BY 3.0'),
+    'wi-pastel': ('withicons-pastel', '', 'with icons Pastel (Evergrow)', 'MIT'),
+    'wi-soft3d': ('withicons-soft3d', '', 'with icons Soft 3D (Evergrow)', 'MIT'),
     'pixelarticons': ('pixelarticons', '', 'Pixelarticons (Gerrit Halfmann)', 'MIT'),
     'sl-cyber': ('streamline-cyber', '', 'Streamline Cyber (Streamline)', 'CC BY 4.0'),
     'ph-fill': ('ph', '-fill', 'Phosphor Fill (Phosphor Icons)', 'MIT'),
 }
 
 # Наборы с тяжёлыми значками (десятки КБ на значок) сжимаются svgo до одного знака после запятой: на размере значка в приложении разницы не видно, а файл втрое легче.
-OPTIMIZE = {'wi-anime': 1, 'wi-brutal': 1, 'wi-luxe': 1, 'wi-kawaii': 1, 'wi-coquette': 1, 'wi-gothic': 1, 'wi-clay': 1, 'wi-liquid': 1, 'wi-chrome': 1, 'wi-retro': 1, 'wi-bauhaus': 1, 'wi-sticker': 1}
+OPTIMIZE = {'wi-anime': 1, 'wi-brutal': 1, 'wi-luxe': 1, 'wi-kawaii': 1, 'wi-coquette': 1, 'wi-gothic': 1, 'wi-clay': 1, 'wi-liquid': 1, 'wi-chrome': 1, 'wi-retro': 1, 'wi-bauhaus': 1, 'wi-sticker': 1, 'wi-pastel': 1, 'wi-soft3d': 1}
 
 
 def curl(url: str) -> str:
