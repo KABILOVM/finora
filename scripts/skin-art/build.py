@@ -147,19 +147,15 @@ hero('real', cover('real-madrid/images/hala-madrid-pitch.webp', 0.5, 0.72), 0.05
 TAJ = [(0, (30, 6, 20)), (0.4, (110, 18, 40)), (0.75, (190, 90, 50)), (1, (236, 190, 110))]
 hero('tajik', gradient_map(cover('photos/tajik-flagpole.jpg', 0.44, 0.3, 1.8), TAJ), 0.04, 0.45)  # душанбинский флагшток (165 м) в закатной дымке, цвета образа
 hero('spain', cover('photos/spain-flag.jpg', 0.55, 0.5, 1.0), 0.05, 0.55)  # огромный флаг на площади Колумба в Мадриде
-hero('argentina', cover('photos/argentina-flag.jpg', 0.43, 0.2, 2.2), 0.03, 0.45)  # флаг Аргентины с «Солнцем мая» на мачте
-# Памир: хребет над озером Каракуль в ледяных сине-голубых цветах (фото CC BY-SA 4.0, см. CREDITS.md).
-PAM = [(0, (6, 12, 38)), (0.35, (22, 44, 96)), (0.7, (60, 120, 150)), (1, (190, 215, 225))]
-hero('pamir', gradient_map(cover('tajik/photos/karakul-lake.jpg', 0.5, 0.40, 1.5), PAM), 0.05, 0.60)
-# Стили: настоящие фото (Unsplash и др.), у «Пикселя» ещё и в цветах Game Boy.
+# Памир: «Гималаи, Сикким» Николая Рериха (картина, общественное достояние): ночные снежные вершины и месяц в сине-бирюзовых тонах.
+hero('pamir', cover('photos/pamir-roerich.jpg', 0.58, 0.62, 1.45), 0.0, 0.4)
+# Стили: настоящие фото (Unsplash), у «Пикселя» своя пиксельная картинка в зелёных оттенках Game Boy.
 hero('football', cover('photos/football-night.jpg', 0.5, 0.62, 1.0), 0.05, 0.55)
 hero('racing', cover('photos/racing-f1.jpg', 0.62, 0.45, 1.0), 0.05, 0.55)
 hero('cyber', cover('photos/cyber-shibuya.jpg', 0.5, 0.45, 1.0), 0.05, 0.55)
 hero('aesthetic', cover('photos/aesthetic-roses.jpg', 0.5, 0.35, 1.0), 0.05, 0.55)
 hero('kawaii', cover('photos/kawaii-unicorn.jpg', 0.5, 0.5, 1.0), 0.05, 0.55)
 hero('comic', cover('photos/comic-superhero.jpg', 0.5, 0.42, 1.0), 0.05, 0.55)
-GB = [(0, (15, 38, 15)), (0.5, (48, 98, 48)), (1, (155, 188, 15))]
-hero('pixel', gradient_map(cover('photos/pixel-retro-tv.jpg', 0.5, 0.5, 1.15), GB), 0.05, 0.55)
 
 
 # ---- «вырезы»: герой на прозрачном фоне, в правом нижнем углу ----
@@ -183,6 +179,17 @@ def cutout(name: str, im: Image.Image, frac: float, pad: float = 0.04) -> None:
 cutout('spider', key_black(load('spider/images/hero-dynamic.webp'), 1.6), 0.88)
 cutout('messi', feather_top(feather_left(load('barca/images/messi-10-art.webp'), 0.0, 0.55), 0.3), 0.74, pad=0.0)
 cutout('shinobi', load('shinobi/png/rasengan.png'), 0.72, pad=0.0)
+# Пиксель: своя пиксельная картинка (scripts/skin-art/pixel_scene.py) правой частью в правом нижнем углу; слева и сверху плавно исчезает,
+# а яркость не ограничена, чтобы остались настоящие зелёные оттенки Game Boy.
+scene = load('photos/pixel-scene.png').crop((280, 0, 640, 320))
+scene = feather_top(feather_left(scene, 0.0, 0.45), 0.2)
+ph = round(H * 0.66)
+pw = round(scene.width * ph / scene.height)
+canvas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+canvas.alpha_composite(scene.resize((pw, ph), Image.NEAREST), (W - pw, H - ph))
+save(canvas, 'pixel-hero.webp', 80)
+# Аргентина: «Солнце мая» с флага (рисунок общественного достояния), золотое на синем.
+cutout('argentina', load('photos/sol-de-mayo.png'), 0.74, pad=0.03)
 # Роналду: портрет в цветах образа (чёрное, гранат, золото), по высоте карточки у правого края, слева уходит в прозрачность.
 CR = [(0, (8, 6, 8)), (0.45, (120, 16, 32)), (0.8, (200, 140, 40)), (1, (240, 210, 130))]
 portrait = feather_top(feather_left(cap_luminance(gradient_map(load('photos/cr7.jpg'), CR)), 0.0, 0.6), 0.3)
@@ -224,7 +231,7 @@ thumbs = {
     'classic': tmp('classic-icon.png'),
     'barca': marks['barca'],
     'real': marks['real'],
-    'argentina': sq('photos/argentina-flag.jpg', 0.43, 0.2, 3.0),
+    'argentina': load('photos/sol-de-mayo.png'),
     'messi': sq('barca/images/messi-10-art.webp', 0.62, 0.30, 2.4),
     'spain': sq('photos/spain-flag-detail.jpg', 0.42, 0.4, 1.5),
     'cr7': sq('photos/cr7.jpg', 0.5, 0.28, 1.7),
@@ -234,14 +241,14 @@ thumbs = {
     'spider': key_black(crop_cover(load('spider/images/hero-mask-closeup.webp'), fx=0.5, fy=0.5, zoom=1.05, ratio=1.0)),
     'comic': sq('photos/comic-superhero.jpg', 0.55, 0.5, 2.2),
     'tajik': sq('photos/tajik-flagpole-view.jpg', 0.34, 0.5, 1.5),  # флаг Таджикистана с высоты флагштока
-    'pamir': sq('tajik/photos/karakul-lake.jpg', 0.5, 0.42, 2.0),
+    'pamir': sq('photos/pamir-roerich.jpg', 0.52, 0.55, 1.7),
     'kawaii': sq('photos/kawaii-unicorn.jpg', 0.45, 0.4, 2.0),
     'aesthetic': sq('photos/aesthetic-roses.jpg', 0.5, 0.45, 1.5),
     'racing': sq('photos/racing-f1.jpg', 0.65, 0.5, 2.2),
     'cyber': sq('photos/cyber-shibuya.jpg', 0.78, 0.3, 2.4),
-    'pixel': sq('photos/pixel-retro-tv.jpg', 0.5, 0.45, 2.0),
+    'pixel': sq('photos/pixel-scene.png', 0.76, 0.42, 2.2),
 }
-FULL = {'classic', 'barca', 'real', 'shinobi'}  # значок-герб или картинка с прозрачным фоном: вписываем целиком
+FULL = {'classic', 'barca', 'real', 'shinobi', 'argentina'}  # значок-герб или картинка с прозрачным фоном: вписываем целиком
 def on_dark(im: Image.Image) -> Image.Image:
     """Прозрачная картинка на тёмном фоне: файл заметно легче, чем с прозрачностью."""
     bg = Image.new('RGBA', im.size, (12, 14, 30, 255))
