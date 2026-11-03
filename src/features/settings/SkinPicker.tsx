@@ -1,6 +1,7 @@
 import { useId, useRef, type KeyboardEvent } from 'react';
 import { Icon } from '@/components/Icon';
 import { cn } from '@/lib/cn';
+import { SKIN_THUMBS } from '@/skinThumbs';
 import { SKIN_GROUPS, SKINS, type SkinId } from '@/skins';
 
 export interface SkinPickerProps {
@@ -11,7 +12,7 @@ export interface SkinPickerProps {
 /**
  * Выбор образа: «Классика» и готовые образы, по разделам (футбол, кино и аниме, национальные, стили). Одна радиогруппа, как у выбора
  * цвета: в группу заходят одним Tab, внутри — стрелками по всему списку (разделы — только заголовки над карточками).
- * Три цветные точки на карточке — просто образец (фон, главный и второй цвет образа), на сам образ они не влияют.
+ * Слева на карточке: значок образа (герб, флаг, герой или иллюстрация; src/skinThumbs.ts). Он просто показывает, о чём образ, на сам образ не влияет.
  */
 export function SkinPicker({ value, onChange }: SkinPickerProps) {
   const labelId = useId();
@@ -68,11 +69,16 @@ export function SkinPicker({ value, onChange }: SkinPickerProps) {
                         selected ? 'border-brand bg-brand/10' : 'border-border bg-surface hover:bg-surface-2',
                       )}
                     >
-                      <span aria-hidden="true" className="flex shrink-0 -space-x-2">
-                        {skin.swatch.map((color, k) => (
-                          <span key={k} style={{ backgroundColor: color }} className="h-7 w-7 rounded-full border-2 border-surface shadow-sm" />
-                        ))}
-                      </span>
+                      <img
+                        src={SKIN_THUMBS[skin.id]}
+                        alt=""
+                        width={44}
+                        height={44}
+                        loading="lazy"
+                        decoding="async"
+                        data-skin-thumb={skin.id}
+                        className="h-11 w-11 shrink-0 rounded-xl border border-border bg-surface-2 object-contain p-0.5"
+                      />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-semibold text-text">{skin.label}</span>
                         <span className="block text-sm text-muted">{skin.hint}</span>

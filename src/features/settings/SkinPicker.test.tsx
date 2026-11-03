@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, user } from '@/components/testUtils';
+import { SKIN_THUMBS } from '@/skinThumbs';
 import { SKIN_GROUPS, SKINS } from '@/skins';
 import { AppearanceSection } from './AppearanceSection';
 import { SkinPicker } from './SkinPicker';
@@ -50,6 +51,20 @@ describe('выбор образа', () => {
     for (const id of ['barca', 'real', 'argentina', 'messi', 'spain', 'cr7', 'football', 'shinobi', 'akatsuki', 'spider', 'comic', 'tajik', 'pamir', 'kawaii', 'aesthetic', 'racing', 'cyber', 'pixel']) {
       expect(SKINS.map((s) => s.id), id).toContain(id);
     }
+  });
+
+  it('у каждого образа на карточке свой значок (картинка), а не просто цвета', () => {
+    render(<SkinPicker value="classic" onChange={() => undefined} />);
+    const seen = new Set<string>();
+    for (const skin of SKINS) {
+      const card = document.querySelector(`[data-skin-option="${skin.id}"]`);
+      const thumb = card?.querySelector('img[data-skin-thumb]');
+      expect(thumb?.getAttribute('src'), skin.id).toBe(SKIN_THUMBS[skin.id]);
+      expect(thumb?.getAttribute('alt'), skin.id).toBe(''); // название рядом, значок — просто украшение
+      expect(card?.querySelectorAll('span[style]').length, `${skin.id}: цветных точек больше нет`).toBe(0);
+      seen.add(SKIN_THUMBS[skin.id]);
+    }
+    expect(seen.size, 'у образов разные значки').toBe(SKINS.length);
   });
 
   it('нажатие выбирает образ', async () => {
