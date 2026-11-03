@@ -20,6 +20,11 @@ export interface Release {
 
 export const RELEASES: readonly Release[] = [
   {
+    version: '0.12.1',
+    date: '2026-11-03',
+    items: [{ icon: '🎨', text: 'У образов свои наборы значков: аниме у «Шиноби», кавай, пиксельные, неоновый контур. Значки категорий и кошельков меняются вместе с образом.' }],
+  },
+  {
     version: '0.12.0',
     date: '2026-11-02',
     items: [

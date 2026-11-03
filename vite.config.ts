@@ -102,6 +102,8 @@ export default defineConfig({
         // Только файлы самого приложения. Запросы к Supabase НЕ кэшируем никогда (приватные данные).
         // Картинки образов (webp, src/assets/skins/art) намеренно не в списке: иначе их скачал бы каждый при установке, даже не выбрав образ.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
+        // Файлы наборов значков образов (assets/pack-*.js, их грузят только те, кто образ выбрал) тоже не в офлайн-кэше: целиком они весят мегабайты.
+        globIgnores: ['**/assets/pack-*.js'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [],
@@ -118,6 +120,11 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
+        // Файлы наборов значков образов (src/skinIconPacks/<набор>/<группа>.ts) называются pack-<набор>-<группа>: по имени их отличают офлайн-кэш и проверка размера.
+        chunkFileNames: (chunk) => {
+          const pack = /\/src\/skinIconPacks\/([^/]+)\/([^/]+)\.ts$/.exec(chunk.facadeModuleId ?? '');
+          return pack === null ? 'assets/[name]-[hash].js' : `assets/pack-${pack[1]}-${pack[2]}-[hash].js`;
+        },
         // Тяжёлые библиотеки — отдельными файлами: при выходе новой версии приложения они не скачиваются заново.
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;

@@ -1,9 +1,10 @@
 import type { CSSProperties } from 'react';
 import { bankById } from '@/features/wallets/banks';
-import { useExtraIconMarkup } from './glyphExtras';
+import { extraIconByName, useExtraIconMarkup } from './glyphExtras';
 import { DuoMarkup, Icon } from './Icon';
 import { resolveGlyph } from './glyphs';
 import { serviceById, serviceImageUrl, useServiceLogo } from './services';
+import { skinPackId, useSkinExtraIcon } from './skinIconStore';
 
 export interface GlyphProps {
   /** Значение поля icon категории или кошелька: «i:cup», «b:alif», «s:netflix» или эмодзи. */
@@ -28,14 +29,25 @@ function tileTint(color: string | undefined): { className: string; style: CSSPro
 }
 
 /** Дополнительный значок: плитка как у обычных, разметка приходит из ленивого файла (пока он грузится, видна пустая плитка). */
-function ExtraGlyph({ name, color, base, inner, className }: { name: string; color: string | undefined; base: CSSProperties; inner: number; className?: string }) {
-  const markup = useExtraIconMarkup(name);
+function ExtraTile({ name, markup, color, base, inner, className, fromSkin }: { name: string; markup: string | null; color: string | undefined; base: CSSProperties; inner: number; className?: string; fromSkin?: boolean }) {
   const tint = tileTint(color);
   return (
     <span aria-hidden="true" className={`inline-flex items-center justify-center ${tint.className} ${className ?? ''}`} style={{ ...base, ...tint.style }}>
-      {markup !== null && <DuoMarkup cacheKey={name} markup={markup} size={inner} />}
+      {markup !== null && <DuoMarkup cacheKey={name} markup={markup} size={inner} data-skin-icon={fromSkin ? '' : undefined} />}
     </span>
   );
+}
+
+/** Обычный (Solar) дополнительный значок: файл его раздела грузится, только когда образ своего рисунка для него не даёт. */
+function SolarExtraGlyph(props: { name: string; color: string | undefined; base: CSSProperties; inner: number; className?: string }) {
+  return <ExtraTile {...props} markup={useExtraIconMarkup(props.name)} />;
+}
+
+/** Дополнительный значок: у образа с набором значков — рисунок из набора (файл раздела набора), иначе и пока набора нет — обычный. */
+function ExtraGlyph(props: { name: string; color: string | undefined; base: CSSProperties; inner: number; className?: string }) {
+  const skin = useSkinExtraIcon(props.name, extraIconByName(props.name)?.section ?? '');
+  if (skin === undefined) return <SolarExtraGlyph {...props} />;
+  return <ExtraTile {...props} name={`${skinPackId()}:${props.name}`} markup={skin} fromSkin />;
 }
 
 /** Логотип сервиса на плитке его фирменного цвета (цвет категории не нужен). Пока файл логотипов грузится, видна пустая плитка. */

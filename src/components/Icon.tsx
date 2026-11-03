@@ -60,6 +60,7 @@ export function Icon({ name, size = 24, label, strokeWidth = 2.2, ...rest }: Ico
       aria-label={label}
       aria-hidden={label ? undefined : true}
       focusable="false"
+      data-skin-icon={custom === null ? undefined : ''}
       {...rest}
     >
       {shapes(skinIconKey(name), html)}

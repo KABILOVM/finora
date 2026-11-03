@@ -1,0 +1,135 @@
+[
+ {
+  "id": "wi-anime",
+  "prefix": "withicons-anime",
+  "title": "with icons Anime (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-brutal",
+  "prefix": "withicons-brutal",
+  "title": "with icons Brutal (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-kawaii",
+  "prefix": "withicons-kawaii",
+  "title": "with icons Kawaii (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-luxe",
+  "prefix": "withicons-luxe",
+  "title": "with icons Luxe (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "pixelarticons",
+  "prefix": "pixelarticons",
+  "title": "Pixelarticons (Gerrit Halfmann)",
+  "license": "MIT",
+  "count": 136,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "ph-fill",
+  "prefix": "ph",
+  "title": "Phosphor Fill (Phosphor Icons)",
+  "license": "MIT",
+  "count": 167,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "sl-cyber",
+  "prefix": "streamline-cyber",
+  "title": "Streamline Cyber (Streamline)",
+  "license": "CC BY 4.0",
+  "count": 135,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ }
+]

@@ -267,10 +267,14 @@ function loadSkinIcons(id: SkinId): void {
     return;
   }
   void import('./skinIcons')
-    .then((m) => {
-      if (document.documentElement.getAttribute('data-skin') === id) setSkinIconPack(m.skinIconPack(id) ?? null, id);
+    .then((m) => m.loadSkinIconPack(id))
+    .then((set) => {
+      if (document.documentElement.getAttribute('data-skin') === id) setSkinIconPack(set?.pack ?? null, id, set?.extras);
     })
-    .catch(() => undefined); // файл не загрузился (нет сети): остаются обычные значки
+    .catch(() => {
+      // файл набора не загрузился (нет сети, а в кеше браузера его нет): значки обычные, а не от прежнего образа
+      if (document.documentElement.getAttribute('data-skin') === id) setSkinIconPack(null, null);
+    });
 }
 
 export function saveSkinPref(id: SkinId): void {
