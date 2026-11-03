@@ -2496,3 +2496,13 @@ html[data-skin] .skin-hero {
 .slide-down {
   animation: slide-down 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* «Эстетика»: значки with icons Luxe тёмно-синие, на тёмной теме они тонут в плитке — подсвечиваем (значки из набора помечены data-skin-icon). */
+:root[data-theme='dark'][data-skin='aesthetic'] [data-skin-icon] {
+  filter: brightness(1.55) saturate(1.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme])[data-skin='aesthetic'] [data-skin-icon] {
+    filter: brightness(1.55) saturate(1.1);
+  }
+}

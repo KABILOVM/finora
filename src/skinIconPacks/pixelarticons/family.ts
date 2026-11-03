@@ -1,0 +1,15 @@
+// Создан scripts/skin-art/icon_packs.py. Вручную не править.
+// Набор: Pixelarticons (Gerrit Halfmann), лицензия MIT (Iconify: pixelarticons). Группа: family.
+export const ICONS: Readonly<Record<string, string>> = {
+  "family": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 2h6v2H5zm10 0h4v2h-4zM5 10h6v2H5zm10 0h4v2h-4zm4-6h2v6h-2zm-8 0h2v6h-2zM3 4h2v6H3zM0 18h2v4H0zm14 0h2v4h-2zm8 0h2v4h-2zM4 14h8v2H4zm12 0h4v2h-4zM2 16h2v2H2zm10 0h2v2h-2zm8 0h2v2h-2z\"/></svg>",
+  "wife": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M9 2h6v2H9zm0 8h6v2H9zm6-6h2v6h-2zM7 4h2v6H7zM4 18h2v4H4zm14 0h2v4h-2zM8 14h8v2H8zm-2 2h2v2H6zm10 0h2v2h-2z\"/></svg>",
+  "husband": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M9 2h6v2H9zm0 8h6v2H9zm6-6h2v6h-2zM7 4h2v6H7zM4 18h2v4H4zm14 0h2v4h-2zM8 14h8v2H8zm-2 2h2v2H6zm10 0h2v2h-2z\"/></svg>",
+  "kids": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M10 2h4v4h-4zM3 7h18v2H3zm6 2h2v7H9zm4 0h2v7h-2zm-4 7h2v6H9zm4 0h2v6h-2zm-2-2h2v2h-2z\"/></svg>",
+  "baby": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M10 2h4v4h-4zM3 7h18v2H3zm6 2h2v7H9zm4 0h2v7h-2zm-4 7h2v6H9zm4 0h2v6h-2zm-2-2h2v2h-2z\"/></svg>",
+  "toys": "<svg viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><path d=\"M15 1h6v2h-6zm-2 2h2v6h-2zm2 6h6v2h-6zm6-6h2v6h-2zM3 5h6v2H3zM1 7h2v14H1zm2 14h14v2H3zm14-6h2v6h-2zM3 13h14v2H3z\"/><path d=\"M9 7h2v14H9z\"/></g></svg>",
+  "school": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M1 10h2v10H1zm2 10h18v2H3zm18-10h2v10h-2zM3 8h4v2H3zm14 0h4v2h-4zM7 6h2v2H7zm2-2h2v2H9zm2-2h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2zm-4 2h2v2h-2zm-2 2h2v2H9zm2 2h2v2h-2zm2-2h2v2h-2zm-8 3h2v2H5zm0 4h2v2H5zm12 0h2v2h-2zm0-4h2v2h-2zm-8 5h2v2H9zm0-2h6v2H9zm4 2h2v2h-2z\"/></svg>",
+  "friends": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 2h6v2H5zm10 0h4v2h-4zM5 10h6v2H5zm10 0h4v2h-4zm4-6h2v6h-2zm-8 0h2v6h-2zM3 4h2v6H3zM0 18h2v4H0zm14 0h2v4h-2zm8 0h2v4h-2zM4 14h8v2H4zm12 0h4v2h-4zM2 16h2v2H2zm10 0h2v2h-2zm8 0h2v2h-2z\"/></svg>",
+  "couple": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M13 22h-2v-2h2zm-2-2H9v-2h2zm4 0h-2v-2h2zm-6-2H7v-2h2zm8 0h-2v-2h2zM7 16H5v-2h2zm12 0h-2v-2h2zM5 14H3v-2h2zm16 0h-2v-2h2zM3 12H1V6h2zm20 0h-2V6h2zM13 8h-2V6h2zM5 6H3V4h2zm6 0H9V4h2zm4 0h-2V4h2zm6 0h-2V4h2zM9 4H5V2h4zm10 0h-4V2h4z\"/></svg>",
+  "wedding": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M7 1h10v2H7zM5 3h2v2H5zm12 0h2v2h-2zm2 2h2v2h-2zm0 8h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2h-2zm-2-2h2v2H9zm-2-2h2v2H7zm-2-2h2v2H5zm-2-2h2v2H3zm0-8h2v2H3zM1 7h2v6H1zm20 0h2v6h-2zM3 9h18v2H3zm6-6h2v3H9zM7 6h2v3H7zm8 0h2v3h-2zm-8 5h2v2H7zm2 2h2v3H9zm2 3h2v3h-2zm2-3h2v3h-2zm2-2h2v2h-2zm-2-8h2v3h-2z\"/></svg>",
+  "charity": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M13 22h-2v-2h2zm-2-2H9v-2h2zm4 0h-2v-2h2zm-6-2H7v-2h2zm8 0h-2v-2h2zM7 16H5v-2h2zm12 0h-2v-2h2zM5 14H3v-2h2zm16 0h-2v-2h2zM3 12H1V6h2zm20 0h-2V6h2zM13 8h-2V6h2zM5 6H3V4h2zm6 0H9V4h2zm4 0h-2V4h2zm6 0h-2V4h2zM9 4H5V2h4zm10 0h-4V2h4z\"/></svg>",
+};

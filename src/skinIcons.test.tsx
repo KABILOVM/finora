@@ -145,14 +145,14 @@ describe('Icon берёт рисунок из набора образа', () => 
 });
 
 describe('выбор образа подгружает набор значков', () => {
-  it('«Пиксель» ставит пиксельный набор, другой образ — свой, «Классика» убирает набор', async () => {
+  it('«Пиксель» ставит набор Pixelarticons, другой образ — свой линейный, «Классика» убирает набор', async () => {
     const { container } = render(<Icon name="home" />);
     const plain = container.innerHTML;
     saveSkinPref('pixel');
-    await waitFor(() => expect(container.innerHTML).toContain('v2h-'));
+    await waitFor(() => expect(container.querySelector('svg svg')).not.toBeNull()); // готовый значок набора Pixelarticons: свой <svg viewBox> внутри
     saveSkinPref('barca');
     await waitFor(() => expect(container.innerHTML).toContain('stroke-linecap'));
-    expect(container.innerHTML).not.toContain('v2h-');
+    expect(container.querySelector('svg svg')).toBeNull();
     act(() => saveSkinPref('classic'));
     await waitFor(() => expect(container.innerHTML).toBe(plain));
   });

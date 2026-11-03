@@ -1,6 +1,7 @@
 import { NATIVE_ICONS, nativeShapes, nativeSvg } from './skinNativeIcons';
 import type { SkinId } from './skinCore';
-import type { SkinIconPack } from './components/skinIconStore';
+import { refreshSkinIcons, type SkinExtras, type SkinIconPack } from './components/skinIconStore';
+import { loadPackGroup, SKIN_ICONIFY } from './skinIconPacks/registry';
 
 /**
  * Наборы значков образов (свои рисунки, замены для встроенных значков из iconData.ts). Грузится лениво, только когда выбран образ с
@@ -170,4 +171,37 @@ export function skinIconPack(id: SkinId): SkinIconPack | undefined {
   const style = SKIN_ICON_STYLE[id];
   if (style === undefined) return undefined;
   return style === 'pixel' ? pack(PIXEL) : { ...linePack(style), ...nativePack(id, style) };
+}
+
+/** Дополнительные значки набора: файлы разделов грузятся по одному, по первому запросу; не загрузился (нет сети) — остаются обычные значки. */
+export function createExtras(load: (section: string) => Promise<SkinIconPack>): SkinExtras {
+  const sections = new Map<string, SkinIconPack | null>(); // null — раздел грузится
+  return {
+    get: (name, section) => {
+      const got = sections.get(section);
+      return got == null ? null : got[name];
+    },
+    ensure: (section) => {
+      if (sections.has(section)) return;
+      sections.set(section, null);
+      void load(section)
+        .catch((): SkinIconPack => ({}))
+        .then((icons) => {
+          sections.set(section, icons);
+          refreshSkinIcons();
+        });
+    },
+  };
+}
+
+/**
+ * Полный набор значков образа вместе с дополнительными: у образа с набором из Iconify (src/skinIconPacks) основные значки берутся из него, а недостающие —
+ * из линейного набора его стиля (у «Пикселя» — из собственных картинок); у остальных образов — только линейный набор. undefined — у образа набора нет.
+ */
+export async function loadSkinIconPack(id: SkinId): Promise<{ pack: SkinIconPack; extras?: SkinExtras } | undefined> {
+  const own = skinIconPack(id);
+  const iconify = SKIN_ICONIFY[id];
+  if (iconify === undefined) return own === undefined ? undefined : { pack: own };
+  const base = await loadPackGroup(iconify, 'base');
+  return { pack: { ...own, ...base }, extras: createExtras((section) => loadPackGroup(iconify, section)) };
 }

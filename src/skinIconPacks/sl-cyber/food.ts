@@ -1,0 +1,10 @@
+// Создан scripts/skin-art/icon_packs.py. Вручную не править.
+// Набор: Streamline Cyber (Streamline), лицензия CC BY 4.0 (Iconify: streamline-cyber). Группа: food.
+export const ICONS: Readonly<Record<string, string>> = {
+  "takeaway": "<svg viewBox=\"0 0 24 24\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" d=\"M18.5 9.5h-13l2 14h9zm0-3h-13l-1 3h15zM6.735 18.145l11.42-6.229m-10.89 9.939l10.27-5.601M8.5 4.5l1-1l-2-2l1-1m3.5 4l1-1l-2-2l1-1m3.5 4l1-1l-2-2l1-1\"/></svg>",
+  "lunch": "<svg viewBox=\"0 0 24 24\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" d=\"M23.5 5.5h-10l-4-3m0 9l4-3h10m-20-6h-3m3 3h-3m3 3h-3m3 3h-3m5 9.5l2-5.5v-3h-4v-11h6v14l-2 6zm0-19.5v11m2-11v11\"/></svg>",
+  "tea": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"M17.5 10.5h-15l3 13h9z\"/><path d=\"M15.423 19.5H19.5l2-7h-4.462M6.5 7l1-1l-2-2l1-1M10 7l1-1l-2-2l1-1m3.5 4l1-1l-2-2l1-1\"/></g></svg>",
+  "bakery": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"M19 4.5L12 14L5 4.5l2-2h10zm0 0l4.5 5.5l-6 4l-4.309-1.616\"/><path d=\"M23.5 10v6.5h-4l-2-2.5m6 2.5l-3 5l-1-5zM5 4.5L.5 10l6 4l4.309-1.616\"/><path d=\"M.5 10v6.5h4l2-2.5m-6 2.5l3 5l1-5z\"/></g></svg>",
+  "cocktail": "<svg viewBox=\"0 0 24 24\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" d=\"M14.5 18L18 .5H5L8.5 18l-2 5.5h10zM5.8 4.5h11.4\"/></svg>",
+  "cooking": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"M16 2.5L2.5 16L8 21.5L21.5 8z\"/><path d=\"m19.5 1.5l-1.125 3.375l.75.75L22.5 4.5v-3zm-14.996 21l1.125-3.375l-.75-.75L1.504 19.5v3zm2.996-8l3-3m2-2l1-1M15 7l.5-.5\"/></g></svg>",
+};

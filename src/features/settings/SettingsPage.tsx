@@ -16,6 +16,7 @@ import { CurrencySection } from './CurrencySection';
 import { RatesSection } from './RatesSection';
 import { RemindersSection } from './RemindersSection';
 import { SyncSection } from './SyncSection';
+import { PACK_CREDITS_TEXT } from '@/skinIconPacks/credits';
 
 /** Сообщает о синхронизации только когда с ней что-то не так; в обычной жизни она идёт сама и статус виден в шапке. */
 function SyncProblems() {
@@ -94,6 +95,9 @@ export default function SettingsPage() {
         )}
         <p className="pb-2 text-center text-xs text-muted">
           Sumoima {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Onest (SIL OFL)
+        </p>
+        <p className="pb-2 text-center text-xs text-muted">
+          Значки образов: {PACK_CREDITS_TEXT}
         </p>
       </Block>
 

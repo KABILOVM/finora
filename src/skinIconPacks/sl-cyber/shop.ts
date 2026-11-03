@@ -1,0 +1,10 @@
+// Создан scripts/skin-art/icon_packs.py. Вручную не править.
+// Набор: Streamline Cyber (Streamline), лицензия CC BY 4.0 (Iconify: streamline-cyber). Группа: shop.
+export const ICONS: Readonly<Record<string, string>> = {
+  "dress": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"m11.5 5.5l-3-2l-3 2l2.5 6l-6.5 10l4 2h12l4-2l-6.5-10l2.5-6l-3-2zm3-2v-3m-6 3v-3\"/><path d=\"m15 11.5l-3.5.5l-3.5-.5\"/></g></svg>",
+  "hanger": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"m11.5 5.5l-3-2l-3 2l2.5 6l-6.5 10l4 2h12l4-2l-6.5-10l2.5-6l-3-2zm3-2v-3m-6 3v-3\"/><path d=\"m15 11.5l-3.5.5l-3.5-.5\"/></g></svg>",
+  "glasses": "<svg viewBox=\"0 0 24 24\"><path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" d=\"m3.5 19.5l-2-4l2-4H8l2 4l-2 4zm12.5 0l-2-4l2-4h4.5l2 4l-2 4zm-6-4h4m-10.5-4l3-7h2m12 7l-3-7h-2\"/></svg>",
+  "watch": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"M11.5 8.5v4h3m-7-5.754V1.5h8v5.246m-8 11.508V23.5h8v-5.246\"/><path d=\"m4.5 8.43l7-3.93l7 3.93v8.14l-7 3.93l-7-3.93z\"/></g></svg>",
+  "shop": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"M20.5 8v9.5m0 0h-6l-3 6l-3-6h-6V8m0 5.5h12m0 2V7.75m2 6.75v-3m6-8H.5l3-3h16zm-19 0l3-3m1 3l2-3m2 3v-3\"/><path d=\"m11.5 7l-2 1.5l-2-1.5l-2 1.5l-2-1.5L2 8.5L.5 7V3.5m3 3.5V3.5m8 3.5V3.5M7.5 7V3.5m12 0l-3-3m-1 3l-2-3m-2 6.5l2 1.5l2-1.5l2 1.5l2-1.5L21 8.5L22.5 7V3.5m-3 3.5V3.5m-4 3.5V3.5\"/></g></svg>",
+  "price": "<svg viewBox=\"0 0 24 24\"><g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\"><path d=\"M22.5 1.5H13L.5 14l8 1.5l1.5 8L22.5 11z\"/><path d=\"M20.501 3.5h-3v3h3z\"/></g></svg>",
+};
