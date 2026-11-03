@@ -41,6 +41,16 @@ afterEach(() => {
 });
 
 describe('Настройки: общий вид (локальный режим)', () => {
+  it('«Конфиденциальность и условия» открываются из блока «О приложении» и без входа в облако', async () => {
+    await openSettings();
+    await user.click(screen.getByRole('button', { name: /Конфиденциальность и условия/ }));
+    const sheet = await findByRole('dialog', { name: 'Конфиденциальность и условия' });
+    expect(sheet.textContent).toContain('Где лежат ваши данные');
+    expect(sheet.textContent).toContain('Резервная копия');
+    await user.click(screen.getByRole('button', { name: 'Понятно' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Конфиденциальность и условия' })).toBeNull());
+  });
+
   it('только нужное: оформление, валюта, копия; версия берётся из package.json', async () => {
     await openSettings();
     for (const name of ['Оформление', 'Валюта учёта', 'Резервная копия']) {

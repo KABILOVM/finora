@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Logo } from '@/components/Logo';
 import { Segmented, type SegmentOption } from '@/components/Segmented';
 import { Wordmark } from '@/components/Wordmark';
 import { CodeLoginForm } from './CodeLoginForm';
 import { PasswordLoginForm } from './PasswordLoginForm';
 import { useCodeLogin } from './useCodeLogin';
+
+// Текст политики не нужен для входа: грузится, только когда человек нажал на ссылку (основной файл остаётся в бюджете размера).
+const PrivacySheet = lazy(() => import('@/features/about/PrivacySheet').then((m) => ({ default: m.PrivacySheet })));
 
 type Method = 'password' | 'code';
 type Mode = 'in' | 'up';
@@ -24,6 +27,7 @@ export default function LoginPage() {
   const [method, setMethod] = useState<Method>('password');
   // Почта общая для обоих способов: переключили способ — набирать заново не нужно.
   const [email, setEmail] = useState('');
+  const [privacy, setPrivacy] = useState(false);
   const codeFlow = useCodeLogin(email);
   const signUp = mode === 'up';
 
@@ -62,7 +66,21 @@ export default function LoginPage() {
         >
           {signUp ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setPrivacy(true)}
+          className="mt-1 min-h-[44px] rounded-lg px-2 text-center text-sm text-muted underline underline-offset-2"
+        >
+          {signUp ? 'Регистрируясь, вы принимаете условия и политику конфиденциальности' : 'Конфиденциальность и условия'}
+        </button>
       </div>
+
+      {privacy && (
+        <Suspense fallback={null}>
+          <PrivacySheet onClose={() => setPrivacy(false)} />
+        </Suspense>
+      )}
     </main>
   );
 }

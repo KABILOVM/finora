@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 import { readCloudConfig } from './src/auth/config';
+import { applySiteMeta } from './src/features/about/siteMeta';
 
 /* ---------------------------------------------------------------------------------------------
  * Политика безопасности страницы (CSP) собирается ПОД КОНКРЕТНЫЙ проект Supabase.
@@ -63,12 +64,25 @@ function finoraCsp(): Plugin {
   };
 }
 
+/** Превью ссылки (og:url, og:image) собирается под адрес сайта из VITE_SITE_URL: см. src/features/about/siteMeta.ts. */
+function finoraSiteMeta(): Plugin {
+  let env: Record<string, unknown> = {};
+  return {
+    name: 'finora-site-meta',
+    configResolved: (config) => {
+      env = config.env;
+    },
+    transformIndexHtml: (html) => applySiteMeta(html, env),
+  };
+}
+
 // base: './' — чтобы работало на любом хостинге (GitHub Pages в подпапке, Cloudflare Pages в корне).
 export default defineConfig({
   base: './',
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   plugins: [
     finoraCsp(),
+    finoraSiteMeta(),
     react(),
     VitePWA({
       // «prompt»: новая версия не подменяет приложение молча, пока человек вносит операцию.
@@ -103,7 +117,7 @@ export default defineConfig({
         // Картинки образов (webp, src/assets/skins/art) намеренно не в списке: иначе их скачал бы каждый при установке, даже не выбрав образ.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
         // Файлы наборов значков образов (assets/pack-*.js, их грузят только те, кто образ выбрал) тоже не в офлайн-кэше: целиком они весят мегабайты.
-        globIgnores: ['**/assets/pack-*.js'],
+        globIgnores: ['**/assets/pack-*.js', '**/og-image.jpg'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [],
