@@ -17,8 +17,8 @@ const BUDGET = [
   { match: /^vendor-supabase-.*\.js$/, max: 65 * KB, name: 'vendor: supabase' },
   { match: /^vendor-react-.*\.js$/, max: 60 * KB, name: 'vendor: react' },
   { match: /^vendor-dexie-.*\.js$/, max: 38 * KB, name: 'vendor: dexie' },
-  // 90: набор значков образа (assets/pack-<набор>-<группа>.js, src/skinIconPacks) — самый тяжёлый, основные значки «Эстетики» (with icons Luxe), около 80 КБ; грузится, только когда образ выбран
-  { match: /^pack-.*\.js$/, max: 90 * KB, name: 'набор значков образа (ленивый файл)' },
+  // 100: набор значков образа (assets/pack-<набор>-<группа>.js, src/skinIconPacks) — самый тяжёлый, основные значки «Готики» (with icons Gothic), около 97 КБ; грузится, только когда образ выбран
+  { match: /^pack-.*\.js$/, max: 100 * KB, name: 'набор значков образа (ленивый файл)' },
   { match: /\.js$/, max: 40 * KB, name: 'страница (ленивый файл)' },
 ];
 

@@ -21,7 +21,12 @@ export type SkinId =
   | 'aesthetic'
   | 'racing'
   | 'cyber'
-  | 'pixel';
+  | 'pixel'
+  | 'coquette'
+  | 'gothic'
+  | 'clay'
+  | 'liquid'
+  | 'chrome';
 
 export const DEFAULT_SKIN: SkinId = 'classic';
 
@@ -48,6 +53,11 @@ export const SKIN_BARS: Readonly<Record<Exclude<SkinId, 'classic'>, { light: str
   racing: { light: '#f1f2f5', dark: '#101114' },
   cyber: { light: '#f3eefc', dark: '#07060f' },
   pixel: { light: '#eef4d2', dark: '#0a240a' },
+  coquette: { light: '#fdf0f3', dark: '#1d1218' },
+  gothic: { light: '#f1ecee', dark: '#0e0b10' },
+  clay: { light: '#f3e9ff', dark: '#1c1530' },
+  liquid: { light: '#e8eeff', dark: '#0c1224' },
+  chrome: { light: '#e9ecf4', dark: '#0d1020' },
 };
 
 export const isSkinId = (v: string | null): v is SkinId => v === DEFAULT_SKIN || (v !== null && Object.prototype.hasOwnProperty.call(SKIN_BARS, v));

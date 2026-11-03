@@ -23,6 +23,11 @@ import thumbAesthetic from './assets/skins/art/aesthetic-thumb.webp';
 import thumbRacing from './assets/skins/art/racing-thumb.webp';
 import thumbCyber from './assets/skins/art/cyber-thumb.webp';
 import thumbPixel from './assets/skins/art/pixel-thumb.webp';
+import thumbCoquette from './assets/skins/art/coquette-thumb.webp';
+import thumbGothic from './assets/skins/art/gothic-thumb.webp';
+import thumbClay from './assets/skins/art/clay-thumb.webp';
+import thumbLiquid from './assets/skins/art/liquid-thumb.webp';
+import thumbChrome from './assets/skins/art/chrome-thumb.webp';
 
 export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   classic: thumbClassic,
@@ -44,4 +49,9 @@ export const SKIN_THUMBS: Readonly<Record<SkinId, string>> = {
   racing: thumbRacing,
   cyber: thumbCyber,
   pixel: thumbPixel,
+  coquette: thumbCoquette,
+  gothic: thumbGothic,
+  clay: thumbClay,
+  liquid: thumbLiquid,
+  chrome: thumbChrome,
 };

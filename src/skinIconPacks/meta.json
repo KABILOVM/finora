@@ -131,5 +131,100 @@
    "transport",
    "work"
   ]
+ },
+ {
+  "id": "wi-coquette",
+  "prefix": "withicons-coquette",
+  "title": "with icons Coquette (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-gothic",
+  "prefix": "withicons-gothic",
+  "title": "with icons Gothic (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-clay",
+  "prefix": "withicons-clay",
+  "title": "with icons Clay (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-liquid",
+  "prefix": "withicons-liquid",
+  "title": "with icons Liquid (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
+ },
+ {
+  "id": "wi-chrome",
+  "prefix": "withicons-chrome",
+  "title": "with icons Chrome (Evergrow)",
+  "license": "MIT",
+  "count": 166,
+  "groups": [
+   "base",
+   "family",
+   "food",
+   "fun",
+   "health",
+   "home",
+   "misc",
+   "shop",
+   "transport",
+   "work"
+  ]
  }
 ]
