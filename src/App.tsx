@@ -27,6 +27,7 @@ import { InstallPrompt } from '@/install/InstallPrompt';
 import PushKeeper from '@/push/PushKeeper';
 import { AppShell } from '@/layout/AppShell';
 import { ADD_PATH } from '@/layout/nav';
+import { useDocumentTitle } from '@/layout/documentTitle';
 
 // Страницы подгружаются лениво: на старте грузится только каркас.
 const HomePage = lazy(() => import('@/features/home/HomePage'));
@@ -105,6 +106,8 @@ export function AppRoutes() {
   const isAdd = location.pathname === ADD_PATH;
   const editId = matchPath(EDIT_PATTERN, location.pathname)?.params.id ?? null;
   const pagesLocation = isAdd || editId !== null ? (background ?? '/') : location;
+  // Заголовок вкладки — по странице под шитом: «Добавить операцию» поверх «Кошельков» остаётся «Кошельки — Sumoima»
+  useDocumentTitle(typeof pagesLocation === 'string' ? pagesLocation : pagesLocation.pathname);
 
   // Назад (navigate(-1)) — только если есть куда вернуться: шит открыли переходом внутри приложения (PUSH) или перед этой
   // записью в истории есть другая (history.state.idx > 0). Иначе (дубль вкладки, восстановление сессии, прямой заход,

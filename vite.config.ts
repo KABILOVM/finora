@@ -117,7 +117,7 @@ export default defineConfig({
         // Картинки образов (webp, src/assets/skins/art) намеренно не в списке: иначе их скачал бы каждый при установке, даже не выбрав образ.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
         // Файлы наборов значков образов (assets/pack-*.js, их грузят только те, кто образ выбрал) тоже не в офлайн-кэше: целиком они весят мегабайты.
-        globIgnores: ['**/assets/pack-*.js', '**/og-image.jpg'],
+        globIgnores: ['**/assets/pack-*.js', '**/og-image.jpg', '**/404.html', '**/404.css'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [],
