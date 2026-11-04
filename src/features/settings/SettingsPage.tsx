@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
+import { PrivacySheet } from '@/features/about/PrivacySheet';
 import { RELEASES } from '@/features/whatsnew/releases';
 import { WhatsNewSheet } from '@/features/whatsnew/WhatsNewSheet';
 import { useSyncEnabled, useSyncStatus } from '@/sync/syncContext';
@@ -44,6 +45,7 @@ export const SETTINGS_BLOCKS = ['account', 'security', 'accounting', 'data', 'ap
  */
 export default function SettingsPage() {
   const [news, setNews] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
   const latest = RELEASES[0];
   const [params] = useSearchParams();
   const wanted = params.get('section');
@@ -80,19 +82,34 @@ export default function SettingsPage() {
       </Block>
 
       <Block id="about">
-        {latest && (
-          <Card padding="none" className="mb-6">
-            <button
-              type="button"
-              onClick={() => setNews(true)}
-              className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left transition-colors hover:bg-surface-2 active:bg-border/60"
-            >
-              <Glyph value="i:stars" color="#d97706" size={40} />
-              <span className="min-w-0 flex-1 text-base font-medium">Что нового</span>
-              <Icon name="chevron" size={18} className="shrink-0 text-muted" />
-            </button>
-          </Card>
-        )}
+        <Card padding="none" className="mb-6">
+          <ul className="divide-y divide-border">
+            {latest && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setNews(true)}
+                  className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left transition-colors hover:bg-surface-2 active:bg-border/60"
+                >
+                  <Glyph value="i:stars" color="#d97706" size={40} />
+                  <span className="min-w-0 flex-1 text-base font-medium">Что нового</span>
+                  <Icon name="chevron" size={18} className="shrink-0 text-muted" />
+                </button>
+              </li>
+            )}
+            <li>
+              <button
+                type="button"
+                onClick={() => setPrivacy(true)}
+                className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left transition-colors hover:bg-surface-2 active:bg-border/60"
+              >
+                <Glyph value="i:lock" color="#4f46e5" size={40} />
+                <span className="min-w-0 flex-1 text-base font-medium">Конфиденциальность и условия</span>
+                <Icon name="chevron" size={18} className="shrink-0 text-muted" />
+              </button>
+            </li>
+          </ul>
+        </Card>
         <p className="pb-2 text-center text-xs text-muted">
           Sumoima {version} · Иконки: Solar (CC BY 4.0), Lucide (ISC) · Шрифт: Onest (SIL OFL)
         </p>
@@ -102,6 +119,7 @@ export default function SettingsPage() {
       </Block>
 
       {news && latest && <WhatsNewSheet releases={[latest]} onClose={() => setNews(false)} />}
+      {privacy && <PrivacySheet onClose={() => setPrivacy(false)} />}
 
     </>
   );

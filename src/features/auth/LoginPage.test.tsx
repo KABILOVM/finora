@@ -30,6 +30,20 @@ describe('экран входа', () => {
     expect(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' })).toBeInTheDocument();
   });
 
+  it('«Конфиденциальность и условия» открываются до входа; при регистрации ссылка напоминает о принятии условий', async () => {
+    await openLogin();
+    await user.click(screen.getByRole('button', { name: 'Конфиденциальность и условия' }));
+    const sheet = await findByRole('dialog', { name: 'Конфиденциальность и условия' });
+    expect(sheet.textContent).toContain('Gemini');
+    expect(sheet.textContent).toContain('Удалить аккаунт');
+    await user.click(screen.getByRole('button', { name: 'Понятно' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Конфиденциальность и условия' })).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }));
+    await findByRole('heading', { name: 'Регистрация', level: 1 });
+    await user.click(screen.getByRole('button', { name: /Регистрируясь, вы принимаете условия/ }));
+    await findByRole('dialog', { name: 'Конфиденциальность и условия' });
+  });
+
   describe('регистрация', () => {
     const NEW = { email: 'new@example.com', password: 'new-password-1' };
     const fill = async (email: string, password: string, repeat: string | null = password) => {

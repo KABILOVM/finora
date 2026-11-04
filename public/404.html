@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Страница «не найдено» для адресов вне приложения (например, /что-то): её отдаёт хостинг (Vercel берёт файл 404.html из корня сборки).
+      Адреса внутри приложения (/#/…) сюда не попадают: хеш-маршрутизатор уводит непонятный адрес на «Главную».
+      Страница статичная и живёт без скриптов, поэтому политика у неё своя и строгая: ни скриптов, ни встроенных стилей.
+      Пути к файлам АБСОЛЮТНЫЕ (с «/» в начале): страница показывается по любому адресу, и относительные ссылки вели бы мимо.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#eceefb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#080a18" media="(prefers-color-scheme: dark)" />
+    <title>Страница не найдена — Sumoima</title>
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="stylesheet" href="/404.css" />
+  </head>
+  <body>
+    <main>
+      <img src="/icon.svg" width="72" height="72" alt="" />
+      <p class="code">404</p>
+      <h1>Страница не найдена</h1>
+      <p class="hint">Такого адреса в Sumoima нет. Возможно, ссылка устарела или в ней опечатка.</p>
+      <a class="button" href="/">Открыть Sumoima</a>
+    </main>
+  </body>
+</html>

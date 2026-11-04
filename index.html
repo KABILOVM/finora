@@ -30,6 +30,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>Sumoima — учёт денег</title>
     <meta name="description" content="Личный учёт расходов и доходов. Работает без интернета." />
+    <!--
+      Приложение личное, в поиске ему делать нечего: noindex. Нарочно НЕ запрещаем обход в robots.txt (Disallow): запрет мешал бы
+      показывать превью ссылки в мессенджерах и прятал бы от поисковиков этот самый noindex.
+    -->
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- Превью ссылки в мессенджерах. Адрес и картинка зависят от адреса сайта: их подставляет метка ниже (VITE_SITE_URL, src/features/about/siteMeta.ts). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sumoima" />
+    <meta property="og:title" content="Sumoima — учёт денег" />
+    <meta property="og:description" content="Личный учёт расходов и доходов. Работает без интернета." />
+    <meta property="og:locale" content="ru_RU" />
+    <!--@@SITE_META@@-->
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#eceefb" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#080a18" media="(prefers-color-scheme: dark)" />

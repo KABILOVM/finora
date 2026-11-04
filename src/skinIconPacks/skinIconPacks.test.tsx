@@ -254,7 +254,8 @@ describe('сборка: файлы наборов не в основном фа�
 
   it('vite.config.ts называет файлы наборов pack-…, исключает их из офлайн-кэша; в check-bundle.mjs для них свой порог', () => {
     const vite = read('vite.config.ts');
-    expect(vite).toContain("globIgnores: ['**/assets/pack-*.js']");
+    // в списке могут быть и другие исключения (картинка превью ссылки og-image.jpg), важно, что наборы значков среди них
+    expect(vite).toMatch(/globIgnores: \[[^\]]*'\*\*\/assets\/pack-\*\.js'/);
     expect(vite).toContain('assets/pack-${pack[1]}-${pack[2]}-[hash].js');
     const bundle = read('scripts/check-bundle.mjs');
     expect(bundle).toMatch(/match: \/\^pack-\.\*\\\.js\$\//);
