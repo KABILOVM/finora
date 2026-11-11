@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addTx, dismissToasts, expect, goSection, norm, openApp, shot, sheet, tapAmount, test } from '../helpers';
+import { addTx, dismissToasts, expect, goSection, modalHistorySettled, norm, openApp, shot, sheet, tapAmount, test } from '../helpers';
 
 /** «Сегодня» закреплено: 15 октября 2026 (14:00 в Душанбе). Прошлые месяцы для подсказок — сентябрь и август. */
 const NOW = new Date('2026-10-15T09:00:00Z');
@@ -57,6 +57,7 @@ test.describe('44. Бюджеты: подсказки суммы, ссылка �
     await expect(page).toHaveURL(/#\/budgets$/); // параметр убран: «Назад» и обновление не откроют форму снова
     await dlg.getByRole('button', { name: 'Закрыть' }).click();
     await expect(dlg).toBeHidden();
+    await modalHistorySettled(page);
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: 'Бюджеты' })).toBeVisible();
     await expect(sheet(page, 'Новый лимит')).toHaveCount(0);
