@@ -52,7 +52,8 @@ export function AppearanceSection() {
         className="press flex min-h-[72px] items-center gap-3 rounded-2xl border border-border bg-surface-2/50 p-3 transition-colors hover:bg-surface-2"
       >
         {thumb !== undefined ? (
-          <img src={thumb} alt="" width={48} height={48} decoding="async" className="h-12 w-12 shrink-0 rounded-xl border border-border bg-surface-2 object-contain p-0.5" />
+          // картинки образов в офлайн-кэш не входят: значок грузится, только когда до него долистали (без сети страница открывается без ошибок)
+          <img src={thumb} alt="" width={48} height={48} loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-xl border border-border bg-surface-2 object-contain p-0.5" />
         ) : (
           <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-accent text-brand-fg">
             <Icon name="stars" size={24} />
