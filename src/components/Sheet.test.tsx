@@ -318,6 +318,8 @@ describe('Sheet: заголовок рядом с кнопкой в шапке �
     });
   };
   afterEach(() => vi.restoreAllMocks());
+  /** Замер идёт в ближайшем кадре (не в момент вставки окна на страницу): ждём кадр. */
+  const frame = () => act(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
   const title = () => screen.getByRole('heading', { name: 'Новая операция' });
   const show = (withAction: boolean) =>
     render(
@@ -326,30 +328,35 @@ describe('Sheet: заголовок рядом с кнопкой в шапке �
       </Sheet>,
     );
 
-  it('широкий шрифт образа не помещается рядом с датой: заголовок мельче, но в одну строку', () => {
+  it('широкий шрифт образа не помещается рядом с датой: заголовок мельче, но в одну строку', async () => {
     measure(210, 168);
     show(true);
+    expect(title().style.whiteSpace).toBe(''); // в момент вставки не меряем: вставка окна на страницу не должна затягиваться
+    await frame();
     expect(title().style.whiteSpace).toBe('nowrap');
     expect(title().style.fontSize).toBe('16px'); // 20 × 168 / 210
   });
 
-  it('заголовок помещается: размер шрифта не трогаем', () => {
+  it('заголовок помещается: размер шрифта не трогаем', async () => {
     measure(150, 168);
     show(true);
+    await frame();
     expect(title().style.fontSize).toBe('');
     expect(title().style.whiteSpace).toBe('nowrap');
   });
 
-  it('места совсем мало (пришлось бы мельче 14 px): заголовок переносится, как раньше', () => {
+  it('места совсем мало (пришлось бы мельче 14 px): заголовок переносится, как раньше', async () => {
     measure(400, 120);
     show(true);
+    await frame();
     expect(title().style.fontSize).toBe('');
     expect(title().style.whiteSpace).toBe('');
   });
 
-  it('без кнопки в шапке заголовок не трогаем: длинные названия окон переносятся', () => {
+  it('без кнопки в шапке заголовок не трогаем: длинные названия окон переносятся', async () => {
     measure(400, 120);
     show(false);
+    await frame();
     expect(title().style.fontSize).toBe('');
     expect(title().style.whiteSpace).toBe('');
   });

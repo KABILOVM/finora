@@ -170,17 +170,34 @@ export function AmountInput({
     const size = Number.isFinite(px) ? `${Math.max(MIN_FIT_PX, Math.floor(px * 2) / 2)}px` : '';
     if (input.style.fontSize !== size) input.style.fontSize = size;
   };
-  // после каждого рендера: число, кнопки по краям и ступень шрифта могли измениться
-  useLayoutEffect(fitAmount);
-  // и когда меняется ширина самого поля (поворот экрана, окно на компьютере)
+  // Когда мерить. При первом показе — в ближайшем кадре, до отрисовки: замер прямо в момент вставки окна на страницу заставлял
+  // браузер тут же раскладывать всё окно, вставка затягивалась, и обработчики окна (Esc, «Назад») подключались на миг позже — очень
+  // быстрое нажатие терялось. После первого показа — сразу после каждого рендера (число, кнопки по краям и ступень шрифта могли
+  // измениться): меняется уже только строка суммы. И ещё — когда меняется ширина самого поля (поворот экрана, окно на компьютере):
+  // тоже в кадре, а не внутри уведомления ResizeObserver, чтобы правка шрифта не вызывала его повторных уведомлений.
   const fitRef = useRef(fitAmount);
   fitRef.current = fitAmount;
-  useEffect(() => {
+  const fitReady = useRef(false);
+  useLayoutEffect(() => {
+    if (fitReady.current) fitAmount();
+  });
+  useLayoutEffect(() => {
+    let frame = 0;
+    const later = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        fitReady.current = true;
+        fitRef.current();
+      });
+    };
+    later();
     const box = sizerRef.current?.parentElement?.parentElement;
-    if (!box || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => fitRef.current());
-    ro.observe(box);
-    return () => ro.disconnect();
+    const ro = box && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(later) : null;
+    if (ro && box) ro.observe(box);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro?.disconnect();
+    };
   }, []);
 
   // На телефоне курсор сам ставится только в поле со своей цифровой клавиатурой (inputmode="none"): системная закрыла бы полэкрана

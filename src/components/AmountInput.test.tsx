@@ -659,33 +659,53 @@ describe('AmountInput: сумма вписывается в поле по шир
     });
   };
   afterEach(() => vi.restoreAllMocks());
+  /** Первый замер идёт в ближайшем кадре (не в момент вставки на страницу): ждём кадр. */
+  const frame = () => act(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
 
-  it('число шире поля (рядом кнопки «Комиссия» и «Что куплено»): шрифт уменьшается ровно настолько, чтобы оно поместилось', () => {
+  it('число шире поля (рядом кнопки «Комиссия» и «Что куплено»): шрифт уменьшается ровно настолько, чтобы оно поместилось', async () => {
     measure(180, 120);
     render(<AmountInput currency="TJS" value={125050} onChange={() => {}} start={<button type="button">%</button>} end={<button type="button">з</button>} wideSides />);
+    expect(input().style.fontSize).toBe(''); // в момент вставки не меряем: вставка окна на страницу не должна затягиваться
+    await frame();
     expect(input().style.fontSize).toBe('32px'); // 48 × 120 / 180
   });
 
-  it('число помещается: шрифт задаёт только класс, своего размера у поля нет', () => {
+  it('число помещается: шрифт задаёт только класс, своего размера у поля нет', async () => {
     measure(100, 160);
     render(<AmountInput currency="TJS" value={1250} onChange={() => {}} />);
+    await frame();
     expect(input().style.fontSize).toBe('');
   });
 
-  it('совсем узкое поле: мельче 16 px не становится (дальше поле прокручивается внутри себя, как раньше)', () => {
+  it('совсем узкое поле: мельче 16 px не становится (дальше поле прокручивается внутри себя, как раньше)', async () => {
     measure(400, 60);
     render(<AmountInput currency="TJS" value={12_345_678_901} onChange={() => {}} />);
+    await frame();
     expect(input().style.fontSize).toBe('16px');
   });
 
-  it('число стало короче и снова помещается: свой размер снимается', async () => {
+  it('после первого показа размер пересчитывается сразу при каждом изменении числа: стало короче и помещается — свой размер снимается', async () => {
     measure(180, 120);
     render(<Harness initial={125050} />);
+    await frame();
     expect(input().style.fontSize).toBe('32px');
     vi.restoreAllMocks();
     measure(60, 120);
     await user.click(key('Стереть'));
     expect(input().style.fontSize).toBe('');
+    vi.restoreAllMocks();
+    measure(240, 120);
+    await user.click(key('7'));
+    expect(input().style.fontSize).toBe('24px'); // без ожидания кадра
+  });
+
+  it('поле убрали до первого кадра: отложенный замер отменяется', async () => {
+    measure(180, 120);
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    const { unmount } = render(<AmountInput currency="TJS" value={125050} onChange={() => {}} />);
+    unmount();
+    expect(cancel).toHaveBeenCalled();
+    await frame();
   });
 
   it('у мерки и поля нет переходов: при «уменьшить движение» замер ширины иначе отставал бы на кадр', () => {

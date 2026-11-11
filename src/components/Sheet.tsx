@@ -133,6 +133,8 @@ export function Sheet({
 
   // Заголовок рядом с кнопкой в шапке (дата у операции): широкий шрифт образа («НОВАЯ ОПЕРАЦИЯ» прописными) не помещался в строку
   // и переносился, отнимая высоту у формы. Такой заголовок ужимается до одной строки; мельче TITLE_MIN_PX не делаем — тогда перенос.
+  // Замер — в ближайшем кадре, до отрисовки, а не в момент вставки окна на страницу: иначе браузер тут же раскладывал бы всё окно,
+  // вставка затягивалась, и обработчики окна (Esc, «Назад») подключались на миг позже — очень быстрое нажатие терялось.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const hasAction = headerAction != null && headerAction !== false;
   useLayoutEffect(() => {
@@ -148,12 +150,20 @@ export function Sheet({
       if (Number.isFinite(px) && px >= TITLE_MIN_PX) el.style.fontSize = `${Math.floor(px * 2) / 2}px`;
       else el.style.whiteSpace = '';
     };
-    fit();
-    if (typeof ResizeObserver === 'undefined') return;
-    // ширина заголовка меняется вместе с кнопкой в шапке («Сегодня» → «12 ноября») и с шириной окна
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
+    let frame = 0;
+    const later = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    };
+    later();
+    // ширина заголовка меняется вместе с кнопкой в шапке («Сегодня» → «12 ноября») и с шириной окна; правка шрифта — тоже в кадре,
+    // а не внутри уведомления ResizeObserver, чтобы не вызывать его повторных уведомлений
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(later) : null;
+    ro?.observe(el);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro?.disconnect();
+    };
   }, [open, hasAction, title]);
 
   if (!open) return null;
