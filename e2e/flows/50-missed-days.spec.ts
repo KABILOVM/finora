@@ -1,12 +1,10 @@
 import { addTx, dismissToasts, expect, goSection, openApp, shot, sheet, test } from '../helpers';
 
-/** 'ГГГГ-ММ-ДД' за n дней до сегодня по местным часам браузера (так же считает приложение). */
-const daysAgo = (n: number): string => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  const p = (x: number) => String(x).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-};
+/**
+ * 'ГГГГ-ММ-ДД' за n дней до сегодня по часам браузера (часовой пояс сценариев — Душанбе, см. playwright.config.ts): так же считает
+ * приложение. По часам самой машины нельзя: после полуночи по Душанбе (19:00–24:00 UTC) у неё ещё «вчера», и счёт дней расходился на один.
+ */
+const daysAgo = (n: number): string => new Date(Date.now() - n * 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Asia/Dushanbe' });
 
 test.describe('50. Пропущенные дни на «Главной»', () => {
   test('последняя запись 5 дней назад: плашка с двумя кнопками; «Внести траты» — форма на вчера; «Ничего не тратил(а)» убирает и помнит', async ({ page }, testInfo) => {

@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { RELEASES } from '../../src/features/whatsnew/releases';
-import { addTx, dismissToasts, expect, goSection, openApp, shot, sheet, test } from '../helpers';
+import { addTx, dismissToasts, expect, goSection, modalHistorySettled, openApp, shot, sheet, test } from '../helpers';
 
 // Окно показывает запись текущей версии (package.json). Её текст берём из самого списка выпусков: сценарий не привязан к одному выпуску
 // и не устаревает с каждым новым. Версия без записи окно не показывает — тогда сценарию нечего проверять, и это ошибка выпуска.
@@ -42,7 +42,8 @@ test.describe('36. «Что нового» после обновления', () 
     await news.getByRole('button', { name: 'Понятно' }).click();
     await expect(news).toBeHidden();
 
-    // при следующем запуске окна нет
+    // при следующем запуске окна нет (запись окна уходит из истории чуть позже самого окна: перезагрузка в этот миг обрывалась)
+    await modalHistorySettled(page);
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: 'Главная' })).toBeVisible();
     await page.waitForTimeout(2000);
