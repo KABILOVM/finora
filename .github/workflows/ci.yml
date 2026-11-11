@@ -45,7 +45,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # Без --with-deps: библиотеки для Chromium на ubuntu-latest уже стоят, а этот
+      # флаг дотягивал через apt только дополнительные шрифты и ронял всю проверку,
+      # когда зеркала Ubuntu не отвечали. Если браузеру не хватит библиотеки,
+      # следующий шаг упадёт с её названием.
+      - name: Браузер для e2e
+        run: npx playwright install chromium
       - name: Быстрые e2e (безопасность, меню, зоны касания, импорт)
         run: npx playwright test e2e/sec/audit.spec.ts e2e/sec/csp.spec.ts e2e/flows/15-more-menu.spec.ts e2e/flows/41-touch-targets.spec.ts e2e/flows/19-import.spec.ts -g "^(?!.*большой файл)(?!.*уход с экрана)" --reporter=line
         env:
