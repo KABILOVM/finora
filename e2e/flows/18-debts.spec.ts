@@ -383,7 +383,8 @@ test.describe('18. Долги и кредиты', () => {
     await shot(page, '18-layout-home', testInfo);
     await goSection(page, 'Операции');
     await noHorizontalScroll(page, 'Операции');
-    expect(norm(await page.locator('main').innerText())).toContain('Долг: ');
+    // имя в метке «Долг: …» подставляется, когда прочитаны долги (до этого строка подписана просто «Долг»): ждём, а не читаем текст сразу
+    await expect.poll(async () => norm(await page.locator('main').innerText())).toContain('Долг: ');
   });
 
   test('правка операции по долгу: связь сохраняется, чужая валюта кошелька не принимается понятной ошибкой', async ({ page, errors }, testInfo) => {
