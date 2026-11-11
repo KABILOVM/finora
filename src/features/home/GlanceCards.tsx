@@ -8,13 +8,14 @@ import WeatherAdviceRow from './WeatherAdviceRow';
 import WeatherWidget from './WeatherWidget';
 
 /**
- * Блок «Курсы валют» на «Главной»: доллар и рубль к основной валюте, нажатие открывает «Курсы валют». По умолчанию стоит парой с
- * «Погодой» (обе — в половину ширины); каждую можно скрыть или растянуть в настройке главной.
+ * Блок «Курсы валют» на «Главной»: выбранные валюты (по умолчанию доллар и рубль) к основной, нажатие открывает «Курсы валют».
+ * По умолчанию стоит парой с «Погодой» (обе — в половину ширины); каждую можно скрыть или растянуть в настройке главной, там же
+ * выбирают валюты (`currencies`).
  */
-export function RatesCard({ base }: { base: CurrencyCode }) {
+export function RatesCard({ base, currencies }: { base: CurrencyCode; currencies?: readonly CurrencyCode[] }) {
   return (
     <Card padding="none" data-testid="home-rates" className="overflow-hidden">
-      <RatesWidget base={base} />
+      <RatesWidget base={base} {...(currencies ? { currencies } : {})} />
     </Card>
   );
 }

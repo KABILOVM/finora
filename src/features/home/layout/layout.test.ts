@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseHome, stringifyHome, type HomeItem } from '@/domain/homeLayout';
 import { HOME_BLOCKS, homeBlock } from './blocks';
-import { HOME_PRESETS, adviceAnchor, defaultHome, matchPreset, presetHome, reorderShown, resolveHome, setShown, setSize, shiftShown, sizeOf, slotsOf, widthOf } from './layout';
+import { HOME_PRESETS, adviceAnchor, defaultHome, matchPreset, presetHome, reorderShown, resolveHome, setCurrencies, setShown, setSize, shiftShown, sizeOf, slotsOf, widthOf } from './layout';
 
 const ids = (items: readonly HomeItem[]) => items.map((i) => i.id);
 const shownIds = (items: readonly HomeItem[]) =>
@@ -15,11 +15,11 @@ describe('реестр блоков главной', () => {
     expect(parseHome(stringifyHome(defaultHome()))).toEqual(defaultHome());
   });
 
-  it('стандартная главная — прежняя: те же блоки в том же порядке, курсы и погода парой; новые блоки скрыты', () => {
+  it('стандартная главная: последние операции сразу под итогом (над ними только строки «по делу»), курсы и погода парой; новые блоки скрыты', () => {
     expect(shownIds(defaultHome())).toEqual([
-      'hero', 'templates', 'attention', 'missed', 'weekly', 'monthly', 'save', 'trip', 'daily', 'rates', 'weather', 'wallets', 'budgets', 'upcoming', 'recent',
+      'hero', 'templates', 'attention', 'missed', 'recent', 'wallets', 'weekly', 'monthly', 'save', 'trip', 'daily', 'rates', 'weather', 'budgets', 'upcoming',
     ]);
-    expect(HOME_BLOCKS.filter((b) => !b.on).map((b) => b.id)).toEqual(['spending', 'debts', 'goals', 'shopping', 'shortcuts']);
+    expect(HOME_BLOCKS.filter((b) => !b.on).map((b) => b.id)).toEqual(['today', 'spending', 'debts', 'goals', 'shopping', 'shortcuts']);
     expect(HOME_BLOCKS.filter((b) => b.size === 'half').map((b) => b.id)).toEqual(['rates', 'weather']);
   });
 
@@ -83,10 +83,10 @@ describe('порядок, показ и ширина', () => {
   });
 
   it('shiftShown двигает блок на одно место среди показанных; у края ничего не меняет', () => {
-    const up = shiftShown(base, 'recent', -1);
-    expect(shownIds(up).slice(-2)).toEqual(['recent', 'upcoming']);
+    const up = shiftShown(base, 'upcoming', -1);
+    expect(shownIds(up).slice(-2)).toEqual(['upcoming', 'budgets']);
     expect(shiftShown(base, 'hero', -1)).toEqual(base);
-    expect(shiftShown(base, 'recent', 1)).toEqual(base);
+    expect(shiftShown(base, 'upcoming', 1)).toEqual(base);
     expect(shiftShown(base, 'debts', -1)).toEqual(base); // скрытый блок не двигается
     // скрытые блоки между показанными не мешают: «Ближайшие платежи» и «Можно тратить» меняются местами через скрытые «Расходы»
     expect(shownIds(shiftShown(base, 'upcoming', -1))).toEqual(shownIds(base).map((id) => (id === 'upcoming' ? 'budgets' : id === 'budgets' ? 'upcoming' : id)));
@@ -98,6 +98,17 @@ describe('порядок, показ и ширина', () => {
     expect(ids(hidden)).toEqual(ids(base));
     expect(setShown(hidden, 'weather', true)).toEqual(base);
     expect(shownIds(setShown(base, 'debts', true))).toContain('debts');
+  });
+
+  it('setCurrencies запоминает валюты блока курсов; null возвращает стандартные; остальные поля блока не трогаются', () => {
+    const slot = (items: readonly HomeItem[]) => slotsOf(items).find((s) => s.block.id === 'rates')!;
+    const chosen = setCurrencies(setSize(base, 'rates', 'full'), 'rates', ['EUR', 'CNY', 'KZT']);
+    expect(slot(chosen)).toMatchObject({ size: 'full', cur: ['EUR', 'CNY', 'KZT'] });
+    expect(parseHome(stringifyHome(chosen))).toEqual(chosen); // переживает сохранение
+    const back = setCurrencies(chosen, 'rates', null);
+    expect(slot(back).cur).toBeUndefined();
+    expect(slot(back).size).toBe('full');
+    expect(slot(base).cur).toBeUndefined();
   });
 
   it('setSize запоминает выбор; sizeOf: выбор человека, иначе задуманная ширина; блок без узкого вида всегда во всю ширину', () => {
@@ -169,17 +180,28 @@ describe('готовые наборы', () => {
     expect(matchPreset(null)).toBe('standard');
   });
 
-  it('«Операции сверху»: последние операции сразу под итогом, дальше кошельки и остальное как было', () => {
-    const items = presetHome('ops')!;
-    expect(shownIds(items).slice(0, 3)).toEqual(['hero', 'recent', 'wallets']);
-    expect(new Set(shownIds(items))).toEqual(new Set(shownIds(defaultHome())));
-    expect(matchPreset(items)).toBe('ops');
+  it('«Операции внизу»: прежняя главная — курсы с погодой и подсказки сверху, последние операции в самом низу; новые блоки скрыты', () => {
+    const items = presetHome('classic')!;
+    expect(shownIds(items)).toEqual([
+      'hero', 'templates', 'attention', 'missed', 'weekly', 'monthly', 'save', 'trip', 'daily', 'rates', 'weather', 'wallets', 'budgets', 'upcoming', 'recent',
+    ]);
+    expect(new Set(ids(items))).toEqual(new Set(HOME_BLOCKS.map((b) => b.id))); // запись полная: скрытые блоки тоже на местах
+    expect(matchPreset(items)).toBe('classic');
   });
 
-  it('«Минимум»: итог, «Требует внимания», кошельки и операции', () => {
+  it('«Минимум»: итог, «Требует внимания», операции и кошельки', () => {
     const items = presetHome('minimal')!;
-    expect(shownIds(items)).toEqual(['hero', 'attention', 'wallets', 'recent']);
+    expect(shownIds(items)).toEqual(['hero', 'attention', 'recent', 'wallets']);
     expect(matchPreset(items)).toBe('minimal');
+  });
+
+  it('выбранные валюты блока курсов набор не сбрасывает — в том числе «Стандартная»', () => {
+    const current = setCurrencies(defaultHome(), 'rates', ['EUR', 'CNY']);
+    for (const p of HOME_PRESETS) {
+      const items = presetHome(p.id, current);
+      expect(items?.find((i) => i.id === 'rates')?.cur, p.id).toEqual(['EUR', 'CNY']);
+      expect(matchPreset(items), p.id).toBe(p.id);
+    }
   });
 
   it('«Всё»: показаны все блоки реестра', () => {

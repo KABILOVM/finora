@@ -5,8 +5,9 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { InstallHint } from '@/components/InstallHint';
 import { PageHeader } from '@/components/PageHeader';
-import { useBalances, useSettings, useTransactions, useWallets } from '@/db';
-import { parseHome } from '@/domain/homeLayout';
+import { useToast } from '@/components/Toast';
+import { useBalances, useSettings, useStore, useTransactions, useWallets } from '@/db';
+import { parseHome, stringifyHome, type HomeItem } from '@/domain/homeLayout';
 import type { LocalRow, Wallet } from '@/domain/types';
 import BudgetsWidget from '@/features/budgets/BudgetsWidget';
 import UpcomingWidget from '@/features/recurring/UpcomingWidget';
@@ -19,9 +20,11 @@ import { RatesCard, WeatherCard } from './GlanceCards';
 import MissedDaysCard from './MissedDaysCard';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
-import type { HomeBlockId } from './layout/blocks';
+import { homeBlock, type HomeBlock } from './layout/blocks';
 import { HOME_EDIT_LINK } from './layout/editLink';
-import { adviceAnchor, resolveHome, slotsOf, widthOf } from './layout/layout';
+import { HomeBlockMenu } from './layout/HomeBlockMenu';
+import { adviceAnchor, resolveHome, setCurrencies, setShown, slotsOf, widthOf, type HomeSlot } from './layout/layout';
+import { useLongPress } from './layout/useLongPress';
 import { inMonthlyWindow } from './monthlyWindow';
 import { RecentOps } from './RecentOps';
 import SaveRemainderCard from './SaveRemainderCard';
@@ -37,13 +40,15 @@ const MonthlyCard = lazy(() => import('./MonthlyCard'));
 // «Траты в день» нужны только тому, кто отметил ежедневные категории: расчёт и карточка грузятся отдельным файлом
 const DailyHomeCard = lazy(() => import('@/features/daily/DailyHomeCard'));
 // Блоки, которых на стандартной главной нет: код грузится, только когда человек вынес блок на главную
+const TodayHomeCard = lazy(() => import('./blocks/TodayHomeCard'));
 const SpendingHomeCard = lazy(() => import('./blocks/SpendingHomeCard'));
 const DebtsHomeCard = lazy(() => import('./blocks/DebtsHomeCard'));
 const GoalsHomeCard = lazy(() => import('./blocks/GoalsHomeCard'));
 const ShoppingHomeCard = lazy(() => import('./blocks/ShoppingHomeCard'));
 const ShortcutsRow = lazy(() => import('./blocks/ShortcutsRow'));
-// Настройка главной открывается редко: её код в файл главной не входит
+// Настройка главной и выбор валют блока курсов открываются редко: их код в файл главной не входит
 const HomeEditor = lazy(() => import('./layout/HomeEditor'));
+const RatesCurrencySheet = lazy(() => import('./layout/RatesCurrencySheet'));
 
 /** Затвор: карточку подгружаем, только когда операций нет совсем. */
 function FirstOperation({ wallets }: { wallets: readonly LocalRow<Wallet>[] }) {
@@ -71,8 +76,9 @@ const WIDTH_ATTRS = {
 
 /**
  * Главная собирается из блоков по раскладке из настроек (layout/): человек сам решает, что показывать, в каком порядке и какой ширины.
- * Пока он ничего не настраивал, главная стандартная: «Всего» с приходом и расходом месяца, строка «Требует внимания», курсы и
- * погода, кошельки, «Можно тратить в день», ближайшие платежи, последние операции. Адрес `/?edit=1` открывает настройку главной.
+ * Пока он ничего не настраивал, главная стандартная: «Всего» с приходом и расходом месяца, строка «Требует внимания», последние
+ * операции, кошельки, курсы и погода, «Можно тратить в день», ближайшие платежи. Адрес `/?edit=1` открывает настройку главной;
+ * долгое нажатие на блок — его меню («Скрыть с главной», «Настроить главную»).
  * Подсказка «как установить» живёт только здесь (на других страницах её нет).
  */
 export default function HomePage() {
@@ -91,7 +97,17 @@ export default function HomePage() {
     [wallets, balances, base, getRate],
   );
   const home = settings?.home ?? null;
-  const slots = useMemo(() => slotsOf(resolveHome(parseHome(home))).filter((s) => s.on), [home]);
+  const items = useMemo(() => resolveHome(parseHome(home)), [home]);
+  const slots = useMemo(() => slotsOf(items).filter((s) => s.on), [items]);
+  const store = useStore();
+  const toast = useToast();
+  // меню блока по долгому нажатию и окно выбора валют блока курсов
+  const [menu, setMenu] = useState<HomeBlock | null>(null);
+  const [pickingCurrencies, setPickingCurrencies] = useState(false);
+  const longPress = useLongPress((target) => {
+    const block = homeBlock(target.closest<HTMLElement>('[data-home-block]')?.dataset['homeBlock'] ?? '');
+    if (block) setMenu(block);
+  });
   // место под строку-совет погоды: отдельная строка под рядом с погодой, когда та стоит половиной (см. adviceAnchor)
   const [adviceSlot, setAdviceSlot] = useState<HTMLElement | null>(null);
   const adviceAt = useMemo(() => adviceAnchor(slots), [slots]);
@@ -125,7 +141,7 @@ export default function HomePage() {
           </p>
         }
       >
-        <HomeEditor home={home} />
+        <HomeEditor home={home} base={base} />
       </Suspense>
     );
   }
@@ -149,9 +165,25 @@ export default function HomePage() {
     );
   }
 
+  /** Запись раскладки в настройки (null — стандартная главная). */
+  const saveHome = (next: readonly HomeItem[] | string | null): void => {
+    const text = next === null || typeof next === 'string' ? next : stringifyHome(next);
+    store.settings.update({ home: text }).catch((e: unknown) => {
+      console.error('Не удалось сохранить раскладку главной:', e);
+      toast.error('Не удалось сохранить раскладку. Попробуйте ещё раз.');
+    });
+  };
+
+  const hideBlock = (block: HomeBlock) => {
+    const before = home;
+    setMenu(null);
+    saveHome(setShown(items, block.id, false));
+    toast.success(`Блок «${block.title}» скрыт с главной`, { durationMs: 7000, action: { label: 'Отменить', onClick: () => saveHome(before) } });
+  };
+
   /** half — блок стоит в половину ширины: у блоков с узким видом он включается. */
-  const render = (id: HomeBlockId, half: boolean): ReactNode => {
-    switch (id) {
+  const render = (slot: HomeSlot, half: boolean): ReactNode => {
+    switch (slot.block.id) {
       case 'hero':
         return <HomeHero total={total ?? null} base={base} />;
       case 'templates':
@@ -178,8 +210,14 @@ export default function HomePage() {
             <DailyHomeCard />
           </Suspense>
         );
+      case 'today':
+        return (
+          <Suspense fallback={null}>
+            <TodayHomeCard today={today} base={base} half={half} />
+          </Suspense>
+        );
       case 'rates':
-        return <RatesCard base={base} />;
+        return <RatesCard base={base} {...(slot.cur ? { currencies: slot.cur } : {})} />;
       case 'weather':
         return adviceAt < 0 ? <WeatherCard /> : <WeatherCard adviceSlot={adviceSlot} />;
       case 'wallets':
@@ -234,7 +272,7 @@ export default function HomePage() {
     const width = widthOf(slot);
     nodes.push(
       <div key={slot.block.id} data-home-block={slot.block.id} {...WIDTH_ATTRS[width]}>
-        {render(slot.block.id, width === 'half')}
+        {render(slot, width === 'half')}
       </div>,
     );
     if (slot.block.id === 'hero') nodes.push(first);
@@ -246,13 +284,13 @@ export default function HomePage() {
     <HideAmountsProvider>
       <InstallHint className="mb-2" />
       <PageHeader title="Главная" className={HEADER_CLASS} />
-      <div data-home-grid className="stagger">
+      <div data-home-grid className="stagger" {...longPress}>
         {nodes}
       </div>
       {slots.length === 0 && (
         <EmptyState icon="home" title="На главной пусто" text="Все блоки скрыты. Верните нужные — это занимает пару касаний." className="py-8" />
       )}
-      <div className="flex justify-center pt-3">
+      <div className="flex flex-col items-center pt-3">
         <Link
           {...HOME_EDIT_LINK}
           className="press inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 text-sm font-semibold text-muted hover:text-brand"
@@ -260,7 +298,29 @@ export default function HomePage() {
           <Icon name="sliders" size={18} />
           Настроить главную
         </Link>
+        {/* долгое нажатие есть только у пальца: мыши подсказка не нужна */}
+        <p className="hidden text-center text-xs text-muted [@media(pointer:coarse)]:block">Долгое нажатие на блок — скрыть его с главной</p>
       </div>
+      <HomeBlockMenu
+        block={pickingCurrencies ? null : menu}
+        onClose={() => setMenu(null)}
+        onHide={hideBlock}
+        onCurrencies={() => setPickingCurrencies(true)}
+      />
+      {pickingCurrencies && (
+        <Suspense fallback={null}>
+          <RatesCurrencySheet
+            open
+            base={base}
+            value={items.find((i) => i.id === 'rates')?.cur}
+            onChange={(cur) => saveHome(setCurrencies(items, 'rates', cur))}
+            onClose={() => {
+              setPickingCurrencies(false);
+              setMenu(null);
+            }}
+          />
+        </Suspense>
+      )}
     </HideAmountsProvider>
   );
 }

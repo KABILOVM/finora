@@ -1,12 +1,17 @@
 import type { CurrencyCode } from '@/domain/types';
 import { formatNumber } from '@/features/converter/convert';
 
-/** Какие валюты показываем на «Главной» (к основной валюте): доллар и рубль; если основная — одна из них, на её место встаёт евро. */
+/** Какие валюты показываем на «Главной» (к основной валюте), пока человек не выбрал сам: доллар и рубль; если основная — одна из них, на её место встаёт евро. */
 const WIDGET_CANDIDATES: readonly CurrencyCode[] = ['USD', 'RUB', 'EUR'];
 export const RATES_WIDGET_COUNT = 2;
 
-export function widgetCurrencies(base: CurrencyCode): CurrencyCode[] {
-  return WIDGET_CANDIDATES.filter((c) => c !== base).slice(0, RATES_WIDGET_COUNT);
+/**
+ * Валюты блока курсов. `chosen` — выбор человека из раскладки главной (настройка главной → «Валюты»): основная валюта из него
+ * выпадает (курс к самой себе не нужен); если после этого ничего не осталось или выбора нет — стандартные.
+ */
+export function widgetCurrencies(base: CurrencyCode, chosen?: readonly CurrencyCode[]): CurrencyCode[] {
+  const own = (chosen ?? []).filter((c) => c !== base);
+  return own.length > 0 ? own : WIDGET_CANDIDATES.filter((c) => c !== base).slice(0, RATES_WIDGET_COUNT);
 }
 
 /** Сколько единиц валюты брать, чтобы число в курсе читалось: «1 $ = 10,95», но «100 ₽ = 12,10», а не «1 ₽ = 0,1210». */

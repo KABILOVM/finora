@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { findByRole, screen, user, waitFor } from '@/components/testUtils';
+import { act, findByRole, fire, screen, user, waitFor } from '@/components/testUtils';
 import type { Store } from '@/db';
 import { parseHome, stringifyHome, type HomeItem } from '@/domain/homeLayout';
 import { formatMinor } from '@/domain/money';
 import { parseForecast } from '@/features/weather/api';
 import { DEFAULT_CITIES, saveCache } from '@/features/weather/store';
-import { currentPath, currentSearch, LocationProbe, opsDeps, pinToday, seedHistory, showApp, storeOf, table, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
+import { backgroundPath, currentPath, currentSearch, LocationProbe, opsDeps, pinToday, seedHistory, showApp, storeOf, table, unpinToday, type History } from '@/features/transactions/__fixtures__/opsKit';
+import { markSaved, resetSavedForTests } from '@/features/transactions/savedTx';
 import HomePage from './HomePage';
 import { HOME_BLOCKS } from './layout/blocks';
-import { defaultHome, presetHome, setShown, setSize } from './layout/layout';
+import { defaultHome, presetHome, setCurrencies, setShown, setSize } from './layout/layout';
+import { LONG_PRESS_MS } from './layout/useLongPress';
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({ needRefresh: [false, vi.fn()], offlineReady: [false, vi.fn()], updateServiceWorker: vi.fn() }),
@@ -24,7 +26,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
+  resetSavedForTests();
 });
+
+/** Операции из затравки (seedHistory) последнего открытого экрана. */
+let hist: History = { cash: '', card: '', usd: '', txs: {} };
 
 const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
 const text = (el: Element | null | undefined) => norm(el?.textContent);
@@ -47,7 +53,7 @@ interface OpenOptions {
 async function open(options: OpenOptions = {}) {
   const td = opsDeps([table()], {
     setup: async (s) => {
-      await seedHistory(s);
+      hist = await seedHistory(s);
       if (options.setup) await options.setup(s);
       if (typeof options.home === 'string') await s.db.settings.update(s.userId, { home: options.home });
       else if (options.home) await s.settings.update({ home: stringifyHome(options.home) });
@@ -82,10 +88,12 @@ const savedShown = async (td: Awaited<ReturnType<typeof open>>) =>
   (parseHome(await savedHome(td)) ?? []).filter((i) => i.off !== true).map((i) => i.id);
 
 describe('главная по раскладке', () => {
-  it('раскладка не задана — стандартная главная: блоки в прежнем порядке, «первая трата» сразу под итогом, курсы и погода — половинами', async () => {
+  it('раскладка не задана — стандартная главная: последние операции сразу под итогом, «первая трата» — за итогом, курсы и погода — половинами', async () => {
     await openHome();
     const standard = HOME_BLOCKS.filter((b) => b.on).map((b) => b.id as string);
     expect(blockIds()).toEqual([standard[0], 'first', ...standard.slice(1)]);
+    // над операциями — только строки, которые появляются по делу; курсы, погода и карточки — ниже
+    expect(standard.slice(0, 6)).toEqual(['hero', 'templates', 'attention', 'missed', 'recent', 'wallets']);
     expect(wrapper('rates')?.dataset['size']).toBe('half');
     expect(wrapper('weather')?.dataset['size']).toBe('half');
     // компактные карточки ширину не выбирали: парами их ставит только «Бенто»
@@ -95,7 +103,7 @@ describe('главная по раскладке', () => {
     expect(byTest('home-rates')).not.toBeNull();
     expect(byTest('home-weather')).not.toBeNull();
     // блоки, которых на стандартной главной нет, не рисуются и не загружаются
-    for (const id of ['debts-card', 'goals-card', 'shopping-card', 'spending-card', 'home-shortcuts']) expect(byTest(id), id).toBeNull();
+    for (const id of ['today-card', 'debts-card', 'goals-card', 'shopping-card', 'spending-card', 'home-shortcuts']) expect(byTest(id), id).toBeNull();
   });
 
   it('своя раскладка: порядок из настроек, скрытые блоки не рисуются, выбранная ширина сильнее задуманной', async () => {
@@ -138,8 +146,10 @@ describe('главная по раскладке', () => {
 
   it('незнакомый блок в записи пропускается, остальные идут своим порядком', async () => {
     await openHome({ home: [{ id: 'recent' }, { id: 'future-block' }, { id: 'hero' }] });
+    expect(blockIds()[0]).toBe('recent');
     // «первая трата» держится за итог, где бы он ни стоял
-    expect(blockIds().slice(0, 3)).toEqual(['recent', 'hero', 'first']);
+    expect(blockIds()[blockIds().indexOf('hero') + 1]).toBe('first');
+    expect(blockIds().indexOf('hero')).toBeGreaterThan(blockIds().indexOf('recent'));
     expect(blockIds()).not.toContain('future-block');
   });
 });
@@ -339,6 +349,167 @@ describe('блоки, которые выносят на главную', () => 
   });
 });
 
+describe('блок «Сегодня»', () => {
+  it('сколько потрачено за день, сколько операций и сколько получено; заголовок открывает операции за сегодня', async () => {
+    await openHome({ home: setShown(defaultHome(), 'today', true) });
+    await waitFor(() => expect(byTest('today-spent')).not.toBeNull());
+    // сегодня (15.10): обед 12,50 и аванс 5 000
+    expect(text(byTest('today-spent'))).toBe(fmt(1_250));
+    expect(text(byTest('today-count'))).toBe(`2 операции · получено +${fmt(500_000)}`);
+    expect(screen.getByRole('link', { name: 'Сегодня: открыть операции за день' })).toHaveAttribute('href', '/transactions?period=range&from=2026-10-15&to=2026-10-15');
+    // блок стоит над «Последними операциями»
+    expect(blockIds().indexOf('today')).toBe(blockIds().indexOf('recent') - 1);
+  });
+
+  it('за сегодня ничего нет — строка со ссылкой «Добавить»', async () => {
+    await openHome({
+      home: setShown(defaultHome(), 'today', true),
+      setup: async (s) => {
+        await s.transactions.softDelete(hist.txs['lunch']!);
+        await s.transactions.softDelete(hist.txs['advance']!);
+      },
+    });
+    await waitFor(() => expect(text(byTest('today-card'))).toContain('Сегодня операций пока нет.'));
+    expect(byTest('today-spent')).toBeNull();
+    await user.click(byTest('today-card')!.querySelector('p a')!);
+    expect(currentPath()).toBe('/add');
+    expect(backgroundPath()).toBe('/');
+  });
+});
+
+describe('валюты блока курсов', () => {
+  const rateRows = () => Array.from(document.querySelectorAll('[data-testid="rates-widget-row"]')).map((r) => text(r));
+
+  it('по умолчанию — доллар и рубль; выбранные в раскладке валюты заменяют их', async () => {
+    await openHome();
+    expect(rateRows()).toEqual(['1 USD10,90 с.', 'RUBнет курса']);
+  });
+
+  it('выбор из раскладки: показаны только выбранные валюты, в выбранном порядке', async () => {
+    await openHome({ home: setCurrencies(defaultHome(), 'rates', ['EUR', 'USD']) });
+    expect(rateRows()).toEqual(['1 EUR12,00 с.', '1 USD10,90 с.']);
+  });
+
+  it('основная валюта из выбора выпадает; если ничего не осталось — стандартные', async () => {
+    await openHome({ home: setCurrencies(defaultHome(), 'rates', ['TJS']) });
+    expect(rateRows()).toEqual(['1 USD10,90 с.', 'RUBнет курса']);
+  });
+});
+
+describe('долгое нажатие на блок', () => {
+  /** Палец лёг на блок и держится. pointerType у события нет (как у пальца в тестовой среде без PointerEvent). */
+  const touchDown = (el: Element, x = 20, y = 20) => fire(el, new MouseEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+  const hold = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, LONG_PRESS_MS + 80)));
+  const menu = (title: string) => screen.queryByRole('dialog', { name: title });
+
+  it('долгое нажатие открывает меню блока; «Скрыть с главной» убирает блок, «Отменить» в тосте возвращает', async () => {
+    const td = await openHome();
+    touchDown(byTest('home-weather')!);
+    await hold();
+    const dialog = menu('Погода');
+    expect(dialog).not.toBeNull();
+    expect(text(dialog)).toContain('Сейчас в вашем городе и совет взять зонт');
+    await user.click(screen.getByRole('button', { name: 'Скрыть с главной' }));
+    await waitFor(() => expect(blockIds()).not.toContain('weather'));
+    expect(menu('Погода')).toBeNull();
+    expect(await savedShown(td)).not.toContain('weather');
+    expect(screen.getByText('Блок «Погода» скрыт с главной')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Отменить' }));
+    await waitFor(() => expect(blockIds()).toContain('weather'));
+    expect(await savedHome(td)).toBeNull(); // вернулась стандартная главная, а не «своя, как стандартная»
+  });
+
+  it('короткое касание, сдвиг пальца (прокрутка) и мышь меню не открывают', async () => {
+    await openHome();
+    const block = byTest('home-weather')!;
+    // отпустили раньше
+    touchDown(block);
+    fire(block, new MouseEvent('pointerup', { bubbles: true }));
+    await hold();
+    expect(menu('Погода')).toBeNull();
+    // палец поехал — это прокрутка
+    touchDown(block);
+    fire(block, new MouseEvent('pointermove', { bubbles: true, clientX: 20, clientY: 60 }));
+    await hold();
+    expect(menu('Погода')).toBeNull();
+    // мышь: у неё долгого нажатия нет
+    const mouse = new MouseEvent('pointerdown', { bubbles: true, clientX: 20, clientY: 20 });
+    Object.defineProperty(mouse, 'pointerType', { value: 'mouse' });
+    fire(block, mouse);
+    await hold();
+    expect(menu('Погода')).toBeNull();
+  });
+
+  it('после долгого нажатия отпускание пальца не «нажимает» ссылку под ним', async () => {
+    await openHome();
+    const link = byTest('rates-widget')!;
+    touchDown(link);
+    await hold();
+    expect(menu('Курсы валют')).not.toBeNull();
+    await user.click(link); // палец отпустили над той же ссылкой
+    expect(currentPath()).toBe('/'); // в «Курсы валют» не ушли
+  });
+
+  it('у блока курсов в меню есть «Выбрать валюты»: выбор сохраняется в раскладку и сразу виден на главной', async () => {
+    const td = await openHome();
+    touchDown(byTest('home-rates')!);
+    await hold();
+    await user.click(screen.getByRole('button', { name: 'Выбрать валюты' }));
+    const sheet = await findByRole('dialog', { name: 'Валюты блока курсов' });
+    const box = (name: string) => Array.from(sheet.querySelectorAll<HTMLElement>('[role="checkbox"]')).find((b) => b.getAttribute('aria-label') === name)!;
+    expect(box('USD, Доллар США')).toHaveAttribute('aria-checked', 'true');
+    expect(box('EUR, Евро')).toHaveAttribute('aria-checked', 'false');
+    expect(sheet.querySelector('[aria-label^="TJS"]')).toBeNull(); // основной валюты в списке нет
+
+    await user.click(box('EUR, Евро'));
+    await waitFor(async () => expect(parseHome(await savedHome(td))?.find((i) => i.id === 'rates')?.cur).toEqual(['USD', 'EUR', 'RUB']));
+    await waitFor(() => expect(box('EUR, Евро')).toHaveAttribute('aria-checked', 'true'));
+    // три валюты — предел: четвёртую не добавить
+    expect(box('KZT, Тенге')).toBeDisabled();
+    // рубль убираем
+    await user.click(box('RUB, Российский рубль'));
+    await waitFor(async () => expect(parseHome(await savedHome(td))?.find((i) => i.id === 'rates')?.cur).toEqual(['USD', 'EUR']));
+
+    await user.click(screen.getByRole('button', { name: 'Готово' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Валюты блока курсов' })).toBeNull());
+    expect(menu('Курсы валют')).toBeNull(); // меню блока тоже закрыто
+    await waitFor(() => expect(Array.from(document.querySelectorAll('[data-testid="rates-widget-row"]')).map((r) => text(r))).toEqual(['1 USD10,90 с.', '1 EUR12,00 с.']));
+  });
+
+  it('«Настроить главную» в меню открывает настройку', async () => {
+    await openHome();
+    touchDown(byTest('home-total')!);
+    await hold();
+    expect(menu('Всего')).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Настроить главную' }));
+    await findByRole('heading', { name: 'Настройка главной', level: 1 });
+    expect(currentSearch()).toBe('?edit=1');
+  });
+
+  it('«первая трата» и место под совет погоды — не блоки раскладки: меню у них нет', async () => {
+    await openHome();
+    touchDown(wrapper('first')!);
+    await hold();
+    expect(document.querySelector('[data-testid="home-block-menu"]')).toBeNull();
+  });
+});
+
+describe('подсветка только что внесённой операции', () => {
+  it('строка новой операции в «Последних операциях» подсвечена, остальные — нет; через несколько секунд подсветка уходит', async () => {
+    await openHome();
+    await waitFor(() => expect(document.querySelectorAll('section[aria-labelledby="home-recent"] button').length).toBeGreaterThan(0));
+    const fresh = () => Array.from(document.querySelectorAll('section[aria-labelledby="home-recent"] [data-fresh="true"]'));
+    expect(fresh()).toHaveLength(0);
+    act(() => markSaved(hist.txs['lunch']!));
+    expect(fresh()).toHaveLength(1);
+    expect(text(fresh()[0])).toContain('обед');
+    expect(fresh()[0]?.className).toContain('bg-brand/15');
+    act(() => resetSavedForTests());
+    expect(fresh()).toHaveLength(0);
+  });
+});
+
 describe('настройка главной', () => {
   const shownRows = () => Array.from(byTest('home-edit-shown')?.querySelectorAll(':scope > li') ?? []).map((li) => (li.getAttribute('data-testid') ?? '').replace('home-edit-row-', ''));
   const hiddenRows = () => Array.from(byTest('home-edit-hidden')?.querySelectorAll(':scope > li') ?? []).map((li) => (li.getAttribute('data-testid') ?? '').replace('home-edit-row-', ''));
@@ -382,19 +553,19 @@ describe('настройка главной', () => {
   it('стрелки ↑ и ↓ на ручке двигают блок; фокус остаётся на ручке, у края ничего не происходит', async () => {
     const td = await openEditor();
     const last = shownRows().length - 1;
-    expect(shownRows()[last]).toBe('recent');
-    handle('Последние операции').focus();
+    expect(shownRows()[last]).toBe('upcoming');
+    handle('Ближайшие платежи').focus();
     await user.keyboard('{ArrowUp}');
-    await waitFor(() => expect(shownRows()[last - 1]).toBe('recent'));
-    expect(document.activeElement).toBe(handle('Последние операции'));
+    await waitFor(() => expect(shownRows()[last - 1]).toBe('upcoming'));
+    expect(document.activeElement).toBe(handle('Ближайшие платежи'));
     await user.keyboard('{ArrowUp}');
-    await waitFor(() => expect(shownRows()[last - 2]).toBe('recent'));
-    await waitFor(async () => expect((await savedShown(td)).indexOf('recent')).toBe(last - 2));
+    await waitFor(() => expect(shownRows()[last - 2]).toBe('upcoming'));
+    await waitFor(async () => expect((await savedShown(td)).indexOf('upcoming')).toBe(last - 2));
     // место объявляется для скринридера
-    expect(text(document.querySelector('[aria-live="polite"]'))).toBe(`«Последние операции»: место ${last - 1} из ${last + 1}`);
+    expect(text(document.querySelector('[aria-live="polite"]'))).toBe(`«Ближайшие платежи»: место ${last - 1} из ${last + 1}`);
 
     await user.keyboard('{ArrowDown}');
-    await waitFor(() => expect(shownRows()[last - 1]).toBe('recent'));
+    await waitFor(() => expect(shownRows()[last - 1]).toBe('upcoming'));
 
     // первый блок вверх не уходит
     const before = shownRows();
@@ -418,14 +589,36 @@ describe('настройка главной', () => {
     await waitFor(() => expect(text(byTest('home-edit-row-budgets'))).toContain('На телефоне блок остаётся во всю ширину.'));
   });
 
+  it('валюты блока курсов: кнопка «Валюты» открывает выбор; он сохраняется сразу, «По умолчанию» возвращает доллар и рубль', async () => {
+    const td = await openEditor();
+    const button = byTest('home-edit-currencies')!;
+    expect(text(button)).toBe('Валюты: USD, RUB');
+    await user.click(button);
+    const sheet = await findByRole('dialog', { name: 'Валюты блока курсов' });
+    const box = (code: string) => Array.from(sheet.querySelectorAll<HTMLElement>('[role="checkbox"]')).find((b) => (b.getAttribute('aria-label') ?? '').startsWith(code))!;
+    await user.click(box('CNY'));
+    await waitFor(() => expect(text(byTest('home-edit-currencies'))).toBe('Валюты: USD, RUB, CNY'));
+    await waitFor(async () => expect(parseHome(await savedHome(td))?.find((i) => i.id === 'rates')?.cur).toEqual(['USD', 'RUB', 'CNY']));
+    // последнюю оставшуюся валюту снять нельзя
+    await user.click(box('USD'));
+    await user.click(box('RUB'));
+    await waitFor(() => expect(text(byTest('home-edit-currencies'))).toBe('Валюты: CNY'));
+    expect(box('CNY')).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'По умолчанию' }));
+    await waitFor(() => expect(text(byTest('home-edit-currencies'))).toBe('Валюты: USD, RUB'));
+    await waitFor(async () => expect(parseHome(await savedHome(td))?.find((i) => i.id === 'rates')).toEqual({ id: 'rates' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'По умолчанию' })).toBeNull());
+  });
+
   it('готовый набор применяется сразу и отмечается выбранным; «Отменить» возвращает прежнюю раскладку', async () => {
     const custom = setShown(defaultHome(), 'weather', false);
     const td = await openEditor({ home: custom });
     expect(screen.getByRole('button', { name: 'Сбросить' })).toBeInTheDocument();
     await user.click(presetButton('Минимум'));
-    await waitFor(() => expect(shownRows()).toEqual(['hero', 'attention', 'wallets', 'recent']));
+    await waitFor(() => expect(shownRows()).toEqual(['hero', 'attention', 'recent', 'wallets']));
     expect(presetButton('Минимум', true)).toBeInTheDocument();
-    await waitFor(async () => expect(await savedShown(td)).toEqual(['hero', 'attention', 'wallets', 'recent']));
+    await waitFor(async () => expect(await savedShown(td)).toEqual(['hero', 'attention', 'recent', 'wallets']));
 
     await user.click(screen.getByRole('button', { name: 'Отменить' }));
     await waitFor(() => expect(shownRows()).not.toContain('weather'));
@@ -433,10 +626,12 @@ describe('настройка главной', () => {
     await waitFor(async () => expect(await savedHome(td)).toBe(stringifyHome(custom)));
   });
 
-  it('«Операции сверху» и «Всё»', async () => {
+  it('«Операции внизу» (как было раньше) и «Всё»', async () => {
     const td = await openEditor();
-    await user.click(presetButton('Операции сверху'));
-    await waitFor(() => expect(shownRows().slice(0, 3)).toEqual(['hero', 'recent', 'wallets']));
+    await user.click(presetButton('Операции внизу'));
+    await waitFor(() => expect(shownRows().at(-1)).toBe('recent'));
+    expect(shownRows().indexOf('rates')).toBeLessThan(shownRows().indexOf('wallets'));
+    expect(presetButton('Операции внизу', true)).toBeInTheDocument();
     await user.click(presetButton('Всё'));
     await waitFor(() => expect(shownRows()).toEqual(HOME_BLOCKS.map((b) => b.id)));
     expect(byTest('home-edit-hidden')).toBeNull();

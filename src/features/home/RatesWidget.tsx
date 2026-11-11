@@ -18,13 +18,13 @@ function rowText(row: Row, base: CurrencyCode): string | null {
 }
 
 /**
- * Содержимое блока «Курсы валют» на «Главной»: доллар и рубль к основной валюте, две строки по 20 px. Нажатие открывает
+ * Содержимое блока «Курсы валют» на «Главной»: выбранные валюты (по умолчанию доллар и рубль) к основной, строки по 20 px. Нажатие открывает
  * «Курсы валют». Курсы лежат на устройстве, поэтому работает без интернета; нет курса — так и пишем, без выдуманных цифр.
  * Дата курса и «устарел» — в имени ссылки и жёлтой точкой, чтобы не занимать место.
  */
-export default function RatesWidget({ base }: { base: CurrencyCode }) {
+export default function RatesWidget({ base, currencies }: { base: CurrencyCode; currencies?: readonly CurrencyCode[] }) {
   const { getRate } = useRates();
-  const rows: Row[] = widgetCurrencies(base).map((code) => ({ code, lookup: getRate(code, base) }));
+  const rows: Row[] = widgetCurrencies(base, currencies).map((code) => ({ code, lookup: getRate(code, base) }));
   const known = rows.filter((r): r is Row & { lookup: RateLookup } => r.lookup !== null);
   const asOf = known.map((r) => r.lookup.asOf).sort()[0];
   const stale = known.some((r) => r.lookup.stale);

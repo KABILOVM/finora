@@ -12,6 +12,8 @@ export interface HomeSlot {
   on: boolean;
   /** Ширина, которую выбрал человек; нет — как задумано у блока. */
   size?: HomeSize;
+  /** Валюты блока курсов, выбранные человеком; нет — доллар и рубль. */
+  cur?: string[];
 }
 
 const defaultItem = (b: HomeBlock): HomeItem => (b.on ? { id: b.id } : { id: b.id, off: true });
@@ -39,7 +41,7 @@ export function resolveHome(stored: readonly HomeItem[] | null): HomeItem[] {
 export function slotsOf(items: readonly HomeItem[]): HomeSlot[] {
   return items.flatMap((i) => {
     const block = homeBlock(i.id);
-    return block ? [{ block, on: i.off !== true, ...(i.size ? { size: i.size } : {}) }] : [];
+    return block ? [{ block, on: i.off !== true, ...(i.size ? { size: i.size } : {}), ...(i.cur ? { cur: i.cur } : {}) }] : [];
   });
 }
 
@@ -80,6 +82,15 @@ export function setSize(items: readonly HomeItem[], id: string, size: HomeSize):
   return items.map((i) => (i.id === id ? { ...i, size } : i));
 }
 
+/** Валюты блока курсов; null — вернуть стандартные (доллар и рубль). */
+export function setCurrencies(items: readonly HomeItem[], id: string, cur: readonly string[] | null): HomeItem[] {
+  return items.map((i) => {
+    if (i.id !== id) return i;
+    const { cur: _cur, ...rest } = i;
+    return cur === null ? rest : { ...rest, cur: [...cur] };
+  });
+}
+
 /** Ширина блока «как сейчас»: выбор человека, иначе задуманная у блока. Блок, который не бывает половиной, всегда во всю ширину. */
 export function sizeOf(slot: Pick<HomeSlot, 'block' | 'size'>): HomeSize {
   return slot.block.half === 'never' ? 'full' : (slot.size ?? slot.block.size ?? 'full');
@@ -115,7 +126,7 @@ export function adviceAnchor(shown: readonly Pick<HomeSlot, 'block' | 'size'>[])
 
 // ───────────────────────── готовые наборы ─────────────────────────
 
-export type HomePresetId = 'standard' | 'ops' | 'minimal' | 'all';
+export type HomePresetId = 'standard' | 'classic' | 'minimal' | 'all';
 
 export interface HomePreset {
   id: HomePresetId;
@@ -124,31 +135,37 @@ export interface HomePreset {
 }
 
 export const HOME_PRESETS: readonly HomePreset[] = [
-  { id: 'standard', title: 'Стандартная', hint: 'Как было' },
-  { id: 'ops', title: 'Операции сверху', hint: 'Последние операции сразу под итогом' },
-  { id: 'minimal', title: 'Минимум', hint: 'Итог, кошельки и операции' },
+  { id: 'standard', title: 'Стандартная', hint: 'Операции сразу под итогом' },
+  { id: 'classic', title: 'Операции внизу', hint: 'Как было раньше' },
+  { id: 'minimal', title: 'Минимум', hint: 'Итог, операции и кошельки' },
   { id: 'all', title: 'Всё', hint: 'Все блоки, какие есть' },
 ];
 
 /** Блоки набора «Минимум»; «Требует внимания» оставлен: он появляется, только когда что-то горит. */
-const MINIMAL: readonly HomeBlockId[] = ['hero', 'attention', 'wallets', 'recent'];
-/** Что идёт сразу под итогом в наборе «Операции сверху». */
-const OPS_FIRST: readonly HomeBlockId[] = ['hero', 'recent', 'wallets'];
+const MINIMAL: readonly HomeBlockId[] = ['hero', 'attention', 'recent', 'wallets'];
+/** Прежняя стандартная главная (до версии 0.13): подсказки и курсы с погодой сверху, последние операции — в самом низу. */
+const CLASSIC: readonly HomeBlockId[] = [
+  'hero', 'templates', 'attention', 'missed', 'weekly', 'monthly', 'save', 'trip', 'daily', 'rates', 'weather', 'wallets', 'budgets', 'upcoming', 'recent',
+];
 
 /**
- * Раскладка готового набора. null — стандартная (запись в настройках очищается). Незнакомые блоки из текущей раскладки
- * сохраняются в конце списка: набор не должен стирать то, что записало более новое приложение.
+ * Раскладка готового набора. null — стандартная, и хранить нечего (запись в настройках очищается). Незнакомые блоки из текущей
+ * раскладки сохраняются в конце списка: набор не должен стирать то, что записало более новое приложение. Выбранные человеком
+ * валюты блока курсов набор тоже не трогает: он про порядок и состав блоков (их сбрасывает только «Сбросить»).
  */
 export function presetHome(id: HomePresetId, current: readonly HomeItem[] = []): HomeItem[] | null {
-  if (id === 'standard') return null;
   const unknown = current.filter((i) => homeBlock(i.id) === undefined);
+  const cur = current.find((i) => i.id === 'rates')?.cur;
+  // стандартной главной запись не нужна — кроме случая, когда в ней лежит выбор валют или незнакомые блоки
+  if (id === 'standard' && !cur && unknown.length === 0) return null;
   const pick = (): HomeItem[] => {
+    if (id === 'standard') return defaultHome();
     if (id === 'all') return HOME_BLOCKS.map((b) => ({ id: b.id }));
     if (id === 'minimal') return HOME_BLOCKS.map((b) => (MINIMAL.includes(b.id) ? { id: b.id } : { id: b.id, off: true as const }));
-    const rest = HOME_BLOCKS.filter((b) => !OPS_FIRST.includes(b.id));
-    return [...OPS_FIRST.map((bid) => homeBlock(bid)!), ...rest].map(defaultItem);
+    // блоки, которых на прежней главной не было, встают за своими соседями по реестру и остаются скрытыми
+    return resolveHome(CLASSIC.map((bid) => ({ id: bid })));
   };
-  return [...pick(), ...unknown];
+  return [...pick().map((i) => (i.id === 'rates' && cur ? { ...i, cur } : i)), ...unknown];
 }
 
 /** Какому набору равна раскладка (по показанным блокам, их порядку и ширине); null — своя. */

@@ -3209,6 +3209,15 @@ html[data-skin='bento'] .rounded-card {
     gap: 1rem;
   }
 }
+/* Долгое нажатие на блок главной открывает его меню (features/home/layout/useLongPress.ts): пока палец держат, браузер не должен
+   выделять текст и показывать своё меню ссылки. Только для пальца: мышью текст выделяется как обычно. */
+@media (pointer: coarse) {
+  [data-home-grid] > [data-home-block] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
 /* Рамка карточки «Всего» цвета образа (--skin-line). */
 html[data-skin] .skin-hero {
   border: 2px solid rgb(var(--skin-line, 255 255 255) / 0.85);

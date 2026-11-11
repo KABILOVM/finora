@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -9,8 +9,13 @@ import { Switch } from '@/components/Switch';
 import { useToast } from '@/components/Toast';
 import { useStore } from '@/db';
 import { parseHome, stringifyHome, type HomeItem, type HomeSize } from '@/domain/homeLayout';
+import type { CurrencyCode } from '@/domain/types';
 import { cn } from '@/lib/cn';
-import { HOME_PRESETS, matchPreset, presetHome, reorderShown, resolveHome, setShown, setSize, shiftShown, sizeOf, slotsOf, type HomePresetId, type HomeSlot } from './layout';
+import { widgetCurrencies } from '../ratesView';
+import { HOME_PRESETS, matchPreset, presetHome, reorderShown, resolveHome, setCurrencies, setShown, setSize, shiftShown, sizeOf, slotsOf, type HomePresetId, type HomeSlot } from './layout';
+
+// Окно выбора валют блока курсов открывают редко: грузится по нажатию
+const RatesCurrencySheet = lazy(() => import('./RatesCurrencySheet'));
 
 /** Раскладка, которую уже видно на экране, но настройки ещё не подтвердили запись (чтобы список не «прыгал» назад на мгновение). */
 interface Pending {
@@ -73,9 +78,11 @@ function BlockText({ slot }: { slot: HomeSlot }) {
  * ↑/↓, когда ручка в фокусе), выключателем убирают с главной, а у блоков с узким видом выбирают ширину. Ниже — скрытые блоки:
  * выключатель возвращает блок на главную на прежнее место. Каждое изменение сохраняется сразу — в настройки, поэтому раскладка
  * появляется на всех устройствах человека. «Готово» возвращает на главную.
- * `home` — текущая запись раскладки из настроек (её уже прочитала главная): список сразу настоящий, без мгновения со стандартным.
+ * У блока курсов — кнопка «Валюты»: какие курсы показывать (от одной до трёх валют).
+ * `home` — текущая запись раскладки из настроек (её уже прочитала главная): список сразу настоящий, без мгновения со стандартным;
+ * `base` — основная валюта (к ней показываются курсы).
  */
-export default function HomeEditor({ home: text }: { home: string | null }) {
+export default function HomeEditor({ home: text, base }: { home: string | null; base: CurrencyCode }) {
   const store = useStore();
   const toast = useToast();
   // непонятная запись (её оставило более новое приложение) читается как «не задана»
@@ -97,6 +104,7 @@ export default function HomeEditor({ home: text }: { home: string | null }) {
   const preset = matchPreset(current === null ? null : items);
 
   const [live, setLive] = useState('');
+  const [pickingCurrencies, setPickingCurrencies] = useState(false);
   const [drag, setDrag] = useState<DragView | null>(null);
   const memory = useRef<DragMemory | null>(null);
   const rows = useRef(new Map<string, HTMLLIElement>());
@@ -352,22 +360,34 @@ export default function HomeEditor({ home: text }: { home: string | null }) {
                     {/* у компактных карточек половина бывает только от 560 px: на телефоне выбора нет, там они всегда во всю ширину */}
                     {block.half !== 'never' && (
                       <div className={cn('pb-2 pl-[6.125rem] pr-3', block.half === 'wide' && 'hidden min-[560px]:block')}>
-                        <div role="radiogroup" aria-label={`Ширина: ${block.title}`} className="flex gap-1.5">
-                          {(['full', 'half'] as const).map((s) => (
+                        <div className="flex flex-wrap gap-1.5">
+                          <div role="radiogroup" aria-label={`Ширина: ${block.title}`} className="flex gap-1.5">
+                            {(['full', 'half'] as const).map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                role="radio"
+                                aria-checked={size === s}
+                                onClick={() => size !== s && apply(setSize(items, block.id, s))}
+                                className={cn(
+                                  'min-h-[44px] rounded-full border px-3 text-sm font-semibold transition-colors',
+                                  size === s ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-text',
+                                )}
+                              >
+                                {SIZE_LABEL[s]}
+                              </button>
+                            ))}
+                          </div>
+                          {block.id === 'rates' && (
                             <button
-                              key={s}
                               type="button"
-                              role="radio"
-                              aria-checked={size === s}
-                              onClick={() => size !== s && apply(setSize(items, block.id, s))}
-                              className={cn(
-                                'min-h-[44px] rounded-full border px-3 text-sm font-semibold transition-colors',
-                                size === s ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-text',
-                              )}
+                              data-testid="home-edit-currencies"
+                              onClick={() => setPickingCurrencies(true)}
+                              className="min-h-[44px] rounded-full border border-border px-3 text-sm font-semibold text-muted transition-colors hover:text-text"
                             >
-                              {SIZE_LABEL[s]}
+                              Валюты: {widgetCurrencies(base, slot.cur).join(', ')}
                             </button>
-                          ))}
+                          )}
                         </div>
                         {block.half === 'wide' && size === 'half' && <p className="mt-1 text-xs text-muted">На телефоне блок остаётся во всю ширину.</p>}
                       </div>
@@ -413,6 +433,17 @@ export default function HomeEditor({ home: text }: { home: string | null }) {
         )}
       </div>
       <p className="px-1 pb-2 text-sm text-muted">Раскладка сохраняется сама и появляется на всех ваших устройствах.</p>
+      {pickingCurrencies && (
+        <Suspense fallback={null}>
+          <RatesCurrencySheet
+            open
+            base={base}
+            value={items.find((i) => i.id === 'rates')?.cur}
+            onChange={(cur) => apply(setCurrencies(items, 'rates', cur))}
+            onClose={() => setPickingCurrencies(false)}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

@@ -13,7 +13,16 @@ describe('widgetCurrencies', () => {
     expect(widgetCurrencies('RUB')).toEqual(['USD', 'EUR']);
     expect(widgetCurrencies('EUR')).toEqual(['USD', 'RUB']);
   });
-  it('всегда ровно две валюты и никогда не основная', () => {
+  it('выбор человека заменяет стандартные валюты: порядок его, основная валюта выпадает', () => {
+    expect(widgetCurrencies('TJS', ['EUR', 'CNY', 'USD'])).toEqual(['EUR', 'CNY', 'USD']);
+    expect(widgetCurrencies('USD', ['USD', 'EUR'])).toEqual(['EUR']);
+  });
+  it('после выпадения основной ничего не осталось или выбор пуст — стандартные', () => {
+    expect(widgetCurrencies('USD', ['USD'])).toEqual(['RUB', 'EUR']);
+    expect(widgetCurrencies('TJS', [])).toEqual(['USD', 'RUB']);
+    expect(widgetCurrencies('TJS', undefined)).toEqual(['USD', 'RUB']);
+  });
+  it('без выбора — всегда ровно две валюты и никогда не основная', () => {
     fc.assert(
       fc.property(fc.constantFrom('TJS', 'USD', 'EUR', 'RUB', 'KZT', 'CNY'), (base) => {
         const list = widgetCurrencies(base);

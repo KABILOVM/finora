@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventually } from '@/app/testkit';
-import { act, findByRole, fire, screen, user, waitFor } from '@/components/testUtils';
+import { act, findByRole, fire, render, screen, user, waitFor } from '@/components/testUtils';
 import {
   catBtn,
   CATEGORY_NUDGE,
@@ -14,6 +14,7 @@ import {
   chipLabels,
   clickSave,
   contextChip,
+  currentPath,
   dateInput,
   liveTxs,
   openAddSheet,
@@ -25,9 +26,13 @@ import {
   tapAmount,
   withCard,
 } from '@/features/transactions/__fixtures__/opsKit';
+import { resetSavedForTests, useIsFresh } from '@/features/transactions/savedTx';
 import { addDays, todayLocal } from '@/lib/dates';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  resetSavedForTests();
+});
 
 /** Кнопка внутри окна подтверждения (под нею в странице есть своя «Сохранить»). */
 const dialogButton = (dialog: HTMLElement, name: string): HTMLElement => {
@@ -447,6 +452,49 @@ describe('тост «Сохранено» и отмена', () => {
     expect(rows).toHaveLength(1); // физически не удалена
     expect(rows[0]?.deletedAt).not.toBeNull();
     expect((await balancesOf(td)).get(cash.id)).toBe(0);
+  });
+});
+
+describe('тост «Сохранено»: «Открыть» и подсветка новой операции', () => {
+  it('«Открыть» показывает только что внесённую операцию — поверх страницы, с которой открывали окно', async () => {
+    const { td, onClose } = await openAddSheet();
+    await tapAmount('250');
+    await clickSave();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const [tx] = await liveTxs(td);
+    // кнопки в тосте: «Открыть», потом «Отменить»; «×» остаётся — тост можно убрать, если он мешает
+    const toast = screen.getByText('Сохранено').closest('[role="status"]');
+    expect(Array.from(toast?.querySelectorAll('button') ?? []).map((b) => b.textContent || b.getAttribute('aria-label'))).toEqual(['Открыть', 'Отменить', 'Закрыть уведомление']);
+    await user.click(screen.getByRole('button', { name: 'Открыть' }));
+    expect(currentPath()).toBe(`/edit/${tx?.id}`);
+    expect(screen.queryByText('Сохранено')).toBeNull(); // тост закрылся
+    expect((await liveTxs(td))).toHaveLength(1); // операция на месте
+  });
+
+  it('«Сохранить и добавить ещё»: окно остаётся открытым, поэтому «Открыть» в тосте нет — только «Отменить»', async () => {
+    await openAddSheet();
+    await tapAmount('250');
+    await clickSave('Сохранить и добавить ещё одну');
+    await waitFor(() => expect(screen.getByText('Сохранено')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Открыть' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Отменить' })).toBeInTheDocument();
+  });
+
+  it('сохранённая операция помечается «только что внесённой» (её строку в списке подсветят)', async () => {
+    const { td, onClose } = await openAddSheet();
+    await tapAmount('250');
+    await clickSave();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const [tx] = await liveTxs(td);
+    const seen: boolean[] = [];
+    function Probe() {
+      seen.push(useIsFresh(tx!.id));
+      return null;
+    }
+    render(<Probe />);
+    expect(seen.at(-1)).toBe(true);
+    act(() => resetSavedForTests());
+    expect(seen.at(-1)).toBe(false);
   });
 });
 
