@@ -29,9 +29,10 @@ const OPS: OpKey[] = ['÷', '×', '−', '+'];
 const OP_LABEL: Record<OpKey, string> = { '+': 'Плюс', '−': 'Минус', '×': 'Умножить', '÷': 'Разделить' };
 
 // Клавиши «приподняты»: тонкая рамка, светлая кромка сверху и мягкая тень; при нажатии уменьшаются и темнеют.
+// Углы — из общей шкалы (rounded-2xl): у образов с острыми или круглыми формами клавиши меняются вместе со всем остальным.
 // Клавиши не ниже 56px: так требует проект (удобно попадать пальцем).
 const BASE_KEY =
-  'flex min-h-[56px] select-none items-center justify-center rounded-[1.1rem] border text-[1.75rem] font-semibold leading-none ' +
+  'flex min-h-[56px] select-none items-center justify-center rounded-2xl border text-[1.75rem] font-semibold leading-none ' +
   'tracking-tight transition duration-150 ease-spring active:scale-[0.93] disabled:opacity-40 disabled:active:scale-100 ' +
   'shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_6px_14px_-9px_rgb(var(--brand)/0.55)]';
 const KEY_CLASS = `${BASE_KEY} border-border/80 bg-surface text-text active:bg-brand/10`;

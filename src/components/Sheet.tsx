@@ -162,7 +162,7 @@ export function Sheet({
       >
         {!centered && <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-border-strong/50 md:hidden" aria-hidden="true" />}
         <div className="flex items-center justify-between gap-2 px-5 pb-1 pt-3">
-          <h2 id={titleId} className="min-w-0 break-words text-lg font-bold">
+          <h2 id={titleId} className="min-w-0 break-words text-xl font-extrabold tracking-tight">
             {title}
           </h2>
           <div className="flex shrink-0 items-center gap-1">
