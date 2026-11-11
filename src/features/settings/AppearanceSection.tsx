@@ -8,7 +8,6 @@ import { readActiveCustomSkin } from '@/customSkin';
 import { paletteFromHex } from '@/lib/palette';
 import { CUSTOM_SKIN, isBaseSkin } from '@/skinCore';
 import { skinById } from '@/skins';
-import { SKIN_THUMBS } from '@/skinThumbs';
 import { readCustomPalette, saveCustomAccent, useAccentPref, useCustomAccent, useFxPref, useSkinPref, useThemePref, type ThemePref } from '@/theme';
 import { AccentPicker } from './AccentPicker';
 import { SettingsSection } from './SettingsSection';
@@ -39,9 +38,8 @@ export function AppearanceSection() {
     if (accent === 'custom' && customHex !== null && readCustomPalette(customHex) === null) setCustomHex(customHex);
   }, [accent, customHex, setCustomHex]);
   const { hidden, toggle } = useHideAmounts();
-  // у своего образа название хранится вместе с ним, значка-картинки у него нет
+  // у своего образа название хранится вместе с ним
   const skinLabel = skin === CUSTOM_SKIN ? (readActiveCustomSkin()?.name ?? 'Свой образ') : (skinById(skin)?.label ?? 'Классика');
-  const thumb = skin === CUSTOM_SKIN ? undefined : SKIN_THUMBS[skin];
   return (
     <SettingsSection title="Оформление">
       <Segmented ariaLabel="Тема оформления" options={OPTIONS} value={pref} onChange={setPref} />
@@ -51,14 +49,11 @@ export function AppearanceSection() {
         aria-label={`Образ: ${skinLabel}. Выбрать другой`}
         className="press flex min-h-[72px] items-center gap-3 rounded-2xl border border-border bg-surface-2/50 p-3 transition-colors hover:bg-surface-2"
       >
-        {thumb !== undefined ? (
-          // картинки образов в офлайн-кэш не входят: значок грузится, только когда до него долистали (без сети страница открывается без ошибок)
-          <img src={thumb} alt="" width={48} height={48} loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-xl border border-border bg-surface-2 object-contain p-0.5" />
-        ) : (
-          <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-accent text-brand-fg">
-            <Icon name="stars" size={24} />
-          </span>
-        )}
+        {/* Плитка в цветах образа, который сейчас стоит на странице. Картинки-значка здесь нет нарочно: картинки образов в офлайн-кэш
+            не входят, и без сети «Настройки» запрашивали бы файл, которого нет. Значки образов — на витрине. */}
+        <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-accent text-brand-fg">
+          <Icon name="stars" size={24} />
+        </span>
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-medium text-muted">Образ</span>
           <span className="block truncate font-semibold text-text">{skinLabel}</span>
