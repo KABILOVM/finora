@@ -1387,7 +1387,7 @@
  * Картинки и логотипы лежат в src/assets/skins; в предзагрузку приложения они не входят (см. vite.config.ts), качаются при выборе образа.
  */
 /* Барселона */
-:root[data-skin='barca'] {
+:root[data-skin='barca'], [data-skin-scope='barca'] {
   --ac-bg-l: 238 242 251;
   --ac-surface-2-l: 232 237 250;
   --ac-text-l: 8 18 46;
@@ -1423,7 +1423,7 @@
   --ac-logo-glyph: 255 223 120;
 }
 /* Реал Мадрид */
-:root[data-skin='real'] {
+:root[data-skin='real'], [data-skin-scope='real'] {
   --ac-bg-l: 247 245 239;
   --ac-surface-2-l: 239 236 226;
   --ac-text-l: 10 31 77;
@@ -1460,7 +1460,7 @@
 }
 
 /* Шиноби */
-:root[data-skin='shinobi'] {
+:root[data-skin='shinobi'], [data-skin-scope='shinobi'] {
   --ac-bg-l: 246 236 216;
   --ac-surface-2-l: 237 223 194;
   --ac-text-l: 25 32 63;
@@ -1496,7 +1496,7 @@
   --ac-logo-glyph: 244 236 231;
 }
 /* Акацуки */
-:root[data-skin='akatsuki'] {
+:root[data-skin='akatsuki'], [data-skin-scope='akatsuki'] {
   --ac-bg-l: 244 239 239;
   --ac-surface-2-l: 234 225 225;
   --ac-text-l: 26 16 18;
@@ -1532,7 +1532,7 @@
   --ac-logo-glyph: 247 231 232;
 }
 /* Паутина */
-:root[data-skin='spider'] {
+:root[data-skin='spider'], [data-skin-scope='spider'] {
   --ac-bg-l: 238 241 251;
   --ac-surface-2-l: 227 232 247;
   --ac-text-l: 10 13 28;
@@ -1568,7 +1568,7 @@
   --ac-logo-glyph: 248 232 233;
 }
 /* Герой */
-:root[data-skin='comic'] {
+:root[data-skin='comic'], [data-skin-scope='comic'] {
   --ac-bg-l: 238 242 255;
   --ac-surface-2-l: 226 233 253;
   --ac-text-l: 11 11 34;
@@ -1604,7 +1604,7 @@
   --ac-logo-glyph: 248 231 233;
 }
 /* Кавай */
-:root[data-skin='kawaii'] {
+:root[data-skin='kawaii'], [data-skin-scope='kawaii'] {
   --ac-bg-l: 255 240 248;
   --ac-surface-2-l: 255 228 242;
   --ac-text-l: 65 29 58;
@@ -1640,7 +1640,7 @@
   --ac-logo-glyph: 247 245 248;
 }
 /* Эстетика */
-:root[data-skin='aesthetic'] {
+:root[data-skin='aesthetic'], [data-skin-scope='aesthetic'] {
   --ac-bg-l: 247 235 230;
   --ac-surface-2-l: 239 221 214;
   --ac-text-l: 51 27 38;
@@ -1676,7 +1676,7 @@
   --ac-logo-glyph: 243 236 239;
 }
 /* Гонки */
-:root[data-skin='racing'] {
+:root[data-skin='racing'], [data-skin-scope='racing'] {
   --ac-bg-l: 241 242 245;
   --ac-surface-2-l: 230 232 238;
   --ac-text-l: 18 20 26;
@@ -1712,7 +1712,7 @@
   --ac-logo-glyph: 248 230 230;
 }
 /* Футбол */
-:root[data-skin='football'] {
+:root[data-skin='football'], [data-skin-scope='football'] {
   --ac-bg-l: 229 243 234;
   --ac-surface-2-l: 214 235 222;
   --ac-text-l: 14 42 26;
@@ -1748,7 +1748,7 @@
   --ac-logo-glyph: 237 245 240;
 }
 /* Киберпанк */
-:root[data-skin='cyber'] {
+:root[data-skin='cyber'], [data-skin-scope='cyber'] {
   --ac-bg-l: 243 238 252;
   --ac-surface-2-l: 233 224 248;
   --ac-text-l: 20 8 42;
@@ -1784,7 +1784,7 @@
   --ac-logo-glyph: 230 239 241;
 }
 /* Пиксель */
-:root[data-skin='pixel'] {
+:root[data-skin='pixel'], [data-skin-scope='pixel'] {
   --ac-bg-l: 238 244 210;
   --ac-surface-2-l: 226 236 187;
   --ac-text-l: 12 46 12;
@@ -1820,7 +1820,7 @@
   --ac-logo-glyph: 234 239 234;
 }
 /* Памир */
-:root[data-skin='pamir'] {
+:root[data-skin='pamir'], [data-skin-scope='pamir'] {
   --ac-bg-l: 231 240 246;
   --ac-surface-2-l: 217 230 239;
   --ac-text-l: 9 39 61;
@@ -1856,7 +1856,7 @@
   --ac-logo-glyph: 231 236 239;
 }
 /* Таджикистан */
-:root[data-skin='tajik'] {
+:root[data-skin='tajik'], [data-skin-scope='tajik'] {
   --ac-bg-l: 241 230 205;
   --ac-surface-2-l: 232 219 188;
   --ac-text-l: 43 26 22;
@@ -1892,7 +1892,7 @@
   --ac-logo-glyph: 246 233 235;
 }
 /* Аргентина */
-:root[data-skin='argentina'] {
+:root[data-skin='argentina'], [data-skin-scope='argentina'] {
   --ac-bg-l: 238 246 252;
   --ac-surface-2-l: 224 238 249;
   --ac-text-l: 10 37 64;
@@ -1928,7 +1928,7 @@
   --ac-logo-glyph: 231 240 246;
 }
 /* Месси */
-:root[data-skin='messi'] {
+:root[data-skin='messi'], [data-skin-scope='messi'] {
   --ac-bg-l: 244 241 232;
   --ac-surface-2-l: 234 229 214;
   --ac-text-l: 10 26 38;
@@ -1964,7 +1964,7 @@
   --ac-logo-glyph: 232 238 242;
 }
 /* Испания */
-:root[data-skin='spain'] {
+:root[data-skin='spain'], [data-skin-scope='spain'] {
   --ac-bg-l: 251 241 230;
   --ac-surface-2-l: 244 229 211;
   --ac-text-l: 42 10 12;
@@ -2000,7 +2000,7 @@
   --ac-logo-glyph: 247 231 232;
 }
 /* Роналду */
-:root[data-skin='cr7'] {
+:root[data-skin='cr7'], [data-skin-scope='cr7'] {
   --ac-bg-l: 246 243 236;
   --ac-surface-2-l: 236 231 219;
   --ac-text-l: 20 16 10;
@@ -2037,7 +2037,7 @@
 }
 
 /* Кокетка */
-:root[data-skin='coquette'] {
+:root[data-skin='coquette'], [data-skin-scope='coquette'] {
   --ac-bg-l: 253 240 243;
   --ac-surface-2-l: 249 225 232;
   --ac-text-l: 60 30 39;
@@ -2073,7 +2073,7 @@
   --ac-logo-glyph: 249 245 246;
 }
 /* Готика */
-:root[data-skin='gothic'] {
+:root[data-skin='gothic'], [data-skin-scope='gothic'] {
   --ac-bg-l: 241 236 238;
   --ac-surface-2-l: 230 221 225;
   --ac-text-l: 29 18 24;
@@ -2109,7 +2109,7 @@
   --ac-logo-glyph: 240 232 234;
 }
 /* Глина */
-:root[data-skin='clay'] {
+:root[data-skin='clay'], [data-skin-scope='clay'] {
   --ac-bg-l: 243 233 255;
   --ac-surface-2-l: 233 220 250;
   --ac-text-l: 41 29 59;
@@ -2145,7 +2145,7 @@
   --ac-logo-glyph: 244 245 244;
 }
 /* Жидкое стекло */
-:root[data-skin='liquid'] {
+:root[data-skin='liquid'], [data-skin-scope='liquid'] {
   --ac-bg-l: 232 238 255;
   --ac-surface-2-l: 219 228 251;
   --ac-text-l: 12 18 36;
@@ -2181,7 +2181,7 @@
   --ac-logo-glyph: 234 238 248;
 }
 /* Y2K-хром */
-:root[data-skin='chrome'] {
+:root[data-skin='chrome'], [data-skin-scope='chrome'] {
   --ac-bg-l: 233 236 244;
   --ac-surface-2-l: 221 226 238;
   --ac-text-l: 26 32 48;
@@ -2218,7 +2218,7 @@
 }
 
 /* Ретро 70–80-х */
-:root[data-skin='retro'] {
+:root[data-skin='retro'], [data-skin-scope='retro'] {
   --ac-bg-l: 247 234 208;
   --ac-surface-2-l: 240 220 180;
   --ac-text-l: 47 28 16;
@@ -2254,7 +2254,7 @@
   --ac-logo-glyph: 244 235 232;
 }
 /* Баухаус */
-:root[data-skin='bauhaus'] {
+:root[data-skin='bauhaus'], [data-skin-scope='bauhaus'] {
   --ac-bg-l: 242 239 230;
   --ac-surface-2-l: 232 227 212;
   --ac-text-l: 22 22 26;
@@ -2290,7 +2290,7 @@
   --ac-logo-glyph: 246 234 233;
 }
 /* Скрапбук */
-:root[data-skin='sticker'] {
+:root[data-skin='sticker'], [data-skin-scope='sticker'] {
   --ac-bg-l: 255 246 214;
   --ac-surface-2-l: 251 233 176;
   --ac-text-l: 51 36 54;
@@ -2326,7 +2326,7 @@
   --ac-logo-glyph: 245 246 249;
 }
 /* Школьная тетрадь */
-:root[data-skin='notebook'] {
+:root[data-skin='notebook'], [data-skin-scope='notebook'] {
   --ac-bg-l: 246 247 242;
   --ac-surface-2-l: 233 236 224;
   --ac-text-l: 27 30 43;
@@ -2362,7 +2362,7 @@
   --ac-logo-glyph: 235 238 249;
 }
 /* Подземелье */
-:root[data-skin='dungeon'] {
+:root[data-skin='dungeon'], [data-skin-scope='dungeon'] {
   --ac-bg-l: 243 233 210;
   --ac-surface-2-l: 234 223 191;
   --ac-text-l: 42 29 18;
@@ -2399,7 +2399,7 @@
 }
 
 /* Граффити */
-:root[data-skin='graffiti'] {
+:root[data-skin='graffiti'], [data-skin-scope='graffiti'] {
   --ac-bg-l: 236 236 240;
   --ac-surface-2-l: 225 225 232;
   --ac-text-l: 23 23 28;
@@ -2435,7 +2435,7 @@
   --ac-logo-glyph: 244 245 245;
 }
 /* Кофейня */
-:root[data-skin='cafe'] {
+:root[data-skin='cafe'], [data-skin-scope='cafe'] {
   --ac-bg-l: 239 241 245;
   --ac-surface-2-l: 230 233 239;
   --ac-text-l: 38 40 52;
@@ -2471,7 +2471,7 @@
   --ac-logo-glyph: 241 235 251;
 }
 /* Навруз */
-:root[data-skin='nowruz'] {
+:root[data-skin='nowruz'], [data-skin-scope='nowruz'] {
   --ac-bg-l: 243 250 238;
   --ac-surface-2-l: 229 243 221;
   --ac-text-l: 26 49 36;
@@ -2508,7 +2508,7 @@
 }
 
 /* Новый год */
-:root[data-skin='christmas'] {
+:root[data-skin='christmas'], [data-skin-scope='christmas'] {
   --ac-bg-l: 244 248 251;
   --ac-surface-2-l: 230 238 245;
   --ac-text-l: 16 38 61;
@@ -2544,7 +2544,7 @@
   --ac-logo-glyph: 247 234 233;
 }
 /* Хэллоуин */
-:root[data-skin='halloween'] {
+:root[data-skin='halloween'], [data-skin-scope='halloween'] {
   --ac-bg-l: 246 239 230;
   --ac-surface-2-l: 238 226 211;
   --ac-text-l: 42 22 54;
@@ -2580,7 +2580,7 @@
   --ac-logo-glyph: 245 236 230;
 }
 /* 14 февраля */
-:root[data-skin='valentine'] {
+:root[data-skin='valentine'], [data-skin-scope='valentine'] {
   --ac-bg-l: 255 241 244;
   --ac-surface-2-l: 253 227 234;
   --ac-text-l: 74 20 36;
@@ -2616,7 +2616,7 @@
   --ac-logo-glyph: 247 232 236;
 }
 /* Бенто */
-:root[data-skin='bento'] {
+:root[data-skin='bento'], [data-skin-scope='bento'] {
   --ac-bg-l: 238 241 246;
   --ac-surface-2-l: 226 231 240;
   --ac-text-l: 29 39 57;
@@ -2651,6 +2651,1196 @@
   --ac-logo-to: 15 157 119;
   --ac-logo-glyph: 244 246 244;
 }
+/* >>> нарисованные образы, палитры: не править руками, `python3 scripts/skin-art/gen_new_skins.py` */
+/* Океан */
+:root[data-skin='ocean'], [data-skin-scope='ocean'] {
+  --ac-bg-l: 234 245 251;
+  --ac-surface-2-l: 214 233 245;
+  --ac-text-l: 2 24 40;
+  --ac-muted-l: 75 91 102;
+  --ac-border-l: 204 216 224;
+  --ac-border-strong-l: 111 126 137;
+  --ac-brand-l: 9 94 156;
+  --ac-brand-hover-l: 8 77 128;
+  --ac-accent-l: 14 152 165;
+  --ac-hero-l: 6 56 92;
+  --ac-orb-1-l: 157 191 216;
+  --ac-orb-2-l: 159 214 219;
+  --ac-orb-3-l: 197 241 244;
+  --ac-glass-shadow-l: 6 57 94;
+  --ac-bg-d: 4 18 31;
+  --ac-surface-d: 18 31 43;
+  --ac-surface-2-d: 32 44 56;
+  --ac-text-d: 238 245 250;
+  --ac-muted-d: 161 170 177;
+  --ac-border-d: 47 59 70;
+  --ac-border-strong-d: 117 127 136;
+  --ac-brand-d: 133 183 220;
+  --ac-brand-hover-d: 157 197 227;
+  --ac-on-brand-d: 4 18 31;
+  --ac-accent-d: 122 199 207;
+  --ac-hero-from-d: 8 78 129;
+  --ac-hero-d: 4 36 60;
+  --ac-orb-1-d: 7 60 100;
+  --ac-orb-2-d: 8 79 92;
+  --ac-orb-3-d: 47 90 101;
+  --ac-logo-from: 9 94 156;
+  --ac-logo-to: 14 152 165;
+  --ac-logo-glyph: 238 246 249;
+}
+/* Лес */
+:root[data-skin='forest'], [data-skin-scope='forest'] {
+  --ac-bg-l: 238 245 234;
+  --ac-surface-2-l: 219 233 218;
+  --ac-text-l: 7 24 13;
+  --ac-muted-l: 79 91 81;
+  --ac-border-l: 208 216 205;
+  --ac-border-strong-l: 115 126 116;
+  --ac-brand-l: 30 104 56;
+  --ac-brand-hover-l: 25 85 46;
+  --ac-accent-l: 107 127 30;
+  --ac-hero-l: 16 54 29;
+  --ac-orb-1-l: 165 195 176;
+  --ac-orb-2-l: 196 204 165;
+  --ac-orb-3-l: 231 236 188;
+  --ac-glass-shadow-l: 18 62 34;
+  --ac-bg-d: 10 22 14;
+  --ac-surface-d: 23 35 27;
+  --ac-surface-2-d: 37 48 41;
+  --ac-text-d: 239 245 241;
+  --ac-muted-d: 167 174 169;
+  --ac-border-d: 51 62 55;
+  --ac-border-strong-d: 120 130 123;
+  --ac-brand-d: 143 181 156;
+  --ac-brand-hover-d: 165 196 176;
+  --ac-on-brand-d: 10 22 14;
+  --ac-accent-d: 174 185 131;
+  --ac-hero-from-d: 22 75 41;
+  --ac-hero-d: 10 35 19;
+  --ac-orb-1-d: 19 60 34;
+  --ac-orb-2-d: 54 69 21;
+  --ac-orb-3-d: 77 88 46;
+  --ac-logo-from: 30 104 56;
+  --ac-logo-to: 107 127 30;
+  --ac-logo-glyph: 233 240 235;
+}
+/* Сакура */
+:root[data-skin='sakura'], [data-skin-scope='sakura'] {
+  --ac-bg-l: 253 241 244;
+  --ac-surface-2-l: 247 224 231;
+  --ac-text-l: 40 11 22;
+  --ac-muted-l: 104 83 91;
+  --ac-border-l: 225 211 215;
+  --ac-border-strong-l: 139 120 126;
+  --ac-brand-l: 164 44 89;
+  --ac-brand-hover-l: 134 36 73;
+  --ac-accent-l: 215 101 139;
+  --ac-hero-l: 92 25 50;
+  --ac-orb-1-l: 219 171 189;
+  --ac-orb-2-l: 239 193 208;
+  --ac-orb-3-l: 255 228 237;
+  --ac-glass-shadow-l: 98 27 53;
+  --ac-bg-d: 28 15 22;
+  --ac-surface-d: 40 28 35;
+  --ac-surface-2-d: 53 41 48;
+  --ac-text-d: 250 241 244;
+  --ac-muted-d: 178 168 173;
+  --ac-border-d: 67 56 62;
+  --ac-border-strong-d: 134 124 129;
+  --ac-brand-d: 220 152 178;
+  --ac-brand-hover-d: 227 173 193;
+  --ac-on-brand-d: 28 15 22;
+  --ac-accent-d: 234 171 192;
+  --ac-hero-from-d: 129 35 70;
+  --ac-hero-d: 60 16 32;
+  --ac-orb-1-d: 98 31 57;
+  --ac-orb-2-d: 113 54 75;
+  --ac-orb-3-d: 107 78 89;
+  --ac-logo-from: 164 44 89;
+  --ac-logo-to: 215 101 139;
+  --ac-logo-glyph: 251 243 246;
+}
+/* Северное сияние */
+:root[data-skin='aurora'], [data-skin-scope='aurora'] {
+  --ac-bg-l: 236 247 245;
+  --ac-surface-2-l: 216 237 234;
+  --ac-text-l: 3 30 26;
+  --ac-muted-l: 75 94 91;
+  --ac-border-l: 206 219 217;
+  --ac-border-strong-l: 112 130 127;
+  --ac-brand-l: 10 105 90;
+  --ac-brand-hover-l: 8 86 74;
+  --ac-accent-l: 109 79 224;
+  --ac-hero-l: 6 69 59;
+  --ac-orb-1-l: 157 195 189;
+  --ac-orb-2-l: 197 185 243;
+  --ac-orb-3-l: 190 248 228;
+  --ac-glass-shadow-l: 6 63 54;
+  --ac-bg-d: 5 13 28;
+  --ac-surface-d: 19 26 40;
+  --ac-surface-2-d: 32 40 53;
+  --ac-text-d: 238 247 245;
+  --ac-muted-d: 158 167 171;
+  --ac-border-d: 47 55 67;
+  --ac-border-strong-d: 118 125 132;
+  --ac-brand-d: 134 196 186;
+  --ac-brand-hover-d: 158 208 200;
+  --ac-on-brand-d: 5 13 28;
+  --ac-accent-d: 175 158 238;
+  --ac-hero-from-d: 9 97 83;
+  --ac-hero-d: 4 45 38;
+  --ac-orb-1-d: 9 69 68;
+  --ac-orb-2-d: 52 43 116;
+  --ac-orb-3-d: 42 92 86;
+  --ac-logo-from: 10 105 90;
+  --ac-logo-to: 109 79 224;
+  --ac-logo-glyph: 230 240 238;
+}
+/* Пустыня */
+:root[data-skin='desert'], [data-skin-scope='desert'] {
+  --ac-bg-l: 250 240 224;
+  --ac-surface-2-l: 243 226 206;
+  --ac-text-l: 39 18 6;
+  --ac-muted-l: 100 85 73;
+  --ac-border-l: 223 211 196;
+  --ac-border-strong-l: 136 121 108;
+  --ac-brand-l: 144 69 21;
+  --ac-brand-hover-l: 118 56 17;
+  --ac-accent-l: 185 121 26;
+  --ac-hero-l: 88 42 13;
+  --ac-orb-1-l: 211 181 162;
+  --ac-orb-2-l: 227 201 163;
+  --ac-orb-3-l: 249 227 185;
+  --ac-glass-shadow-l: 87 41 13;
+  --ac-bg-d: 28 18 10;
+  --ac-surface-d: 40 31 23;
+  --ac-surface-2-d: 53 44 37;
+  --ac-text-d: 249 243 239;
+  --ac-muted-d: 178 172 167;
+  --ac-border-d: 67 59 51;
+  --ac-border-strong-d: 134 126 120;
+  --ac-brand-d: 216 170 140;
+  --ac-brand-hover-d: 224 187 163;
+  --ac-on-brand-d: 28 18 10;
+  --ac-accent-d: 216 181 129;
+  --ac-hero-from-d: 123 59 18;
+  --ac-hero-d: 57 27 8;
+  --ac-orb-1-d: 95 48 17;
+  --ac-orb-2-d: 99 64 17;
+  --ac-orb-3-d: 103 79 41;
+  --ac-logo-from: 144 69 21;
+  --ac-logo-to: 185 121 26;
+  --ac-logo-glyph: 246 238 231;
+}
+/* Космос */
+:root[data-skin='cosmos'], [data-skin-scope='cosmos'] {
+  --ac-bg-l: 240 238 252;
+  --ac-surface-2-l: 226 222 248;
+  --ac-text-l: 20 14 46;
+  --ac-muted-l: 87 83 106;
+  --ac-border-l: 211 209 225;
+  --ac-border-strong-l: 122 118 140;
+  --ac-brand-l: 88 62 203;
+  --ac-brand-hover-l: 72 51 166;
+  --ac-accent-l: 184 60 207;
+  --ac-hero-l: 45 32 104;
+  --ac-orb-1-l: 188 178 234;
+  --ac-orb-2-l: 227 177 236;
+  --ac-orb-3-l: 224 214 255;
+  --ac-glass-shadow-l: 53 37 122;
+  --ac-bg-d: 7 5 18;
+  --ac-surface-d: 21 19 31;
+  --ac-surface-2-d: 34 32 44;
+  --ac-text-d: 243 242 252;
+  --ac-muted-d: 160 159 170;
+  --ac-border-d: 50 48 60;
+  --ac-border-strong-d: 121 119 130;
+  --ac-brand-d: 172 159 231;
+  --ac-brand-hover-d: 189 178 236;
+  --ac-on-brand-d: 7 5 18;
+  --ac-accent-d: 216 148 229;
+  --ac-hero-from-d: 63 44 145;
+  --ac-hero-d: 29 21 68;
+  --ac-orb-1-d: 44 31 103;
+  --ac-orb-2-d: 87 30 103;
+  --ac-orb-3-d: 69 61 101;
+  --ac-logo-from: 88 62 203;
+  --ac-logo-to: 184 60 207;
+  --ac-logo-glyph: 238 236 250;
+}
+/* Рамазан */
+:root[data-skin='ramadan'], [data-skin-scope='ramadan'] {
+  --ac-bg-l: 238 242 250;
+  --ac-surface-2-l: 219 227 240;
+  --ac-text-l: 7 17 31;
+  --ac-muted-l: 80 87 98;
+  --ac-border-l: 208 213 222;
+  --ac-border-strong-l: 116 123 133;
+  --ac-brand-l: 31 79 141;
+  --ac-brand-hover-l: 25 65 116;
+  --ac-accent-l: 168 123 28;
+  --ac-hero-l: 16 40 70;
+  --ac-orb-1-l: 165 185 209;
+  --ac-orb-2-l: 220 202 164;
+  --ac-orb-3-l: 248 230 181;
+  --ac-glass-shadow-l: 19 47 85;
+  --ac-bg-d: 7 13 29;
+  --ac-surface-d: 21 26 41;
+  --ac-surface-2-d: 34 40 54;
+  --ac-text-d: 239 243 247;
+  --ac-muted-d: 162 166 174;
+  --ac-border-d: 49 54 68;
+  --ac-border-strong-d: 119 124 134;
+  --ac-brand-d: 143 167 198;
+  --ac-brand-hover-d: 165 185 209;
+  --ac-on-brand-d: 7 13 29;
+  --ac-accent-d: 207 182 130;
+  --ac-hero-from-d: 22 55 99;
+  --ac-hero-d: 10 26 46;
+  --ac-orb-1-d: 18 43 79;
+  --ac-orb-2-d: 79 62 29;
+  --ac-orb-3-d: 89 78 50;
+  --ac-logo-from: 31 79 141;
+  --ac-logo-to: 168 123 28;
+  --ac-logo-glyph: 233 237 244;
+}
+/* Курбан */
+:root[data-skin='kurban'], [data-skin-scope='kurban'] {
+  --ac-bg-l: 238 247 242;
+  --ac-surface-2-l: 218 235 228;
+  --ac-text-l: 3 26 19;
+  --ac-muted-l: 77 93 87;
+  --ac-border-l: 207 218 213;
+  --ac-border-strong-l: 113 128 123;
+  --ac-brand-l: 12 104 78;
+  --ac-brand-hover-l: 10 85 64;
+  --ac-accent-l: 168 128 31;
+  --ac-hero-l: 7 58 44;
+  --ac-orb-1-l: 158 195 184;
+  --ac-orb-2-l: 220 204 165;
+  --ac-orb-3-l: 245 230 186;
+  --ac-glass-shadow-l: 7 62 47;
+  --ac-bg-d: 6 20 15;
+  --ac-surface-d: 20 33 28;
+  --ac-surface-2-d: 33 46 41;
+  --ac-text-d: 238 245 243;
+  --ac-muted-d: 163 172 169;
+  --ac-border-d: 48 61 56;
+  --ac-border-strong-d: 118 128 125;
+  --ac-brand-d: 134 186 172;
+  --ac-brand-hover-d: 158 200 189;
+  --ac-on-brand-d: 6 20 15;
+  --ac-accent-d: 207 185 132;
+  --ac-hero-from-d: 10 82 62;
+  --ac-hero-d: 5 38 29;
+  --ac-orb-1-d: 10 64 48;
+  --ac-orb-2-d: 79 69 22;
+  --ac-orb-3-d: 85 83 45;
+  --ac-logo-from: 12 104 78;
+  --ac-logo-to: 168 128 31;
+  --ac-logo-glyph: 237 240 233;
+}
+/* День независимости */
+:root[data-skin='independence'], [data-skin-scope='independence'] {
+  --ac-bg-l: 251 242 239;
+  --ac-surface-2-l: 246 222 222;
+  --ac-text-l: 43 4 11;
+  --ac-muted-l: 107 80 84;
+  --ac-border-l: 224 211 209;
+  --ac-border-strong-l: 140 117 119;
+  --ac-brand-l: 178 15 44;
+  --ac-brand-hover-l: 146 12 36;
+  --ac-accent-l: 23 120 58;
+  --ac-hero-l: 97 8 24;
+  --ac-orb-1-l: 224 159 171;
+  --ac-orb-2-l: 162 201 176;
+  --ac-orb-3-l: 252 228 140;
+  --ac-glass-shadow-l: 107 9 26;
+  --ac-bg-d: 22 10 10;
+  --ac-surface-d: 35 23 23;
+  --ac-surface-2-d: 48 37 37;
+  --ac-text-d: 251 238 241;
+  --ac-muted-d: 174 162 164;
+  --ac-border-d: 63 51 51;
+  --ac-border-strong-d: 132 120 121;
+  --ac-brand-d: 224 136 152;
+  --ac-brand-hover-d: 230 160 173;
+  --ac-on-brand-d: 22 10 10;
+  --ac-accent-d: 127 181 147;
+  --ac-hero-from-d: 136 11 34;
+  --ac-hero-d: 63 5 16;
+  --ac-orb-1-d: 99 13 27;
+  --ac-orb-2-d: 22 60 32;
+  --ac-orb-3-d: 101 75 6;
+  --ac-logo-from: 178 15 44;
+  --ac-logo-to: 23 120 58;
+  --ac-logo-glyph: 247 231 234;
+}
+/* 8 марта */
+:root[data-skin='march8'], [data-skin-scope='march8'] {
+  --ac-bg-l: 253 240 246;
+  --ac-surface-2-l: 247 223 234;
+  --ac-text-l: 42 10 26;
+  --ac-muted-l: 104 81 93;
+  --ac-border-l: 226 210 217;
+  --ac-border-strong-l: 139 118 128;
+  --ac-brand-l: 163 40 101;
+  --ac-brand-hover-l: 133 33 83;
+  --ac-accent-l: 169 122 0;
+  --ac-hero-l: 94 24 59;
+  --ac-orb-1-l: 218 169 194;
+  --ac-orb-2-l: 221 202 153;
+  --ac-orb-3-l: 255 237 175;
+  --ac-glass-shadow-l: 98 24 61;
+  --ac-bg-d: 26 14 24;
+  --ac-surface-d: 39 27 37;
+  --ac-surface-2-d: 51 41 49;
+  --ac-text-d: 250 240 245;
+  --ac-muted-d: 177 167 174;
+  --ac-border-d: 66 55 64;
+  --ac-border-strong-d: 134 123 131;
+  --ac-brand-d: 222 151 186;
+  --ac-brand-hover-d: 229 172 200;
+  --ac-on-brand-d: 26 14 24;
+  --ac-accent-d: 208 182 115;
+  --ac-hero-from-d: 132 33 83;
+  --ac-hero-d: 61 16 38;
+  --ac-orb-1-d: 99 29 66;
+  --ac-orb-2-d: 90 63 13;
+  --ac-orb-3-d: 106 85 43;
+  --ac-logo-from: 163 40 101;
+  --ac-logo-to: 169 122 0;
+  --ac-logo-glyph: 246 234 240;
+}
+/* День рождения */
+:root[data-skin='birthday'], [data-skin-scope='birthday'] {
+  --ac-bg-l: 246 240 253;
+  --ac-surface-2-l: 234 223 250;
+  --ac-text-l: 26 12 48;
+  --ac-muted-l: 93 83 108;
+  --ac-border-l: 217 210 226;
+  --ac-border-strong-l: 128 118 141;
+  --ac-brand-l: 108 52 205;
+  --ac-brand-hover-l: 88 43 168;
+  --ac-accent-l: 217 63 134;
+  --ac-hero-l: 58 28 110;
+  --ac-orb-1-l: 196 174 235;
+  --ac-orb-2-l: 240 178 207;
+  --ac-orb-3-l: 255 232 168;
+  --ac-glass-shadow-l: 65 31 123;
+  --ac-bg-d: 19 11 34;
+  --ac-surface-d: 32 24 46;
+  --ac-surface-2-d: 45 38 58;
+  --ac-text-d: 245 241 253;
+  --ac-muted-d: 170 165 180;
+  --ac-border-d: 60 52 73;
+  --ac-border-strong-d: 128 122 139;
+  --ac-brand-d: 186 156 238;
+  --ac-brand-hover-d: 200 176 241;
+  --ac-on-brand-d: 19 11 34;
+  --ac-accent-d: 234 149 188;
+  --ac-hero-from-d: 81 39 154;
+  --ac-hero-d: 38 18 72;
+  --ac-orb-1-d: 63 31 118;
+  --ac-orb-2-d: 108 34 79;
+  --ac-orb-3-d: 102 78 43;
+  --ac-logo-from: 108 52 205;
+  --ac-logo-to: 217 63 134;
+  --ac-logo-glyph: 240 235 250;
+}
+/* Манчестер Сити */
+:root[data-skin='mancity'], [data-skin-scope='mancity'] {
+  --ac-bg-l: 237 245 251;
+  --ac-surface-2-l: 220 235 246;
+  --ac-text-l: 10 29 44;
+  --ac-muted-l: 79 92 102;
+  --ac-border-l: 207 217 224;
+  --ac-border-strong-l: 115 127 137;
+  --ac-brand-l: 34 96 145;
+  --ac-brand-hover-l: 28 79 119;
+  --ac-accent-l: 28 44 91;
+  --ac-hero-l: 24 67 100;
+  --ac-orb-1-l: 167 192 211;
+  --ac-orb-2-l: 164 171 189;
+  --ac-orb-3-l: 189 217 240;
+  --ac-glass-shadow-l: 20 58 87;
+  --ac-bg-d: 6 17 28;
+  --ac-surface-d: 20 30 40;
+  --ac-surface-2-d: 33 43 53;
+  --ac-text-d: 240 247 251;
+  --ac-muted-d: 161 169 175;
+  --ac-border-d: 49 58 67;
+  --ac-border-strong-d: 119 128 135;
+  --ac-brand-d: 151 194 228;
+  --ac-brand-hover-d: 172 206 233;
+  --ac-on-brand-d: 6 17 28;
+  --ac-accent-d: 130 139 165;
+  --ac-hero-from-d: 33 94 141;
+  --ac-hero-d: 16 44 65;
+  --ac-orb-1-d: 24 70 106;
+  --ac-orb-2-d: 16 29 56;
+  --ac-orb-3-d: 42 71 96;
+  --ac-logo-from: 34 96 145;
+  --ac-logo-to: 28 44 91;
+  --ac-logo-glyph: 233 239 244;
+}
+/* Ливерпуль */
+:root[data-skin='liverpool'], [data-skin-scope='liverpool'] {
+  --ac-bg-l: 251 238 238;
+  --ac-surface-2-l: 246 218 221;
+  --ac-text-l: 43 4 10;
+  --ac-muted-l: 105 78 82;
+  --ac-border-l: 224 208 208;
+  --ac-border-strong-l: 140 115 118;
+  --ac-brand-l: 175 15 40;
+  --ac-brand-hover-l: 144 12 33;
+  --ac-accent-l: 0 127 115;
+  --ac-hero-l: 98 8 22;
+  --ac-orb-1-l: 223 159 169;
+  --ac-orb-2-l: 153 204 199;
+  --ac-orb-3-l: 251 246 184;
+  --ac-glass-shadow-l: 105 9 24;
+  --ac-bg-d: 23 7 8;
+  --ac-surface-d: 36 21 22;
+  --ac-surface-2-d: 49 34 35;
+  --ac-text-d: 251 238 240;
+  --ac-muted-d: 174 160 162;
+  --ac-border-d: 64 49 50;
+  --ac-border-strong-d: 133 119 120;
+  --ac-brand-d: 226 136 150;
+  --ac-brand-hover-d: 232 160 171;
+  --ac-on-brand-d: 23 7 8;
+  --ac-accent-d: 115 185 178;
+  --ac-hero-from-d: 138 12 31;
+  --ac-hero-d: 64 5 14;
+  --ac-orb-1-d: 101 12 25;
+  --ac-orb-2-d: 13 61 56;
+  --ac-orb-3-d: 101 87 39;
+  --ac-logo-from: 175 15 40;
+  --ac-logo-to: 0 127 115;
+  --ac-logo-glyph: 247 231 234;
+}
+/* Манчестер Юнайтед */
+:root[data-skin='manutd'], [data-skin-scope='manutd'] {
+  --ac-bg-l: 251 239 236;
+  --ac-surface-2-l: 248 221 217;
+  --ac-text-l: 47 9 6;
+  --ac-muted-l: 107 81 78;
+  --ac-border-l: 224 209 206;
+  --ac-border-strong-l: 140 117 114;
+  --ac-brand-l: 173 32 22;
+  --ac-brand-hover-l: 142 27 18;
+  --ac-accent-l: 26 26 26;
+  --ac-hero-l: 107 20 14;
+  --ac-orb-1-l: 222 166 162;
+  --ac-orb-2-l: 163 163 163;
+  --ac-orb-3-l: 253 242 156;
+  --ac-glass-shadow-l: 104 19 13;
+  --ac-bg-d: 20 8 7;
+  --ac-surface-d: 33 22 21;
+  --ac-surface-2-d: 46 35 34;
+  --ac-text-d: 252 240 239;
+  --ac-muted-d: 172 161 160;
+  --ac-border-d: 61 50 49;
+  --ac-border-strong-d: 132 120 119;
+  --ac-brand-d: 234 148 141;
+  --ac-brand-hover-d: 238 169 164;
+  --ac-on-brand-d: 20 8 7;
+  --ac-accent-d: 129 129 129;
+  --ac-hero-from-d: 150 28 19;
+  --ac-hero-d: 70 13 9;
+  --ac-orb-1-d: 107 22 16;
+  --ac-orb-2-d: 23 16 16;
+  --ac-orb-3-d: 101 84 16;
+  --ac-logo-from: 173 32 22;
+  --ac-logo-to: 26 26 26;
+  --ac-logo-glyph: 247 233 232;
+}
+/* Арсенал */
+:root[data-skin='arsenal'], [data-skin-scope='arsenal'] {
+  --ac-bg-l: 252 240 238;
+  --ac-surface-2-l: 249 221 221;
+  --ac-text-l: 49 6 10;
+  --ac-muted-l: 109 80 82;
+  --ac-border-l: 226 210 208;
+  --ac-border-strong-l: 143 117 118;
+  --ac-brand-l: 178 21 35;
+  --ac-brand-hover-l: 146 17 29;
+  --ac-accent-l: 6 54 114;
+  --ac-hero-l: 111 13 22;
+  --ac-orb-1-l: 224 161 167;
+  --ac-orb-2-l: 155 175 199;
+  --ac-orb-3-l: 230 216 181;
+  --ac-glass-shadow-l: 107 12 21;
+  --ac-bg-d: 21 9 9;
+  --ac-surface-d: 34 23 23;
+  --ac-surface-2-d: 47 36 36;
+  --ac-text-d: 253 239 240;
+  --ac-muted-d: 174 161 162;
+  --ac-border-d: 62 51 51;
+  --ac-border-strong-d: 133 120 121;
+  --ac-brand-d: 238 140 150;
+  --ac-brand-hover-d: 241 163 171;
+  --ac-on-brand-d: 21 9 9;
+  --ac-accent-d: 118 144 177;
+  --ac-hero-from-d: 155 18 31;
+  --ac-hero-d: 72 8 14;
+  --ac-orb-1-d: 111 17 25;
+  --ac-orb-2-d: 14 29 56;
+  --ac-orb-3-d: 84 65 37;
+  --ac-logo-from: 178 21 35;
+  --ac-logo-to: 6 54 114;
+  --ac-logo-glyph: 247 232 233;
+}
+/* Челси */
+:root[data-skin='chelsea'], [data-skin-scope='chelsea'] {
+  --ac-bg-l: 237 241 250;
+  --ac-surface-2-l: 216 226 241;
+  --ac-text-l: 1 15 33;
+  --ac-muted-l: 77 87 100;
+  --ac-border-l: 206 212 222;
+  --ac-border-strong-l: 113 122 134;
+  --ac-brand-l: 3 70 148;
+  --ac-brand-hover-l: 2 57 121;
+  --ac-accent-l: 169 122 16;
+  --ac-hero-l: 2 35 74;
+  --ac-orb-1-l: 154 181 212;
+  --ac-orb-2-l: 221 202 159;
+  --ac-orb-3-l: 244 228 182;
+  --ac-glass-shadow-l: 2 42 89;
+  --ac-bg-d: 5 12 29;
+  --ac-surface-d: 19 25 41;
+  --ac-surface-2-d: 32 39 54;
+  --ac-text-d: 237 242 248;
+  --ac-muted-d: 160 165 175;
+  --ac-border-d: 47 53 68;
+  --ac-border-strong-d: 117 123 134;
+  --ac-brand-d: 129 162 202;
+  --ac-brand-hover-d: 154 181 213;
+  --ac-on-brand-d: 5 12 29;
+  --ac-accent-d: 208 182 124;
+  --ac-hero-from-d: 2 49 104;
+  --ac-hero-d: 1 23 48;
+  --ac-orb-1-d: 4 38 83;
+  --ac-orb-2-d: 79 62 23;
+  --ac-orb-3-d: 84 76 51;
+  --ac-logo-from: 3 70 148;
+  --ac-logo-to: 169 122 16;
+  --ac-logo-glyph: 230 236 244;
+}
+/* ПСЖ */
+:root[data-skin='psg'], [data-skin-scope='psg'] {
+  --ac-bg-l: 238 242 247;
+  --ac-surface-2-l: 217 226 235;
+  --ac-text-l: 0 14 25;
+  --ac-muted-l: 77 87 96;
+  --ac-border-l: 207 212 218;
+  --ac-border-strong-l: 113 122 129;
+  --ac-brand-l: 0 65 112;
+  --ac-brand-hover-l: 0 53 92;
+  --ac-accent-l: 212 40 28;
+  --ac-hero-l: 0 32 56;
+  --ac-orb-1-l: 153 179 198;
+  --ac-orb-2-l: 238 169 164;
+  --ac-orb-3-l: 247 153 156;
+  --ac-glass-shadow-l: 0 39 67;
+  --ac-bg-d: 4 11 24;
+  --ac-surface-d: 18 24 37;
+  --ac-surface-2-d: 32 38 49;
+  --ac-text-d: 237 242 245;
+  --ac-muted-d: 158 164 170;
+  --ac-border-d: 46 52 64;
+  --ac-border-strong-d: 117 122 131;
+  --ac-brand-d: 128 160 184;
+  --ac-brand-hover-d: 153 179 198;
+  --ac-on-brand-d: 4 11 24;
+  --ac-accent-d: 231 137 130;
+  --ac-hero-from-d: 0 46 78;
+  --ac-hero-d: 0 21 36;
+  --ac-orb-1-d: 2 35 64;
+  --ac-orb-2-d: 98 24 26;
+  --ac-orb-3-d: 86 17 28;
+  --ac-logo-from: 0 65 112;
+  --ac-logo-to: 212 40 28;
+  --ac-logo-glyph: 230 236 241;
+}
+/* Бавария */
+:root[data-skin='bayern'], [data-skin-scope='bayern'] {
+  --ac-bg-l: 251 238 240;
+  --ac-surface-2-l: 248 217 223;
+  --ac-text-l: 48 1 11;
+  --ac-muted-l: 110 77 84;
+  --ac-border-l: 225 207 210;
+  --ac-border-strong-l: 142 114 119;
+  --ac-brand-l: 177 5 39;
+  --ac-brand-hover-l: 145 4 32;
+  --ac-accent-l: 0 102 178;
+  --ac-hero-l: 109 3 24;
+  --ac-orb-1-l: 224 155 169;
+  --ac-orb-2-l: 153 194 224;
+  --ac-orb-3-l: 197 221 244;
+  --ac-glass-shadow-l: 106 3 23;
+  --ac-bg-d: 24 7 11;
+  --ac-surface-d: 37 21 24;
+  --ac-surface-2-d: 49 34 38;
+  --ac-text-d: 252 238 241;
+  --ac-muted-d: 175 160 163;
+  --ac-border-d: 65 49 52;
+  --ac-border-strong-d: 134 119 122;
+  --ac-brand-d: 236 130 152;
+  --ac-brand-hover-d: 240 155 173;
+  --ac-on-brand-d: 24 7 11;
+  --ac-accent-d: 115 171 213;
+  --ac-hero-from-d: 153 4 34;
+  --ac-hero-d: 71 2 16;
+  --ac-orb-1-d: 111 7 28;
+  --ac-orb-2-d: 13 50 86;
+  --ac-orb-3-d: 60 67 88;
+  --ac-logo-from: 177 5 39;
+  --ac-logo-to: 0 102 178;
+  --ac-logo-glyph: 247 230 233;
+}
+/* Ювентус */
+:root[data-skin='juventus'], [data-skin-scope='juventus'] {
+  --ac-bg-l: 243 243 241;
+  --ac-surface-2-l: 224 224 222;
+  --ac-text-l: 6 6 6;
+  --ac-muted-l: 85 85 85;
+  --ac-border-l: 212 212 210;
+  --ac-border-strong-l: 121 121 120;
+  --ac-brand-l: 27 27 29;
+  --ac-brand-hover-l: 22 22 24;
+  --ac-accent-l: 143 116 32;
+  --ac-hero-l: 14 14 14;
+  --ac-orb-1-l: 164 164 165;
+  --ac-orb-2-l: 210 199 166;
+  --ac-orb-3-l: 236 219 165;
+  --ac-glass-shadow-l: 16 16 17;
+  --ac-bg-d: 11 11 12;
+  --ac-surface-d: 24 24 25;
+  --ac-surface-2-d: 38 38 39;
+  --ac-text-d: 239 239 239;
+  --ac-muted-d: 164 164 164;
+  --ac-border-d: 52 52 53;
+  --ac-border-strong-d: 121 121 121;
+  --ac-brand-d: 241 241 238;
+  --ac-brand-hover-d: 244 244 241;
+  --ac-on-brand-d: 11 11 12;
+  --ac-accent-d: 193 179 132;
+  --ac-hero-from-d: 19 19 20;
+  --ac-hero-d: 9 9 9;
+  --ac-orb-1-d: 18 18 20;
+  --ac-orb-2-d: 70 58 21;
+  --ac-orb-3-d: 81 68 27;
+  --ac-logo-from: 27 27 29;
+  --ac-logo-to: 143 116 32;
+  --ac-logo-glyph: 232 232 232;
+}
+/* Милан */
+:root[data-skin='milan'], [data-skin-scope='milan'] {
+  --ac-bg-l: 250 238 238;
+  --ac-surface-2-l: 246 218 220;
+  --ac-text-l: 45 4 9;
+  --ac-muted-l: 106 78 81;
+  --ac-border-l: 223 208 208;
+  --ac-border-strong-l: 140 115 117;
+  --ac-brand-l: 175 15 34;
+  --ac-brand-hover-l: 144 13 28;
+  --ac-accent-l: 20 20 20;
+  --ac-hero-l: 102 9 20;
+  --ac-orb-1-l: 223 159 167;
+  --ac-orb-2-l: 161 161 161;
+  --ac-orb-3-l: 255 181 190;
+  --ac-glass-shadow-l: 105 9 21;
+  --ac-bg-d: 19 6 7;
+  --ac-surface-d: 32 20 21;
+  --ac-surface-2-d: 45 33 34;
+  --ac-text-d: 251 238 240;
+  --ac-muted-d: 172 159 160;
+  --ac-border-d: 60 48 49;
+  --ac-border-strong-d: 131 118 120;
+  --ac-brand-d: 230 136 148;
+  --ac-brand-hover-d: 235 160 169;
+  --ac-on-brand-d: 19 6 7;
+  --ac-accent-d: 126 126 126;
+  --ac-hero-from-d: 143 13 28;
+  --ac-hero-d: 66 6 13;
+  --ac-orb-1-d: 102 11 22;
+  --ac-orb-2-d: 19 12 13;
+  --ac-orb-3-d: 102 35 43;
+  --ac-logo-from: 175 15 34;
+  --ac-logo-to: 20 20 20;
+  --ac-logo-glyph: 247 231 233;
+}
+/* Интер */
+:root[data-skin='inter'], [data-skin-scope='inter'] {
+  --ac-bg-l: 237 241 251;
+  --ac-surface-2-l: 217 225 244;
+  --ac-text-l: 2 14 37;
+  --ac-muted-l: 78 86 103;
+  --ac-border-l: 206 211 223;
+  --ac-border-strong-l: 114 121 137;
+  --ac-brand-l: 10 63 168;
+  --ac-brand-hover-l: 8 52 138;
+  --ac-accent-l: 16 20 24;
+  --ac-hero-l: 5 32 84;
+  --ac-orb-1-l: 157 178 220;
+  --ac-orb-2-l: 159 161 163;
+  --ac-orb-3-l: 231 213 158;
+  --ac-glass-shadow-l: 6 38 101;
+  --ac-bg-d: 5 9 26;
+  --ac-surface-d: 19 23 39;
+  --ac-surface-2-d: 32 36 51;
+  --ac-text-d: 238 242 249;
+  --ac-muted-d: 158 162 173;
+  --ac-border-d: 47 51 66;
+  --ac-border-strong-d: 118 122 134;
+  --ac-brand-d: 132 159 212;
+  --ac-brand-hover-d: 157 178 221;
+  --ac-on-brand-d: 5 9 26;
+  --ac-accent-d: 124 126 128;
+  --ac-hero-from-d: 7 44 118;
+  --ac-hero-d: 3 21 55;
+  --ac-orb-1-d: 7 33 90;
+  --ac-orb-2-d: 10 14 25;
+  --ac-orb-3-d: 74 63 31;
+  --ac-logo-from: 10 63 168;
+  --ac-logo-to: 16 20 24;
+  --ac-logo-glyph: 230 236 246;
+}
+/* Сборная Таджикистана */
+:root[data-skin='tjk'], [data-skin-scope='tjk'] {
+  --ac-bg-l: 238 246 239;
+  --ac-surface-2-l: 218 235 223;
+  --ac-text-l: 2 27 13;
+  --ac-muted-l: 76 93 83;
+  --ac-border-l: 207 218 210;
+  --ac-border-strong-l: 113 128 118;
+  --ac-brand-l: 10 106 51;
+  --ac-brand-hover-l: 8 87 42;
+  --ac-accent-l: 200 16 46;
+  --ac-hero-l: 6 61 30;
+  --ac-orb-1-l: 157 195 174;
+  --ac-orb-2-l: 233 159 171;
+  --ac-orb-3-l: 252 228 140;
+  --ac-glass-shadow-l: 6 64 31;
+  --ac-bg-d: 7 19 11;
+  --ac-surface-d: 21 32 24;
+  --ac-surface-2-d: 34 45 38;
+  --ac-text-d: 238 246 241;
+  --ac-muted-d: 162 171 165;
+  --ac-border-d: 49 60 52;
+  --ac-border-strong-d: 119 128 122;
+  --ac-brand-d: 133 188 157;
+  --ac-brand-hover-d: 157 201 177;
+  --ac-on-brand-d: 7 19 11;
+  --ac-accent-d: 225 124 140;
+  --ac-hero-from-d: 8 85 41;
+  --ac-hero-d: 4 40 20;
+  --ac-orb-1-d: 9 65 33;
+  --ac-orb-2-d: 94 18 27;
+  --ac-orb-3-d: 91 81 7;
+  --ac-logo-from: 10 106 51;
+  --ac-logo-to: 200 16 46;
+  --ac-logo-glyph: 230 240 235;
+}
+/* Истиклол */
+:root[data-skin='istiklol'], [data-skin-scope='istiklol'] {
+  --ac-bg-l: 249 239 239;
+  --ac-surface-2-l: 243 219 220;
+  --ac-text-l: 39 4 6;
+  --ac-muted-l: 104 79 81;
+  --ac-border-l: 222 208 209;
+  --ac-border-strong-l: 137 115 116;
+  --ac-brand-l: 175 18 26;
+  --ac-brand-hover-l: 144 14 22;
+  --ac-accent-l: 107 114 128;
+  --ac-hero-l: 90 9 14;
+  --ac-orb-1-l: 223 160 164;
+  --ac-orb-2-l: 196 199 204;
+  --ac-orb-3-l: 238 214 170;
+  --ac-glass-shadow-l: 105 11 16;
+  --ac-bg-d: 21 10 10;
+  --ac-surface-d: 34 23 23;
+  --ac-surface-2-d: 47 37 37;
+  --ac-text-d: 250 238 239;
+  --ac-muted-d: 173 162 163;
+  --ac-border-d: 62 51 51;
+  --ac-border-strong-d: 131 120 120;
+  --ac-brand-d: 217 136 141;
+  --ac-brand-hover-d: 225 160 164;
+  --ac-on-brand-d: 21 10 10;
+  --ac-accent-d: 174 177 185;
+  --ac-hero-from-d: 125 13 19;
+  --ac-hero-d: 58 6 9;
+  --ac-orb-1-d: 92 14 18;
+  --ac-orb-2-d: 60 57 63;
+  --ac-orb-3-d: 90 64 29;
+  --ac-logo-from: 175 18 26;
+  --ac-logo-to: 107 114 128;
+  --ac-logo-glyph: 247 231 232;
+}
+/* Бразилия */
+:root[data-skin='brazil'], [data-skin-scope='brazil'] {
+  --ac-bg-l: 244 248 230;
+  --ac-surface-2-l: 224 238 215;
+  --ac-text-l: 5 30 13;
+  --ac-muted-l: 79 95 79;
+  --ac-border-l: 213 220 202;
+  --ac-border-strong-l: 117 131 114;
+  --ac-brand-l: 17 107 47;
+  --ac-brand-hover-l: 14 88 38;
+  --ac-accent-l: 29 79 181;
+  --ac-hero-l: 11 68 30;
+  --ac-orb-1-l: 160 196 172;
+  --ac-orb-2-l: 165 185 225;
+  --ac-orb-3-l: 255 241 140;
+  --ac-glass-shadow-l: 10 64 28;
+  --ac-bg-d: 8 19 10;
+  --ac-surface-d: 22 32 23;
+  --ac-surface-2-d: 35 45 37;
+  --ac-text-d: 239 247 241;
+  --ac-muted-d: 162 171 164;
+  --ac-border-d: 50 60 51;
+  --ac-border-strong-d: 120 129 121;
+  --ac-brand-d: 138 196 158;
+  --ac-brand-hover-d: 161 208 177;
+  --ac-on-brand-d: 8 19 10;
+  --ac-accent-d: 131 158 214;
+  --ac-hero-from-d: 15 96 42;
+  --ac-hero-d: 7 44 20;
+  --ac-orb-1-d: 14 72 32;
+  --ac-orb-2-d: 17 46 87;
+  --ac-orb-3-d: 94 90 6;
+  --ac-logo-from: 17 107 47;
+  --ac-logo-to: 29 79 181;
+  --ac-logo-glyph: 231 240 234;
+}
+/* Португалия */
+:root[data-skin='portugal'], [data-skin-scope='portugal'] {
+  --ac-bg-l: 249 238 238;
+  --ac-surface-2-l: 242 218 220;
+  --ac-text-l: 37 5 9;
+  --ac-muted-l: 102 80 82;
+  --ac-border-l: 221 208 208;
+  --ac-border-strong-l: 136 115 117;
+  --ac-brand-l: 170 21 43;
+  --ac-brand-hover-l: 139 17 35;
+  --ac-accent-l: 10 107 58;
+  --ac-hero-l: 85 10 22;
+  --ac-orb-1-l: 221 161 170;
+  --ac-orb-2-l: 157 196 176;
+  --ac-orb-3-l: 249 228 140;
+  --ac-glass-shadow-l: 102 13 26;
+  --ac-bg-d: 20 8 10;
+  --ac-surface-d: 33 22 23;
+  --ac-surface-2-d: 46 35 37;
+  --ac-text-d: 249 239 240;
+  --ac-muted-d: 171 161 162;
+  --ac-border-d: 61 50 51;
+  --ac-border-strong-d: 130 120 121;
+  --ac-brand-d: 212 138 149;
+  --ac-brand-hover-d: 221 161 170;
+  --ac-on-brand-d: 20 8 10;
+  --ac-accent-d: 120 174 147;
+  --ac-hero-from-d: 119 15 30;
+  --ac-hero-d: 55 6 14;
+  --ac-orb-1-d: 88 14 25;
+  --ac-orb-2-d: 16 53 32;
+  --ac-orb-3-d: 98 73 6;
+  --ac-logo-from: 170 21 43;
+  --ac-logo-to: 10 107 58;
+  --ac-logo-glyph: 246 232 234;
+}
+/* Франция */
+:root[data-skin='france'], [data-skin-scope='france'] {
+  --ac-bg-l: 238 241 250;
+  --ac-surface-2-l: 219 225 241;
+  --ac-text-l: 7 13 32;
+  --ac-muted-l: 81 85 100;
+  --ac-border-l: 208 211 222;
+  --ac-border-strong-l: 116 121 134;
+  --ac-brand-l: 31 58 147;
+  --ac-brand-hover-l: 25 48 121;
+  --ac-accent-l: 208 37 55;
+  --ac-hero-l: 16 29 74;
+  --ac-orb-1-l: 165 176 212;
+  --ac-orb-2-l: 236 168 175;
+  --ac-orb-3-l: 231 237 249;
+  --ac-glass-shadow-l: 19 35 88;
+  --ac-bg-d: 7 11 28;
+  --ac-surface-d: 21 24 40;
+  --ac-surface-2-d: 34 38 53;
+  --ac-text-d: 239 241 247;
+  --ac-muted-d: 162 164 174;
+  --ac-border-d: 49 52 67;
+  --ac-border-strong-d: 119 122 133;
+  --ac-brand-d: 143 156 201;
+  --ac-brand-hover-d: 165 176 212;
+  --ac-on-brand-d: 7 11 28;
+  --ac-accent-d: 229 135 145;
+  --ac-hero-from-d: 22 41 103;
+  --ac-hero-d: 10 19 48;
+  --ac-orb-1-d: 18 32 82;
+  --ac-orb-2-d: 97 23 40;
+  --ac-orb-3-d: 75 82 103;
+  --ac-logo-from: 31 58 147;
+  --ac-logo-to: 208 37 55;
+  --ac-logo-glyph: 233 235 244;
+}
+/* Бокс */
+:root[data-skin='boxing'], [data-skin-scope='boxing'] {
+  --ac-bg-l: 246 238 236;
+  --ac-surface-2-l: 239 219 217;
+  --ac-text-l: 36 6 6;
+  --ac-muted-l: 101 80 80;
+  --ac-border-l: 219 208 206;
+  --ac-border-strong-l: 134 116 115;
+  --ac-brand-l: 165 28 28;
+  --ac-brand-hover-l: 135 23 23;
+  --ac-accent-l: 42 42 46;
+  --ac-hero-l: 82 14 14;
+  --ac-orb-1-l: 219 164 164;
+  --ac-orb-2-l: 170 170 171;
+  --ac-orb-3-l: 238 214 162;
+  --ac-glass-shadow-l: 99 17 17;
+  --ac-bg-d: 15 8 8;
+  --ac-surface-d: 28 22 22;
+  --ac-surface-2-d: 41 35 35;
+  --ac-text-d: 249 239 239;
+  --ac-muted-d: 169 160 160;
+  --ac-border-d: 57 50 50;
+  --ac-border-strong-d: 127 120 120;
+  --ac-brand-d: 210 142 142;
+  --ac-brand-hover-d: 219 165 165;
+  --ac-on-brand-d: 15 8 8;
+  --ac-accent-d: 138 138 140;
+  --ac-hero-from-d: 115 20 20;
+  --ac-hero-d: 53 9 9;
+  --ac-orb-1-d: 82 17 17;
+  --ac-orb-2-d: 27 23 25;
+  --ac-orb-3-d: 86 63 22;
+  --ac-logo-from: 165 28 28;
+  --ac-logo-to: 42 42 46;
+  --ac-logo-glyph: 246 232 232;
+}
+/* Баскетбол */
+:root[data-skin='basketball'], [data-skin-scope='basketball'] {
+  --ac-bg-l: 251 241 229;
+  --ac-surface-2-l: 245 226 210;
+  --ac-text-l: 42 17 3;
+  --ac-muted-l: 102 85 73;
+  --ac-border-l: 224 212 200;
+  --ac-border-strong-l: 138 121 110;
+  --ac-brand-l: 151 63 10;
+  --ac-brand-hover-l: 124 52 8;
+  --ac-accent-l: 43 47 54;
+  --ac-hero-l: 94 40 6;
+  --ac-orb-1-l: 213 178 157;
+  --ac-orb-2-l: 170 172 175;
+  --ac-orb-3-l: 248 202 156;
+  --ac-glass-shadow-l: 91 38 6;
+  --ac-bg-d: 20 12 6;
+  --ac-surface-d: 33 25 20;
+  --ac-surface-2-d: 46 39 33;
+  --ac-text-d: 250 243 238;
+  --ac-muted-d: 172 165 160;
+  --ac-border-d: 61 53 48;
+  --ac-border-strong-d: 131 123 118;
+  --ac-brand-d: 222 167 134;
+  --ac-brand-hover-d: 229 185 158;
+  --ac-on-brand-d: 20 12 6;
+  --ac-accent-d: 138 141 144;
+  --ac-hero-from-d: 132 55 8;
+  --ac-hero-d: 61 26 4;
+  --ac-orb-1-d: 96 42 9;
+  --ac-orb-2-d: 30 28 28;
+  --ac-orb-3-d: 97 56 16;
+  --ac-logo-from: 151 63 10;
+  --ac-logo-to: 43 47 54;
+  --ac-logo-glyph: 245 236 230;
+}
+/* Зал */
+:root[data-skin='gym'], [data-skin-scope='gym'] {
+  --ac-bg-l: 241 243 238;
+  --ac-surface-2-l: 226 232 218;
+  --ac-text-l: 16 27 3;
+  --ac-muted-l: 84 91 76;
+  --ac-border-l: 212 215 207;
+  --ac-border-strong-l: 121 127 113;
+  --ac-brand-l: 61 101 12;
+  --ac-brand-hover-l: 50 83 10;
+  --ac-accent-l: 39 39 42;
+  --ac-hero-l: 37 61 8;
+  --ac-orb-1-l: 178 194 158;
+  --ac-orb-2-l: 169 169 170;
+  --ac-orb-3-l: 214 244 164;
+  --ac-glass-shadow-l: 37 61 7;
+  --ac-bg-d: 12 13 12;
+  --ac-surface-d: 25 26 25;
+  --ac-surface-2-d: 39 40 39;
+  --ac-text-d: 242 246 238;
+  --ac-muted-d: 163 166 161;
+  --ac-border-d: 53 55 53;
+  --ac-border-strong-d: 123 125 121;
+  --ac-brand-d: 163 230 53;
+  --ac-brand-hover-d: 181 235 93;
+  --ac-on-brand-d: 12 13 12;
+  --ac-accent-d: 136 136 138;
+  --ac-hero-from-d: 52 85 10;
+  --ac-hero-d: 24 40 5;
+  --ac-orb-1-d: 40 62 13;
+  --ac-orb-2-d: 24 25 26;
+  --ac-orb-3-d: 65 89 26;
+  --ac-logo-from: 61 101 12;
+  --ac-logo-to: 39 39 42;
+  --ac-logo-glyph: 236 240 231;
+}
+/* Чёрная карта */
+:root[data-skin='blackcard'], [data-skin-scope='blackcard'] {
+  --ac-bg-l: 241 241 243;
+  --ac-surface-2-l: 222 222 224;
+  --ac-text-l: 6 6 6;
+  --ac-muted-l: 84 84 85;
+  --ac-border-l: 210 210 212;
+  --ac-border-strong-l: 119 119 120;
+  --ac-brand-l: 25 25 28;
+  --ac-brand-hover-l: 20 20 23;
+  --ac-accent-l: 109 109 118;
+  --ac-hero-l: 12 12 14;
+  --ac-orb-1-l: 163 163 164;
+  --ac-orb-2-l: 197 197 200;
+  --ac-orb-3-l: 227 227 230;
+  --ac-glass-shadow-l: 15 15 17;
+  --ac-bg-d: 7 7 8;
+  --ac-surface-d: 21 21 22;
+  --ac-surface-2-d: 34 34 35;
+  --ac-text-d: 239 239 239;
+  --ac-muted-d: 160 160 160;
+  --ac-border-d: 49 49 50;
+  --ac-border-strong-d: 119 119 120;
+  --ac-brand-d: 228 228 231;
+  --ac-brand-hover-d: 233 233 236;
+  --ac-on-brand-d: 7 7 8;
+  --ac-accent-d: 175 175 180;
+  --ac-hero-from-d: 18 18 20;
+  --ac-hero-d: 8 8 9;
+  --ac-orb-1-d: 15 15 17;
+  --ac-orb-2-d: 53 53 58;
+  --ac-orb-3-d: 72 72 75;
+  --ac-logo-from: 25 25 28;
+  --ac-logo-to: 109 109 118;
+  --ac-logo-glyph: 232 232 232;
+}
+/* Золото */
+:root[data-skin='gold'], [data-skin-scope='gold'] {
+  --ac-bg-l: 250 245 232;
+  --ac-surface-2-l: 240 232 212;
+  --ac-text-l: 29 21 3;
+  --ac-muted-l: 96 89 75;
+  --ac-border-l: 221 216 202;
+  --ac-border-strong-l: 131 125 110;
+  --ac-brand-l: 119 86 13;
+  --ac-brand-hover-l: 98 71 11;
+  --ac-accent-l: 168 120 28;
+  --ac-hero-l: 67 48 8;
+  --ac-orb-1-l: 201 188 158;
+  --ac-orb-2-l: 220 201 164;
+  --ac-orb-3-l: 242 224 167;
+  --ac-glass-shadow-l: 72 52 8;
+  --ac-bg-d: 20 16 10;
+  --ac-surface-d: 33 29 23;
+  --ac-surface-2-d: 46 42 37;
+  --ac-text-d: 247 244 238;
+  --ac-muted-d: 172 169 163;
+  --ac-border-d: 61 57 51;
+  --ac-border-strong-d: 129 126 120;
+  --ac-brand-d: 233 196 106;
+  --ac-brand-hover-d: 237 208 136;
+  --ac-on-brand-d: 20 16 10;
+  --ac-accent-d: 207 181 130;
+  --ac-hero-from-d: 94 68 10;
+  --ac-hero-d: 44 31 5;
+  --ac-orb-1-d: 71 52 12;
+  --ac-orb-2-d: 87 63 18;
+  --ac-orb-3-d: 92 75 27;
+  --ac-logo-from: 119 86 13;
+  --ac-logo-to: 168 120 28;
+  --ac-logo-glyph: 241 238 231;
+}
+/* Мрамор */
+:root[data-skin='marble'], [data-skin-scope='marble'] {
+  --ac-bg-l: 244 243 239;
+  --ac-surface-2-l: 223 231 225;
+  --ac-text-l: 3 23 18;
+  --ac-muted-l: 79 91 87;
+  --ac-border-l: 213 214 210;
+  --ac-border-strong-l: 117 126 122;
+  --ac-brand-l: 15 103 80;
+  --ac-brand-hover-l: 12 84 66;
+  --ac-accent-l: 138 109 51;
+  --ac-hero-l: 8 52 41;
+  --ac-orb-1-l: 159 194 185;
+  --ac-orb-2-l: 208 197 173;
+  --ac-orb-3-l: 231 216 182;
+  --ac-glass-shadow-l: 9 62 48;
+  --ac-bg-d: 13 17 16;
+  --ac-surface-d: 26 30 29;
+  --ac-surface-2-d: 40 43 42;
+  --ac-text-d: 238 244 243;
+  --ac-muted-d: 164 169 168;
+  --ac-border-d: 54 58 57;
+  --ac-border-strong-d: 121 126 125;
+  --ac-brand-d: 135 180 168;
+  --ac-brand-hover-d: 159 195 185;
+  --ac-on-brand-d: 13 17 16;
+  --ac-accent-d: 191 175 143;
+  --ac-hero-from-d: 10 74 57;
+  --ac-hero-d: 5 34 27;
+  --ac-orb-1-d: 14 57 46;
+  --ac-orb-2-d: 69 58 32;
+  --ac-orb-3-d: 79 70 43;
+  --ac-logo-from: 15 103 80;
+  --ac-logo-to: 138 109 51;
+  --ac-logo-glyph: 231 240 238;
+}
+/* Биржа */
+:root[data-skin='trading'], [data-skin-scope='trading'] {
+  --ac-bg-l: 238 244 240;
+  --ac-surface-2-l: 218 233 225;
+  --ac-text-l: 3 26 17;
+  --ac-muted-l: 77 92 86;
+  --ac-border-l: 207 216 211;
+  --ac-border-strong-l: 113 127 121;
+  --ac-brand-l: 11 104 67;
+  --ac-brand-hover-l: 9 85 55;
+  --ac-accent-l: 189 37 44;
+  --ac-hero-l: 6 60 38;
+  --ac-orb-1-l: 158 194 180;
+  --ac-orb-2-l: 229 168 171;
+  --ac-orb-3-l: 160 237 196;
+  --ac-glass-shadow-l: 7 62 40;
+  --ac-bg-d: 5 10 8;
+  --ac-surface-d: 19 23 22;
+  --ac-surface-2-d: 32 37 35;
+  --ac-text-d: 238 245 243;
+  --ac-muted-d: 156 163 161;
+  --ac-border-d: 47 52 51;
+  --ac-border-strong-d: 118 123 121;
+  --ac-brand-d: 52 211 153;
+  --ac-brand-hover-d: 93 220 173;
+  --ac-on-brand-d: 5 10 8;
+  --ac-accent-d: 219 135 139;
+  --ac-hero-from-d: 9 83 54;
+  --ac-hero-d: 4 39 25;
+  --ac-orb-1-d: 9 59 39;
+  --ac-orb-2-d: 88 22 24;
+  --ac-orb-3-d: 18 81 48;
+  --ac-logo-from: 11 104 67;
+  --ac-logo-to: 189 37 44;
+  --ac-logo-glyph: 231 240 236;
+}
+/* <<< нарисованные образы, палитры */
 
 html[data-skin='barca'] {
   --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
@@ -2960,6 +4150,339 @@ html[data-skin='bento'] {
   --skin-art: url('./assets/skins/art/bento-hero.webp');
   --skin-art-content: '';
 }
+/* >>> нарисованные образы, украшения: не править руками, `python3 scripts/skin-art/gen_new_skins.py` */
+html[data-skin='ocean'] {
+  --skin-head: 'Commissioner', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: radial-gradient(circle at 50% 100%, transparent 10px, rgb(11 111 184 / 0.1) 10px 11.5px, transparent 11.5px);
+  --skin-pattern-size: 24px 12px;
+  --skin-line: 127 224 230;
+  --skin-art: url('./assets/skins/art/ocean-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='forest'] {
+  --skin-head: 'Alegreya', 'Onest', Georgia, serif;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(31 107 58 / 0.05) 0 2px, transparent 2px 14px);
+  --skin-line: 201 212 106;
+  --skin-art: url('./assets/skins/art/forest-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='sakura'] {
+  --skin-head: 'Lora', 'Onest', Georgia, serif;
+  --skin-pattern: radial-gradient(rgb(184 50 100 / 0.13) 1.5px, transparent 2px);
+  --skin-pattern-size: 20px 20px;
+  --skin-line: 255 194 214;
+  --skin-art: url('./assets/skins/art/sakura-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='aurora'] {
+  --skin-head: 'Exo 2', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: radial-gradient(rgb(110 240 194 / 0.55) 1px, transparent 1.5px);
+  --skin-pattern-size: 38px 38px;
+  --skin-line: 110 240 194;
+  --skin-art: url('./assets/skins/art/aurora-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='desert'] {
+  --skin-head: 'Podkova', 'Onest', Georgia, serif;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(176 84 26 / 0.05) 0 2px, transparent 2px 14px);
+  --skin-line: 242 192 99;
+  --skin-art: url('./assets/skins/art/desert-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='cosmos'] {
+  --skin-head: 'Tektur', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: radial-gradient(rgb(185 164 255 / 0.55) 1px, transparent 1.5px);
+  --skin-pattern-size: 38px 38px;
+  --skin-line: 185 164 255;
+  --skin-art: url('./assets/skins/art/cosmos-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='ramadan'] {
+  --skin-head: 'Forum', 'Onest', Georgia, serif;
+  --skin-pattern: radial-gradient(rgb(240 199 90 / 0.55) 1px, transparent 1.5px);
+  --skin-pattern-size: 38px 38px;
+  --skin-line: 240 199 90;
+  --skin-art: url('./assets/skins/art/ramadan-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='kurban'] {
+  --skin-head: 'Alegreya', 'Onest', Georgia, serif;
+  --skin-pattern: conic-gradient(rgb(14 117 88 / 0.05) 25%, transparent 0 50%, rgb(14 117 88 / 0.05) 0 75%, transparent 0);
+  --skin-pattern-size: 28px 28px;
+  --skin-line: 232 199 102;
+  --skin-art: url('./assets/skins/art/kurban-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='independence'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(194 16 48 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 248 195 0;
+  --skin-art: url('./assets/skins/art/independence-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='march8'] {
+  --skin-head: 'Lora', 'Onest', Georgia, serif;
+  --skin-pattern: radial-gradient(rgb(189 47 118 / 0.13) 1.5px, transparent 2px);
+  --skin-pattern-size: 20px 20px;
+  --skin-line: 255 216 77;
+  --skin-art: url('./assets/skins/art/march8-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='birthday'] {
+  --skin-head: 'Shantell Sans', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: radial-gradient(rgb(116 56 220 / 0.13) 1.5px, transparent 2px);
+  --skin-pattern-size: 20px 20px;
+  --skin-line: 255 203 61;
+  --skin-art: url('./assets/skins/art/birthday-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='mancity'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(47 134 201 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 108 171 221;
+  --skin-art: url('./assets/skins/art/mancity-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='liverpool'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(197 17 45 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 246 235 97;
+  --skin-art: url('./assets/skins/art/liverpool-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='manutd'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(214 40 27 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 251 225 34;
+  --skin-art: url('./assets/skins/art/manutd-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='arsenal'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(222 26 44 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 200 168 90;
+  --skin-art: url('./assets/skins/art/arsenal-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='chelsea'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(3 70 148 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 230 195 92;
+  --skin-art: url('./assets/skins/art/chelsea-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='psg'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(0 65 112 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 237 28 36;
+  --skin-art: url('./assets/skins/art/psg-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='bayern'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: conic-gradient(rgb(218 6 48 / 0.05) 25%, transparent 0 50%, rgb(218 6 48 / 0.05) 0 75%, transparent 0);
+  --skin-pattern-size: 28px 28px;
+  --skin-line: 127 179 230;
+  --skin-art: url('./assets/skins/art/bayern-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='juventus'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(27 27 29 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 212 175 55;
+  --skin-art: url('./assets/skins/art/juventus-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='milan'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(204 18 40 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 255 90 110;
+  --skin-art: url('./assets/skins/art/milan-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='inter'] {
+  --skin-head: 'Exo 2', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(10 63 168 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 201 162 39;
+  --skin-art: url('./assets/skins/art/inter-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='tjk'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(11 122 59 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 248 195 0;
+  --skin-art: url('./assets/skins/art/tjk-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='istiklol'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(179 18 27 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 217 164 65;
+  --skin-art: url('./assets/skins/art/istiklol-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='brazil'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(22 137 60 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 255 223 0;
+  --skin-art: url('./assets/skins/art/brazil-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='portugal'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(170 21 43 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 242 194 0;
+  --skin-art: url('./assets/skins/art/portugal-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='france'] {
+  --skin-head: 'Montserrat', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(90deg, rgb(31 58 147 / 0.05) 0 26px, transparent 26px 52px);
+  --skin-line: 201 214 242;
+  --skin-art: url('./assets/skins/art/france-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='boxing'] {
+  --skin-head: 'Oswald', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(165 28 28 / 0.05) 0 2px, transparent 2px 14px);
+  --skin-line: 217 164 49;
+  --skin-art: url('./assets/skins/art/boxing-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='basketball'] {
+  --skin-head: 'Tektur', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(189 79 12 / 0.05) 0 2px, transparent 2px 14px);
+  --skin-line: 240 138 36;
+  --skin-art: url('./assets/skins/art/basketball-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='gym'] {
+  --skin-head: 'Exo 2', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: linear-gradient(rgb(74 122 15 / 0.07) 1px, transparent 1px), linear-gradient(90deg, rgb(74 122 15 / 0.07) 1px, transparent 1px);
+  --skin-pattern-size: 24px 24px;
+  --skin-line: 163 230 53;
+  --skin-art: url('./assets/skins/art/gym-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='blackcard'] {
+  --skin-head: 'Commissioner', 'Onest', ui-sans-serif, system-ui, sans-serif;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(25 25 28 / 0.05) 0 2px, transparent 2px 14px);
+  --skin-line: 192 192 200;
+  --skin-art: url('./assets/skins/art/blackcard-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='gold'] {
+  --skin-head: 'Cormorant Garamond', 'Onest', Georgia, serif;
+  --skin-head-adjust: 0.5;
+  --skin-pattern: repeating-linear-gradient(135deg, rgb(134 97 15 / 0.05) 0 2px, transparent 2px 14px);
+  --skin-line: 226 185 59;
+  --skin-art: url('./assets/skins/art/gold-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='marble'] {
+  --skin-head: 'Forum', 'Onest', Georgia, serif;
+  --skin-pattern: repeating-linear-gradient(115deg, transparent 0 38px, rgb(15 105 82 / 0.07) 38px 39px, transparent 39px 91px);
+  --skin-line: 201 168 92;
+  --skin-art: url('./assets/skins/art/marble-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+html[data-skin='trading'] {
+  --skin-head: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --skin-head-tt: uppercase;
+  --skin-head-ls: 0.04em;
+  --skin-pattern: linear-gradient(rgb(13 119 77 / 0.07) 1px, transparent 1px), linear-gradient(90deg, rgb(13 119 77 / 0.07) 1px, transparent 1px);
+  --skin-pattern-size: 24px 24px;
+  --skin-line: 43 214 123;
+  --skin-art: url('./assets/skins/art/trading-hero.webp');
+  --skin-art-content: '';
+  --skin-art-size: auto 76%;
+  --skin-art-pos: right bottom;
+}
+/* <<< нарисованные образы, украшения */
 /* Заголовки экранов и карточек — шрифтом образа (суммы и мелкий текст остаются Onest: у него табличные цифры). */
 html[data-skin] :is(h1, h2, h3) {
   font-family: var(--skin-head);

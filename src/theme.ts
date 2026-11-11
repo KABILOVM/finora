@@ -2,7 +2,21 @@ import { useSyncExternalStore } from 'react';
 import { GENERATED_ACCENTS } from './lib/accentSpecs';
 import { isPalette, normalizeHex, PALETTE_KEYS, triple, type Palette } from './lib/paletteBase';
 import { setSkinIconPack } from './components/skinIconStore';
-import { DEFAULT_SKIN, isBaseSkin, isSkinId, LEGACY_SKIN, resolveSkin, SKIN_ICON_PACKS, skinBar, skinTraits, type SkinId, type SkinTraits } from './skinCore';
+import { clearCustomSkin, customSkinBar, paintCustomSkin, readActiveCustomSkin, type CustomSkin } from './customSkin';
+import {
+  CUSTOM_SKIN,
+  DEFAULT_SKIN,
+  isBaseSkin,
+  isSkinId,
+  LEGACY_SKIN,
+  parseTraits,
+  resolveSkin,
+  SKIN_ICON_PACKS,
+  skinBar,
+  skinTraits,
+  type SkinId,
+  type SkinTraits,
+} from './skinCore';
 
 /**
  * Тема оформления: «светлая» (по умолчанию), «тёмная» или «как в системе». Хранится на самом устройстве (localStorage),
@@ -149,7 +163,8 @@ function paintBar(): void {
   const theme = root.getAttribute('data-theme'); // атрибута нет — тема «как в системе»
   const accent = root.getAttribute('data-accent');
   // у клубного образа свой фон страницы, акцент на него не влияет
-  const forSkin = skinBar(root.getAttribute('data-skin'));
+  const custom = root.getAttribute('data-skin') === CUSTOM_SKIN ? readActiveCustomSkin() : null;
+  const forSkin = custom ? customSkinBar(custom) : skinBar(root.getAttribute('data-skin'));
   const bar = forSkin ?? (accent === CUSTOM_ACCENT ? customBar(root) : (accentById(accent) ?? VIOLET).bar);
   // В index.html два meta theme-color (для светлой и тёмной системы). Явный выбор темы перекрывает оба.
   document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
@@ -256,7 +271,14 @@ export function readSkinPref(): SkinId {
  */
 export function applySkin(id: SkinId): void {
   const root = document.documentElement;
-  const shown = resolveSkin(id); // «Сезонные» превращаются в праздничный образ по сегодняшней дате
+  // Свой образ: всё, что нужно, лежит вместе с ним на устройстве. Его больше нет (удалили, хранилище почистили) — показываем «Классику».
+  const custom = id === CUSTOM_SKIN ? readActiveCustomSkin() : null;
+  if (id === CUSTOM_SKIN && custom) {
+    applyCustomSkin(custom);
+    return;
+  }
+  clearCustomSkin(root);
+  const shown = id === CUSTOM_SKIN ? DEFAULT_SKIN : resolveSkin(id); // «Сезонные» превращаются в праздничный образ по сегодняшней дате
   // «Классика» и «Классика (прежняя)» палитру не задают (цвет — акцентом), поэтому data-skin у них нет; прежний вид включается своим атрибутом
   if (isBaseSkin(shown)) root.removeAttribute('data-skin');
   else root.setAttribute('data-skin', shown);
@@ -265,6 +287,17 @@ export function applySkin(id: SkinId): void {
   applyTraits(skinTraits(shown));
   applyAccent(readAccentPref());
   loadSkinIcons(shown);
+}
+
+/** Ставит на страницу свой образ (src/customSkin.ts): палитру, черты, шрифт, узор, фото и набор значков выбранного готового образа. */
+export function applyCustomSkin(skin: CustomSkin): void {
+  const root = document.documentElement;
+  root.setAttribute('data-skin', CUSTOM_SKIN);
+  root.removeAttribute('data-look');
+  paintCustomSkin(root, skin);
+  applyTraits(parseTraits(skin.traits));
+  applyAccent(readAccentPref());
+  loadSkinIcons(isSkinId(skin.icons) ? skin.icons : DEFAULT_SKIN, CUSTOM_SKIN);
 }
 
 const TRAIT_KEYS = ['shape', 'material', 'nav', 'hero', 'motion', 'scene'] as const satisfies readonly (keyof SkinTraits)[];
@@ -307,19 +340,20 @@ export function saveFxPref(on: boolean): void {
 }
 
 /** Свой набор значков образа: грузится лениво и ставится, если образ за это время не сменили; у образов без набора — прежние значки. */
-function loadSkinIcons(id: SkinId): void {
+function loadSkinIcons(id: SkinId, onPage: SkinId = id): void {
   if (!SKIN_ICON_PACKS.includes(id)) {
     setSkinIconPack(null, null);
     return;
   }
+  // onPage — что должно стоять в data-skin, когда набор придёт: сам образ, а у своего образа (он берёт чужой набор) — «custom»
   void import('./skinIcons')
     .then((m) => m.loadSkinIconPack(id))
     .then((set) => {
-      if (document.documentElement.getAttribute('data-skin') === id) setSkinIconPack(set?.pack ?? null, id, set?.extras);
+      if (document.documentElement.getAttribute('data-skin') === onPage) setSkinIconPack(set?.pack ?? null, id, set?.extras);
     })
     .catch(() => {
       // файл набора не загрузился (нет сети, а в кеше браузера его нет): значки обычные, а не от прежнего образа
-      if (document.documentElement.getAttribute('data-skin') === id) setSkinIconPack(null, null);
+      if (document.documentElement.getAttribute('data-skin') === onPage) setSkinIconPack(null, null);
     });
 }
 

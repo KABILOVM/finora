@@ -35,7 +35,7 @@ describe('Button', () => {
     render(<Button>Ок</Button>);
     const b = screen.getByRole('button', { name: 'Ок' });
     expect(b).toHaveAttribute('type', 'button');
-    expect(b.className).toContain('min-h-[44px]');
+    expect(b.className).toContain('min-h-[46px]'); // обычная кнопка 46 px, крупная 54 px: обе не меньше 44
   });
 
   it('варианты различаются по стилю', () => {

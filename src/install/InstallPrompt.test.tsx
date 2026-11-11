@@ -58,7 +58,7 @@ describe('InstallPrompt', () => {
     expect(dialog()).not.toBeNull();
     expect(ev.prompt).not.toHaveBeenCalled(); // только из нажатия
     const btn = screen.getByRole('button', { name: 'Установить' });
-    expect(btn.className).toMatch(/min-h-\[(44|52)px\]/);
+    expect(btn.className).toMatch(/min-h-\[(46|54)px\]/);
     await act(async () => btn.click());
     expect(ev.prompt).toHaveBeenCalledTimes(1);
     expect(dialog()).toBeNull();

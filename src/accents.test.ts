@@ -50,10 +50,15 @@ for (const [selector, decls] of rules) {
   if (m?.[1]) BLOCKS.set(m[1], decls);
 }
 
-/** Блок палитры каждого образа (src/skins.ts): `:root[data-skin='…']`. Шрифты и украшения лежат в других блоках, `html[data-skin]`. */
+/**
+ * Блок палитры каждого образа (src/skins.ts): `:root[data-skin='…'], [data-skin-scope='…']`. Вторая часть селектора отдаёт ту же палитру
+ * любому элементу с data-skin-scope: так витрина образов рисует предпросмотр, не меняя образ всей страницы.
+ * Шрифты и украшения лежат в других блоках, `html[data-skin]`.
+ */
+const SKIN_BLOCK_SELECTOR = /^:root\[data-skin='([a-z0-9]+)'\], \[data-skin-scope='\1'\]$/;
 const SKIN_BLOCKS = new Map<string, Decls>();
 for (const [selector, decls] of rules) {
-  const m = /^:root\[data-skin='([a-z0-9]+)'\]$/.exec(selector);
+  const m = SKIN_BLOCK_SELECTOR.exec(selector);
   if (m?.[1]) SKIN_BLOCKS.set(m[1], decls);
 }
 
@@ -230,14 +235,19 @@ describe('цвета акцентов (src/index.css)', () => {
       expect([...SKIN_BLOCKS.keys()].sort()).toEqual(SKINS.filter((s) => !s.base && !s.resolves).map((s) => s.id).sort());
     });
 
-    it('«Классика» первая в списке и без своего блока: это прежний вид с выбираемым акцентом', () => {
+    it('«Классика» первая в списке и без своего блока, как и «Классика (прежняя)»: цвет у них задаёт выбранный акцент', () => {
       expect(SKINS[0]?.id).toBe('classic');
       expect(SKINS[0]?.bar).toBeNull();
       expect(SKIN_BLOCKS.has('classic')).toBe(false);
+      expect(SKINS[1]?.id).toBe('legacy');
+      expect(SKINS[1]?.bar).toBeNull();
+      expect(SKIN_BLOCKS.has('legacy')).toBe(false);
     });
 
     it('образ перекрывает акцент: селектор :root[data-skin] сильнее [data-accent] (иначе выбранный раньше акцент испортил бы образ)', () => {
-      expect([...rules.keys()].some((sel) => /^:root\[data-skin='[a-z0-9]+'\]$/.test(sel))).toBe(true);
+      expect([...rules.keys()].some((sel) => SKIN_BLOCK_SELECTOR.test(sel))).toBe(true);
+      // палитра образа не задана одним лишь :root[data-skin]: у каждого блока есть пара для предпросмотра
+      expect([...rules.keys()].filter((sel) => /^:root\[data-skin='[a-z0-9]+'\]$/.test(sel))).toEqual([]);
       expect([...rules.keys()].filter((sel) => /data-accent/.test(sel) && /data-skin/.test(sel))).toEqual([]);
     });
 
