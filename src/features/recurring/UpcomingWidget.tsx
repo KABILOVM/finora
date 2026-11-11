@@ -153,7 +153,7 @@ export default function UpcomingWidget() {
   const postingRule = posting ? items.find((i) => i.rule.id === posting.ruleId)?.rule : undefined;
 
   return (
-    <section aria-labelledby="home-upcoming" data-bento="half">
+    <section aria-labelledby="home-upcoming">
       <div className="-mb-1 -mt-1 flex items-center justify-between gap-3 px-1">
         <h2 id="home-upcoming" className="section-title">
           Ближайшие платежи

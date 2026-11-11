@@ -127,7 +127,7 @@ export default function BudgetsWidget() {
   const budgetsData = 'overflow' in data ? null : data;
   const hasBudgets = budgetsData !== null && budgetsData.progress.ok && budgetsData.progress.items.length > 0;
   return (
-    <Card aria-labelledby="budgets-widget-title" data-testid="budgets-widget" data-bento="half">
+    <Card aria-labelledby="budgets-widget-title" data-testid="budgets-widget">
       <Link to="/budgets" aria-label="Все бюджеты" className="press -my-1 flex min-h-[44px] items-center justify-between gap-3">
         <h2 id="budgets-widget-title" className="section-title">
           Можно тратить в день

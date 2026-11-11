@@ -11,14 +11,14 @@ import { useForecast } from '@/features/weather/useForecast';
 import { usePlaces } from '@/features/weather/usePlaces';
 import { WeatherIcon } from '@/features/weather/WeatherIcon';
 
-const CELL = 'press relative flex min-h-[64px] min-w-0 items-center gap-1.5 px-2.5 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand/40';
+const CELL = 'press relative flex min-h-[64px] min-w-0 flex-1 items-center gap-1.5 px-2.5 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand/40';
 
 function hhmm(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
- * Правая ячейка полосы «Курсы и погода» на «Главной»: сейчас в выбранном городе. Нажатие открывает «Погоду» — день по часам и
+ * Содержимое блока «Погода» на «Главной»: сейчас в выбранном городе. Нажатие открывает «Погоду» — день по часам и
  * следующие дни. Пока город не выбран, в сеть не ходим: ячейка предлагает определить место или выбрать город.
  * `onForecast` сообщает наружу прогноз выбранного города (или `null`, пока его нет): по нему «Главная» решает, что посоветовать.
  */
@@ -52,7 +52,7 @@ export default function WeatherWidget({ onForecast }: { onForecast?: (forecast: 
 
   if (!city) {
     return (
-      <div data-testid="weather-widget" aria-label="Погода" role="group" className="flex min-h-[64px] min-w-0 flex-col justify-center px-2 py-1">
+      <div data-testid="weather-widget" aria-label="Погода" role="group" className="flex min-h-[64px] min-w-0 flex-1 flex-col justify-center px-2 py-1">
         <div className="flex items-center gap-1">
           <button
             type="button"

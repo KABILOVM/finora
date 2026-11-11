@@ -4538,20 +4538,49 @@ html[data-skin] .skin-hero::after {
 }
 /* Форма углов, материал карточек, вид меню и карточки «Всего» у образов теперь задаются чертами (data-shape, data-material, data-nav, data-hero):
    таблица — src/skinCore.ts, значения — src/styles/look.css. Там же несколько штрихов отдельных образов (кружево «Кокетки», поля «Тетради»…). */
-/* Бенто: на экране от 560 px главная собирается «коробкой» в две колонки: итог и широкие блоки на всю ширину, компактные карточки (data-bento="half") парами.
-   На узком телефоне плитка вдвое уже суммы с копейками, поэтому там карточки остаются в один столбец. */
+/* Главная собирается из блоков по раскладке человека (src/features/home/layout). Блок во всю ширину занимает ряд целиком;
+   «половины» (data-size="half") встают парами, а одинокая половина растягивается на весь ряд. На экране уже 360 px половина
+   вдвое уже суммы с копейками, поэтому там все блоки идут в один столбец. Блок, которому сейчас нечего показать, пуст и места
+   не занимает. */
+[data-home-grid] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+[data-home-grid] > * {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 0 0 100%;
+  min-width: 0;
+}
+[data-home-grid] > :empty {
+  display: none;
+}
+@media (min-width: 360px) {
+  [data-home-grid] > [data-size='half'] {
+    flex: 1 1 calc(50% - 1rem);
+  }
+}
+/* Компактные карточки бывают половиной только от 560 px (data-size="half-wide"): на телефоне им тесно. Бенто ставит парами те из
+   них, ширину которых человек не выбирал (data-bento="half"). */
 @media (min-width: 560px) {
-  html[data-skin='bento'] [data-home-grid] {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-flow: dense;
-    align-items: stretch;
-  }
-  html[data-skin='bento'] [data-home-grid] > * {
-    grid-column: span 2;
-  }
+  [data-home-grid] > [data-size='half-wide'],
   html[data-skin='bento'] [data-home-grid] > [data-bento='half'] {
-    grid-column: span 1;
+    flex: 1 1 calc(50% - 1rem);
+  }
+}
+@media (min-width: 768px) {
+  [data-home-grid] {
+    gap: 1.25rem;
+  }
+}
+/* Долгое нажатие на блок главной открывает его меню (features/home/layout/useLongPress.ts): пока палец держат, браузер не должен
+   выделять текст и показывать своё меню ссылки. Только для пальца: мышью текст выделяется как обычно. */
+@media (pointer: coarse) {
+  [data-home-grid] > [data-home-block] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 }
 /* Рамка карточки «Всего» цвета образа (--skin-line). */

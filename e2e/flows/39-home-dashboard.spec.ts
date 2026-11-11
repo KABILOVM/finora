@@ -117,8 +117,9 @@ test.describe('39. Главная: компактная, с «Требует в�
     await expect(row.getByRole('link', { name: /Платёж просрочен/ })).toBeVisible();
     await expect(row.getByRole('link', { name: /Лимит превышен/ })).toBeVisible();
 
-    // полоса «Курсы и погода»
-    await expect(page.getByTestId('home-glance')).toBeVisible();
+    // курсы и погода — два блока парой
+    await expect(page.getByTestId('home-rates')).toBeVisible();
+    await expect(page.getByTestId('home-weather')).toBeVisible();
     await expect(page.getByTestId('rates-widget')).toContainText('USD');
 
     // кошельки чипами, лимиты и платежи компактно; долгов, целей и итогов месяца на главной больше нет

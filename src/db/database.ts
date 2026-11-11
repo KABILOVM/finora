@@ -55,6 +55,8 @@ export function dbNameFor(userId: string): string {
  *    (категория долга: '' старым, без индексов). Категории и долги забираются с сервера заново (как в версии 8).
  *  - 11: у категорий daily («ежедневная»: 0 старым) и dailyLimitMinor (дневной лимит: null старым), без индексов. Категории забираются
  *    с сервера заново (как в версии 9): прежняя версия получала их, отбрасывая незнакомые колонки daily и daily_limit_minor.
+ *  - 12: у настроек раскладка «Главной» (home — без индексов). Старым настройкам null, настройки забираются с сервера заново
+ *    (как в версии 6): прежняя версия получала их, отбрасывая незнакомую колонку home.
  */
 export class FinoraDB extends Dexie {
   declare settings: EntityTable<LocalRow<Settings>, 'id'>;
@@ -226,6 +228,21 @@ export class FinoraDB extends Dexie {
             if (c['daily'] === undefined) c['daily'] = 0;
             if (c['dailyLimitMinor'] === undefined) c['dailyLimitMinor'] = null;
             if (typeof c['serverSeq'] === 'number') c['serverSeq'] = 0;
+          });
+      });
+    // Раскладка «Главной»: тот же порядок, что в версии 6. Прежняя версия получала настройки, отбрасывая незнакомую колонку home,
+    // и без повторного получения первая же правка настроек стёрла бы раскладку на сервере.
+    this.version(12)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('meta').bulkDelete([cursorKey('settings')]);
+        await tx.table('meta').bulkPut([{ key: resyncKey('settings'), value: true }]);
+        await tx
+          .table('settings')
+          .toCollection()
+          .modify((s: Record<string, unknown>) => {
+            if (s['home'] === undefined) s['home'] = null;
+            if (typeof s['serverSeq'] === 'number') s['serverSeq'] = 0;
           });
       });
   }

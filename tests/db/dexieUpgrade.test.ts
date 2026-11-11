@@ -754,6 +754,69 @@ describe('обновление базы с версии 10 до 11: «ежедн
   });
 });
 
+describe('обновление базы с версии 11 до 12: раскладка «Главной» в настройках', () => {
+  const stores11 = {
+    settings: 'id, dirty, [dirty+clientUpdatedAt]',
+    wallets: 'id, dirty, sortOrder, [dirty+clientUpdatedAt]',
+    categories: 'id, dirty, kind, sortOrder, [dirty+clientUpdatedAt]',
+    transactions: 'id, dirty, occurredOn, walletId, toWalletId, categoryId, debtId, recurringRuleId, [walletId+occurredOn], [dirty+clientUpdatedAt]',
+    budgets: 'id, dirty, categoryId, [dirty+clientUpdatedAt]',
+    debts: 'id, dirty, direction, closedAt, archivedAt, [dirty+clientUpdatedAt]',
+    recurring_rules: 'id, dirty, startOn, archivedAt, [dirty+clientUpdatedAt]',
+    shopping_items: 'id, dirty, purchasedAt, transactionId, [dirty+clientUpdatedAt]',
+    savings_goals: 'id, dirty, walletId, [dirty+clientUpdatedAt]',
+    meta: 'key',
+  };
+  const settings = (local: object) => ({
+    ...sync, id: USER_A, baseCurrency: 'USD', locale: 'ru', weekStartsOn: 0, defaultWalletId: null, weather: null, syncError: null, ...local,
+  });
+
+  it('у старых настроек home = null (а не undefined); настройки забираются заново; правка и память о ней на месте', async () => {
+    const factory = new IDBFactory();
+    const old = new Dexie(dbNameFor(USER_A), { indexedDB: factory, IDBKeyRange });
+    old.version(11).stores(stores11);
+    await old.open();
+    const memory = { dirtyGroups: ['week'], dirtyBase: { week: { b: { weekStartsOn: 1 }, at: '2026-10-02T00:00:00.000Z' } } };
+    await old.table('settings').add(settings({ dirty: 1, serverSeq: 7, ...memory })); // неделя правлена, ещё не отправлена
+    await old.table('meta').bulkPut([
+      { key: 'cursor:settings', value: 7 },
+      { key: 'cursor:categories', value: 5 },
+      { key: 'initialPullDone', value: true },
+    ]);
+    old.close();
+
+    const store = await open(factory);
+    try {
+      expect(await store.db.meta.get('cursor:settings')).toBeUndefined();
+      expect(await store.sync.getCursor('settings')).toBe(0);
+      expect(await store.sync.needsResync('settings')).toBe(true); // метка держит повтор, даже если вкладка со старым кодом запишет курсор
+      expect(await store.sync.getCursor('categories')).toBe(5); // остальные таблицы не забираются заново
+      expect(await store.sync.needsResync('categories')).toBe(false);
+
+      const s = await store.settings.get();
+      expect(s).toMatchObject({ baseCurrency: 'USD', weekStartsOn: 0, dirty: 1, serverSeq: 0, home: null, ...memory });
+      expect('home' in s!).toBe(true);
+      expect(await store.sync.hasMergeableEdits()).toBe(true); // правка настроек перед отправкой сверится с сервером
+    } finally {
+      store.close();
+    }
+  });
+
+  it('пустая правка старой строки (без ключа home) не помечает её изменённой', async () => {
+    const factory = new IDBFactory();
+    const store = await open(factory);
+    try {
+      // как вкладка со старым кодом: нового поля в строке нет совсем
+      await store.db.settings.add(settings({ dirty: 0, serverSeq: 4 }) as never);
+      expect((await store.db.settings.get(USER_A))!.home).toBeUndefined();
+      expect((await store.settings.update({ home: null })).dirty).toBe(0);
+      expect((await store.settings.update({ weekStartsOn: 0 })).dirty).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+});
+
 /**
  * Страж. Версия приложения, ещё не знающая новой колонки, получает строки без неё (select('*') + отбор по TABLE_SPECS) и
  * запоминает их серверную версию и курсор. После обновления строка выглядит «без значения», с сервера она больше не придёт,
@@ -761,9 +824,9 @@ describe('обновление базы с версии 10 до 11: «ежедн
  * в src/db/database.ts). Поэтому колонка в TABLE_SPECS добавляется ВМЕСТЕ с версией базы, которая заново забирает её таблицу.
  */
 describe('новая колонка договора требует версии базы, которая заново забирает таблицу', () => {
-  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции), версии 7 и 8 (долги), версия 9 (категории, долги), версия 11 (категории). */
+  /** Поля договора по таблицам; последние сбросы курсоров — версия 6 (кошельки, настройки, операции), версии 7 и 8 (долги), версия 9 (категории, долги), версия 11 (категории), версия 12 (настройки). */
   const SNAPSHOT: Record<SyncTableName, string[]> = {
-    settings: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather'],
+    settings: ['id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'baseCurrency', 'locale', 'weekStartsOn', 'defaultWalletId', 'weather', 'home'],
     wallets: [
       'id', 'createdAt', 'clientUpdatedAt', 'deviceId', 'deletedAt', 'name', 'currency', 'kind', 'openingBalanceMinor', 'color', 'icon',
       'sortOrder', 'archivedAt', 'goalMinor', 'goalOn',

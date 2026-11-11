@@ -231,6 +231,7 @@ export function makeSettings(userId: string, overrides: Partial<Settings> = {}):
     weekStartsOn: 1,
     defaultWalletId: null,
     weather: null,
+    home: null,
     ...overrides,
   };
 }

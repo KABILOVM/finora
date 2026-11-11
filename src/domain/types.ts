@@ -262,6 +262,11 @@ export interface Settings extends SyncFields {
    * не выбирал. Живёт в настройках, чтобы выбор ехал между устройствами.
    */
   weather: string | null;
+  /**
+   * Раскладка «Главной» одним текстом: порядок блоков, скрытые и ширина (формат и проверки — domain/homeLayout.ts). null — человек
+   * главную не настраивал, она стандартная. Живёт в настройках, чтобы раскладка ехала между устройствами.
+   */
+  home: string | null;
 }
 
 export type LocalRow<T> = T & LocalFields;

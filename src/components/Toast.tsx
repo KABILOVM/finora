@@ -8,8 +8,13 @@ export interface ToastOptions {
   tone?: ToastTone;
   /** Сколько показывать, мс. По умолчанию 4000 (ошибки — 7000). 0 — пока не закроют. */
   durationMs?: number;
-  /** Кнопка в тосте, например «Отменить» после удаления. */
-  action?: { label: string; onClick: () => void };
+  /** Кнопка в тосте, например «Отменить» после удаления; две кнопки — списком («Открыть» и «Отменить»). */
+  action?: ToastAction | readonly ToastAction[];
+}
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
 }
 
 interface ToastItem extends ToastOptions {
@@ -116,29 +121,39 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       >
         {shown.map((t) => {
           const tone = t.tone ?? 'info';
+          // Над открытым окном тост узкий и не должен заходить на его заголовок: там остаётся одна кнопка — последняя («Отменить»).
+          const actions = (t.action ? [t.action].flat() : []).slice(overModal ? -1 : 0);
+          // Две кнопки («Открыть» и «Отменить») вместе с «×» в одну строку телефона не помещаются: они идут второй строкой, справа.
+          const many = actions.length > 1;
           return (
             <div
               key={t.id}
               role={tone === 'error' ? 'alert' : 'status'}
               className={cn(
-                'pointer-events-auto flex w-full max-w-sm animate-pop-in items-center gap-3 rounded-2xl border border-border bg-surface px-4 shadow-float',
+                'pointer-events-auto flex w-full max-w-sm animate-pop-in items-center gap-x-3 rounded-2xl border border-border bg-surface px-4 shadow-float',
+                many && 'flex-wrap',
                 // над окном — пониже ростом: тост не должен заходить на заголовок окна
                 overModal ? 'py-2' : 'py-3',
               )}
             >
               <Icon name={TONE_ICON[tone]} size={22} className={cn('shrink-0', TONE_CLASS[tone])} />
               <p className="min-w-0 flex-1 text-base text-text">{t.message}</p>
-              {t.action && (
-                <button
-                  type="button"
-                  className="-my-2 min-h-[44px] shrink-0 rounded-lg px-2 text-base font-semibold text-brand"
-                  onClick={() => {
-                    t.action?.onClick();
-                    dismiss(t.id);
-                  }}
-                >
-                  {t.action.label}
-                </button>
+              {actions.length > 0 && (
+                <div className={cn('flex shrink-0', many ? 'order-last -mb-2 -mr-2 basis-full justify-end' : '-my-2')}>
+                  {actions.map((a) => (
+                    <button
+                      key={a.label}
+                      type="button"
+                      className="min-h-[44px] rounded-lg px-2 text-base font-semibold text-brand"
+                      onClick={() => {
+                        a.onClick();
+                        dismiss(t.id);
+                      }}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
               )}
               <button
                 type="button"
