@@ -18,6 +18,7 @@ import { AnomaliesCard } from './AnomaliesCard';
 import { categoryFilterOptions } from './categoryFilter';
 import { CashCalendarView } from './CashCalendarView';
 import { CategoryCompare } from './CategoryCompare';
+import { SpendSplitBar } from './SpendSplitBar';
 import { MonthlyBars } from './charts/MonthlyBars';
 import { WeekdayBars } from './charts/WeekdayBars';
 import { NetWorthCard } from './NetWorthCard';
@@ -58,9 +59,9 @@ function Summary({ data }: { data: AnalyticsData }) {
   const up = through.expenseMinor > compare.expenseMinor;
   const planned = current.expenseMinor - through.expenseMinor;
   return (
-    <Card aria-label="Итоги месяца" data-testid="analytics-summary" className="!py-4 md:!p-5">
+    <Card aria-label="Итоги месяца" data-testid="analytics-summary">
       <p className="text-sm text-muted">Расходы за {monthTitle(data.month).toLowerCase()}</p>
-      <p className="mt-0.5 text-[clamp(1.75rem,8vw,2.25rem)] font-extrabold leading-tight tracking-tight">
+      <p className="num-xl mt-1 text-[clamp(2rem,9.5vw,2.75rem)] font-extrabold">
         <MoneyText minor={current.expenseMinor} currency={base} tone="none" />
       </p>
       {trend !== null && (
@@ -268,7 +269,9 @@ export default function AnalyticsPage() {
                     : 'В этом месяце расходов пока нет.'}
               </p>
             ) : (
-              <CategoryCompare
+              <>
+                {data.categoryFilter === null && <SpendSplitBar deltas={data.deltas} categories={categories} totalMinor={data.through.expenseMinor} base={data.base} />}
+                <CategoryCompare
                 key={month}
                 deltas={data.deltas}
                 categories={categories}
@@ -277,6 +280,7 @@ export default function AnalyticsPage() {
                 totalMinor={data.through.expenseMinor}
                 compareDays={data.compareDays}
               />
+              </>
             )}
           </Section>
           {data.where.wallet.length > 0 && (

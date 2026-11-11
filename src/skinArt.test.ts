@@ -14,7 +14,7 @@ const extras = (id: string): string => {
   return m?.[1] ?? '';
 };
 /** Образы, которые рисуются сами (у «Сезонных» своего блока нет: на странице стоит праздничный образ). */
-const drawn = SKINS.filter((s) => s.id !== 'classic' && !s.resolves);
+const drawn = SKINS.filter((s) => !s.base && !s.resolves);
 const artSkins = drawn.filter((s) => extras(s.id).includes('--skin-art:'));
 const KB = 1024;
 

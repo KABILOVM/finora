@@ -62,7 +62,7 @@ describe('наборы значков образов: «Пиксель»', () =>
   });
 
   it('набор есть у каждого образа, кроме «Классики»: SKIN_ICON_PACKS, SKIN_ICON_STYLE и список образов совпадают', () => {
-    const ids = SKINS.filter((s) => s.id !== 'classic' && !s.resolves).map((s) => s.id); // «Сезонные» берут набор у праздничного образа
+    const ids = SKINS.filter((s) => !s.base && !s.resolves).map((s) => s.id); // «Сезонные» берут набор у праздничного образа
     expect([...SKIN_ICON_PACKS].sort()).toEqual([...ids].sort());
     expect(Object.keys(SKIN_ICON_STYLE).sort()).toEqual([...ids].sort());
     for (const id of ids) expect(skinIconPack(id), id).toBeDefined();

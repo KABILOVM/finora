@@ -18,7 +18,7 @@ export function WeekdayBars({ points, base }: { points: readonly WeekdayPoint[];
   const best = busiestWeekday(points);
   const scale = Math.max(1, ...points.map((p) => p.avgMinor));
   const groupW = W / 7;
-  const barW = Math.min(groupW * 0.56, 28);
+  const barW = Math.min(groupW * 0.56, 24);
   return (
     <div>
       <svg viewBox={`0 0 ${W} 80`} role="img" aria-label="Средний расход по дням недели" className="block h-auto w-full" data-testid="weekday-bars">
@@ -28,7 +28,7 @@ export function WeekdayBars({ points, base }: { points: readonly WeekdayPoint[];
           const h = p.avgMinor <= 0 ? 0 : Math.max(2, (p.avgMinor / scale) * (PLOT_BOTTOM - PLOT_TOP));
           const top = best !== null && p.weekday === best.weekday;
           return (
-            <g key={p.weekday}>
+            <g key={p.weekday} style={{ '--i': p.weekday } as React.CSSProperties}>
               <rect
                 data-testid={`weekday-bar-${p.weekday}`}
                 x={cx - barW / 2}
@@ -36,7 +36,7 @@ export function WeekdayBars({ points, base }: { points: readonly WeekdayPoint[];
                 width={barW}
                 height={h}
                 rx="4"
-                className={top ? 'fill-brand' : 'fill-brand/40'}
+                className={top ? 'chart-bar fill-brand' : 'chart-bar fill-brand/40'}
               />
               <text x={cx} y="77" textAnchor="middle" fontSize="10" className={top ? 'fill-current font-semibold' : 'fill-muted'}>
                 {WEEKDAYS_SHORT_MON_FIRST[p.weekday]}

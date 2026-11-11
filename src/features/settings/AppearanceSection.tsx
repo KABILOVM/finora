@@ -3,6 +3,7 @@ import { useHideAmounts } from '@/components/hideAmounts';
 import { Segmented } from '@/components/Segmented';
 import { Switch } from '@/components/Switch';
 import { paletteFromHex } from '@/lib/palette';
+import { isBaseSkin } from '@/skinCore';
 import { skinById } from '@/skins';
 import { readCustomPalette, saveCustomAccent, useAccentPref, useCustomAccent, useSkinPref, useThemePref, type ThemePref } from '@/theme';
 import { AccentPicker } from './AccentPicker';
@@ -35,7 +36,7 @@ export function AppearanceSection() {
     <SettingsSection title="Оформление">
       <Segmented ariaLabel="Тема оформления" options={OPTIONS} value={pref} onChange={setPref} />
       <SkinPicker value={skin} onChange={setSkin} />
-      {skin === 'classic' ? (
+      {isBaseSkin(skin) ? (
         <AccentPicker value={accent} onChange={setAccent} customHex={customHex} onCustomChange={setCustomHex} />
       ) : (
         <p data-testid="skin-colors-note" className="text-sm text-muted">
