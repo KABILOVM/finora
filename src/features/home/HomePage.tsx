@@ -1,10 +1,13 @@
-import { lazy, Suspense, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { buttonClasses } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
+import { Icon } from '@/components/Icon';
 import { InstallHint } from '@/components/InstallHint';
 import { PageHeader } from '@/components/PageHeader';
-import { useBalances, useSettings, useTransactions, useWallets } from '@/db';
+import { useToast } from '@/components/Toast';
+import { useBalances, useSettings, useStore, useTransactions, useWallets } from '@/db';
+import { parseHome, stringifyHome, type HomeItem } from '@/domain/homeLayout';
 import type { LocalRow, Wallet } from '@/domain/types';
 import BudgetsWidget from '@/features/budgets/BudgetsWidget';
 import UpcomingWidget from '@/features/recurring/UpcomingWidget';
@@ -13,10 +16,15 @@ import { useRates } from '@/rates/hooks';
 import { useToday } from '@/recurring/useToday';
 import { computeWalletsTotal } from '@/rates/walletsTotal';
 import AttentionRow from './AttentionRow';
+import { RatesCard, WeatherCard } from './GlanceCards';
 import MissedDaysCard from './MissedDaysCard';
-import { GlanceStrip } from './GlanceStrip';
 import { HideAmountsProvider } from './hideAmounts';
 import { HomeHero } from './HomeHero';
+import { homeBlock, type HomeBlock } from './layout/blocks';
+import { HOME_EDIT_LINK } from './layout/editLink';
+import { HomeBlockMenu } from './layout/HomeBlockMenu';
+import { adviceAnchor, resolveHome, setCurrencies, setShown, slotsOf, widthOf, type HomeSlot } from './layout/layout';
+import { useLongPress } from './layout/useLongPress';
 import { inMonthlyWindow } from './monthlyWindow';
 import { RecentOps } from './RecentOps';
 import SaveRemainderCard from './SaveRemainderCard';
@@ -31,6 +39,16 @@ const FirstOperationCard = lazy(() => import('./FirstOperationCard'));
 const MonthlyCard = lazy(() => import('./MonthlyCard'));
 // «Траты в день» нужны только тому, кто отметил ежедневные категории: расчёт и карточка грузятся отдельным файлом
 const DailyHomeCard = lazy(() => import('@/features/daily/DailyHomeCard'));
+// Блоки, которых на стандартной главной нет: код грузится, только когда человек вынес блок на главную
+const TodayHomeCard = lazy(() => import('./blocks/TodayHomeCard'));
+const SpendingHomeCard = lazy(() => import('./blocks/SpendingHomeCard'));
+const DebtsHomeCard = lazy(() => import('./blocks/DebtsHomeCard'));
+const GoalsHomeCard = lazy(() => import('./blocks/GoalsHomeCard'));
+const ShoppingHomeCard = lazy(() => import('./blocks/ShoppingHomeCard'));
+const ShortcutsRow = lazy(() => import('./blocks/ShortcutsRow'));
+// Настройка главной и выбор валют блока курсов открываются редко: их код в файл главной не входит
+const HomeEditor = lazy(() => import('./layout/HomeEditor'));
+const RatesCurrencySheet = lazy(() => import('./layout/RatesCurrencySheet'));
 
 /** Затвор: карточку подгружаем, только когда операций нет совсем. */
 function FirstOperation({ wallets }: { wallets: readonly LocalRow<Wallet>[] }) {
@@ -49,9 +67,18 @@ function FirstOperation({ wallets }: { wallets: readonly LocalRow<Wallet>[] }) {
  */
 const HEADER_CLASS = 'sr-only md:not-sr-only md:!pb-4 md:!pt-2';
 
+const WIDTH_ATTRS = {
+  full: {},
+  half: { 'data-size': 'half' },
+  'half-wide': { 'data-size': 'half-wide' },
+  bento: { 'data-bento': 'half' },
+} as const;
+
 /**
- * Главная: «Всего» с приходом и расходом месяца, строка «Требует внимания», курсы и погода, кошельки, «Можно тратить в день»,
- * ближайшие платежи, последние операции.
+ * Главная собирается из блоков по раскладке из настроек (layout/): человек сам решает, что показывать, в каком порядке и какой ширины.
+ * Пока он ничего не настраивал, главная стандартная: «Всего» с приходом и расходом месяца, строка «Требует внимания», последние
+ * операции, кошельки, курсы и погода, «Можно тратить в день», ближайшие платежи. Адрес `/?edit=1` открывает настройку главной;
+ * долгое нажатие на блок — его меню («Скрыть с главной», «Настроить главную»).
  * Подсказка «как установить» живёт только здесь (на других страницах её нет).
  */
 export default function HomePage() {
@@ -62,12 +89,28 @@ export default function HomePage() {
   const categoryIndex = useCategoryIndex();
   const { getRate } = useRates();
   const today = useToday();
+  const [params] = useSearchParams();
 
   const base = settings?.baseCurrency;
   const total = useMemo(
     () => (wallets && balances && base ? computeWalletsTotal(wallets, balances, base, getRate) : undefined),
     [wallets, balances, base, getRate],
   );
+  const home = settings?.home ?? null;
+  const items = useMemo(() => resolveHome(parseHome(home)), [home]);
+  const slots = useMemo(() => slotsOf(items).filter((s) => s.on), [items]);
+  const store = useStore();
+  const toast = useToast();
+  // меню блока по долгому нажатию и окно выбора валют блока курсов
+  const [menu, setMenu] = useState<HomeBlock | null>(null);
+  const [pickingCurrencies, setPickingCurrencies] = useState(false);
+  const longPress = useLongPress((target) => {
+    const block = homeBlock(target.closest<HTMLElement>('[data-home-block]')?.dataset['homeBlock'] ?? '');
+    if (block) setMenu(block);
+  });
+  // место под строку-совет погоды: отдельная строка под рядом с погодой, когда та стоит половиной (см. adviceAnchor)
+  const [adviceSlot, setAdviceSlot] = useState<HTMLElement | null>(null);
+  const adviceAt = useMemo(() => adviceAnchor(slots), [slots]);
 
   if (!wallets || !balances || settings === undefined || !walletIndex || !categoryIndex) {
     return (
@@ -86,6 +129,20 @@ export default function HomePage() {
         <PageHeader title="Главная" />
         <EmptyState icon="cloud" title="Данные ещё загружаются" text="Подождите немного: после первой загрузки здесь появится сводка." />
       </>
+    );
+  }
+
+  if (params.get('edit') === '1') {
+    return (
+      <Suspense
+        fallback={
+          <p role="status" className="py-10 text-center text-muted">
+            Загрузка…
+          </p>
+        }
+      >
+        <HomeEditor home={home} base={base} />
+      </Suspense>
     );
   }
 
@@ -108,33 +165,163 @@ export default function HomePage() {
     );
   }
 
+  /** Запись раскладки в настройки (null — стандартная главная). */
+  const saveHome = (next: readonly HomeItem[] | string | null): void => {
+    const text = next === null || typeof next === 'string' ? next : stringifyHome(next);
+    store.settings.update({ home: text }).catch((e: unknown) => {
+      console.error('Не удалось сохранить раскладку главной:', e);
+      toast.error('Не удалось сохранить раскладку. Попробуйте ещё раз.');
+    });
+  };
+
+  const hideBlock = (block: HomeBlock) => {
+    const before = home;
+    setMenu(null);
+    saveHome(setShown(items, block.id, false));
+    toast.success(`Блок «${block.title}» скрыт с главной`, { durationMs: 7000, action: { label: 'Отменить', onClick: () => saveHome(before) } });
+  };
+
+  /** half — блок стоит в половину ширины: у блоков с узким видом он включается. */
+  const render = (slot: HomeSlot, half: boolean): ReactNode => {
+    switch (slot.block.id) {
+      case 'hero':
+        return <HomeHero total={total ?? null} base={base} />;
+      case 'templates':
+        return <TemplatesRow />;
+      case 'attention':
+        return <AttentionRow />;
+      case 'missed':
+        return <MissedDaysCard />;
+      case 'weekly':
+        return <WeeklyCard today={today} categories={categoryIndex} />;
+      case 'monthly':
+        return inMonthlyWindow(today) ? (
+          <Suspense fallback={null}>
+            <MonthlyCard today={today} categories={categoryIndex} />
+          </Suspense>
+        ) : null;
+      case 'save':
+        return <SaveRemainderCard today={today} />;
+      case 'trip':
+        return <TripCard />;
+      case 'daily':
+        return (
+          <Suspense fallback={null}>
+            <DailyHomeCard />
+          </Suspense>
+        );
+      case 'today':
+        return (
+          <Suspense fallback={null}>
+            <TodayHomeCard today={today} base={base} half={half} />
+          </Suspense>
+        );
+      case 'rates':
+        return <RatesCard base={base} {...(slot.cur ? { currencies: slot.cur } : {})} />;
+      case 'weather':
+        return adviceAt < 0 ? <WeatherCard /> : <WeatherCard adviceSlot={adviceSlot} />;
+      case 'wallets':
+        return <WalletChips wallets={wallets} balances={balances} />;
+      case 'budgets':
+        return <BudgetsWidget />;
+      case 'spending':
+        return (
+          <Suspense fallback={null}>
+            <SpendingHomeCard today={today} base={base} categories={categoryIndex} half={half} />
+          </Suspense>
+        );
+      case 'upcoming':
+        return <UpcomingWidget />;
+      case 'debts':
+        return (
+          <Suspense fallback={null}>
+            <DebtsHomeCard today={today} half={half} />
+          </Suspense>
+        );
+      case 'goals':
+        return (
+          <Suspense fallback={null}>
+            <GoalsHomeCard half={half} />
+          </Suspense>
+        );
+      case 'shopping':
+        return (
+          <Suspense fallback={null}>
+            <ShoppingHomeCard half={half} />
+          </Suspense>
+        );
+      case 'shortcuts':
+        return (
+          <Suspense fallback={null}>
+            <ShortcutsRow />
+          </Suspense>
+        );
+      case 'recent':
+        return <RecentOps wallets={walletIndex} categories={categoryIndex} today={today} base={base} />;
+    }
+  };
+
+  // «Запишите первую трату» — не блок раскладки: карточка стоит сразу под итогом (или первой, если итог скрыт), пока операций нет
+  const first = (
+    <div key="first" data-home-block="first">
+      <FirstOperation wallets={wallets} />
+    </div>
+  );
+  const nodes: ReactNode[] = slots.some((s) => s.block.id === 'hero') ? [] : [first];
+  slots.forEach((slot, i) => {
+    const width = widthOf(slot);
+    nodes.push(
+      <div key={slot.block.id} data-home-block={slot.block.id} {...WIDTH_ATTRS[width]}>
+        {render(slot, width === 'half')}
+      </div>,
+    );
+    if (slot.block.id === 'hero') nodes.push(first);
+    // пустое, пока совета нет: пустой блок места не занимает
+    if (i === adviceAt) nodes.push(<div key="weather-advice" data-home-block="weather-advice" ref={setAdviceSlot} />);
+  });
+
   return (
     <HideAmountsProvider>
       <InstallHint className="mb-2" />
       <PageHeader title="Главная" className={HEADER_CLASS} />
-      <div data-home-grid className="stagger flex flex-col gap-4 md:gap-5">
-        <HomeHero total={total ?? null} base={base} />
-        <FirstOperation wallets={wallets} />
-        <TemplatesRow />
-        <AttentionRow />
-        <MissedDaysCard />
-        <WeeklyCard today={today} categories={categoryIndex} />
-        {inMonthlyWindow(today) && (
-          <Suspense fallback={null}>
-            <MonthlyCard today={today} categories={categoryIndex} />
-          </Suspense>
-        )}
-        <SaveRemainderCard today={today} />
-        <TripCard />
-        <Suspense fallback={null}>
-          <DailyHomeCard />
-        </Suspense>
-        <GlanceStrip base={base} />
-        <WalletChips wallets={wallets} balances={balances} />
-        <BudgetsWidget />
-        <UpcomingWidget />
-        <RecentOps wallets={walletIndex} categories={categoryIndex} today={today} base={base} />
+      <div data-home-grid className="stagger" {...longPress}>
+        {nodes}
       </div>
+      {slots.length === 0 && (
+        <EmptyState icon="home" title="На главной пусто" text="Все блоки скрыты. Верните нужные — это занимает пару касаний." className="py-8" />
+      )}
+      <div className="flex flex-col items-center pt-3">
+        <Link
+          {...HOME_EDIT_LINK}
+          className="press inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 text-sm font-semibold text-muted hover:text-brand"
+        >
+          <Icon name="sliders" size={18} />
+          Настроить главную
+        </Link>
+        {/* долгое нажатие есть только у пальца: мыши подсказка не нужна */}
+        <p className="hidden text-center text-xs text-muted [@media(pointer:coarse)]:block">Долгое нажатие на блок — скрыть его с главной</p>
+      </div>
+      <HomeBlockMenu
+        block={pickingCurrencies ? null : menu}
+        onClose={() => setMenu(null)}
+        onHide={hideBlock}
+        onCurrencies={() => setPickingCurrencies(true)}
+      />
+      {pickingCurrencies && (
+        <Suspense fallback={null}>
+          <RatesCurrencySheet
+            open
+            base={base}
+            value={items.find((i) => i.id === 'rates')?.cur}
+            onChange={(cur) => saveHome(setCurrencies(items, 'rates', cur))}
+            onClose={() => {
+              setPickingCurrencies(false);
+              setMenu(null);
+            }}
+          />
+        </Suspense>
+      )}
     </HideAmountsProvider>
   );
 }
+

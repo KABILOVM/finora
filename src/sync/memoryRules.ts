@@ -182,6 +182,8 @@ export function checkConstraints(table: SyncTableName, r: Rec, userId: string): 
       if (r['week_starts_on'] !== 0 && r['week_starts_on'] !== 1) fail('week_starts_on');
       // города для погоды (раздел 13 supabase/schema.sql): текст не длиннее 8000 знаков
       if (r['weather'] != null && charLength(String(r['weather'])) > 8000) fail('weather_len');
+      // раскладка «Главной» (раздел 21): текст не длиннее 4000 знаков
+      if (r['home'] != null && charLength(String(r['home'])) > 4000) fail('home_len');
       break;
     case 'wallets': {
       if (!tsOkOrNull(r['archived_at'] ?? null)) fail('ts_sane');

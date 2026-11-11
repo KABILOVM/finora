@@ -3,6 +3,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isSkinId, resolveSkin, SEASONAL_SKIN, SKIN_BARS, SKIN_ICON_PACKS, seasonFor, skinBar } from './skinCore';
 import { SKIN_GROUPS, SKINS } from './skins';
+import { HOME_BLOCKS } from './features/home/layout/blocks';
+import { widthOf } from './features/home/layout/layout';
 import { applySkin, readSkinPref, saveSkinPref } from './theme';
 
 const reset = () => {
@@ -128,28 +130,25 @@ describe('«Сезонные»: праздничный образ по дате'
 describe('«Бенто»: раскладка главной', () => {
   const read = (file: string) => fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8');
 
-  it('главная помечает контейнер, а шесть компактных карточек — data-bento="half"', () => {
+  it('главная помечает контейнер, а шести компактным блокам обёртка ставит data-bento="half", пока человек не выбрал ширину сам', () => {
     expect(read('src/features/home/HomePage.tsx')).toContain('<div data-home-grid ');
-    for (const file of [
-      'src/features/home/WeeklyCard.tsx',
-      'src/features/home/SaveRemainderCard.tsx',
-      'src/features/home/TripCard.tsx',
-      'src/features/daily/DailyHomeCard.tsx',
-      'src/features/budgets/BudgetsWidget.tsx',
-      'src/features/recurring/UpcomingWidget.tsx',
-    ]) {
-      expect(read(file), file).toContain('data-bento="half"');
-    }
+    expect(read('src/features/home/HomePage.tsx')).toContain("bento: { 'data-bento': 'half' }");
+    // какие блоки компактные, решает реестр (half: 'wide')
+    const wide = HOME_BLOCKS.filter((b) => b.half === 'wide');
+    expect(wide.map((b) => b.id)).toEqual(['weekly', 'save', 'trip', 'daily', 'budgets', 'upcoming']);
+    for (const block of HOME_BLOCKS) expect(widthOf({ block }) === 'bento', block.id).toBe(block.half === 'wide');
+    // выбранная человеком ширина сильнее образа
+    expect(widthOf({ block: wide[0]!, size: 'full' })).toBe('full');
+    expect(widthOf({ block: wide[0]!, size: 'half' })).toBe('half-wide');
   });
 
-  it('две колонки включаются только у образа «Бенто» и только от 560 px: на телефоне карточки остаются в один столбец', () => {
+  it('пары включаются только у образа «Бенто» и только от 560 px: на телефоне карточки остаются в один столбец', () => {
     const css = read('src/index.css');
-    const m = /@media \(min-width: 560px\) \{([\s\S]*?)\n\}\n/.exec(css.slice(css.indexOf("Бенто: на экране от 560 px")));
+    const m = /@media \(min-width: 560px\) \{([\s\S]*?)\n\}\n/.exec(css.slice(css.indexOf('Компактные карточки бывают половиной только от 560 px')));
     expect(m, 'блок раскладки').not.toBeNull();
     const block = m?.[1] ?? '';
-    expect(block).toContain("html[data-skin='bento'] [data-home-grid]");
-    expect(block).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-    expect(block).toContain("> [data-bento='half']");
+    expect(block).toContain("html[data-skin='bento'] [data-home-grid] > [data-bento='half']");
+    expect(block).toContain('flex: 1 1 calc(50% - 1rem)');
     expect(block).not.toMatch(/html\[data-skin='(?!bento)/); // других образов раскладка не касается
   });
 });

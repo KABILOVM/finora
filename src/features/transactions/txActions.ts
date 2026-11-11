@@ -1,4 +1,4 @@
-import type { ToastApi } from '@/components/Toast';
+import type { ToastAction, ToastApi } from '@/components/Toast';
 import { ValidationError } from '@/db';
 
 /** Сколько секунд в тосте живёт кнопка «Отменить». */
@@ -12,21 +12,20 @@ export function humanError(e: unknown, fallback: string): string {
 /**
  * Тост с кнопкой «Отменить». Сама отмена выполняется функцией undo; удалось — короткое подтверждение,
  * не удалось — понятная ошибка (и ничего не теряется: операция остаётся как была).
+ * `before` — ещё одна кнопка перед «Отменить» (например, «Открыть» у только что внесённой операции).
  */
-export function toastWithUndo(toast: ToastApi, message: string, undo: () => Promise<unknown>, undoneText: string): void {
-  toast.success(message, {
-    durationMs: UNDO_MS,
-    action: {
-      label: 'Отменить',
-      onClick: () => {
-        undo().then(
-          () => toast.show(undoneText),
-          (e: unknown) => {
-            console.error('Не удалось отменить:', e);
-            toast.error(humanError(e, 'Не удалось отменить. Попробуйте ещё раз.'));
-          },
-        );
-      },
+export function toastWithUndo(toast: ToastApi, message: string, undo: () => Promise<unknown>, undoneText: string, before?: ToastAction): void {
+  const undoAction: ToastAction = {
+    label: 'Отменить',
+    onClick: () => {
+      undo().then(
+        () => toast.show(undoneText),
+        (e: unknown) => {
+          console.error('Не удалось отменить:', e);
+          toast.error(humanError(e, 'Не удалось отменить. Попробуйте ещё раз.'));
+        },
+      );
     },
-  });
+  };
+  toast.success(message, { durationMs: UNDO_MS, action: before ? [before, undoAction] : undoAction });
 }

@@ -112,6 +112,8 @@ export const MERGE_GROUPS: Readonly<Record<SyncTableName, Readonly<Record<GroupN
     locale: ['locale'],
     /** Города для погоды и выбранный город: правятся вместе и не конфликтуют с валютой, неделей и кошельком по умолчанию. */
     weather: ['weather'],
+    /** Раскладка «Главной» — одним куском: порядок блоков по частям не сливается, побеждает более новая раскладка целиком. */
+    home: ['home'],
     deleted: ['deletedAt'],
   },
 };

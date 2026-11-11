@@ -105,7 +105,7 @@ describe('облако без поздних колонок: ждёт тольк
     expect(server.dump(USER, 'settings')[0]).toMatchObject({ week_starts_on: 1 }); // настройки ждут целиком
     expect(a.engine.getStatus()).toMatchObject({ phase: 'error', pending: 1, quarantined: 0 });
     expect(a.engine.getStatus().lastError).toBe(
-      'В облаке устарела схема: выполните supabase/schema.sql целиком (раздел 13 — города для погоды); пока настройки остаются только на этом устройстве',
+      'В облаке устарела схема: выполните supabase/schema.sql целиком (раздел 13 — города для погоды; раздел 21 — раскладка главной); пока настройки остаются только на этом устройстве',
     );
     oldSchema.on = false;
     await a.engine.syncNow();

@@ -30,6 +30,7 @@ import { useToast } from '@/components/Toast';
 import { newId, useCategories, useSettings, useStore, useWallets } from '@/db';
 import { formatMinor } from '@/domain/money';
 import type { Category, CurrencyCode, LocalRow, Settings, Wallet } from '@/domain/types';
+import { markSaved } from '@/features/transactions/savedTx';
 import { humanError, toastWithUndo } from '@/features/transactions/txActions';
 import { useRecentStats, type RecentStats } from '@/features/transactions/txData';
 import { suggestNotes, useNoteIndex } from '@/features/transactions/noteSuggest';
@@ -146,6 +147,7 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
 
   // Быстрые кнопки главной («Расход», «Доход», «Перевод») открывают шит сразу на нужной вкладке.
   const location = useLocation();
+  const navigate = useNavigate();
   const preset = location.state as { kind?: string; walletId?: string; prefill?: unknown; date?: unknown } | null;
   // Ярлыки на иконке приложения (манифест) открывают `#/add?kind=income`: у такого перехода состояния нет, вид берём из адреса.
   // Состояние главнее адреса; непонятный вид в адресе — обычный расход.
@@ -376,7 +378,18 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
             ).transaction
           : await store.transactions.create(input, { id: idRef.current });
       prepared.rememberRate(); // курс, набранный руками, запоминаем только после успешного сохранения
-      toastWithUndo(toast, trip.tag === null ? 'Сохранено' : `Сохранено · #${trip.tag}`, () => store.transactions.softDelete(row.id), 'Операция отменена');
+      // строку новой операции в списке под окном подсветим и прокрутим к ней; «Открыть» в тосте показывает её саму — поверх той
+      // страницы, с которой открывали окно. При «Сохранить и ещё» окно остаётся, поэтому «Открыть» там нет.
+      const id = row.id;
+      const background = (location.state as { background?: unknown } | null)?.background;
+      markSaved(id);
+      toastWithUndo(
+        toast,
+        trip.tag === null ? 'Сохранено' : `Сохранено · #${trip.tag}`,
+        () => store.transactions.softDelete(id),
+        'Операция отменена',
+        again ? undefined : { label: 'Открыть', onClick: () => navigate(`/edit/${id}`, { state: { background } }) },
+      );
       onSaved();
       if (again) {
         idRef.current = newId();
