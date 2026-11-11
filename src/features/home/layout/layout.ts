@@ -143,7 +143,7 @@ export const HOME_PRESETS: readonly HomePreset[] = [
 
 /** Блоки набора «Минимум»; «Требует внимания» оставлен: он появляется, только когда что-то горит. */
 const MINIMAL: readonly HomeBlockId[] = ['hero', 'attention', 'recent', 'wallets'];
-/** Прежняя стандартная главная (до версии 0.13): подсказки и курсы с погодой сверху, последние операции — в самом низу. */
+/** Прежняя стандартная главная (до версии 0.14): подсказки и курсы с погодой сверху, последние операции — в самом низу. */
 const CLASSIC: readonly HomeBlockId[] = [
   'hero', 'templates', 'attention', 'missed', 'weekly', 'monthly', 'save', 'trip', 'daily', 'rates', 'weather', 'wallets', 'budgets', 'upcoming', 'recent',
 ];

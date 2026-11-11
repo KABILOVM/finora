@@ -155,7 +155,7 @@ export default function UpcomingWidget() {
   return (
     <section aria-labelledby="home-upcoming">
       <div className="-mb-1 -mt-1 flex items-center justify-between gap-3 px-1">
-        <h2 id="home-upcoming" className="text-base font-semibold text-muted">
+        <h2 id="home-upcoming" className="section-title">
           Ближайшие платежи
         </h2>
         <Link to="/recurring" className="inline-flex min-h-[44px] shrink-0 items-center text-base font-semibold text-brand">

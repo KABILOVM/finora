@@ -6,7 +6,7 @@ import { monthShort, type MonthPoint } from '../analytics';
 
 const W = 300;
 const PLOT_TOP = 6;
-const PLOT_BOTTOM = 76;
+const PLOT_BOTTOM = 106;
 
 export interface MonthlyBarsProps {
   points: readonly MonthPoint[];
@@ -30,7 +30,7 @@ export function MonthlyBars({ points, base, onSelect }: MonthlyBarsProps) {
   return (
     // -mx-2: при 320 px в карточке остаётся 256 px, на шесть кнопок по 42,7 — меньше 44; расширяем ряд (и столбики над ним) на поля карточки
     <div className="-mx-2">
-      <svg viewBox={`0 0 ${W} 80`} role="img" aria-label="Доходы и расходы по месяцам" className="block h-auto w-full" data-testid="monthly-bars">
+      <svg viewBox={`0 0 ${W} 110`} role="img" aria-label="Доходы и расходы по месяцам" className="block h-auto w-full" data-testid="monthly-bars">
         <line x1="0" x2={W} y1={PLOT_BOTTOM} y2={PLOT_BOTTOM} className="stroke-border" strokeWidth="1" />
         {points.map((p, i) => {
           const cx = groupW * i + groupW / 2;
@@ -38,9 +38,9 @@ export function MonthlyBars({ points, base, onSelect }: MonthlyBarsProps) {
           const hi = height(p.incomeMinor);
           const he = height(p.expenseMinor);
           return (
-            <g key={p.month} opacity={last ? 1 : 0.55}>
-              <rect data-testid={`bar-income-${p.month}`} x={cx - barW - 1} y={PLOT_BOTTOM - hi} width={barW} height={hi} rx="3" className="fill-income" />
-              <rect data-testid={`bar-expense-${p.month}`} x={cx + 1} y={PLOT_BOTTOM - he} width={barW} height={he} rx="3" className="fill-expense" />
+            <g key={p.month} opacity={last ? 1 : 0.55} style={{ '--i': i } as React.CSSProperties}>
+              <rect data-testid={`bar-income-${p.month}`} x={cx - barW - 1} y={PLOT_BOTTOM - hi} width={barW} height={hi} rx="3" className="chart-bar fill-income" />
+              <rect data-testid={`bar-expense-${p.month}`} x={cx + 1} y={PLOT_BOTTOM - he} width={barW} height={he} rx="3" className="chart-bar fill-expense" />
             </g>
           );
         })}

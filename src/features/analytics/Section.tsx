@@ -4,8 +4,8 @@ import { Card } from '@/components/Card';
 /** Карточка экрана «Аналитика»: заголовок и содержимое. */
 export function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <Card aria-labelledby={id} className="!py-4 md:!p-5">
-      <h2 id={id} className="mb-3 text-base font-semibold">
+    <Card aria-labelledby={id}>
+      <h2 id={id} className="section-title mb-3">
         {title}
       </h2>
       {children}

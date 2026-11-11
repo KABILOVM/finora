@@ -28,7 +28,17 @@ export default {
         warning: v('warning'),
       },
       // Шкала скруглений: поле/кнопка — control, карточка — card, «таблетка» и кружки — pill. Остальные значения — для особых случаев.
-      borderRadius: { control: '0.75rem', card: '1.5rem', pill: '9999px' },
+      // Все ступени берутся из переменных (src/styles/look.css): образ меняет форму углов целиком, одной чертой data-shape, а не перекрывая классы.
+      borderRadius: {
+        md: 'var(--r-md, 0.375rem)',
+        lg: 'var(--r-lg, 0.5rem)',
+        xl: 'var(--r-xl, 0.75rem)',
+        '2xl': 'var(--r-2xl, 1rem)',
+        '3xl': 'var(--r-3xl, 1.5rem)',
+        control: 'var(--r-control, 0.75rem)',
+        card: 'var(--r-card, 1.5rem)',
+        pill: 'var(--r-pill, 9999px)',
+      },
       fontSize: { caption: ['0.75rem', { lineHeight: '1rem' }] },
       fontFamily: {
         // Onest вшит в приложение (src/assets/fonts) и содержит таджикские буквы; системные шрифты — запасные.
@@ -54,10 +64,11 @@ export default {
         'safe-b': 'env(safe-area-inset-bottom)',
         'safe-t': 'env(safe-area-inset-top)',
       },
+      // Тени тоже из переменных (src/styles/look.css): «материал» образа (data-material) меняет их разом у всех карточек.
       boxShadow: {
-        card: '0 10px 34px -14px rgb(var(--glass-shadow) / 0.32), inset 0 1px 0 rgb(255 255 255 / 0.28)',
+        card: 'var(--shadow-card, 0 10px 34px -14px rgb(var(--glass-shadow) / 0.32), inset 0 1px 0 rgb(255 255 255 / 0.28))',
         sheet: '0 -8px 32px rgb(0 0 0 / 0.18)',
-        float: '0 8px 24px rgb(0 0 0 / 0.18)',
+        float: 'var(--shadow-float, 0 8px 24px rgb(0 0 0 / 0.18))',
       },
       keyframes: {
         'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'translateY(0)' } },

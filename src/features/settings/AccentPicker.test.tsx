@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fire, render, screen, user } from '@/components/testUtils';
@@ -5,6 +6,13 @@ import { PALETTE_KEYS } from '@/lib/palette';
 import { ACCENTS, type AccentId } from '@/theme';
 import { AccentPicker } from './AccentPicker';
 import { AppearanceSection } from './AppearanceSection';
+
+/** «Оформление» со строкой-ссылкой на витрину образов: ссылке нужен роутер. */
+const Appearance = () => (
+  <MemoryRouter>
+    <AppearanceSection />
+  </MemoryRouter>
+);
 
 const reset = () => {
   localStorage.clear();
@@ -230,7 +238,7 @@ describe('AccentPicker', () => {
 
 describe('Оформление: цвет акцента', () => {
   it('выбор применяется сразу, хранится на устройстве и не мешает выбору темы', async () => {
-    render(<AppearanceSection />);
+    render(<Appearance />);
     expect(screen.getByRole('radio', { name: 'Фиолетовый' })).toBeChecked();
     expect(document.documentElement.hasAttribute('data-accent')).toBe(false);
 
@@ -247,7 +255,7 @@ describe('Оформление: цвет акцента', () => {
 
   it('при открытии показывает сохранённый акцент', () => {
     localStorage.setItem('finora-accent', 'teal');
-    render(<AppearanceSection />);
+    render(<Appearance />);
     expect(screen.getByRole('radio', { name: 'Бирюзовый' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'Фиолетовый' })).not.toBeChecked();
   });
@@ -255,13 +263,13 @@ describe('Оформление: цвет акцента', () => {
   it('возврат к фиолетовому убирает атрибут (прежняя палитра)', async () => {
     localStorage.setItem('finora-accent', 'green');
     document.documentElement.setAttribute('data-accent', 'green');
-    render(<AppearanceSection />);
+    render(<Appearance />);
     await user.click(screen.getByRole('radio', { name: 'Фиолетовый' }));
     expect(document.documentElement.hasAttribute('data-accent')).toBe(false);
   });
 
   it('свой цвет: ставит палитру на <html>, хранится на устройстве; готовый цвет её снимает', async () => {
-    render(<AppearanceSection />);
+    render(<Appearance />);
     await user.click(screen.getByRole('radio', { name: 'Свой цвет' }));
     await user.clear(code());
     await user.type(code(), '#0a8f4a');
@@ -286,7 +294,7 @@ describe('Оформление: цвет акцента', () => {
   it('при открытии показывает сохранённый свой цвет', () => {
     localStorage.setItem('finora-accent', 'custom');
     localStorage.setItem('finora-accent-custom', '#aa3377');
-    render(<AppearanceSection />);
+    render(<Appearance />);
     expect(screen.getByRole('radio', { name: 'Свой цвет' })).toBeChecked();
     expect(code()).toHaveValue('#aa3377');
   });

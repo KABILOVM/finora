@@ -47,7 +47,7 @@ export default function DailyHomeCard() {
   const rows = stats.lines.slice(0, HOME_DAILY_ROWS);
   return (
     <section aria-labelledby="home-daily" data-testid="daily-home-card" className="slide-down">
-      <Card padding="none" className="p-3">
+      <Card padding="none" className="p-4 min-[380px]:p-5">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
             <Icon name="chart" size={20} />

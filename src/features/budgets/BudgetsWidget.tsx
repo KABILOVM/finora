@@ -115,7 +115,7 @@ export default function BudgetsWidget() {
 
   if (forecast === undefined || data === undefined) {
     return (
-      <Card aria-busy="true" className="min-h-[7.5rem] !py-3 md:!p-5">
+      <Card aria-busy="true" className="min-h-[7.5rem]">
         <Skeleton className="h-4 w-40" />
         <Skeleton className="mt-3 h-9 w-44" />
         <Skeleton className="mt-4 h-2 w-full !rounded-pill" />
@@ -127,9 +127,9 @@ export default function BudgetsWidget() {
   const budgetsData = 'overflow' in data ? null : data;
   const hasBudgets = budgetsData !== null && budgetsData.progress.ok && budgetsData.progress.items.length > 0;
   return (
-    <Card aria-labelledby="budgets-widget-title" data-testid="budgets-widget" className="!py-3 md:!p-5">
+    <Card aria-labelledby="budgets-widget-title" data-testid="budgets-widget">
       <Link to="/budgets" aria-label="Все бюджеты" className="press -my-1 flex min-h-[44px] items-center justify-between gap-3">
-        <h2 id="budgets-widget-title" className="text-base font-semibold text-muted">
+        <h2 id="budgets-widget-title" className="section-title">
           Можно тратить в день
         </h2>
         <span className="flex shrink-0 items-center gap-1 text-sm text-muted">

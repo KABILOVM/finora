@@ -10,11 +10,11 @@ export interface SectionHeaderProps {
   className?: string;
 }
 
-/** Подзаголовок группы на странице (h2): ПРОПИСНЫМИ мелким шрифтом, один размер и отступ для «Ещё» и Настроек. */
+/** Подзаголовок группы на странице (h2): один размер и отступ для «Ещё» и Настроек. Вид задаёт класс section-title (src/styles/look.css): у «Классики (прежней)» он мелкий и прописными. */
 export function SectionHeader({ id, children, action, className }: SectionHeaderProps) {
   return (
-    <div className={cn('mb-2 flex items-center justify-between gap-3 px-1', className)}>
-      <h2 id={id} className="text-sm font-bold uppercase tracking-wide text-muted">
+    <div className={cn('mb-2.5 flex items-center justify-between gap-3 px-1', className)}>
+      <h2 id={id} className="section-title">
         {children}
       </h2>
       {action}

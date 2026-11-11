@@ -52,7 +52,7 @@ export function RecentOps({ wallets, categories, today, base }: RecentOpsProps) 
   return (
     <section aria-labelledby="home-recent">
       <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
-        <h2 id="home-recent" className="text-base font-semibold text-muted">
+        <h2 id="home-recent" className="section-title">
           Последние операции
         </h2>
         {anyRow && (

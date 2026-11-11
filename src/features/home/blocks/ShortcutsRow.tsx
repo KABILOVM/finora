@@ -12,7 +12,7 @@ export default function ShortcutsRow() {
   return (
     <section aria-labelledby="home-shortcuts" data-testid="home-shortcuts" className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2 px-1">
-        <h2 id="home-shortcuts" className="text-sm font-semibold text-muted">
+        <h2 id="home-shortcuts" className="section-title">
           Разделы
         </h2>
         <Link to="/more" className="-mr-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-sm font-semibold text-brand">

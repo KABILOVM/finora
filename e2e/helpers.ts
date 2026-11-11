@@ -295,6 +295,17 @@ export async function openCategories(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { level: 1, name: 'Категории' })).toBeVisible();
 }
 
+/**
+ * Окно уже закрыто, но его запись в истории браузера («якорь», src/components/modalHistory.ts) снимается чуть позже своим history.back().
+ * Перезагрузка страницы, начатая до этого, обрывается (page.reload: net::ERR_ABORTED), поэтому перед ней ждём, пока якорь уйдёт.
+ */
+export async function modalHistorySettled(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const state: unknown = window.history.state;
+    return !(typeof state === 'object' && state !== null && '__sumoimaModal' in state);
+  });
+}
+
 /** Окно с несохранённым вводом на «×», Esc и «назад» сначала спрашивает «Закрыть без сохранения?»: отвечаем «Закрыть». */
 export async function confirmDiscard(page: Page): Promise<void> {
   const ask = page.getByRole('alertdialog', { name: 'Закрыть без сохранения?' });

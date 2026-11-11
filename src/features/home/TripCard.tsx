@@ -63,7 +63,7 @@ function ActiveTripCard({ tag, onEnd }: { tag: string; onEnd: () => void }) {
     : null;
   return (
     <section aria-labelledby="home-trip" data-testid="trip-card" className="slide-down">
-      <Card padding="none" className="p-3">
+      <Card padding="none" className="p-4 min-[380px]:p-5">
         <div className="flex items-center gap-2.5">
           <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand">
             <Icon name="plane" size={20} />

@@ -25,7 +25,7 @@ export function BlockTitle({ id, to, icon, tone, label, half = false, children }
       <span aria-hidden="true" className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', tone)}>
         <Icon name={icon} size={18} />
       </span>
-      <h2 id={id} className="min-w-0 flex-1 truncate text-base font-semibold">
+      <h2 id={id} className="section-title min-w-0 flex-1 truncate">
         {children}
       </h2>
       {!half && <Icon name="chevron" size={16} className="shrink-0 text-muted" />}
@@ -33,8 +33,8 @@ export function BlockTitle({ id, to, icon, tone, label, half = false, children }
   );
 }
 
-/** Отступы карточки блока: в половину ширины поля уже, чтобы содержимому хватало места на узком телефоне. */
-export const blockCardClass = (half: boolean): string => (half ? '!px-3 !py-3' : '!py-3');
+/** Отступы карточки блока: во всю ширину — обычные поля карточки; в половину поля уже, чтобы содержимому хватало места на узком телефоне. */
+export const blockCardClass = (half: boolean): string => (half ? '!p-3' : '');
 
 /** Тонкая полоска доли или прогресса (0…100); color (#rrggbb) красит её цветом категории. Сама она украшение: число рядом читает и скринридер. */
 export function MiniBar({ percent, className, fill = 'bg-brand', color }: { percent: number; className?: string; fill?: string; color?: string | null }) {

@@ -34,6 +34,15 @@ export const SKIN_ICONIFY: Readonly<Partial<Record<SkinId, IconPackId>>> = {
   halloween: 'wi-halloween',
   valentine: 'wi-valentine',
   bento: 'wi-bento',
+  // нарисованные образы берут готовые наборы: те же файлы, второй раз ничего не скачивается
+  ocean: 'wi-liquid',
+  sakura: 'wi-pastel',
+  ramadan: 'wi-luxe',
+  march8: 'wi-coquette',
+  birthday: 'wi-kawaii',
+  boxing: 'ph-fill',
+  blackcard: 'wi-chrome',
+  trading: 'sl-cyber',
 };
 
 type PackFile = { ICONS: Readonly<Record<string, string>> };
