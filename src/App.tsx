@@ -35,6 +35,7 @@ const TransactionsPage = lazy(() => import('@/features/transactions/Transactions
 const WalletsPage = lazy(() => import('@/features/wallets/WalletsPage'));
 const WalletPage = lazy(() => import('@/features/wallets/WalletPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
+const SkinsPage = lazy(() => import('@/features/skins/SkinsPage'));
 const CategoriesPage = lazy(() => import('@/features/categories/CategoriesPage'));
 const DataCheckPage = lazy(() => import('@/features/datacheck/DataCheckPage'));
 const TripsPage = lazy(() => import('@/features/trips/TripsPage'));
@@ -156,6 +157,7 @@ export function AppRoutes() {
             <Route path="/weather" element={<WeatherPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/skins" element={<SkinsPage />} />
             <Route path="/categories" element={<CategoriesPage />} />
             {/* «Категории» вышли из «Настроек» в отдельный раздел; «Проверка данных» и «Шаблоны операций» переехали в «Операции»:
                 старые адреса (закладка, ссылка, уведомление) ведут на новые места */}

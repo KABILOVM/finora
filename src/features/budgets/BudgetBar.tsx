@@ -41,7 +41,7 @@ export function BudgetBar({ percent, level, label, className }: BudgetBarProps) 
       className={cn('relative h-3 overflow-hidden rounded-full bg-surface-2 shadow-inner', className)}
     >
       <div
-        className={cn('h-full rounded-full transition-[width] duration-500 ease-out', FILL[level])}
+        className={cn('bar-grow h-full rounded-full transition-[width] duration-500 ease-out', FILL[level])}
         style={{ width: `${percent > 0 ? Math.max(shown, 2) : 0}%`, ...(level === 'over' ? { backgroundImage: OVER_STRIPES } : {}) }}
       />
       {/* Отметки 70% и 90%: с них начинаются предупреждения. */}

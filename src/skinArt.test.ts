@@ -14,15 +14,15 @@ const extras = (id: string): string => {
   return m?.[1] ?? '';
 };
 /** Образы, которые рисуются сами (у «Сезонных» своего блока нет: на странице стоит праздничный образ). */
-const drawn = SKINS.filter((s) => s.id !== 'classic' && !s.resolves);
+const drawn = SKINS.filter((s) => !s.base && !s.resolves);
 const artSkins = drawn.filter((s) => extras(s.id).includes('--skin-art:'));
 const KB = 1024;
 
 describe('картинки образов: фон карточки «Всего»', () => {
-  it('картинка на карточке есть у всех образов, кроме «Классики» (там обычный цвет без картинки)', () => {
+  it('картинка на карточке есть у всех образов, кроме «Классики» и «Классики (прежней)» (там обычный цвет без картинки)', () => {
     const ids = drawn.map((s) => s.id);
     expect(artSkins.map((s) => s.id).sort()).toEqual([...ids].sort());
-    expect(ids).toHaveLength(35);
+    expect(ids).toHaveLength(68);
   });
 
   it('каждая картинка — webp 640×320 из assets/skins/art, файл есть и не тяжелее 45 КБ; рядом задан --skin-art-content', () => {
@@ -86,7 +86,7 @@ describe('значки образов в настройках', () => {
   it('значок есть у каждого образа, включая «Классику»: файл на месте, webp 112×112, до 12 КБ, и у всех образов разные', () => {
     const ids = SKINS.map((s) => s.id);
     expect(Object.keys(SKIN_THUMBS).sort()).toEqual([...ids].sort());
-    expect(ids).toHaveLength(37);
+    expect(ids).toHaveLength(71);
     for (const id of ids) {
       expect(SKIN_THUMBS[id], id).toContain(`${id}-thumb`);
       const file = bytes(`./assets/skins/art/${id}-thumb.webp`);

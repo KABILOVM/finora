@@ -45,7 +45,7 @@ export default function TemplatesRow() {
   return (
     <section aria-labelledby="home-templates" data-testid="home-templates" className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2 px-1">
-        <h2 id="home-templates" className="text-sm font-semibold text-muted">
+        <h2 id="home-templates" className="section-title">
           Шаблоны
         </h2>
         <Link to="/transactions/templates" className="-mr-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-sm font-semibold text-brand">

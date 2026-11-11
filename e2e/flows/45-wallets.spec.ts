@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addTx, createWallet, dismissToasts, expect, goSection, norm, openApp, shot, sheet, test } from '../helpers';
+import { addTx, createWallet, dismissToasts, expect, goSection, modalHistorySettled, norm, openApp, shot, sheet, test } from '../helpers';
 
 const rows = (page: Page) => page.getByRole('region').getByRole('button');
 
@@ -55,6 +55,7 @@ test.describe('45. Кошельки: строка ведёт к операция
     await expect(page).toHaveURL(/#\/wallets$/);
     await dlg.getByRole('button', { name: 'Закрыть' }).click();
     await expect(dlg).toBeHidden();
+    await modalHistorySettled(page);
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: 'Кошельки' })).toBeVisible();
     await expect(sheet(page, 'Новый кошелёк')).toHaveCount(0);

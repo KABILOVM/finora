@@ -8,17 +8,17 @@ export type ButtonSize = 'md' | 'lg';
 /** Классы по вариантам — общие для Button и ссылок, выглядящих как кнопка. */
 export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-gradient-to-br from-brand to-accent text-brand-fg shadow-[0_10px_24px_-10px_rgb(var(--brand)/0.7)] hover:brightness-110 active:brightness-95',
-  secondary: 'bg-surface/80 text-text border border-border hover:bg-surface-2 active:bg-border/60',
+    'btn-primary bg-gradient-to-br from-brand to-accent text-brand-fg shadow-[0_1px_0_rgb(255_255_255/0.28)_inset,0_10px_24px_-10px_rgb(var(--brand)/0.7)] hover:brightness-110 active:brightness-95',
+  secondary: 'btn-secondary bg-surface text-text border border-border hover:bg-surface-2 active:bg-border/60',
   ghost: 'bg-transparent text-brand hover:bg-brand/10 active:bg-brand/15',
   danger: 'bg-danger text-on-danger hover:opacity-90 active:opacity-80',
 };
 
 export function buttonClasses(variant: ButtonVariant, size: ButtonSize = 'md', fullWidth = false): string {
   return cn(
-    'inline-flex select-none items-center justify-center gap-2 rounded-2xl px-4 font-semibold transition duration-200 ease-spring active:scale-[0.97]',
+    'btn inline-flex select-none items-center justify-center gap-2 rounded-control px-5 font-semibold transition duration-200 ease-spring active:scale-[0.97]',
     // Область касания ≥ 44px.
-    size === 'lg' ? 'min-h-[52px] text-lg' : 'min-h-[44px] text-base',
+    size === 'lg' ? 'min-h-[54px] text-lg' : 'min-h-[46px] text-base',
     'disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress',
     BUTTON_VARIANTS[variant],
     fullWidth && 'w-full',
