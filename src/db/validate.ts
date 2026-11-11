@@ -1,6 +1,7 @@
 import { ADJUSTMENT_SOURCE } from '@/domain/adjustment';
 import { isValidCurrencyCode } from '@/domain/currency';
 import { isMinor } from '@/domain/money';
+import { readHome, stringifyHome } from '@/domain/homeLayout';
 import { readWeather, stringifyWeather } from '@/domain/weatherPlaces';
 import type {
   CategoryKind,
@@ -450,6 +451,7 @@ export interface SettingsData {
   weekStartsOn: 0 | 1;
   defaultWalletId: UUID | null;
   weather: string | null;
+  home: string | null;
 }
 
 export function parseSettingsData(raw: Record<string, unknown>): SettingsData {
@@ -461,6 +463,7 @@ export function parseSettingsData(raw: Record<string, unknown>): SettingsData {
     weekStartsOn: week === 1 ? 1 : 0,
     defaultWalletId: optId(raw['defaultWalletId'], 'Кошелёк по умолчанию'),
     weather: optWeather(raw['weather']),
+    home: optHome(raw['home']),
   };
 }
 
@@ -470,6 +473,14 @@ function optWeather(v: unknown): string | null {
   const r = readWeather(v);
   if (!r.ok) return fail(`Города для погоды: ${r.error}`);
   return stringifyWeather(r.places);
+}
+
+/** Раскладка «Главной»: нет (undefined/null) → null; иначе допустимый текст в каноническом виде. */
+function optHome(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  const r = readHome(v);
+  if (!r.ok) return fail(`Раскладка главной: ${r.error}`);
+  return stringifyHome(r.items);
 }
 
 export interface SyncData {

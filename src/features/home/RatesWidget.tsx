@@ -18,7 +18,7 @@ function rowText(row: Row, base: CurrencyCode): string | null {
 }
 
 /**
- * Левая ячейка полосы «Курсы и погода» на «Главной»: доллар и рубль к основной валюте, две строки по 20 px. Нажатие открывает
+ * Содержимое блока «Курсы валют» на «Главной»: доллар и рубль к основной валюте, две строки по 20 px. Нажатие открывает
  * «Курсы валют». Курсы лежат на устройстве, поэтому работает без интернета; нет курса — так и пишем, без выдуманных цифр.
  * Дата курса и «устарел» — в имени ссылки и жёлтой точкой, чтобы не занимать место.
  */
@@ -39,17 +39,17 @@ export default function RatesWidget({ base }: { base: CurrencyCode }) {
       to="/rates"
       aria-label={label}
       data-testid="rates-widget"
-      className="press relative flex min-h-[64px] min-w-0 flex-col justify-center gap-0.5 rounded-l-3xl px-3 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand/40"
+      className="press relative flex h-full min-h-[64px] min-w-0 flex-col justify-center gap-0.5 px-2.5 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand/40"
     >
       {rows.map((r, i) => (
-        <span key={r.code} data-testid="rates-widget-row" style={{ '--i': i } as React.CSSProperties} className="pop-spring flex items-center gap-2 text-sm leading-5">
+        <span key={r.code} data-testid="rates-widget-row" style={{ '--i': i } as React.CSSProperties} className="pop-spring flex items-center gap-1.5 whitespace-nowrap text-[13px] leading-5 min-[400px]:gap-2 min-[400px]:text-sm">
           <FlagIcon code={r.code} size={18} />
           {r.lookup ? (
             <>
               <span className="text-muted">
                 {formatUnits(scaleRate(r.lookup.rate).units)} {r.code}
               </span>
-              <span className="ml-auto font-semibold tabular-nums">
+              <span className="ml-auto pl-1 font-semibold tabular-nums">
                 {formatWidgetRate(scaleRate(r.lookup.rate).value)} {currencyInfo(base).symbol}
               </span>
             </>

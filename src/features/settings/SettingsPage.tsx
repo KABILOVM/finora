@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Glyph } from '@/components/Glyph';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { PrivacySheet } from '@/features/about/PrivacySheet';
+import { HOME_EDIT_LINK } from '@/features/home/layout/editLink';
 import { RELEASES } from '@/features/whatsnew/releases';
 import { WhatsNewSheet } from '@/features/whatsnew/WhatsNewSheet';
 import { useSyncEnabled, useSyncStatus } from '@/sync/syncContext';
@@ -41,7 +42,7 @@ export const SETTINGS_BLOCKS = ['account', 'security', 'accounting', 'data', 'ap
 
 /**
  * Настройки: только то, чем человек пользуется. Блоки по порядку: аккаунт → безопасность и уведомления → учёт (валюта, курсы) →
- * данные (копия) → оформление → о приложении. Синхронизация показывается сверху только когда с ней что-то не так.
+ * данные (копия) → оформление (и вход в настройку главного экрана) → о приложении. Синхронизация показывается сверху только когда с ней что-то не так.
  */
 export default function SettingsPage() {
   const [news, setNews] = useState(false);
@@ -79,6 +80,21 @@ export default function SettingsPage() {
 
       <Block id="appearance">
         <AppearanceSection />
+        {/* Настройка главной — отдельный экран (на главной, #/?edit=1): здесь только вход в него */}
+        <Card padding="none" className="mb-6">
+          <Link
+            {...HOME_EDIT_LINK}
+            data-testid="settings-home-edit"
+            className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left transition-colors hover:bg-surface-2 active:bg-border/60"
+          >
+            <Glyph value="i:home" color="#7c3aed" size={40} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-medium">Главный экран</span>
+              <span className="block text-sm text-muted">Какие блоки показывать, их порядок и ширина</span>
+            </span>
+            <Icon name="chevron" size={18} className="shrink-0 text-muted" />
+          </Link>
+        </Card>
       </Block>
 
       <Block id="about">

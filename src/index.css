@@ -3173,20 +3173,40 @@ html[data-skin='bento'] .rounded-card {
     box-shadow: 0 10px 22px -14px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.1);
   }
 }
-/* Бенто: на экране от 560 px главная собирается «коробкой» в две колонки: итог и широкие блоки на всю ширину, компактные карточки (data-bento="half") парами.
-   На узком телефоне плитка вдвое уже суммы с копейками, поэтому там карточки остаются в один столбец. */
+/* Главная собирается из блоков по раскладке человека (src/features/home/layout). Блок во всю ширину занимает ряд целиком;
+   «половины» (data-size="half") встают парами, а одинокая половина растягивается на весь ряд. На экране уже 360 px половина
+   вдвое уже суммы с копейками, поэтому там все блоки идут в один столбец. Блок, которому сейчас нечего показать, пуст и места
+   не занимает. */
+[data-home-grid] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+[data-home-grid] > * {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 0 0 100%;
+  min-width: 0;
+}
+[data-home-grid] > :empty {
+  display: none;
+}
+@media (min-width: 360px) {
+  [data-home-grid] > [data-size='half'] {
+    flex: 1 1 calc(50% - 0.75rem);
+  }
+}
+/* Компактные карточки бывают половиной только от 560 px (data-size="half-wide"): на телефоне им тесно. Бенто ставит парами те из
+   них, ширину которых человек не выбирал (data-bento="half"). */
 @media (min-width: 560px) {
-  html[data-skin='bento'] [data-home-grid] {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-flow: dense;
-    align-items: stretch;
-  }
-  html[data-skin='bento'] [data-home-grid] > * {
-    grid-column: span 2;
-  }
+  [data-home-grid] > [data-size='half-wide'],
   html[data-skin='bento'] [data-home-grid] > [data-bento='half'] {
-    grid-column: span 1;
+    flex: 1 1 calc(50% - 0.75rem);
+  }
+}
+@media (min-width: 768px) {
+  [data-home-grid] {
+    gap: 1rem;
   }
 }
 /* Рамка карточки «Всего» цвета образа (--skin-line). */

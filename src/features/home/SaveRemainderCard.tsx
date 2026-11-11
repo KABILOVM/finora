@@ -35,7 +35,7 @@ export default function SaveRemainderCard({ today }: { today: IsoDate }) {
   if (hidden.has(key)) return null;
   const base = settings.baseCurrency;
   return (
-    <section aria-labelledby="home-save" data-testid="save-remainder" data-bento="half" className="slide-down">
+    <section aria-labelledby="home-save" data-testid="save-remainder" className="slide-down">
       <Card padding="none" className="p-3">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-income/15 text-income">

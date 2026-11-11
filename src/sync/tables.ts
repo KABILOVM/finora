@@ -73,6 +73,7 @@ export const TABLE_SPECS: Record<SyncTableName, TableSpec> = {
       { field: 'weekStartsOn', column: 'week_starts_on', type: 'int' },
       { field: 'defaultWalletId', column: 'default_wallet_id', type: 'uuid', nullable: true },
       { field: 'weather', column: 'weather', type: 'text', nullable: true },
+      { field: 'home', column: 'home', type: 'text', nullable: true },
     ],
   },
   wallets: {

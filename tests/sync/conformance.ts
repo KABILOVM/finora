@@ -110,8 +110,9 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       const w2 = makeWallet({ ...sync(1), currency: 'USD', kind: 'card', name: 'Карта «Алиф»', archivedAt: iso(t0 - 30 * MIN), deletedAt: iso(t0 - 20 * MIN), goalMinor: 1, goalOn: '2000-01-01' });
       const cat = makeCategory({ ...sync(2), kind: 'income', name: 'Зарплата', archivedAt: iso(t0 - 10 * MIN) });
       const sub = makeCategory({ ...sync(3), parentId: cat.id, essential: 1 }); // «обязательная» категория возвращается единицей
-      // города для погоды: ровно 8000 знаков (считаются символы, а не байты и не половинки пар) должны вернуться без изменений
-      const settings = makeSettings(userId, { ...sync(4), defaultWalletId: w1.id, weekStartsOn: 0, weather: '🌤'.repeat(8000) });
+      // города для погоды: ровно 8000 знаков (считаются символы, а не байты и не половинки пар) должны вернуться без изменений;
+      // раскладка «Главной» — ровно 4000
+      const settings = makeSettings(userId, { ...sync(4), defaultWalletId: w1.id, weekStartsOn: 0, weather: '🌤'.repeat(8000), home: '🏠'.repeat(4000) });
       const expense = makeTransaction({ ...sync(5), walletId: w1.id, categoryId: sub.id, note: 'Обед, «плов»', amountMinor: 12_345, baseAmountMinor: 12_345 });
       const usd = makeTransaction({ ...sync(6), walletId: w2.id, amountMinor: 1_000, baseAmountMinor: 10_900, fxRate: 10.9, fxSource: 'nbt', occurredOn: '2026-02-28' });
       const income = makeTransaction({ ...sync(7), kind: 'income', walletId: w1.id, categoryId: cat.id, amountMinor: 500_000, baseAmountMinor: 500_000 });
@@ -405,6 +406,17 @@ export function runConformance(label: string, make: () => Promise<ServerHarness>
       expect(await pullAll(B.t, 'settings')).toEqual([]);
       await B.t.push('settings', [row('🌤'.repeat(8000))]);
       expect((await pullAll(B.t, 'settings')).map((r) => r['weather'])).toEqual(['🌤'.repeat(8000)]);
+    });
+
+    it('8б. раскладка «Главной» длиннее 4000 знаков отвергается целиком, а ровно 4000 принимается', async () => {
+      const B = fresh();
+      const t0 = h.now().getTime();
+      const row = (home: string | null): WireRow =>
+        toWire('settings', makeSettings(B.userId, { createdAt: iso(t0 - HOUR), clientUpdatedAt: iso(t0 - HOUR), deviceId: 'device-a', home }));
+      await expectRejected(B.t.push('settings', [row('🏠'.repeat(4001))]));
+      expect(await pullAll(B.t, 'settings')).toEqual([]);
+      await B.t.push('settings', [row('🏠'.repeat(4000))]);
+      expect((await pullAll(B.t, 'settings')).map((r) => r['home'])).toEqual(['🏠'.repeat(4000)]);
     });
 
     it('9. settings.id обязан равняться id пользователя', async () => {

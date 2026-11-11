@@ -4,7 +4,7 @@ import { user } from '@/components/testUtils';
 import { currentPath, LocationProbe, opsDeps, pinToday, showApp, unpinToday } from '@/features/transactions/__fixtures__/opsKit';
 import { parseForecast, type Forecast } from '@/features/weather/api';
 import { DEFAULT_CITIES, saveCache } from '@/features/weather/store';
-import { GlanceStrip } from './GlanceStrip';
+import { RatesCard, WeatherCard } from './GlanceCards';
 
 vi.mock('virtual:pwa-register/react', () => ({
   useRegisterSW: () => ({ needRefresh: [false, vi.fn()], offlineReady: [false, vi.fn()], updateServiceWorker: vi.fn() }),
@@ -53,7 +53,8 @@ const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').tr
 async function open() {
   await showApp(
     <>
-      <GlanceStrip base="TJS" />
+      <RatesCard base="TJS" />
+      <WeatherCard />
       <LocationProbe />
     </>,
     opsDeps([]),
@@ -66,7 +67,7 @@ async function open() {
   });
 }
 
-describe('совет по погоде под полосой «Курсы и погода»', () => {
+describe('совет по погоде в блоке «Погода»', () => {
   it('дождь — «возьмите зонт», нажатие открывает «Погоду»', async () => {
     cached(forecastWith(63, [63, 63, 0, 0, 0, 0], 18));
     await open();
@@ -88,11 +89,12 @@ describe('совет по погоде под полосой «Курсы и п�
     await eventually(() => expect(norm(advice()?.textContent)).toBe('К 16:00 ожидается небольшой дождь — возьмите зонт'));
   });
 
-  it('без осадков строки нет, а сама полоса на месте', async () => {
+  it('без осадков строки нет, а сами блоки на месте', async () => {
     cached(forecastWith(0, [0, 1, 2, 3, 0, 0], 22));
     await open();
     expect(advice()).toBeNull();
-    expect(document.querySelector('[data-testid="home-glance"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="home-rates"] [data-testid="rates-widget"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="home-weather"]')).not.toBeNull();
     expect(norm(document.querySelector('[data-testid="weather-widget"]')?.textContent)).toContain('+22°');
   });
 

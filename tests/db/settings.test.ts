@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '@/db';
+import { stringifyHome } from '@/domain/homeLayout';
 import { stringifyWeather } from '@/domain/weatherPlaces';
 import { basics, makeStore } from './helpers';
 
@@ -130,5 +131,73 @@ describe('SettingsRepo: города для погоды', () => {
     expect(u).toMatchObject({ weekStartsOn: 0, weather: null });
     const same = await store.settings.update({ weather: null });
     expect(same.clientUpdatedAt).toBe(u.clientUpdatedAt);
+  });
+});
+
+describe('SettingsRepo: раскладка «Главной»', () => {
+  const LAYOUT = stringifyHome([{ id: 'hero' }, { id: 'recent' }, { id: 'rates', size: 'half' }, { id: 'weather', off: true }]);
+
+  it('по умолчанию null; затравка и ensure её не трогают', async () => {
+    const store = await makeStore();
+    expect((await store.settings.ensure()).home).toBeNull();
+  });
+
+  it('раскладка записывается отдельной группой «home» и снимает карантин; чужие группы не помечаются', async () => {
+    const store = await makeStore();
+    await store.settings.ensure();
+    await store.sync.markPushed('settings', [{ id: store.userId, clientUpdatedAt: (await store.settings.get())!.clientUpdatedAt, deviceId: store.deviceId }]);
+    await store.sync.quarantine('settings', [store.userId], 'ошибка');
+    const u = await store.settings.update({ home: LAYOUT });
+    expect(u).toMatchObject({ home: LAYOUT, dirty: 1, dirtyGroups: ['home'], syncError: null });
+  });
+
+  it('та же раскладка второй раз — ничего не пишет; null возвращает стандартную', async () => {
+    const store = await makeStore();
+    await store.settings.ensure();
+    const a = await store.settings.update({ home: LAYOUT });
+    const same = await store.settings.update({ home: LAYOUT });
+    expect(same.clientUpdatedAt).toBe(a.clientUpdatedAt);
+    expect((await store.settings.update({ home: null })).home).toBeNull();
+  });
+
+  it('текст приводится к каноническому виду: одинаковое содержимое не плодит правок', async () => {
+    const store = await makeStore();
+    await store.settings.ensure();
+    const loose = JSON.stringify({ items: [{ size: 'half', id: 'rates', лишнее: 1 }, { off: true, id: 'weather' }], v: 1 });
+    expect((await store.settings.update({ home: loose })).home).toBe('{"v":1,"items":[{"id":"rates","size":"half"},{"id":"weather","off":true}]}');
+  });
+
+  it.each([
+    ['не JSON', '{'],
+    ['пустой список', '{"v":1,"items":[]}'],
+    ['повтор блока', '{"v":1,"items":[{"id":"hero"},{"id":"hero"}]}'],
+    ['плохой идентификатор', '{"v":1,"items":[{"id":"Hero!"}]}'],
+    ['плохая ширина', '{"v":1,"items":[{"id":"hero","size":"huge"}]}'],
+    ['слишком длинный текст', ' '.repeat(4001)],
+    ['число', 5],
+  ])('отвергает: %s', async (_n, bad) => {
+    const store = await makeStore();
+    await store.settings.ensure();
+    await expect(store.settings.update({ home: bad as never })).rejects.toBeInstanceOf(ValidationError);
+    expect((await store.settings.get())?.home).toBeNull();
+  });
+
+  it('незнакомая запись (например, от более нового приложения) не мешает менять другие настройки и не затирается ими', async () => {
+    const store = await makeStore();
+    await store.settings.ensure();
+    const future = '{"v":2,"что-то":"новое"}';
+    await store.db.settings.update(store.userId, { home: future });
+    const u = await store.settings.update({ baseCurrency: 'USD' });
+    expect(u).toMatchObject({ baseCurrency: 'USD', home: future, dirtyGroups: ['baseCurrency'] });
+  });
+
+  it('города для погоды и раскладка правятся независимо', async () => {
+    const store = await makeStore();
+    await store.settings.ensure();
+    const places = stringifyWeather({ selected: null, cities: [{ id: '37.50,70.25', name: 'Дом', region: '', lat: 37.5, lon: 70.25 }] });
+    await store.settings.update({ weather: places });
+    const u = await store.settings.update({ home: LAYOUT });
+    expect(u).toMatchObject({ weather: places, home: LAYOUT });
+    expect((await store.settings.update({ weather: null })).home).toBe(LAYOUT);
   });
 });

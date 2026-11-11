@@ -2,6 +2,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it, vi } from 'vitest';
 import { exportBackup, exportTransactionsCsv, importBackup, ValidationError, type BackupFile, type Store } from '@/db';
 import { buildTransactionsCsv } from '@/db/backupCsv';
+import { stringifyHome } from '@/domain/homeLayout';
 import { stringifyWeather } from '@/domain/weatherPlaces';
 import { basics, expense, makeStore, USER_A, USER_B } from './helpers';
 
@@ -601,6 +602,47 @@ describe('резервная копия: города для погоды', () =
       const dst = await fresh();
       await expect(importBackup(dst, file as BackupFile), String(weather).slice(0, 20)).rejects.toBeInstanceOf(ValidationError);
       expect(await dst.db.settings.count(), String(weather).slice(0, 20)).toBe(0);
+    }
+  });
+});
+
+describe('резервная копия: раскладка «Главной»', () => {
+  const LAYOUT = stringifyHome([{ id: 'hero' }, { id: 'recent' }, { id: 'weather', off: true }, { id: 'debts', size: 'half' }]);
+
+  it('раскладка попадает в файл и возвращается из него без изменений', async () => {
+    const src = await fresh();
+    await src.settings.ensure();
+    await src.settings.update({ home: LAYOUT });
+    const file = await exportBackup(src);
+    expect(file.settings?.home).toBe(LAYOUT);
+    const dst = await fresh();
+    await importBackup(dst, JSON.parse(JSON.stringify(file)));
+    expect((await dst.db.settings.get(dst.userId))?.home).toBe(LAYOUT);
+    expect({ ...(await exportBackup(dst)), exportedAt: '' }).toEqual({ ...file, exportedAt: '' });
+  });
+
+  it('копия, сделанная до настройки главной (в настройках нет поля), загружается: раскладка = null, версия копии не менялась', async () => {
+    const src = await fresh();
+    await populated(src);
+    const file = clone(await exportBackup(src));
+    expect(file.version).toBe(2);
+    delete file['settings'].home;
+    const dst = await fresh();
+    await importBackup(dst, file as BackupFile);
+    expect((await dst.db.settings.get(dst.userId))?.home).toBeNull();
+  });
+
+  it('испорченная раскладка в файле — отказ целиком, ничего не записано', async () => {
+    const src = await fresh();
+    await src.settings.ensure();
+    await src.settings.update({ home: LAYOUT });
+    const good = clone(await exportBackup(src));
+    for (const home of ['{', 5, '{"v":1,"items":[]}', ' '.repeat(4001)]) {
+      const file = clone(good as BackupFile);
+      file['settings'].home = home;
+      const dst = await fresh();
+      await expect(importBackup(dst, file as BackupFile), String(home).slice(0, 20)).rejects.toBeInstanceOf(ValidationError);
+      expect(await dst.db.settings.count(), String(home).slice(0, 20)).toBe(0);
     }
   });
 });

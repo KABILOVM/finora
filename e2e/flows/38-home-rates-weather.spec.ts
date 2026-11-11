@@ -42,7 +42,9 @@ const wet = (code: number, temp: number) => ({
 });
 const FORECASTS = { ok: FORECAST, rain: wet(63, 14), snow: wet(73, -2) };
 
-const glance = (page: Page) => page.getByTestId('home-glance');
+/** Блоки «Курсы валют» и «Погода» на главной: по умолчанию стоят парой, каждый — своя карточка. */
+const ratesCard = (page: Page) => page.getByTestId('home-rates');
+const weatherCard = (page: Page) => page.getByTestId('home-weather');
 const advice = (page: Page) => page.getByTestId('weather-advice');
 const ratesWidget = (page: Page) => page.getByTestId('rates-widget');
 const weatherWidget = (page: Page) => page.getByTestId('weather-widget');
@@ -93,7 +95,7 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await expect(rows).toHaveCount(2);
     expect(norm(await rows.nth(0).innerText())).toBe('1 USD 10,95 с.');
     expect(norm(await rows.nth(1).innerText())).toBe('100 RUB 12,10 с.');
-    // дата курса и «устарел» не занимают места в полосе — они в имени ссылки (и жёлтой точкой, если курс старый)
+    // дата курса и «устарел» не занимают места в карточке — они в имени ссылки (и жёлтой точкой, если курс старый)
     await expect(widget).toHaveAttribute('aria-label', /Курсы к Сомони: 1 USD = 10,95 с\.; 100 RUB = 12,10 с\., на 15\.10/);
     await expect(widget).not.toHaveAttribute('aria-label', /устарели/);
     await noHorizontalScroll(page);
@@ -149,7 +151,7 @@ test.describe('38. Курсы и погода на «Главной»', () => {
       }
     });
 
-  test('дождь: под полосой «Курсы и погода» совет «возьмите зонт» → нажатие открывает «Погоду»; в ясную погоду совета нет', async ({ page }, testInfo) => {
+  test('дождь: в блоке «Погода» совет «возьмите зонт» → нажатие открывает «Погоду»; в ясную погоду совета нет', async ({ page }, testInfo) => {
     await page.clock.install({ time: NOW });
     await prepare(page, { forecast: 'rain' });
     await chooseKhujand(page);
@@ -177,13 +179,14 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await shot(page, '38-home-weather-advice-snow', testInfo);
   });
 
-  test('ясно: строки с советом нет, полоса на месте', async ({ page }) => {
+  test('ясно: строки с советом нет, курсы и погода на месте', async ({ page }) => {
     await page.clock.install({ time: NOW });
     await prepare(page);
     await chooseKhujand(page);
     await openApp(page);
     await expect(weatherWidget(page)).toContainText('+23°');
-    await expect(glance(page)).toBeVisible();
+    await expect(ratesCard(page)).toBeVisible();
+    await expect(weatherCard(page)).toBeVisible();
     await expect(advice(page)).toHaveCount(0);
   });
 
@@ -250,7 +253,8 @@ test.describe('38. Курсы и погода на «Главной»', () => {
     await expect(weatherWidget(page)).toContainText('Погода недоступна');
     await expect(weatherWidget(page)).toContainText('Худжанд');
     await expect(ratesWidget(page)).toContainText('1 USD');
-    await expect(glance(page)).toBeVisible();
+    await expect(ratesCard(page)).toBeVisible();
+    await expect(weatherCard(page)).toBeVisible();
   });
 
   test('геолокация: «Определить место» на главной → разрешили → погода в этом месте; в разделе «Погода» оно в списке', async ({ page, context }, testInfo) => {
