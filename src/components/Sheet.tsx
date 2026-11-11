@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
 import { Button } from './Button';
@@ -36,6 +36,9 @@ export interface SheetProps {
   history?: boolean;
   className?: string;
 }
+
+/** Мельче этого заголовок не ужимается (см. подгонку в Sheet): дальше он переносится на вторую строку, как раньше. */
+const TITLE_MIN_PX = 14;
 
 /**
  * Шит: снизу на телефоне, по центру на ПК. Закрытие по Esc, тапу на фон и кнопке «×».
@@ -128,6 +131,31 @@ export function Sheet({
 
   useModal({ open, onClose: requestClose, panelRef, initialFocusRoot: bodyRef, history });
 
+  // Заголовок рядом с кнопкой в шапке (дата у операции): широкий шрифт образа («НОВАЯ ОПЕРАЦИЯ» прописными) не помещался в строку
+  // и переносился, отнимая высоту у формы. Такой заголовок ужимается до одной строки; мельче TITLE_MIN_PX не делаем — тогда перенос.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const hasAction = headerAction != null && headerAction !== false;
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!open || !el || !hasAction) return;
+    const fit = () => {
+      el.style.fontSize = '';
+      el.style.whiteSpace = 'nowrap';
+      const need = el.scrollWidth;
+      const have = el.clientWidth;
+      if (have <= 0 || need <= have) return;
+      const px = parseFloat(getComputedStyle(el).fontSize) * (have / need);
+      if (Number.isFinite(px) && px >= TITLE_MIN_PX) el.style.fontSize = `${Math.floor(px * 2) / 2}px`;
+      else el.style.whiteSpace = '';
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return;
+    // ширина заголовка меняется вместе с кнопкой в шапке («Сегодня» → «12 ноября») и с шириной окна
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, hasAction, title]);
+
   if (!open) return null;
 
   const centered = placement === 'center';
@@ -162,7 +190,12 @@ export function Sheet({
       >
         {!centered && <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-border-strong/50 md:hidden" aria-hidden="true" />}
         <div className="flex items-center justify-between gap-2 px-5 pb-1 pt-3">
-          <h2 id={titleId} className="min-w-0 break-words text-xl font-extrabold tracking-tight">
+          <h2
+            ref={titleRef}
+            id={titleId}
+            // transition-none: при «уменьшить движение» общее правило даёт каждому свойству переход в 0,01 мс, и замер ширины отставал бы
+            className="sheet-title min-w-0 flex-1 break-words text-xl font-extrabold tracking-tight transition-none"
+          >
             {title}
           </h2>
           <div className="flex shrink-0 items-center gap-1">

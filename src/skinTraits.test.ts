@@ -87,6 +87,19 @@ describe('оформление черт (src/styles/look.css)', () => {
     for (const v of MOTIONS.filter((v) => v !== DEFAULT_TRAITS.motion)) has(`html[data-motion='${v}']`);
   });
 
+  it('клавиши суммы следуют материалу образа: у каждого материала свои --key-*, а в «Классике (прежней)» действуют классы самих клавиш', () => {
+    for (const v of MATERIALS.filter((v) => v !== DEFAULT_TRAITS.material)) {
+      const blocks = css.split(`html[data-material='${v}'] {`).slice(1).map((b) => b.slice(0, b.indexOf('}')));
+      expect(blocks.some((b) => b.includes('--key-bg:')), `материал ${v}: клавиши`).toBe(true);
+    }
+    has("html:not([data-look='legacy']) .key {");
+    has("html:not([data-look='legacy']) .amount-stage {");
+    has("html:not([data-look='legacy']) .seg-thumb {");
+    has("html:not([data-look='legacy']) .tx-sheet::before {");
+    // без ползунка (прежний вид) выбранный вариант переключателя закрашен своим классом: ползунок по умолчанию спрятан
+    expect(/\n\.seg-thumb \{\s*display: none;/.test(css)).toBe(true);
+  });
+
   it('в CSS нет правил для черт, которых не существует', () => {
     const known: Record<string, readonly string[]> = { shape: SHAPES, material: MATERIALS, nav: NAVS, hero: HEROES, motion: MOTIONS };
     for (const m of css.matchAll(/html\[data-(shape|material|nav|hero|motion)='([a-z]+)'\]/g)) expect(known[m[1] ?? ''], m[0]).toContain(m[2]);

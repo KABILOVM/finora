@@ -471,6 +471,8 @@ function AddForm({ onClose, wallets, categories, settings, stats, pop, onSaved }
       isDirty={isFormDirty(c.form, initial, false) || lines.length > 0}
       dismissible={saving === null}
       title={TITLE}
+      // верх окна слегка подсвечен цветом вида операции: расход, доход или перевод видны ещё до цифр (см. .tx-sheet в look.css)
+      className={`tx-sheet tx-${c.form.kind}`}
       headerAction={<DateChip c={c} />}
       footer={
         <div className="flex flex-col gap-2">

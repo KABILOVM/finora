@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from 'react';
+import { useRef, type CSSProperties, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/cn';
 
 export type SegmentTone = 'brand' | 'income' | 'expense';
@@ -62,13 +62,25 @@ export function Segmented<T extends string>({
     }
   };
 
+  const selectedIndex = options.findIndex((opt) => opt.value === value);
+  const selectedTone = options[selectedIndex]?.tone ?? 'brand';
+
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn('grid rounded-2xl bg-surface-2', compact ? 'gap-0.5 p-0.5' : 'gap-1 p-1', className)}
-      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      className={cn('seg relative grid rounded-2xl bg-surface-2', compact ? 'gap-0.5 p-0.5' : 'gap-1 p-1', className)}
+      style={
+        {
+          gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
+          '--seg-n': options.length,
+          '--seg-i': Math.max(0, selectedIndex),
+          '--seg-gap': compact ? '0.125rem' : '0.25rem',
+        } as CSSProperties
+      }
     >
+      {/* «Ползунок» под выбранным вариантом: переезжает при переключении (в новом оформлении; в прежнем его нет, см. look.css) */}
+      {selectedIndex >= 0 && <span aria-hidden="true" className="seg-thumb rounded-xl" data-tone={selectedTone} />}
       {options.map((opt, i) => {
         const selected = opt.value === value;
         return (
@@ -87,7 +99,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(opt.value)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
-              'min-h-[44px] rounded-xl font-semibold transition-colors',
+              'seg-item min-h-[44px] rounded-xl font-semibold transition-colors',
               compact ? 'px-1 text-sm' : 'px-3 text-base',
               selected ? ACTIVE[opt.tone ?? 'brand'] : disabled ? 'cursor-not-allowed text-muted opacity-50' : 'text-muted hover:text-text',
             )}

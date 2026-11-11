@@ -642,3 +642,125 @@ describe('Enter в поле суммы (ПК)', () => {
     expect(input().value).toBe('5');
   });
 });
+
+describe('AmountInput: сумма вписывается в поле по ширине', () => {
+  /** jsdom раскладку не считает: ширину мерки и её шрифт подставляем сами. */
+  const measure = (need: number, have: number, fontPx = 48) => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.matches('span.invisible') ? need : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.matches('span.invisible') ? have : 0;
+    });
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element, pseudo?: string | null) => {
+      const cs = real(el, pseudo);
+      return (el as HTMLElement).matches?.('span.invisible') ? ({ ...cs, fontSize: `${fontPx}px`, getPropertyValue: cs.getPropertyValue.bind(cs) } as CSSStyleDeclaration) : cs;
+    });
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  it('число шире поля (рядом кнопки «Комиссия» и «Что куплено»): шрифт уменьшается ровно настолько, чтобы оно поместилось', () => {
+    measure(180, 120);
+    render(<AmountInput currency="TJS" value={125050} onChange={() => {}} start={<button type="button">%</button>} end={<button type="button">з</button>} wideSides />);
+    expect(input().style.fontSize).toBe('32px'); // 48 × 120 / 180
+  });
+
+  it('число помещается: шрифт задаёт только класс, своего размера у поля нет', () => {
+    measure(100, 160);
+    render(<AmountInput currency="TJS" value={1250} onChange={() => {}} />);
+    expect(input().style.fontSize).toBe('');
+  });
+
+  it('совсем узкое поле: мельче 16 px не становится (дальше поле прокручивается внутри себя, как раньше)', () => {
+    measure(400, 60);
+    render(<AmountInput currency="TJS" value={12_345_678_901} onChange={() => {}} />);
+    expect(input().style.fontSize).toBe('16px');
+  });
+
+  it('число стало короче и снова помещается: свой размер снимается', async () => {
+    measure(180, 120);
+    render(<Harness initial={125050} />);
+    expect(input().style.fontSize).toBe('32px');
+    vi.restoreAllMocks();
+    measure(60, 120);
+    await user.click(key('Стереть'));
+    expect(input().style.fontSize).toBe('');
+  });
+
+  it('у мерки и поля нет переходов: при «уменьшить движение» замер ширины иначе отставал бы на кадр', () => {
+    render(<AmountInput currency="TJS" value={1250} onChange={() => {}} />);
+    expect(input().className).toContain('transition-none');
+    expect(input().previousElementSibling?.className).toContain('transition-none');
+  });
+
+  it('на экране уже 360 px левое место у суммы — на одну кнопку, правое — на две', () => {
+    const { container } = render(
+      <AmountInput currency="TJS" value={1250} onChange={() => {}} start={<button type="button">%</button>} end={<button type="button">з</button>} wideSides />,
+    );
+    const card = container.querySelector('[data-amount-card]')!;
+    expect(card.firstElementChild!.className).toContain('max-[359px]:w-10');
+    expect(card.lastElementChild!.className).not.toContain('max-[359px]');
+    expect(card.lastElementChild!.className).toContain('w-[84px]');
+  });
+});
+
+describe('AmountInput: «сцена» суммы', () => {
+  it('поле помечено видом операции: по нему оформление подбирает оттенок (расход, доход, без оттенка)', () => {
+    const { container, rerender } = render(<AmountInput currency="TJS" value={1250} onChange={() => {}} tone="expense" />);
+    const card = () => container.querySelector('[data-amount-card]')!;
+    expect(card().className).toContain('amount-stage');
+    expect(card()).toHaveAttribute('data-tone', 'expense');
+    rerender(<AmountInput currency="TJS" value={1250} onChange={() => {}} tone="income" />);
+    expect(card()).toHaveAttribute('data-tone', 'income');
+    rerender(<AmountInput currency="TJS" value={1250} onChange={() => {}} />);
+    expect(card()).toHaveAttribute('data-tone', 'neutral');
+  });
+
+  it('набранная цифра «подпрыгивает», а при выключенных эффектах и «уменьшить движение» — нет', async () => {
+    const animate = vi.fn();
+    const proto = HTMLElement.prototype as unknown as { animate?: unknown };
+    const had = Object.prototype.hasOwnProperty.call(proto, 'animate');
+    const before = proto.animate;
+    proto.animate = animate;
+    try {
+      render(<Harness />);
+      await user.click(key('5'));
+      expect(animate).toHaveBeenCalledTimes(1);
+
+      document.documentElement.dataset.fx = 'off';
+      await user.click(key('7'));
+      expect(animate).toHaveBeenCalledTimes(1);
+      delete document.documentElement.dataset.fx;
+
+      vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduce'), media: q, addEventListener() {}, removeEventListener() {} }));
+      await user.click(key('9'));
+      expect(animate).toHaveBeenCalledTimes(1);
+      vi.unstubAllGlobals();
+
+      // стёрли цифру — число стало короче, прыгать нечему
+      await user.click(key('Стереть'));
+      expect(animate).toHaveBeenCalledTimes(1);
+    } finally {
+      delete document.documentElement.dataset.fx;
+      if (had) proto.animate = before;
+      else delete proto.animate;
+    }
+  });
+
+  it('сумму подставили снаружи (сброс формы, правка операции): цифры не прыгают', () => {
+    const animate = vi.fn();
+    const proto = HTMLElement.prototype as unknown as { animate?: unknown };
+    const had = Object.prototype.hasOwnProperty.call(proto, 'animate');
+    const before = proto.animate;
+    proto.animate = animate;
+    try {
+      const { rerender } = render(<AmountInput currency="TJS" value={null} onChange={() => {}} />);
+      rerender(<AmountInput currency="TJS" value={125050} onChange={() => {}} />);
+      expect(animate).not.toHaveBeenCalled();
+    } finally {
+      if (had) proto.animate = before;
+      else delete proto.animate;
+    }
+  });
+});

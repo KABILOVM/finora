@@ -262,6 +262,7 @@ function EditForm({ tx, wallets, categories, settings, pop, onClose, closing }: 
         isDirty={isFormDirty(c.form, initial, true)}
         dismissible={!busy}
         title={TITLE}
+        className={`tx-sheet tx-${c.form.kind}`}
         headerAction={<DateChip c={c} />}
         footer={
           <div className="flex flex-col gap-2">
