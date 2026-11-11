@@ -1127,3 +1127,52 @@ html[data-skin='custom'][data-hero-photo] .skin-hero::after {
   background-position: center;
   filter: brightness(0.58) saturate(1.05);
 }
+
+/* ───────────────────────── Маленький телефон ─────────────────────────
+ * На экране уже 380 px или ниже 640 px (iPhone SE и подобные) карточка «Всего» компактная: меньше отступы, приход и расход — узкими
+ * капсулами в ряд, как раньше, и место под график меньше. Иначе она занимает пол-экрана, а то, что должно быть видно сразу под ней
+ * (плашка «Пропущенные дни», «Требует внимания»), уезжает за край. */
+@media (max-width: 379px), (max-height: 640px) {
+  html:not([data-look='legacy']) .skin-hero {
+    padding: 1rem;
+  }
+  html:not([data-look='legacy']) .hero-amount {
+    margin-top: 0.25rem;
+    font-size: clamp(1.75rem, 9vw, 2.75rem);
+  }
+  html:not([data-look='legacy']) .hero-stats {
+    max-width: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+  }
+  html:not([data-look='legacy']) .hero-stat {
+    flex: 0 1 auto;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem 0.25rem 0.25rem;
+    border-radius: 9999px;
+  }
+  html:not([data-look='legacy']) .hero-stat-label {
+    display: none;
+  }
+  html:not([data-look='legacy']) .hero-stat-ico {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  html:not([data-look='legacy']) .hero-net {
+    padding: 0.25rem 0.5rem;
+  }
+  html:not([data-look='legacy']) .hero-spark-gap {
+    height: 2rem;
+  }
+  html[data-hero='banner'] .skin-hero {
+    min-height: 0;
+  }
+  html[data-hero='ticket'] .skin-hero {
+    --notch: calc(100% - 4rem);
+  }
+  html[data-hero='ticket'] .hero-stats {
+    margin-top: 1.5rem;
+  }
+}
