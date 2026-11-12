@@ -300,11 +300,15 @@ export async function openCategories(page: Page): Promise<void> {
 /**
  * Окно уже закрыто, но его запись в истории браузера («якорь», src/components/modalHistory.ts) снимается чуть позже своим history.back().
  * Перезагрузка страницы, начатая до этого, обрывается (page.reload: net::ERR_ABORTED), поэтому перед ней ждём, пока якорь уйдёт.
+ * Якорь при открытом окне — запись этого окна, а не остаток закрытого: его ухода не ждём. Иначе ожидание не кончилось бы там,
+ * где следом само открывается другое окно: на телефоне «Установить Sumoima…» появляется через 0,15–0,4 с после закрытия формы,
+ * открытой по ссылке (45-wallets, /wallets?new=1), и ставит свой якорь.
  */
 export async function modalHistorySettled(page: Page): Promise<void> {
   await page.waitForFunction(() => {
     const state: unknown = window.history.state;
-    return !(typeof state === 'object' && state !== null && '__sumoimaModal' in state);
+    const anchored = typeof state === 'object' && state !== null && '__sumoimaModal' in state;
+    return !anchored || document.querySelector('[aria-modal="true"]') !== null;
   });
 }
 
