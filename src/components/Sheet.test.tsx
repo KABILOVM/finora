@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Sheet } from './Sheet';
 import { act, fire, render, screen, user } from './testUtils';
@@ -299,5 +299,65 @@ describe('Sheet: клавиатура выехала позже события (
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('Sheet: заголовок рядом с кнопкой в шапке ужимается в одну строку', () => {
+  /** jsdom раскладку не считает: ширину заголовка и его шрифт подставляем сами. */
+  const measure = (need: number, have: number, fontPx = 20) => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.matches('h2.sheet-title') ? need : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.matches('h2.sheet-title') ? have : 0;
+    });
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element, pseudo?: string | null) => {
+      const cs = real(el, pseudo);
+      return (el as HTMLElement).matches?.('h2.sheet-title') ? ({ ...cs, fontSize: `${fontPx}px`, getPropertyValue: cs.getPropertyValue.bind(cs) } as CSSStyleDeclaration) : cs;
+    });
+  };
+  afterEach(() => vi.restoreAllMocks());
+  /** Замер идёт в ближайшем кадре (не в момент вставки окна на страницу): ждём кадр. */
+  const frame = () => act(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+  const title = () => screen.getByRole('heading', { name: 'Новая операция' });
+  const show = (withAction: boolean) =>
+    render(
+      <Sheet open onClose={() => {}} title="Новая операция" {...(withAction ? { headerAction: <button type="button">Сегодня</button> } : {})}>
+        <p>Содержимое</p>
+      </Sheet>,
+    );
+
+  it('широкий шрифт образа не помещается рядом с датой: заголовок мельче, но в одну строку', async () => {
+    measure(210, 168);
+    show(true);
+    expect(title().style.whiteSpace).toBe(''); // в момент вставки не меряем: вставка окна на страницу не должна затягиваться
+    await frame();
+    expect(title().style.whiteSpace).toBe('nowrap');
+    expect(title().style.fontSize).toBe('16px'); // 20 × 168 / 210
+  });
+
+  it('заголовок помещается: размер шрифта не трогаем', async () => {
+    measure(150, 168);
+    show(true);
+    await frame();
+    expect(title().style.fontSize).toBe('');
+    expect(title().style.whiteSpace).toBe('nowrap');
+  });
+
+  it('места совсем мало (пришлось бы мельче 14 px): заголовок переносится, как раньше', async () => {
+    measure(400, 120);
+    show(true);
+    await frame();
+    expect(title().style.fontSize).toBe('');
+    expect(title().style.whiteSpace).toBe('');
+  });
+
+  it('без кнопки в шапке заголовок не трогаем: длинные названия окон переносятся', async () => {
+    measure(400, 120);
+    show(false);
+    await frame();
+    expect(title().style.fontSize).toBe('');
+    expect(title().style.whiteSpace).toBe('');
   });
 });

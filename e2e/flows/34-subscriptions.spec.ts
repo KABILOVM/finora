@@ -80,6 +80,8 @@ test.describe('34. Подписки: «Похоже на подписки»', ()
     await expect(card.getByTestId('subscription-rise')).toHaveText('Подорожало: было 49 с., стало 59 с. (+20%)');
     await expect(card.getByTestId('subscriptions-total')).toContainText('Всего в год: ≈');
     await expect(card.getByTestId('subscription-item').first()).toContainText('В год ≈');
+    // на экране 320×568 раскрытая карточка длиннее экрана: к строке прокручиваем — важно, что она есть и ничем не закрыта
+    await card.getByTestId('subscription-rise').scrollIntoViewIfNeeded();
     await expect(card.getByTestId('subscription-rise')).toBeInViewport();
     await noHorizontalScroll(page, 'Платежи (подорожало)');
     await shot(page, '34-subscriptions-rise', testInfo);

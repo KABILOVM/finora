@@ -19,22 +19,37 @@ test.beforeEach(({ browserName: _b }, info) => {
 
 const ready = async (page: Page) => page.getByRole('navigation').first().waitFor();
 
-test('precache: в sw.js есть index.html и КАЖДЫЙ файл сборки (js, css, иконки, манифест)', () => {
+/**
+ * Что намеренно НЕ лежит в офлайн-кэше (см. workbox.globPatterns и globIgnores в vite.config.ts):
+ *  — картинки образов (webp): иначе их скачал бы каждый при установке, даже не выбрав образ;
+ *  — наборы значков образов (assets/pack-*.js): целиком весят мегабайты, грузятся только выбравшим образ;
+ *  — картинка превью ссылки, страница 404 и её стили: приложению без сети не нужны;
+ *  — служебные файлы хостинга (robots.txt, .gitkeep).
+ * Появился новый вид файлов — решите, нужен ли он без сети, и допишите его либо в сборку, либо сюда.
+ */
+const NOT_OFFLINE: readonly RegExp[] = [/\.webp$/, /^assets\/pack-[^/]+\.js$/, /^og-image\.jpg$/, /^404\.(html|css)$/, /^robots\.txt$/, /(^|\/)\.gitkeep$/];
+const notOffline = (f: string) => NOT_OFFLINE.some((re) => re.test(f));
+
+test('precache: в sw.js есть index.html и каждый файл приложения (js, css, иконки, манифест); картинок образов и наборов значков там нет', () => {
   const urls = new Set(precacheUrls());
   const files = listFiles(DIST).filter((f) => f !== 'sw.js' && !/^workbox-[0-9a-f]+\.js$/.test(f));
   expect(urls.has('index.html')).toBe(true);
-  const missing = files.filter((f) => !urls.has(f));
+  const missing = files.filter((f) => !urls.has(f) && !notOffline(f));
   expect(missing, 'файлы сборки, которых нет в precache').toEqual([]);
+  // И наоборот: то, что решено не класть в офлайн-кэш, туда не попало (иначе установка приложения скачивала бы мегабайты картинок).
+  expect([...urls].filter(notOffline), 'в precache попало то, чего там быть не должно').toEqual([]);
+  expect(files.some((f) => /\.webp$/.test(f)), 'в сборке есть картинки образов').toBe(true);
+  expect(files.some((f) => /^assets\/pack-[^/]+\.js$/.test(f)), 'в сборке есть наборы значков').toBe(true);
   // Каждый precache-адрес реально существует в сборке (иначе установка воркера упадёт целиком).
   const files2 = new Set(listFiles(DIST));
   expect([...urls].filter((u) => !files2.has(u))).toEqual([]);
   for (const ext of ['js', 'css', 'png', 'svg', 'webmanifest']) {
     expect([...urls].some((u) => u.endsWith(`.${ext}`)), `.${ext} в precache`).toBe(true);
   }
-  // Каждый ленивый чанк, на который ссылается главный бандл, лежит в precache.
+  // Каждый ленивый чанк, на который ссылается главный бандл, лежит в precache (кроме наборов значков: они грузятся по сети).
   const entry = [...urls].find((u) => /^assets\/index-.*\.js$/.test(u))!;
   const entrySrc = readFileSync(join(DIST, entry), 'utf8');
-  const chunks = [...entrySrc.matchAll(/\.\/([A-Za-z0-9_.-]+\.js)/g)].map((m) => `assets/${m[1]}`).filter((c) => c !== 'assets/sw.js');
+  const chunks = [...entrySrc.matchAll(/\.\/([A-Za-z0-9_.-]+\.js)/g)].map((m) => `assets/${m[1]}`).filter((c) => c !== 'assets/sw.js' && !notOffline(c));
   expect(chunks.length).toBeGreaterThan(3);
   expect(chunks.filter((c) => !urls.has(c))).toEqual([]);
 });

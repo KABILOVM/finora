@@ -290,6 +290,200 @@ html[data-fx='off'] .fx-loop::after {
   animation: none !important;
 }
 
+/* ───────────────────────── Ввод суммы: «сцена», клавиши, переключатель ───────────────────────── */
+
+/*
+ * Окно операции. Раскладка прежняя, меняется характер:
+ *  — верх окна слегка подсвечен цветом вида операции (расход, доход, перевод);
+ *  — поле суммы — «сцена» с тем же оттенком (рамку и кольцо фокуса по-прежнему задают классы самого поля);
+ *  — клавиши — мягкие плитки без рамки, а у образов — по материалу карточек (--key-*);
+ *  — у переключателя «Расход / Доход / Перевод» выбранный вариант отмечает ползунок, который переезжает.
+ * В «Классике (прежней)» всего этого нет: там действуют классы самих компонентов.
+ */
+html:not([data-look='legacy']) {
+  --key-bg: rgb(var(--surface-2) / calc(0.9 - 0.25 * var(--dk)));
+  --key-line: transparent;
+  --key-bw: 1px;
+  --key-shadow: inset 0 1px 0 rgb(255 255 255 / calc(0.8 - 0.74 * var(--dk)));
+  --key-press: rgb(var(--brand) / 0.18);
+  --key-press-shadow: var(--key-shadow);
+  --key-press-move: 0 0;
+}
+
+html:not([data-look='legacy']) .tx-sheet {
+  position: relative;
+  isolation: isolate;
+  --tx: var(--brand);
+}
+html:not([data-look='legacy']) .tx-sheet.tx-expense {
+  --tx: var(--expense);
+}
+html:not([data-look='legacy']) .tx-sheet.tx-income {
+  --tx: var(--income);
+}
+/* Цвет — в background-color (он переливается при смене вида), форма свечения — в маске. */
+html:not([data-look='legacy']) .tx-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 11rem;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: rgb(var(--tx) / calc(0.16 + 0.04 * var(--dk)));
+  -webkit-mask-image: radial-gradient(100% 100% at 50% 0%, #000, transparent 72%);
+  mask-image: radial-gradient(100% 100% at 50% 0%, #000, transparent 72%);
+  transition: background-color calc(360ms * var(--t)) var(--ease-ui);
+}
+
+html:not([data-look='legacy']) .amount-stage {
+  --stage: var(--brand);
+  background-color: rgb(var(--stage) / calc(0.05 + 0.05 * var(--dk)));
+  background-image: linear-gradient(180deg, rgb(255 255 255 / calc(0.6 - 0.56 * var(--dk))), transparent 62%);
+  --tw-shadow: inset 0 1px 0 rgb(255 255 255 / calc(0.75 - 0.68 * var(--dk))), 0 16px 28px -22px rgb(var(--stage) / calc(0.6 + 0.2 * var(--dk)));
+  transition:
+    background-color calc(360ms * var(--t)) var(--ease-ui),
+    border-color 150ms linear,
+    box-shadow calc(360ms * var(--t)) var(--ease-ui);
+}
+html:not([data-look='legacy']) .amount-stage[data-tone='expense'] {
+  --stage: var(--expense);
+}
+html:not([data-look='legacy']) .amount-stage[data-tone='income'] {
+  --stage: var(--income);
+}
+html:not([data-look='legacy']) .amount-stage .money {
+  letter-spacing: -0.03em;
+}
+
+html:not([data-look='legacy']) .key {
+  background: var(--key-bg);
+  border: var(--key-bw) solid var(--key-line);
+  box-shadow: var(--key-shadow);
+  transition:
+    transform calc(150ms * var(--t)) var(--ease-pop),
+    translate calc(90ms * var(--t)) linear,
+    background-color 120ms linear,
+    box-shadow 120ms linear;
+}
+html:not([data-look='legacy']) .key:active:not(:disabled) {
+  background: var(--key-press);
+  box-shadow: var(--key-press-shadow);
+  translate: var(--key-press-move);
+}
+/* «Стереть» — без плитки: служебная клавиша не спорит с цифрами. */
+html:not([data-look='legacy']) .key-service {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+html:not([data-look='legacy']) .key-service:active:not(:disabled) {
+  background: rgb(var(--surface-2));
+}
+/* Знаки действий — узкие «таблетки» цвета образа, «=» залита, когда есть что считать. */
+html:not([data-look='legacy']) .key-op {
+  border-color: transparent;
+  border-radius: var(--r-pill);
+  background: rgb(var(--brand) / calc(0.09 + 0.05 * var(--dk)));
+}
+html:not([data-look='legacy']) .key-eq {
+  border-radius: var(--r-pill);
+}
+html:not([data-look='legacy']) .key-eq:disabled {
+  background: rgb(var(--brand) / calc(0.16 + 0.06 * var(--dk)));
+  color: rgb(var(--brand) / 0.55);
+  opacity: 1;
+}
+
+/* Клавиши по материалу образа. */
+html[data-material='glass'] {
+  --key-bg: linear-gradient(160deg, rgb(var(--surface) / 0.9), rgb(var(--surface-2) / 0.6));
+  --key-line: rgb(255 255 255 / calc(0.85 - 0.7 * var(--dk)));
+  --key-shadow: inset 0 1px 0 rgb(255 255 255 / calc(0.9 - 0.75 * var(--dk))), 0 8px 16px -12px rgb(var(--glass-shadow) / calc(0.5 + 0.3 * var(--dk)));
+}
+html[data-material='outline'] {
+  --key-bg: transparent;
+  --key-line: rgb(var(--skin-line, var(--border-strong)) / 0.85);
+  --key-bw: 2px;
+  --key-shadow: none;
+}
+html[data-material='pop'] {
+  --key-bg: rgb(var(--surface));
+  --key-line: rgb(var(--text));
+  --key-bw: 2px;
+  --key-shadow: 3px 4px 0 rgb(var(--skin-line, var(--brand)) / 0.95);
+  --key-press: rgb(var(--surface));
+  --key-press-shadow: 0 0 0 rgb(var(--skin-line, var(--brand)) / 0.95);
+  --key-press-move: 3px 4px;
+}
+html[data-material='neon'] {
+  --key-bg: rgb(var(--surface-2) / calc(0.45 + 0.1 * var(--dk)));
+  --key-line: rgb(var(--skin-line, var(--brand)) / calc(0.45 + 0.15 * var(--dk)));
+  --key-shadow: 0 0 14px -6px rgb(var(--skin-line, var(--brand)) / calc(0.5 + 0.3 * var(--dk))), inset 0 0 12px -8px rgb(var(--skin-line, var(--brand)) / 0.6);
+  --key-press: rgb(var(--skin-line, var(--brand)) / 0.22);
+  --key-press-shadow: 0 0 20px -2px rgb(var(--skin-line, var(--brand)) / 0.85), inset 0 0 14px -6px rgb(var(--skin-line, var(--brand)) / 0.8);
+}
+html[data-material='clay'] {
+  --key-bg: rgb(var(--surface-2));
+  --key-shadow:
+    0 9px 14px -9px rgb(var(--glass-shadow) / calc(0.5 + 0.3 * var(--dk))), inset 0 2px 2px rgb(255 255 255 / calc(0.8 - 0.66 * var(--dk))),
+    inset 0 -5px 8px rgb(var(--glass-shadow) / calc(0.12 + 0.18 * var(--dk)));
+  --key-press-shadow: inset 0 4px 8px rgb(var(--glass-shadow) / calc(0.22 + 0.2 * var(--dk)));
+}
+html[data-material='paper'] {
+  --key-bg: linear-gradient(180deg, rgb(var(--surface)), rgb(var(--surface-2) / 0.6));
+  --key-line: rgb(var(--skin-line, var(--border-strong)) / 0.34);
+  --key-shadow: 0 1px 0 rgb(var(--glass-shadow) / 0.1);
+}
+html[data-material='metal'] {
+  --key-bg: linear-gradient(180deg, rgb(var(--surface)), rgb(var(--surface-2)));
+  --key-line: rgb(var(--border-strong) / 0.5);
+  --key-shadow: inset 0 1px 0 rgb(255 255 255 / calc(0.95 - 0.75 * var(--dk))), inset 0 -2px 0 rgb(var(--border-strong) / 0.35);
+  --key-press-shadow: inset 0 2px 3px rgb(var(--glass-shadow) / 0.35);
+}
+html[data-material='lux'] {
+  --key-bg: rgb(var(--surface));
+  --key-line: rgb(var(--skin-line, var(--brand)) / 0.42);
+  --key-shadow: inset 0 0 0 3px rgb(var(--surface)), inset 0 0 0 4px rgb(var(--skin-line, var(--brand)) / 0.2);
+}
+/* Срезанный угол — и у клавиш, только меньше. */
+html[data-shape='cut'] .key {
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+}
+
+/* Переключатель из нескольких вариантов: ползунок под выбранным. Ширина — доля поля за вычетом отступов, сдвиг — на свою ширину и зазор. */
+.seg-thumb {
+  display: none;
+}
+html:not([data-look='legacy']) .seg-thumb {
+  --seg-c: var(--brand);
+  display: block;
+  position: absolute;
+  top: var(--seg-gap);
+  bottom: var(--seg-gap);
+  left: var(--seg-gap);
+  width: calc((100% - var(--seg-gap) * (var(--seg-n) + 1)) / var(--seg-n));
+  transform: translateX(calc(var(--seg-i) * (100% + var(--seg-gap))));
+  background-color: rgb(var(--seg-c));
+  box-shadow: 0 8px 16px -10px rgb(var(--seg-c) / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.22);
+  transition:
+    transform calc(320ms * var(--t)) var(--ease-ui),
+    background-color calc(240ms * var(--t)) linear,
+    box-shadow calc(240ms * var(--t)) linear;
+}
+html:not([data-look='legacy']) .seg-thumb[data-tone='expense'] {
+  --seg-c: var(--expense);
+}
+html:not([data-look='legacy']) .seg-thumb[data-tone='income'] {
+  --seg-c: var(--income);
+}
+html:not([data-look='legacy']) .seg-item {
+  position: relative;
+}
+html:not([data-look='legacy']) .seg-item[aria-checked='true'] {
+  background-color: transparent;
+}
+
 /* ───────────────────────── Нижнее меню телефона (data-nav) ───────────────────────── */
 
 /* Парящая панель (по умолчанию): матовое стекло, под выбранным значком — «таблетка», кнопка «+» приподнята и обведена цветом фона. */

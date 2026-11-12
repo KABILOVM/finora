@@ -150,6 +150,36 @@ describe('Segmented', () => {
     await user.keyboard('{ArrowLeft}');
     expect(screen.getByRole('radio', { name: 'Перевод' })).toHaveAttribute('aria-checked', 'true');
   });
+
+  it('ползунок под выбранным вариантом: знает число вариантов, место и цвет выбранного; скринридеру не виден', async () => {
+    render(<Harness />);
+    const group = screen.getByRole('radiogroup', { name: 'Тип операции' });
+    const thumb = () => group.querySelector('.seg-thumb')!;
+    expect(thumb()).toHaveAttribute('aria-hidden', 'true');
+    expect(group.style.getPropertyValue('--seg-n')).toBe('3');
+    expect(group.style.getPropertyValue('--seg-i')).toBe('0');
+    expect(thumb()).toHaveAttribute('data-tone', 'expense');
+
+    await user.click(screen.getByRole('radio', { name: 'Доход' }));
+    expect(group.style.getPropertyValue('--seg-i')).toBe('1');
+    expect(thumb()).toHaveAttribute('data-tone', 'income');
+
+    await user.click(screen.getByRole('radio', { name: 'Перевод' }));
+    expect(group.style.getPropertyValue('--seg-i')).toBe('2');
+    expect(thumb()).toHaveAttribute('data-tone', 'brand');
+    // вариантов по-прежнему три: ползунок — не кнопка
+    expect(screen.getAllByRole('radio')).toHaveLength(3);
+  });
+
+  it('тонкий вариант: зазор ползунка вдвое меньше, как отступы самого переключателя', () => {
+    render(<Segmented ariaLabel="Период" options={OPTIONS} value="income" onChange={() => {}} compact />);
+    expect(screen.getByRole('radiogroup', { name: 'Период' }).style.getPropertyValue('--seg-gap')).toBe('0.125rem');
+  });
+
+  it('значение не из списка: ползунка нет', () => {
+    render(<Segmented ariaLabel="Период" options={OPTIONS} value={'other' as 'income'} onChange={() => {}} />);
+    expect(screen.getByRole('radiogroup', { name: 'Период' }).querySelector('.seg-thumb')).toBeNull();
+  });
 });
 
 describe('ChipPicker и GlyphPicker', () => {

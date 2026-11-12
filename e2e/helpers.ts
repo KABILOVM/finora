@@ -206,6 +206,8 @@ export async function dismissInstallPrompt(page: Page): Promise<void> {
   }
   await dlg.getByRole('button', { name: 'Не сейчас' }).click();
   await expect(dlg).toBeHidden();
+  // запись окна уходит из истории чуть позже самого окна: перезагрузка страницы, начатая в этот миг, обрывалась (net::ERR_ABORTED)
+  await modalHistorySettled(page);
 }
 
 export async function waitReady(page: Page): Promise<void> {
