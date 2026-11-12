@@ -87,7 +87,12 @@ test.describe('16-adv. Бюджеты на самом узком телефон�
     const cat = sheet(page, 'Новая категория расходов');
     await cat.getByRole('textbox', { name: 'Название' }).fill(longName);
     await cat.getByRole('button', { name: 'Сохранить', exact: true }).click();
-    const shown = (await cat.isVisible()) ? norm(await cat.innerText()) : '';
+    // Окно закрылось — категория создана. Осталось открытым — читаем, что в нём написано. Раньше «открыто ли» и «что написано»
+    // спрашивались по очереди: окно успевало закрыться между ними, и чтение текста ждало его до конца времени сценария.
+    const shown = await cat.waitFor({ state: 'hidden', timeout: 5000 }).then(
+      () => '',
+      async () => norm(await cat.innerText({ timeout: 1000 }).catch(() => '')),
+    );
     test.skip(shown !== '', `категорию с длинным названием нельзя создать: ${shown.slice(0, 120)}`);
     await dismissToasts(page);
     const stored = await page.getByRole('main').getByRole('list').first().innerText();

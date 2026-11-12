@@ -308,7 +308,8 @@ describe('страница долга: закрыть, открыть, архи�
     await chooseMenuAction('В архив');
     await eventually(async () => expect((await storeOf(td).db.debts.get(DEBT_ID))?.archivedAt).not.toBeNull());
     await findByRole('status');
-    expect(currentPath()).toBe('/debts');
+    // уведомление появляется раньше перехода к списку: адрес ждём (при полной загрузке тестов он запаздывал, и проверка падала через раз)
+    await waitFor(() => expect(currentPath()).toBe('/debts'));
     await user.click(await waitFor(() => button('Вернуть')));
     await eventually(async () => expect((await storeOf(td).db.debts.get(DEBT_ID))?.archivedAt).toBeNull());
   });

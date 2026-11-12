@@ -192,10 +192,15 @@ test('доступность: у всех кнопок, ссылок и поле
   await tapAmount(page, '9');
   expect(await unnamed(page), 'шит платежа с переплатой').toEqual([]);
   await page.keyboard.press('Escape');
+  await expect(pay).toBeHidden();
 
+  // окно открывается не мгновенно: без ожидания проверка смотрела страницу под ним, а Esc уходил в пустоту — окно оставалось открытым
   await page.getByRole('button', { name: 'Править', exact: true }).click();
+  const edit = sheet(page, 'Правка долга');
+  await expect(edit).toBeVisible();
   expect(await unnamed(page), 'шит «Правка долга»').toEqual([]);
   await page.keyboard.press('Escape');
+  await expect(edit).toBeHidden();
 
   await goSection(page, 'Операции');
   await page.getByTestId('tx-tags').first().click();

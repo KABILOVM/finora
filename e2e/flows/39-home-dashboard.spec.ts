@@ -135,6 +135,16 @@ test.describe('39. Главная: компактная, с «Требует в�
     await expect(page.getByTestId('goals-widget')).toHaveCount(0);
     await expect(page.locator('[aria-label="Итоги месяца"]')).toHaveCount(0);
 
+    // Список «Требует внимания» раскрыт выше; длину страницы меряем в обычном виде, со свёрнутым. Без этого итог зависел от случая:
+    // блок иногда успевал перерисоваться заново (и свернуться) до замера, иногда нет — 1380 или 1530 px при пороге 1500.
+    const toggle = row.getByRole('button');
+    await expect(async () => {
+      if ((await toggle.getAttribute('aria-expanded')) === 'true') await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false', { timeout: 1000 });
+    }).toPass();
+    // сворачивание — переход по высоте: он заканчивается в следующем кадре, а не в момент нажатия
+    await expect(row.locator('.fold')).toHaveJSProperty('offsetHeight', 0);
+
     // длина страницы заметно короче прежних ~2800 px; без горизонтальной прокрутки
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     testInfo.annotations.push({ type: 'height', description: String(height) });

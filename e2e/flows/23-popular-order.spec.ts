@@ -49,10 +49,11 @@ test.describe('23. Сортировка по популярности', () => {
     await page.getByRole('button', { name: /^Фильтры/ }).click();
     const filters = sheet(page, 'Фильтры');
     await expect(filters).toBeVisible();
-    const walletOpts = await filters.locator('#filter-wallet option').allInnerTexts();
-    expect(walletOpts.slice(1)).toEqual(['Карта', 'Наличные']);
-    const catOpts = await filters.locator('#filter-category optgroup[label="Расходы"] option').allInnerTexts();
-    expect(catOpts.slice(0, 3)).toEqual(['Прочее', 'Еда', 'Образование']);
+    // порядок по частоте считается, когда прочитаны операции: ждём его, как и в форме выше, а не читаем список сразу
+    await expect.poll(async () => (await filters.locator('#filter-wallet option').allInnerTexts()).slice(1)).toEqual(['Карта', 'Наличные']);
+    await expect
+      .poll(async () => (await filters.locator('#filter-category optgroup[label="Расходы"] option').allInnerTexts()).slice(0, 3))
+      .toEqual(['Прочее', 'Еда', 'Образование']);
     await page.keyboard.press('Escape');
 
     // Страница «Кошельки» остаётся в прежнем порядке

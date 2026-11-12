@@ -35,14 +35,16 @@ const BASE_KEY =
   'flex min-h-[56px] select-none items-center justify-center rounded-2xl border text-[1.75rem] font-semibold leading-none ' +
   'tracking-tight transition duration-150 ease-spring active:scale-[0.93] disabled:opacity-40 disabled:active:scale-100 ' +
   'shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_6px_14px_-9px_rgb(var(--brand)/0.55)]';
-const KEY_CLASS = `${BASE_KEY} border-border/80 bg-surface text-text active:bg-brand/10`;
-const SERVICE_CLASS = `${BASE_KEY} border-border/60 bg-surface-2 text-muted active:bg-border`;
+// Классы key, key-service, key-op и key-eq — опора для вида: в новом оформлении и у образов клавиши рисует src/styles/look.css
+// (мягкая плитка, а у образов — по материалу карточек: стекло, контур, плакат, неон и так далее). Правила ниже — прежний вид.
+const KEY_CLASS = `key ${BASE_KEY} border-border/80 bg-surface text-text active:bg-brand/10`;
+const SERVICE_CLASS = `key key-service ${BASE_KEY} border-border/60 bg-surface-2 text-muted active:bg-border`;
 // Знаки действий нужны реже цифр: строка над цифрами 44 px (в низких окнах — 40, см. COMPACT_KEYPAD), значки рисуются сами — шрифт «÷» и «×» искажал.
 const OP_CLASS =
-  'flex h-11 min-h-0 select-none items-center justify-center rounded-xl border border-brand/25 bg-brand/10 text-brand transition duration-150 ease-spring ' +
+  'flex h-11 min-h-0 select-none items-center justify-center rounded-xl border border-brand/25 bg-brand/10 text-brand transition duration-150 ease-spring key-op ' +
   'active:scale-[0.93] active:bg-brand/25 disabled:opacity-40 disabled:active:scale-100';
 const EQUAL_CLASS =
-  'flex h-11 min-h-0 select-none items-center justify-center rounded-xl border border-transparent bg-gradient-to-br from-brand to-accent text-brand-fg ' +
+  'flex h-11 min-h-0 select-none items-center justify-center rounded-xl border border-transparent bg-gradient-to-br from-brand to-accent text-brand-fg key-eq ' +
   'transition duration-150 ease-spring active:scale-[0.93] active:brightness-90 disabled:bg-none disabled:bg-brand/30 disabled:active:scale-100';
 
 /** Значки действий: линии одной толщины, одинаковые на любом телефоне. */

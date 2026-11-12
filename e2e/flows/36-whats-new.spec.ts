@@ -1,5 +1,12 @@
 import type { Page } from '@playwright/test';
-import { addTx, dismissToasts, expect, goSection, openApp, shot, sheet, test } from '../helpers';
+import { readFileSync } from 'node:fs';
+import { RELEASES } from '../../src/features/whatsnew/releases';
+import { addTx, dismissToasts, expect, goSection, modalHistorySettled, openApp, shot, sheet, test } from '../helpers';
+
+// Окно показывает запись текущей версии (package.json). Её текст берём из самого списка выпусков: сценарий не привязан к одному выпуску
+// и не устаревает с каждым новым. Версия без записи окно не показывает — тогда сценарию нечего проверять, и это ошибка выпуска.
+const VERSION = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version;
+const CURRENT = RELEASES.find((r) => r.version === VERSION);
 
 const NEWS = (page: Page) => sheet(page, 'Что нового');
 
@@ -21,20 +28,22 @@ test.describe('36. «Что нового» после обновления', () 
 
     await addTx(page, { amount: '25', category: 'Еда' });
     await dismissToasts(page);
+    expect(CURRENT, `в «Что нового» нет записи для версии ${VERSION} из package.json`).toBeDefined();
     await pretendUpdated(page, '0.5.0'); // предыдущая версия: показывается запись текущей
     await page.reload();
 
     const news = NEWS(page);
     await expect(news).toBeVisible({ timeout: 10_000 });
-    await expect(news).toContainText('Отложить сейчас');
-    await expect(news).toContainText('Что если сократить');
+    await expect(news).toContainText(`Версия ${VERSION}`);
+    for (const item of CURRENT!.items) await expect(news).toContainText(item.text);
     await shot(page, '36-whats-new', testInfo);
     const o = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
     expect(o.scroll, 'страница шире экрана').toBeLessThanOrEqual(o.client);
     await news.getByRole('button', { name: 'Понятно' }).click();
     await expect(news).toBeHidden();
 
-    // при следующем запуске окна нет
+    // при следующем запуске окна нет (запись окна уходит из истории чуть позже самого окна: перезагрузка в этот миг обрывалась)
+    await modalHistorySettled(page);
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: 'Главная' })).toBeVisible();
     await page.waitForTimeout(2000);

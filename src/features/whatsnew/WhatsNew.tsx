@@ -2,7 +2,7 @@ import { Component, useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useOptionalStore, type Store } from '@/db';
 import { version } from '../../../package.json';
-import { RELEASES, type Release } from './releases';
+import type { Release } from './releases';
 import { releasesToShow } from './whatsNew';
 import { readSeenVersion, writeSeenVersion } from './whatsNewStorage';
 import { WhatsNewSheet } from './WhatsNewSheet';
@@ -41,6 +41,8 @@ function Gate({ store }: { store: Store }) {
       const seen = readSeenVersion(store.userId);
       // Отметки нет: человек, у которого уже есть операции, обновился с версии без этого окна; у нового операций ещё нет
       const existing = seen !== null || (await store.db.transactions.count()) > 0;
+      // Тексты выпусков — отдельным файлом: они нужны один раз после обновления и растут с каждым выпуском, в основном файле им не место
+      const { RELEASES } = await import('./releases');
       const list = releasesToShow(RELEASES, version, seen, existing);
       if (!alive) return;
       if (list.length > 0) setPending(list);

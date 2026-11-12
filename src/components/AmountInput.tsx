@@ -68,6 +68,19 @@ export interface AmountInputProps {
 
 const TONE = { neutral: 'text-text', income: 'text-income', expense: 'text-expense' } as const;
 
+/** Мельче этого сумма не становится, когда вписывается в поле по ширине. */
+const MIN_FIT_PX = 16;
+
+/** Набранная цифра слегка «подпрыгивает»: видно, что нажатие принято. Не для тех, кто выключил эффекты или просит меньше движения. */
+function bump(el: HTMLElement | null) {
+  if (!el || typeof el.animate !== 'function') return;
+  const root = document.documentElement;
+  if (root.dataset.fx === 'off') return;
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const t = parseFloat(getComputedStyle(root).getPropertyValue('--t')) || 1;
+  el.animate([{ transform: 'scale(1.06)' }, { transform: 'scale(1)' }], { duration: 170 * t, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' });
+}
+
 /**
  * Главный элемент быстрого ввода: крупная сумма с символом валюты + цифровая клавиатура.
  * Работает и с системной клавиатурой (ПК): inputmode="decimal", вставка очищается тем же правилом, что и нажатия.
@@ -142,6 +155,51 @@ export function AmountInput({
     if (m !== valueRef.current) onChangeRef.current(m);
   }, [currency]);
 
+  // Сумма вписывается в свободное место: рядом с кнопками по краям (комиссия, «Что куплено», заметка) длинное число раньше обрезалось.
+  // Ступень шрифта задаёт класс (по длине числа); здесь шрифт только уменьшается, если число всё равно шире поля. Мерка — невидимая
+  // копия текста: её шрифт не трогаем, поэтому она всегда показывает ширину числа «как по классу», а мельче становится само поле.
+  // Мельче MIN_FIT_PX не делаем: дальше поле, как и прежде, прокручивается внутри себя.
+  const sizerRef = useRef<HTMLSpanElement>(null);
+  const fitAmount = () => {
+    const sizer = sizerRef.current;
+    const input = inputRef.current;
+    if (!sizer || !input) return;
+    const need = sizer.scrollWidth;
+    const have = sizer.clientWidth;
+    const px = have > 0 && need > have ? parseFloat(getComputedStyle(sizer).fontSize) * (have / need) : NaN;
+    const size = Number.isFinite(px) ? `${Math.max(MIN_FIT_PX, Math.floor(px * 2) / 2)}px` : '';
+    if (input.style.fontSize !== size) input.style.fontSize = size;
+  };
+  // Когда мерить. При первом показе — в ближайшем кадре, до отрисовки: замер прямо в момент вставки окна на страницу заставлял
+  // браузер тут же раскладывать всё окно, вставка затягивалась, и обработчики окна (Esc, «Назад») подключались на миг позже — очень
+  // быстрое нажатие терялось. После первого показа — сразу после каждого рендера (число, кнопки по краям и ступень шрифта могли
+  // измениться): меняется уже только строка суммы. И ещё — когда меняется ширина самого поля (поворот экрана, окно на компьютере):
+  // тоже в кадре, а не внутри уведомления ResizeObserver, чтобы правка шрифта не вызывала его повторных уведомлений.
+  const fitRef = useRef(fitAmount);
+  fitRef.current = fitAmount;
+  const fitReady = useRef(false);
+  useLayoutEffect(() => {
+    if (fitReady.current) fitAmount();
+  });
+  useLayoutEffect(() => {
+    let frame = 0;
+    const later = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        fitReady.current = true;
+        fitRef.current();
+      });
+    };
+    later();
+    const box = sizerRef.current?.parentElement?.parentElement;
+    const ro = box && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(later) : null;
+    if (ro && box) ro.observe(box);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro?.disconnect();
+    };
+  }, []);
+
   // На телефоне курсор сам ставится только в поле со своей цифровой клавиатурой (inputmode="none"): системная закрыла бы полэкрана
   const focusOnMount = autoFocus && ((showKeypad || noSystemKeyboard) && coarse ? true : canAutoFocusText());
   useEffect(() => {
@@ -185,8 +243,19 @@ export function AmountInput({
     onChange(calc.minor);
   };
 
+  // Число выросло от нажатия — цифры «подпрыгивают» (см. bump). Сброс формы и подстановка суммы снаружи обходятся без этого.
+  const typedRef = useRef(false);
+  const shownLength = useRef(shown.length);
+  useEffect(() => {
+    const grew = shown.length > shownLength.current;
+    shownLength.current = shown.length;
+    if (grew && typedRef.current && !dense) bump(sizerRef.current?.parentElement ?? null);
+    typedRef.current = false;
+  }, [shown, dense]);
+
   const onKey = (key: KeypadKey) => {
     if (onKeyIntercept?.(key)) return;
+    typedRef.current = true;
     if (!calculator && (isOpKey(key) || key === '=')) return; // без калькулятора выражение не начинается
     if (key === '=') return equals();
     if (isOpKey(key)) {
@@ -216,6 +285,7 @@ export function AmountInput({
   // экранной клавиатуре, а вставка чужого текста объясняется сообщением.
   // Текст со словами (СМС банка «Расход 150 TJS», «-150,00 TJS») — не выражение: из него читается сумма, как без калькулятора.
   const onType = (raw: string) => {
+    typedRef.current = true;
     // Одна набранная буква внутри выражения («12 + б» — русская раскладка на месте запятой) — опечатка: выражение остаётся как было.
     // Заменить выражение может только вставка, текст длиннее набранного больше чем на символ.
     const pasted = raw.length > shown.length + 1;
@@ -277,7 +347,7 @@ export function AmountInput({
             <div className={cn('flex items-baseline justify-center gap-2', dense ? 'py-1' : 'py-2', TONE[tone])} onClick={() => inputRef.current?.focus()}>
               {/* Невидимая копия текста задаёт ширину поля: символ валюты стоит вплотную к цифрам. */}
               <span className="inline-grid min-w-0 grid-cols-[minmax(0,auto)]">
-                <span aria-hidden="true" className={cn('money invisible col-start-1 row-start-1 whitespace-pre px-0.5 font-bold', font)}>
+                <span ref={sizerRef} aria-hidden="true" className={cn('money invisible col-start-1 row-start-1 whitespace-pre px-0.5 font-bold transition-none', font)}>
                   {shown || '0'}
                 </span>
                 <input
@@ -305,7 +375,9 @@ export function AmountInput({
                   aria-invalid={message ? true : undefined}
                   aria-describedby={message ? `${id}-error` : undefined}
                   className={cn(
-                    'money col-start-1 row-start-1 w-0 min-w-full bg-transparent px-0.5 text-center font-bold caret-brand outline-none placeholder:text-muted/60',
+                    // без переходов (и у мерки выше): при «уменьшить движение» общее правило даёт каждому свойству переход в 0,01 мс,
+                    // и ширина, снятая сразу после смены шрифта, была бы прежней
+                    'money col-start-1 row-start-1 w-0 min-w-full bg-transparent px-0.5 text-center font-bold caret-brand outline-none transition-none placeholder:text-muted/60',
                     font,
                   )}
                 />
@@ -317,14 +389,17 @@ export function AmountInput({
           );
           if (bare) return amountRow;
           // Поле суммы: рамка с мягкой тенью; кнопки по краям занимают места поровну, чтобы цифры стояли по центру.
+          // На совсем узком экране (до 360 px) левое место не шире одной кнопки: сумма встаёт чуть правее центра, зато читается целиком.
           const side = start || end ? (wideSides ? 'w-[84px] shrink-0' : 'w-10 shrink-0') : null;
+          const startSide = side && wideSides ? `${side} max-[359px]:w-10` : side;
           return (
             <div
               data-amount-card=""
+              data-tone={tone}
               onFocusCapture={onActivate}
               onClick={onActivate}
               className={cn(
-                'flex items-center gap-1 rounded-2xl border bg-surface px-2 shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_8px_18px_-14px_rgb(var(--brand)/0.5)] transition-colors',
+                'amount-stage flex items-center gap-1 rounded-2xl border bg-surface px-2 shadow-[inset_0_1px_0_rgb(255_255_255/0.55),0_8px_18px_-14px_rgb(var(--brand)/0.5)] transition-colors',
                 active === undefined
                   ? 'border-border/70 focus-within:border-brand/60 focus-within:ring-2 focus-within:ring-brand/15'
                   : active
@@ -333,7 +408,7 @@ export function AmountInput({
                 message && 'border-danger/60',
               )}
             >
-              {side && <div className={cn(side, 'flex justify-start')}>{start}</div>}
+              {startSide && <div className={cn(startSide, 'flex justify-start')}>{start}</div>}
               <div className="min-w-0 flex-1 overflow-hidden">{amountRow}</div>
               {side && <div className={cn(side, 'flex justify-end')}>{end}</div>}
             </div>

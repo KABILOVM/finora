@@ -48,9 +48,11 @@ test.describe('9. Нет ошибок в консоли', () => {
     await expect(add).toBeHidden();
     await expect(page.getByRole('heading', { level: 1, name: 'Операции' })).toBeVisible();
 
-    // Esc закрывает шит
+    // Esc закрывает шит. Нажимаем, когда окно готово: оно появляется на странице на миг раньше, чем подключает свои клавиши и ставит
+    // курсор в сумму, и Esc, отправленный в этот миг, уходил в пустоту (раз на несколько десятков прогонов, и до этой правки тоже).
     await page.locator('a[href="#/add"]:visible').first().click();
     await expect(add).toBeVisible();
+    await expect(add.getByRole('textbox', { name: /^Сумма/ })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(add).toBeHidden();
   });
