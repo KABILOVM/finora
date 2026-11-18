@@ -120,7 +120,7 @@ export function usableLedge(b: Box, vw: number, vh: number): boolean {
   return b.width >= 96 && b.height >= 28 && b.top > 4 && b.top < vh && b.left < vw && b.left + b.width > 0;
 }
 
-/** Украшение «в некоторых местах» (иней, роса, блик): у каждого третьего блока по порядку на странице, углы чередуются. */
+/** Украшение «в некоторых местах» (иней, ростки, листья): у каждого третьего блока по порядку на странице, углы чередуются. */
 export function accentCorner(index: number): 'left' | 'right' | null {
   if (index % 3 !== 0) return null;
   return (index / 3) % 2 === 0 ? 'left' : 'right';

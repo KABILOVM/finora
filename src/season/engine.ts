@@ -5,7 +5,7 @@ import { ACCENT_SIZE, accentSprite, paintSprout, particleSprites, type Sprite } 
 
 /**
  * Сезонные эффекты: частицы падают поверх страницы, ложатся на верхний край блоков и стряхиваются нажатием, а у некоторых блоков
- * в углу — украшение сезона (иней, росток, блик, капли). Обычный код без React: запускается на двух элементах и возвращает остановку.
+ * в углу — украшение сезона (иней, росток, горсть листьев). Летом ничего не ложится: только пух летает. Обычный код без React: запускается на двух элементах и возвращает остановку.
  *
  * Как устроено, чтобы не нагружать телефон:
  *  — каждая частица — маленькая картинка, которую двигает САМ браузер (Web Animations: путь задан заранее и повторяется по кругу,
@@ -115,6 +115,8 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
   // без Web Animations (очень старый браузер, тестовая среда) эффекта нет: это украшение, а не функция
   if (typeof sky.animate !== 'function') return () => undefined;
   const preset = SEASON_PRESETS[season];
+  /** Ничего не ложится на блоки (лето): блоки не отслеживаются, слоёв с лежащим нет, нажатие ничего не стряхивает. */
+  const ledgeless = preset.pile === 'none';
 
   let w = window.innerWidth;
   let h = window.innerHeight;
@@ -311,6 +313,7 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
 
   /** Заново находит блоки на странице: новые начинает отслеживать, исчезнувшие забывает. */
   const collect = () => {
+    if (ledgeless) return;
     const root = document.getElementById('main') ?? document.body;
     const seen = new Set<Element>();
     let index = 0;
@@ -505,7 +508,7 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
       l.py = y;
     }
 
-    if (l.corner === null || preset.accent === 'sprout' || l.width < 180 || l.height < 44) {
+    if (l.corner === null || preset.accent === 'sprout' || preset.accent === 'none' || l.width < 180 || l.height < 44) {
       if (l.accent) {
         l.accent.remove();
         l.accent = null;
@@ -519,7 +522,7 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
     const key = `${l.corner}|${aw}|${ah}|${radius}`;
     if (l.accentKey !== key) {
       l.accent?.remove();
-      l.accent = makeCanvas(preset.accent === 'glare' ? 'season-accent season-glare fx-loop' : 'season-accent', aw, ah);
+      l.accent = makeCanvas('season-accent', aw, ah);
       l.accentKey = key;
       l.ax = NaN;
       if (!accents.has(radius)) accents.set(radius, accentSprite(preset.accent, radius, dark, dpr));
@@ -757,12 +760,14 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
     followFrame = requestAnimationFrame(track);
   };
   function follow(ms: number): void {
+    if (ledgeless) return;
     followUntil = Math.max(followUntil, performance.now() + ms);
     if (followFrame === 0) followFrame = requestAnimationFrame(track);
   }
 
   const start = () => {
-    if (timer !== 0 || document.hidden) return;
+    // без блоков смотреть не на что: ни таймера, ни измерений — пух летит сам, его ведёт браузер
+    if (ledgeless || timer !== 0 || document.hidden) return;
     needSurvey = true;
     timer = window.setInterval(tick, TICK_MS);
     tick();
@@ -807,9 +812,9 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
     scrolled = true;
   };
 
-  const mo = typeof MutationObserver === 'function' ? new MutationObserver(() => (needCollect = true)) : null;
+  const mo = !ledgeless && typeof MutationObserver === 'function' ? new MutationObserver(() => (needCollect = true)) : null;
   mo?.observe(document.getElementById('main') ?? document.body, { childList: true, subtree: true });
-  ro?.observe(document.getElementById('main') ?? document.body);
+  if (!ledgeless) ro?.observe(document.getElementById('main') ?? document.body);
 
   resize();
   start();

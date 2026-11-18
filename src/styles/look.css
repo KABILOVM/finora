@@ -834,9 +834,11 @@ html[data-hero='banner'] .hero-amount {
   z-index: 15;
   pointer-events: none;
 }
+/* Падающие частицы — НАД лежащим: снежинка летит перед сугробом и перед листьями на блоке, а не прячется под ними. */
 .season-sky {
   position: fixed;
   inset: 0;
+  z-index: 2;
   overflow: hidden;
   contain: strict;
 }
@@ -850,6 +852,7 @@ html[data-hero='banner'] .hero-amount {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 1;
   width: 0;
   height: 0;
 }
@@ -864,14 +867,88 @@ html[data-hero='banner'] .hero-amount {
 .season-accent {
   z-index: 1;
 }
-/* Солнечный блик медленно «дышит». */
-@keyframes season-glare {
-  50% {
-    opacity: 0.55;
+/*
+ * Лето: жара. Позади частиц и лежащего, поверх страницы: тёплое свечение солнца в верхнем углу, жар от земли у нижнего края и два
+ * широких полупрозрачных «марева», которые медленно поднимаются вверх и тают. Всё это — прозрачность и сдвиг (transform) одной
+ * анимации на элемент: такое браузер ведёт целиком в потоке отрисовки, без нашего кода. Слой лёгкий и очень прозрачный: буквы
+ * под ним читаются как обычно.
+ */
+.season-heat {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  contain: strict;
+}
+@keyframes heat-sun {
+  from {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.08);
   }
 }
-.season-glare {
-  animation: season-glare 6s ease-in-out infinite;
+.season-heat-sun {
+  position: absolute;
+  top: -30vw;
+  right: -30vw;
+  width: 90vw;
+  height: 90vw;
+  max-width: 720px;
+  max-height: 720px;
+  background: radial-gradient(circle, rgb(255 196 84 / 0.4) 0%, rgb(255 178 70 / 0.18) 36%, rgb(255 170 60 / 0) 68%);
+  animation: heat-sun 7s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+@keyframes heat-ground {
+  from {
+    opacity: 0.62;
+    transform: translateY(2vh);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-1vh);
+  }
+}
+.season-heat-ground {
+  position: absolute;
+  inset: auto 0 -4vh;
+  height: 34vh;
+  background: linear-gradient(to top, rgb(255 170 60 / 0.2), rgb(255 190 90 / 0.08) 48%, rgb(255 190 90 / 0));
+  animation: heat-ground 5s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+@keyframes heat-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scaleY(0.85);
+  }
+  18% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-135vh) scaleY(1.25);
+  }
+}
+.season-heat-wave {
+  position: absolute;
+  left: -10%;
+  bottom: -24vh;
+  width: 120%;
+  height: 24vh;
+  background: linear-gradient(to bottom, rgb(255 214 140 / 0), rgb(255 204 120 / 0.13) 50%, rgb(255 214 140 / 0));
+  opacity: 0;
+  animation: heat-rise 15s linear infinite;
+  will-change: transform, opacity;
+}
+.season-heat-wave:nth-child(4) {
+  animation-delay: -7.5s;
 }
 
 /* Сетка (киберпанк): неоновая сетка уходит к горизонту и бежит на зрителя. */

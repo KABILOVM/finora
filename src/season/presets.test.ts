@@ -16,20 +16,29 @@ describe('описания сезонов', () => {
       expect(p.alpha[1], name).toBeLessThanOrEqual(1);
       expect(p.vy[0], `${name}: падает вниз`).toBeGreaterThan(0);
       expect(p.vy[0], name).toBeLessThanOrEqual(p.vy[1]);
-      expect(p.stick, name).toBeGreaterThan(0);
+      // ложится на блоки только то, что вообще ложится: у «ничего» доля нулевая
+      if (p.pile === 'none') expect(p.stick, name).toBe(0);
+      else expect(p.stick, name).toBeGreaterThan(0);
       expect(p.stick, name).toBeLessThanOrEqual(1);
       expect(p.gravity, name).toBeGreaterThan(0);
     }
   });
 
-  it('сугробом лежит только снег, остальное — россыпью; у каждого сезона своё украшение', () => {
+  it('сугробом лежит только снег, остальное — россыпью, а летом не лежит ничего; у каждого сезона своё украшение', () => {
     expect(Object.entries(SEASON_PRESETS).map(([name, p]) => [name, p.pile, p.accent])).toEqual([
       ['winter', 'cap', 'frost'],
       ['spring', 'scatter', 'sprout'],
-      ['summer', 'scatter', 'glare'],
-      ['autumn', 'scatter', 'drops'],
+      ['summer', 'none', 'none'],
+      ['autumn', 'scatter', 'leaves'],
     ]);
     expect(SEASON_PRESETS.winter.grow).toBeGreaterThan(0);
+  });
+
+  it('летом — жара: марево поверх страницы; пуха мало, он только летает', () => {
+    expect(Object.entries(SEASON_PRESETS).filter(([, p]) => p.haze).map(([name]) => name)).toEqual(['summer']);
+    // пуха заметно меньше, чем снега или листьев
+    expect(SEASON_PRESETS.summer.count).toBeLessThanOrEqual(10);
+    expect(SEASON_PRESETS.summer.count).toBeLessThan(SEASON_PRESETS.autumn.count);
   });
 });
 

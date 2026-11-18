@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render } from '@/components/testUtils';
+import { act, render, waitFor } from '@/components/testUtils';
 import { SceneHost } from '@/scene/SceneHost';
 import { readSeasonPref, saveFxPref, saveSeasonPref, saveSkinPref } from '@/theme';
 import { SeasonHost } from './SeasonHost';
@@ -109,6 +109,20 @@ describe('слой сезонных эффектов', () => {
     );
     expect(layer()?.getAttribute('data-season-layer')).toBe('winter');
     expect(sceneLayer()).toBeNull();
+  });
+
+  it('летом поверх страницы жара: свечение солнца и волны марева; в другие сезоны её нет', async () => {
+    act(() => saveSkinPref('classic'));
+    act(() => saveSeasonPref('summer'));
+    render(<SeasonHost />);
+    // код слоя грузится отдельным файлом
+    await waitFor(() => expect(document.querySelector('.season-heat')).not.toBeNull());
+    expect(document.querySelector('.season-heat-sun')).not.toBeNull();
+    expect(document.querySelectorAll('.season-heat-wave').length).toBeGreaterThanOrEqual(2);
+    act(() => saveSeasonPref('winter'));
+    expect(document.querySelector('.season-heat')).toBeNull();
+    act(() => saveSeasonPref('summer'));
+    expect(document.querySelector('.season-heat')).not.toBeNull();
   });
 
   it('фон образа, нарисованный в CSS (сетка, огни), остаётся вместе с сезоном', () => {

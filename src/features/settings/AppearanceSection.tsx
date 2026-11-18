@@ -30,7 +30,7 @@ const SEASON_OPTIONS = [
 ] as const satisfies readonly { value: SeasonPref; label: string; icon?: string }[];
 
 /** Что летает в каждом сезоне — для подписи под выбором. */
-const SEASON_TEXT = { winter: 'идёт снег', spring: 'летят лепестки', summer: 'летит пух', autumn: 'падают листья' } as const;
+const SEASON_TEXT = { winter: 'идёт снег', spring: 'летят лепестки', summer: 'жара и немного пуха', autumn: 'падают листья' } as const;
 
 /**
  * Оформление: тема, образ (строка ведёт на витрину образов), цвет акцента (готовые цвета и «Свой цвет»), живой фон, сезонные
@@ -99,7 +99,7 @@ export function AppearanceSection() {
           <div>
             <p className="font-medium">Сезонные эффекты</p>
             <p className="text-sm text-muted">
-              Зимой идёт снег, весной летят лепестки, летом — пух, осенью — листья. Они ложатся на блоки; нажмите на блок, чтобы стряхнуть.
+              Зимой идёт снег, весной летят лепестки, летом жара и немного пуха, осенью — листья. Снег, лепестки и листья ложатся на блоки; нажмите на блок, чтобы стряхнуть.
               {season === 'auto' && ` «Авто» выбирает по дате: сейчас ${SEASON_TEXT[seasonOf(new Date())]}.`}
             </p>
           </div>

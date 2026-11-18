@@ -34,6 +34,13 @@ test.describe('74. Сезонные эффекты', () => {
     await expect.poll(() => page.locator('.season-flake').count(), { message: 'снежинки летят' }).toBeGreaterThan(10);
     const flakes = await page.locator('.season-flake').count();
 
+    // падающие снежинки рисуются НАД лежащим на блоках: летят перед сугробом, а не прячутся под ним
+    const z = await page.evaluate(() => ({
+      sky: Number(getComputedStyle(document.querySelector('.season-sky')!).zIndex),
+      ground: Number(getComputedStyle(document.querySelector('.season-ground')!).zIndex),
+    }));
+    expect(z.sky, 'слой падающих частиц над слоем лежащего').toBeGreaterThan(z.ground);
+
     // на первом блоке под карточкой «Всего» лежит снег
     const card = '#main .card';
     await page.locator(card).first().scrollIntoViewIfNeeded();
