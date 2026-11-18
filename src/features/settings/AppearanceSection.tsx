@@ -8,7 +8,9 @@ import { readActiveCustomSkin } from '@/customSkin';
 import { paletteFromHex } from '@/lib/palette';
 import { CUSTOM_SKIN, isBaseSkin } from '@/skinCore';
 import { skinById } from '@/skins';
-import { readCustomPalette, saveCustomAccent, useAccentPref, useCustomAccent, useFxPref, useSkinPref, useThemePref, type ThemePref } from '@/theme';
+import { ChipPicker } from '@/components/ChipPicker';
+import { isSeasonPref, seasonOf, type SeasonPref } from '@/season/season';
+import { readCustomPalette, saveCustomAccent, useAccentPref, useCustomAccent, useFxPref, useSeasonPref, useSkinPref, useThemePref, type ThemePref } from '@/theme';
 import { AccentPicker } from './AccentPicker';
 import { SettingsSection } from './SettingsSection';
 
@@ -18,8 +20,21 @@ const OPTIONS = [
   { value: 'system', label: 'Авто' },
 ] as const satisfies readonly { value: ThemePref; label: string }[];
 
+const SEASON_OPTIONS = [
+  { value: 'auto', label: 'Авто' },
+  { value: 'winter', label: 'Зима', icon: '❄️' },
+  { value: 'spring', label: 'Весна', icon: '🌸' },
+  { value: 'summer', label: 'Лето', icon: '☀️' },
+  { value: 'autumn', label: 'Осень', icon: '🍂' },
+  { value: 'off', label: 'Выкл' },
+] as const satisfies readonly { value: SeasonPref; label: string; icon?: string }[];
+
+/** Что летает в каждом сезоне — для подписи под выбором. */
+const SEASON_TEXT = { winter: 'идёт снег', spring: 'летят лепестки', summer: 'летит пух', autumn: 'падают листья' } as const;
+
 /**
- * Оформление: тема, образ (строка ведёт на витрину образов), цвет акцента (готовые цвета и «Свой цвет»), живой фон и скрытие сумм.
+ * Оформление: тема, образ (строка ведёт на витрину образов), цвет акцента (готовые цвета и «Свой цвет»), живой фон, сезонные
+ * эффекты и скрытие сумм.
  * Цвет акцента виден только у «Классики» и «Классики (прежней)»: остальные образы задают цвета сами.
  */
 export function AppearanceSection() {
@@ -27,6 +42,7 @@ export function AppearanceSection() {
   const [accent, setAccent] = useAccentPref();
   const [skin] = useSkinPref();
   const [fx, setFx] = useFxPref();
+  const [season, setSeason] = useSeasonPref();
   const customHex = useCustomAccent();
   // Палитру «своего цвета» строит генератор (он грузится только здесь) и сохраняет вместе с цветом: основному файлу он при запуске не нужен
   const setCustomHex = useCallback((hex: string): boolean => {
@@ -73,10 +89,23 @@ export function AppearanceSection() {
           <p id="fx-label" className="font-medium">
             Живой фон и эффекты
           </p>
-          <p className="text-sm text-muted">Снег, лепестки, огни и другие украшения образов. Выключите, если отвлекают или телефон греется.</p>
+          <p className="text-sm text-muted">Сезонные эффекты, а ещё снег, лепестки, огни и другие украшения образов. Выключите, если отвлекают или телефон греется.</p>
         </div>
         <Switch checked={fx} onChange={() => setFx(!fx)} labelledBy="fx-label" />
       </div>
+      {/* Сезон — часть эффектов: выключены эффекты — выбирать нечего */}
+      {fx && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <p className="font-medium">Сезонные эффекты</p>
+            <p className="text-sm text-muted">
+              Зимой идёт снег, весной летят лепестки, летом — пух, осенью — листья. Они ложатся на блоки; нажмите на блок, чтобы стряхнуть.
+              {season === 'auto' && ` «Авто» выбирает по дате: сейчас ${SEASON_TEXT[seasonOf(new Date())]}.`}
+            </p>
+          </div>
+          <ChipPicker ariaLabel="Сезонные эффекты" options={SEASON_OPTIONS} value={season} onChange={(v) => isSeasonPref(v) && setSeason(v)} />
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p id="hide-amounts-label" className="font-medium">

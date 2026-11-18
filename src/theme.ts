@@ -17,6 +17,7 @@ import {
   type SkinId,
   type SkinTraits,
 } from './skinCore';
+import { DEFAULT_SEASON_PREF, isSeasonPref, type SeasonPref } from './season/season';
 
 /**
  * Тема оформления: «светлая» (по умолчанию), «тёмная» или «как в системе». Хранится на самом устройстве (localStorage),
@@ -97,6 +98,8 @@ const CUSTOM_KEY = 'finora-accent-custom';
 const CUSTOM_PALETTE_KEY = 'finora-accent-custom-palette';
 /** «Живой фон и эффекты»: 'off' — выключены человеком. Хранится на устройстве, как тема. */
 const FX_KEY = 'finora-fx';
+/** «Сезонные эффекты»: сезон или 'off'; ключа нет — «Авто» (по дате). Хранится на устройстве, как тема. */
+const SEASON_KEY = 'finora-season';
 const EVENT = 'finora-theme-change';
 
 const accentById = (id: string | null): AccentOption | undefined => ACCENTS.find((a) => a.id === id);
@@ -339,6 +342,27 @@ export function saveFxPref(on: boolean): void {
   window.dispatchEvent(new Event(EVENT));
 }
 
+/** Выбор сезонных эффектов (src/season): «Авто», если ничего не выбрано или значение испорчено. */
+export function readSeasonPref(): SeasonPref {
+  try {
+    const stored = localStorage.getItem(SEASON_KEY);
+    if (isSeasonPref(stored)) return stored;
+  } catch {
+    /* хранилище недоступно — «Авто» */
+  }
+  return DEFAULT_SEASON_PREF;
+}
+
+export function saveSeasonPref(pref: SeasonPref): void {
+  try {
+    if (pref === DEFAULT_SEASON_PREF) localStorage.removeItem(SEASON_KEY);
+    else localStorage.setItem(SEASON_KEY, pref);
+  } catch {
+    /* не сохранилось — выбор всё равно применится до перезагрузки */
+  }
+  window.dispatchEvent(new Event(EVENT));
+}
+
 /** Свой набор значков образа: грузится лениво и ставится, если образ за это время не сменили; у образов без набора — прежние значки. */
 function loadSkinIcons(id: SkinId, onPage: SkinId = id): void {
   if (!SKIN_ICON_PACKS.includes(id)) {
@@ -417,6 +441,12 @@ export function useSkinPref(): [SkinId, (id: SkinId) => void] {
 export function useFxPref(): [boolean, (on: boolean) => void] {
   const on = useSyncExternalStore(subscribe, readFxPref, () => true);
   return [on, saveFxPref];
+}
+
+/** Выбор сезонных эффектов и функция для его смены; компоненты обновляются сами. */
+export function useSeasonPref(): [SeasonPref, (pref: SeasonPref) => void] {
+  const pref = useSyncExternalStore(subscribe, readSeasonPref, () => DEFAULT_SEASON_PREF);
+  return [pref, saveSeasonPref];
 }
 
 /** Живой фон образа на странице; компонент обновляется сам при смене образа. */
