@@ -1,11 +1,11 @@
-import { accentCorner, capClear, capFill, capLand, capVolume, COLUMN, cornerDrop, makeCap, makeScatter, particleCount, scatterLand, usableLedge, type Cap, type Scatter } from './pile';
+import { accentCorner, capClear, capFill, capLand, capVolume, COLUMN, cornerDrop, makeCap, makeScatter, particleCount, scatterLand, shiftClock, usableLedge, type Cap, type Scatter } from './pile';
 import { CAP_HEIGHT, SCATTER_MAX, SCATTER_SPACING, SEASON_PRESETS } from './presets';
 import type { SeasonKind } from './season';
 import { ACCENT_SIZE, accentSprite, paintSprout, particleSprites, type Sprite } from './sprites';
 
 /**
  * Сезонные эффекты: частицы падают поверх страницы, ложатся на верхний край блоков и стряхиваются нажатием, а у некоторых блоков
- * в углу — украшение сезона (иней, росток, блик, капли). Обычный код без React: запускается на двух элементах и возвращает остановку.
+ * в углу — украшение сезона (иней, росток, горсть листьев). Летом ничего не ложится: только пух летает; дождь только брызгает. Обычный код без React: запускается на двух элементах и возвращает остановку.
  *
  * Как устроено, чтобы не нагружать телефон:
  *  — каждая частица — маленькая картинка, которую двигает САМ браузер (Web Animations: путь задан заранее и повторяется по кругу,
@@ -37,6 +37,8 @@ interface Flake {
   el: HTMLCanvasElement;
   fall: Animation | null;
   sprite: number;
+  /** Сколько от прокрутки страницы частица повторяет (0…1): мелкие, дальние отстают от страницы — получается глубина. */
+  k: number;
   /** Радиус, px, и половина стороны картинки (с полями под свечение). */
   size: number;
   half: number;
@@ -115,6 +117,10 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
   // без Web Animations (очень старый браузер, тестовая среда) эффекта нет: это украшение, а не функция
   if (typeof sky.animate !== 'function') return () => undefined;
   const preset = SEASON_PRESETS[season];
+  /** Ничего не ложится на блоки (лето): блоки не отслеживаются, слоёв с лежащим нет, нажатие ничего не стряхивает. */
+  const ledgeless = preset.pile === 'none';
+  /** На блоке что-то лежит (сугроб, россыпь), а не только брызгает. */
+  const holdsPile = preset.pile === 'cap' || preset.pile === 'scatter';
 
   let w = window.innerWidth;
   let h = window.innerHeight;
@@ -184,10 +190,13 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
    * (при запуске и возврате на вкладку), иначе с самого верха (после приземления).
    */
   const fall = (f: Flake, anywhere: boolean) => {
-    f.x0 = rand(-40, w + 40);
     f.vx = rand(preset.vx[0], preset.vx[1]);
     f.phase = Math.random() * Math.PI * 2;
     f.time = (h + EDGE * 2) / f.vy;
+    // в любом месте по ширине оказывается СЕРЕДИНА пути: ветер сносит частицу вбок, и без этого экран заполнялся бы неравномерно
+    f.x0 = rand(-40, w + 40) - (f.vx * f.time) / 2;
+    // капля вытянута по ходу полёта
+    if (preset.along) f.angle = Math.atan2(f.vy, f.vx);
     // путь — ломаная: покачивание задано точками примерно раз в секунду, кувыркание — вдвое чаще
     const steps = Math.min(80, Math.max(3, Math.ceil(f.time / (preset.flutter ? 0.45 : 1.1))));
     const frames: Keyframe[] = [];
@@ -197,7 +206,10 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
     }
     const offset = anywhere ? Math.random() * f.time * 1000 : 0;
     f.fall?.cancel();
-    f.fall = f.el.animate(frames, { duration: f.time * 1000, easing: 'linear', iterations: Infinity, delay: -offset });
+    const anim = f.el.animate(frames, { duration: f.time * 1000, easing: 'linear', iterations: Infinity });
+    // время ставим сами (а не через delay): так его можно сдвигать вместе со скроллом, см. shiftFlakes
+    anim.currentTime = offset;
+    f.fall = anim;
     f.startedAt = performance.now() - offset;
     f.lastY = yOf(f, clock(f));
   };
@@ -212,6 +224,7 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
       el,
       fall: null,
       sprite,
+      k: 0.3 + 0.6 * depth,
       size: (preset.size[0] + (preset.size[1] - preset.size[0]) * depth) * (sprites[sprite]?.boost ?? 1),
       half: 0,
       // крупные ближе к зрителю: падают быстрее и видны ярче
@@ -311,6 +324,7 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
 
   /** Заново находит блоки на странице: новые начинает отслеживать, исчезнувшие забывает. */
   const collect = () => {
+    if (ledgeless) return;
     const root = document.getElementById('main') ?? document.body;
     const seen = new Set<Element>();
     let index = 0;
@@ -505,7 +519,7 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
       l.py = y;
     }
 
-    if (l.corner === null || preset.accent === 'sprout' || l.width < 180 || l.height < 44) {
+    if (l.corner === null || preset.accent === 'sprout' || preset.accent === 'none' || l.width < 180 || l.height < 44) {
       if (l.accent) {
         l.accent.remove();
         l.accent = null;
@@ -519,7 +533,7 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
     const key = `${l.corner}|${aw}|${ah}|${radius}`;
     if (l.accentKey !== key) {
       l.accent?.remove();
-      l.accent = makeCanvas(preset.accent === 'glare' ? 'season-accent season-glare fx-loop' : 'season-accent', aw, ah);
+      l.accent = makeCanvas('season-accent', aw, ah);
       l.accentKey = key;
       l.ax = NaN;
       if (!accents.has(radius)) accents.set(radius, accentSprite(preset.accent, radius, dark, dpr));
@@ -559,6 +573,8 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
         if (l.pile || l.accent) removeCanvases(l);
         continue;
       }
+      // дождь только брызгает: лежащего нет, холсты не нужны
+      if (!holdsPile) continue;
       if (Math.abs(l.width - l.builtWidth) > 3) buildPile(l);
       place(l);
     }
@@ -593,8 +609,37 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
 
   /* ───────────── Падение, приземление, стряхивание ───────────── */
 
+  /** Брызги: капля разбилась о верхний край блока — маленькое колечко расходится и тает (масштаб и прозрачность, одна анимация). */
+  const splash = (x: number, y: number) => {
+    if (debris >= MAX_DEBRIS) return;
+    const el = document.createElement('span');
+    el.className = 'season-splash';
+    el.style.left = `${x.toFixed(1)}px`;
+    el.style.top = `${y.toFixed(1)}px`;
+    sky.appendChild(el);
+    debris++;
+    const anim = el.animate(
+      [
+        { transform: 'scale(0.3)', opacity: 0.75 },
+        { transform: 'scale(1.8)', opacity: 0 },
+      ],
+      { duration: 380, easing: 'ease-out', fill: 'both' },
+    );
+    const done = () => {
+      if (!el.isConnected) return;
+      el.remove();
+      debris--;
+    };
+    anim.onfinish = done;
+    anim.oncancel = done;
+  };
+
   /** Частица долетела до блока в точке `x` от его левого края. false — не легла (места нет), летит дальше. */
   const settle = (l: Ledge, x: number, p: Flake): boolean => {
+    if (preset.pile === 'splash') {
+      splash(l.left + x, l.top);
+      return true;
+    }
     if (l.cap) {
       if (!capLand(l.cap, x, preset.grow * (0.7 + 0.6 * Math.min(1, p.size / preset.size[1])))) return false;
     } else if (l.scatter) {
@@ -757,12 +802,14 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
     followFrame = requestAnimationFrame(track);
   };
   function follow(ms: number): void {
+    if (ledgeless) return;
     followUntil = Math.max(followUntil, performance.now() + ms);
     if (followFrame === 0) followFrame = requestAnimationFrame(track);
   }
 
   const start = () => {
-    if (timer !== 0 || document.hidden) return;
+    // без блоков смотреть не на что: ни таймера, ни измерений — пух летит сам, его ведёт браузер
+    if (ledgeless || timer !== 0 || document.hidden) return;
     needSurvey = true;
     timer = window.setInterval(tick, TICK_MS);
     tick();
@@ -801,15 +848,34 @@ export function startSeason(sky: HTMLElement, ground: HTMLElement, season: Seaso
     survey(); // точное положение блока в момент нажатия
     if (l.usable) shake(l);
   };
+  /** Прокрутка, на которую частицы уже ответили: от неё считается, на сколько страницу прокрутили с прошлого раза. */
+  let flakeScrollY = window.scrollY;
+  /**
+   * Страницу прокрутили на `dy` px: летящие частицы движутся вместе с ней (k от прокрутки, мелкие меньше). Для браузера это просто
+   * новое время анимации частицы — пути те же, ломаются только часы (shiftClock).
+   */
+  const shiftFlakes = (dy: number) => {
+    if (Math.abs(dy) > h) return; // прыжок (ссылка-якорь, «наверх»): частицы не дёргаем
+    const now = performance.now();
+    for (const f of flakes) {
+      const cur = shiftClock(now - f.startedAt, f.time * 1000, dy, f.k, f.vy);
+      f.startedAt = now - cur;
+      if (f.fall) f.fall.currentTime = cur;
+      f.lastY = yOf(f, cur / 1000);
+    }
+  };
   const onScroll = () => {
     scrollX = window.scrollX;
     scrollY = window.scrollY;
     scrolled = true;
+    const dy = scrollY - flakeScrollY;
+    flakeScrollY = scrollY;
+    if (dy !== 0 && flakes.length > 0) shiftFlakes(dy);
   };
 
-  const mo = typeof MutationObserver === 'function' ? new MutationObserver(() => (needCollect = true)) : null;
+  const mo = !ledgeless && typeof MutationObserver === 'function' ? new MutationObserver(() => (needCollect = true)) : null;
   mo?.observe(document.getElementById('main') ?? document.body, { childList: true, subtree: true });
-  ro?.observe(document.getElementById('main') ?? document.body);
+  if (!ledgeless) ro?.observe(document.getElementById('main') ?? document.body);
 
   resize();
   start();

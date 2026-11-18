@@ -74,6 +74,29 @@ function crystal(ctx: Ctx, r: number, color: string): void {
   }
 }
 
+/** Капля дождя в полёте: тонкая линия, у хвоста прозрачная, у головы плотная. Голова — справа (по ней частицу поворачивают по ходу полёта). */
+function streak(ctx: Ctx, r: number, color: string): void {
+  const g = ctx.createLinearGradient(-r, 0, r, 0);
+  g.addColorStop(0, rgb(color, 0));
+  g.addColorStop(0.6, rgb(color, 0.55));
+  g.addColorStop(1, rgb(color, 1));
+  ctx.strokeStyle = g;
+  ctx.lineWidth = r * 0.23;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r, 0);
+  ctx.lineTo(r, 0);
+  ctx.stroke();
+}
+
+/** Снег в метели: мягкая точка, растянутая вдоль ветра (след от быстрого движения). Длинная ось — по +x, частицу поворачивают по полёту. */
+function windDot(ctx: Ctx, r: number, core: string, rim: string, rimAlpha: number): void {
+  ctx.save();
+  ctx.scale(3.4, 1);
+  softDot(ctx, r, core, rim, rimAlpha);
+  ctx.restore();
+}
+
 /** Лепесток с выемкой на конце (как у цветка абрикоса или сакуры): тёмное основание, светлый край. */
 function petal(ctx: Ctx, r: number, base: string, tip: string): void {
   const g = ctx.createLinearGradient(0, r, 0, -r);
@@ -155,14 +178,25 @@ function leaf(ctx: Ctx, r: number, color: string, shade: string): void {
 /** Картинки падающих частиц сезона. `dark` — тёмная тема; `dpr` — плотность точек экрана. */
 export function particleSprites(season: SeasonKind, dark: boolean, dpr: number): Sprite[] {
   const list: (Sprite | null)[] = [];
-  if (season === 'winter') {
+  if (season === 'winter' || season === 'blizzard') {
     // на светлой теме белая снежинка на белой карточке не видна: она вся голубая, без белой середины (иначе выходит «колечко»)
     const core = dark ? '255 255 255' : '158 190 238';
     const rim = dark ? '214 230 255' : '158 190 238';
     const line = dark ? '236 244 255' : '120 160 220';
-    list.push(sprite(7, 4, dpr, 6, 1, false, (c) => softDot(c, 4, core, rim, dark ? 0.75 : 0.55)));
-    list.push(sprite(6, 4, dpr, 3, 0.75, false, (c) => softDot(c, 3.6, dark ? core : '140 176 232', rim, dark ? 1 : 0.6)));
-    list.push(sprite(9, 8, dpr, 2, 2.1, true, (c) => crystal(c, 8, line)));
+    if (season === 'blizzard') {
+      // метель: быстрые вытянутые по ветру штрихи и крупные снежинки среди них
+      list.push(sprite(14, 4, dpr, 6, 1, false, (c) => windDot(c, 2.6, core, rim, dark ? 0.75 : 0.6)));
+      list.push(sprite(14, 4, dpr, 3, 0.8, false, (c) => windDot(c, 2.6, dark ? core : '140 176 232', rim, dark ? 1 : 0.65)));
+      list.push(sprite(9, 8, dpr, 1, 2.2, true, (c) => crystal(c, 8, line)));
+    } else {
+      list.push(sprite(7, 4, dpr, 6, 1, false, (c) => softDot(c, 4, core, rim, dark ? 0.75 : 0.55)));
+      list.push(sprite(6, 4, dpr, 3, 0.75, false, (c) => softDot(c, 3.6, dark ? core : '140 176 232', rim, dark ? 1 : 0.6)));
+      list.push(sprite(9, 8, dpr, 2, 2.1, true, (c) => crystal(c, 8, line)));
+    }
+  } else if (season === 'rain' || season === 'downpour') {
+    // светлая тема: капля тёмно-голубая; тёмная: светло-голубая
+    const color = dark ? '178 206 246' : '62 100 170';
+    list.push(sprite(12, 10, dpr, 1, 1, false, (c) => streak(c, 10, color)));
   } else if (season === 'spring') {
     const tones: readonly (readonly [string, string])[] = dark
       ? [['246 138 176', '255 206 222'], ['255 176 200', '255 232 240'], ['236 118 164', '255 190 212']]
@@ -171,8 +205,8 @@ export function particleSprites(season: SeasonKind, dark: boolean, dpr: number):
   } else if (season === 'summer') {
     const thread = dark ? '255 250 232' : '148 132 98';
     const glow = dark ? '255 246 214' : '255 240 196';
-    list.push(sprite(11, 9, dpr, 3, 1, true, (c) => fluff(c, 9, thread, glow, dark ? 0.5 : 0.75)));
-    list.push(sprite(8, 6, dpr, 1, 0.7, false, (c) => softDot(c, 4.4, dark ? '255 250 232' : '250 244 224', dark ? '255 236 190' : '170 150 110', dark ? 0.5 : 0.7)));
+    // только пух одуванчика (без «точек»): его мало, и он должен читаться как пух
+    list.push(sprite(11, 9, dpr, 1, 1, true, (c) => fluff(c, 9, thread, glow, dark ? 0.5 : 0.75)));
   } else {
     const tones: readonly (readonly [string, string])[] = [
       ['236 158 44', '178 96 22'],
@@ -273,68 +307,31 @@ function frost(ctx: Ctx, r: number, dark: boolean): void {
   ctx.globalCompositeOperation = 'source-over';
 }
 
-/** Солнечный блик: тёплое пятно света в углу и несколько лучей. */
-function glare(ctx: Ctx, dark: boolean): void {
-  const S = ACCENT_SIZE;
-  const warm = dark ? '255 206 112' : '255 186 60';
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, S);
-  g.addColorStop(0, rgb(warm, dark ? 0.5 : 0.46));
-  g.addColorStop(0.45, rgb(warm, dark ? 0.2 : 0.18));
-  g.addColorStop(1, rgb(warm, 0));
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, S, S);
-  // лучи: к концу тают, чтобы не выглядеть прожектором
-  const ray = ctx.createLinearGradient(0, 0, S * 0.8, 0);
-  ray.addColorStop(0, rgb(dark ? '255 236 180' : '255 222 140', dark ? 0.2 : 0.26));
-  ray.addColorStop(1, rgb(dark ? '255 236 180' : '255 222 140', 0));
-  ctx.fillStyle = ray;
-  for (const a of [0.3, 0.78, 1.26]) {
-    ctx.save();
-    ctx.rotate(a);
-    ctx.beginPath();
-    ctx.moveTo(4, 0);
-    ctx.lineTo(S * 0.8, -6);
-    ctx.lineTo(S * 0.8, 6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-  const hot = ctx.createRadialGradient(9, 9, 0, 9, 9, 20);
-  hot.addColorStop(0, rgb('255 250 226', dark ? 0.75 : 0.9));
-  hot.addColorStop(1, rgb('255 240 200', 0));
-  ctx.fillStyle = hot;
-  ctx.fillRect(0, 0, 40, 40);
-}
-
-/** Капли дождя: несколько выпуклых капель с бликом у края блока. */
-function drops(ctx: Ctx, r: number, dark: boolean): void {
-  const rnd = seeded(20261118);
-  const body = dark ? '170 205 245' : '120 165 222';
-  const rim = dark ? '120 165 225' : '70 118 190';
-  const spots: readonly (readonly [number, number, number])[] = [
-    [r * 0.5 + 12, 12, 4.4],
-    [r * 0.5 + 30, 9, 2.6],
-    [r * 0.5 + 44, 20, 3.4],
-    [14, r * 0.5 + 16, 3.2],
-    [26, r * 0.5 + 34, 4],
-    [r * 0.5 + 22, 30, 2.2],
-    [r * 0.5 + 60, 11, 2],
-    [11, r * 0.5 + 50, 2.4],
+/**
+ * Опавшие листья: горсть из пяти листьев, прижатых к верхнему краю блока в углу и обрезанных его скруглённым краем, как будто они
+ * лежат на карточке. Цвета те же, что у листьев в воздухе. Занимает только полоску у края (около 48×23 px): заголовок и подписи
+ * карточки, которые начинаются от отступа в 16–20 px, остаются чистыми.
+ */
+function leaves(ctx: Ctx, dark: boolean): void {
+  // (x, y, радиус, поворот, цвет, тень цвета) — от дальнего к ближнему
+  const pile: readonly (readonly [number, number, number, number, string, string])[] = [
+    [38, 7, 7, 0.2, '204 168 56', '140 110 30'],
+    [8, 11, 6.5, 2.35, '150 104 58', '96 64 36'],
+    [17, 19, 7.5, -0.35, '186 62 48', '118 34 30'],
+    [25, 9, 9, 0.42, '236 158 44', '178 96 22'],
+    [11, 3, 7, 0.95, '222 102 38', '150 58 22'],
   ];
-  for (const [x, y, size] of spots) {
-    const s = size * (0.85 + rnd() * 0.3);
-    const g = ctx.createRadialGradient(x - s * 0.3, y - s * 0.35, s * 0.1, x, y, s);
-    g.addColorStop(0, rgb('255 255 255', dark ? 0.75 : 0.95));
-    g.addColorStop(0.35, rgb(body, dark ? 0.3 : 0.38));
-    g.addColorStop(1, rgb(rim, dark ? 0.6 : 0.62));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.ellipse(x, y, s * 0.92, s * 1.08, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = rgb('255 255 255', 0.9);
-    ctx.beginPath();
-    ctx.arc(x - s * 0.32, y - s * 0.4, Math.max(0.5, s * 0.17), 0, Math.PI * 2);
-    ctx.fill();
+  const lift = dark ? 1.08 : 1;
+  for (const [x, y, r, angle, color, shade] of pile) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.shadowColor = dark ? 'rgb(0 0 0 / 0.5)' : 'rgb(60 36 20 / 0.34)';
+    ctx.shadowBlur = 2.5;
+    ctx.shadowOffsetX = 0.6;
+    ctx.shadowOffsetY = 1.4;
+    leaf(ctx, r * lift, color, shade);
+    ctx.restore();
   }
 }
 
@@ -343,7 +340,7 @@ function drops(ctx: Ctx, r: number, dark: boolean): void {
  * украшения нет угловой картинки (росток рисуется на краю блока вместе с лежащими лепестками) или холст недоступен.
  */
 export function accentSprite(kind: AccentKind, radius: number, dark: boolean, dpr: number): HTMLCanvasElement | null {
-  if (kind === 'sprout') return null;
+  if (kind === 'sprout' || kind === 'none') return null;
   const img = document.createElement('canvas');
   img.width = Math.ceil(ACCENT_SIZE * dpr);
   img.height = Math.ceil(ACCENT_SIZE * dpr);
@@ -352,8 +349,7 @@ export function accentSprite(kind: AccentKind, radius: number, dark: boolean, dp
   ctx.scale(dpr, dpr);
   cornerClip(ctx, radius, ACCENT_SIZE);
   if (kind === 'frost') frost(ctx, radius, dark);
-  else if (kind === 'glare') glare(ctx, dark);
-  else drops(ctx, radius, dark);
+  else leaves(ctx, dark);
   return img;
 }
 

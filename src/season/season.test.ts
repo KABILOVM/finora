@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSeason, isSeasonPref, SEASON_PREFS, seasonOf, type SeasonPref } from './season';
+import { activeSeason, isSeasonPref, SEASON_PREFS, seasonOf, weatherEffect, type SeasonKind, type SeasonPref } from './season';
 
 const d = (iso: string) => new Date(`${iso}T12:00:00`);
 
@@ -34,8 +34,8 @@ describe('isSeasonPref', () => {
 describe('activeSeason: какой сезонный эффект показать', () => {
   const NOV = d('2026-11-18');
   const JAN = d('2027-01-10');
-  const on = (over: Partial<{ pref: SeasonPref; fx: boolean; reduced: boolean; scene: string; now: Date }> = {}) =>
-    activeSeason({ pref: 'auto', fx: true, reduced: false, scene: 'aurora', now: NOV, ...over });
+  const on = (over: Partial<{ pref: SeasonPref; fx: boolean; reduced: boolean; scene: string; now: Date; weather: SeasonKind | null }> = {}) =>
+    activeSeason({ pref: 'auto', fx: true, reduced: false, scene: 'aurora', now: NOV, weather: null, ...over });
 
   it('«Авто» — сезон по дате', () => {
     expect(on()).toBe('autumn');
@@ -72,5 +72,49 @@ describe('activeSeason: какой сезонный эффект показат�
 
   it('выбранный сезон показывается и поверх образа со своими частицами', () => {
     expect(on({ pref: 'winter', scene: 'stars' })).toBe('winter');
+  });
+});
+
+describe('weatherEffect: что показать по коду погоды', () => {
+  it('дождь любой силы — дождь, ливень и гроза — ливень', () => {
+    for (const code of [51, 53, 55, 56, 57, 61, 63, 66, 67, 80]) expect(weatherEffect(code), String(code)).toBe('rain');
+    for (const code of [65, 81, 82, 95, 96, 99]) expect(weatherEffect(code), String(code)).toBe('downpour');
+  });
+
+  it('слабый снег — обычный снегопад, сильный и снегопад — метель', () => {
+    for (const code of [71, 77]) expect(weatherEffect(code), String(code)).toBe('winter');
+    for (const code of [73, 75, 85, 86]) expect(weatherEffect(code), String(code)).toBe('blizzard');
+  });
+
+  it('ясно, облачно, туман, нет данных — погода эффекта не даёт (остаётся сезон по дате)', () => {
+    for (const code of [0, 1, 2, 3, 45, 48, 4, 100, -1, Number.NaN]) expect(weatherEffect(code), String(code)).toBeNull();
+    expect(weatherEffect(null)).toBeNull();
+  });
+});
+
+describe('activeSeason с погодой', () => {
+  const NOV = d('2026-11-18');
+  const base = { pref: 'auto' as SeasonPref, fx: true, reduced: false, scene: 'aurora', now: NOV };
+
+  it('«Авто»: погода главнее даты — дождь весной и осенью, метель летом', () => {
+    expect(activeSeason({ ...base, weather: 'rain' })).toBe('rain');
+    expect(activeSeason({ ...base, now: d('2026-04-10'), weather: 'rain' })).toBe('rain');
+    expect(activeSeason({ ...base, now: d('2026-07-10'), weather: 'blizzard' })).toBe('blizzard');
+    expect(activeSeason({ ...base, weather: null })).toBe('autumn');
+  });
+
+  it('выбранный вручную сезон погодой не перебивается; «Выкл», выключенные эффекты и «уменьшить движение» — тоже', () => {
+    expect(activeSeason({ ...base, pref: 'summer', weather: 'rain' })).toBe('summer');
+    expect(activeSeason({ ...base, pref: 'off', weather: 'rain' })).toBeNull();
+    expect(activeSeason({ ...base, fx: false, weather: 'rain' })).toBeNull();
+    expect(activeSeason({ ...base, reduced: true, weather: 'rain' })).toBeNull();
+  });
+
+  it('образ со своими частицами другого рода погодой тоже не трогается; свой дождь и снег — заменяются', () => {
+    expect(activeSeason({ ...base, scene: 'stars', weather: 'rain' })).toBeNull();
+    expect(activeSeason({ ...base, scene: 'rain', weather: 'downpour' })).toBe('downpour');
+    expect(activeSeason({ ...base, scene: 'rain', weather: 'blizzard' })).toBeNull();
+    expect(activeSeason({ ...base, scene: 'snow', weather: 'blizzard' })).toBe('blizzard');
+    for (const scene of ['none', 'aurora', 'grid', 'lights']) expect(activeSeason({ ...base, scene, weather: 'rain' }), scene).toBe('rain');
   });
 });

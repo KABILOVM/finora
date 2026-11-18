@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accentCorner, capClear, capFill, capLand, capVolume, COLUMN, cornerDrop, makeCap, makeScatter, particleCount, scatterLand, usableLedge } from './pile';
+import { accentCorner, capClear, capFill, capLand, capVolume, COLUMN, cornerDrop, makeCap, makeScatter, particleCount, scatterLand, shiftClock, usableLedge } from './pile';
 
 /** Предсказуемые «случайные» числа для тестов. */
 const seq = (...values: number[]) => {
@@ -140,5 +140,31 @@ describe('particleCount: сколько частиц на экране', () => {
     expect(particleCount(36, 1280, 800)).toBe(70);
     expect(particleCount(16, 1280, 800)).toBe(50);
     expect(particleCount(36, 200, 200)).toBe(8);
+  });
+});
+
+describe('shiftClock: частица движется вместе со скроллом', () => {
+  // путь длится 10 с (10 000 мс); частица падает со скоростью 50 px/с; доля скролла k
+  const D = 10_000;
+  it('прокрутили вниз на 100 px, k = 0,5: частица поднялась на 50 px — это 1 с пути назад', () => {
+    expect(shiftClock(4000, D, 100, 0.5, 50)).toBe(3000);
+  });
+  it('прокрутили вверх: частица опустилась', () => {
+    expect(shiftClock(4000, D, -100, 0.5, 50)).toBe(5000);
+  });
+  it('время не уходит за начало и за конец пути — путь повторяется по кругу', () => {
+    expect(shiftClock(200, D, 100, 0.5, 50)).toBe(9200); // раньше начала — снова у конца
+    expect(shiftClock(9500, D, -100, 0.5, 50)).toBe(500); // позже конца — снова у начала
+    expect(shiftClock(0, D, 100_000, 1, 50)).toBeGreaterThanOrEqual(0);
+    expect(shiftClock(0, D, 100_000, 1, 50)).toBeLessThan(D);
+  });
+  it('быстрая частица смещается во времени меньше, медленная — больше (на экране сдвиг одинаков)', () => {
+    const fast = 5000 - shiftClock(5000, D, 100, 0.5, 200);
+    const slow = 5000 - shiftClock(5000, D, 100, 0.5, 50);
+    expect(slow / fast).toBe(4);
+  });
+  it('нулевая скорость или мусор — время не меняется', () => {
+    expect(shiftClock(4000, D, 100, 0.5, 0)).toBe(4000);
+    expect(shiftClock(4000, D, Number.NaN, 0.5, 50)).toBe(4000);
   });
 });
