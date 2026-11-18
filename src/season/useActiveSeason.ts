@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { useFxPref, useScene, useSeasonPref } from '@/theme';
-import { activeSeason, type SeasonKind } from './season';
+import { activeSeason, weatherEffect, type SeasonKind } from './season';
+import { useWeatherCode } from './useWeatherCode';
 
 const QUERY = '(prefers-reduced-motion: reduce)';
 const subscribeMotion = (cb: () => void): (() => void) => {
@@ -16,7 +17,7 @@ export function useReducedMotion(): boolean {
 }
 
 /**
- * Сезонный эффект, который сейчас нужно показать; null — никакого (правила — в activeSeason). Одно значение для слоя сезона и для
+ * Эффект (сезон или погода), который сейчас нужно показать; null — никакого (правила — в activeSeason). Одно значение для слоя сезона и для
  * живого фона образа: когда сезон показан, частицы образа не рисуются — летает что-то одно.
  */
 export function useActiveSeason(): SeasonKind | null {
@@ -24,5 +25,8 @@ export function useActiveSeason(): SeasonKind | null {
   const [fx] = useFxPref();
   const [pref] = useSeasonPref();
   const reduced = useReducedMotion();
-  return activeSeason({ pref, fx, reduced, scene, now: new Date() });
+  const code = useWeatherCode();
+  // погода ещё читается: в «Авто» пока ничего не показываем, чтобы осень не мигнула перед дождём
+  if (pref === 'auto' && code === undefined) return null;
+  return activeSeason({ pref, fx, reduced, scene, now: new Date(), weather: weatherEffect(code ?? null) });
 }

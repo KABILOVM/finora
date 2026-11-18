@@ -873,7 +873,9 @@ html[data-hero='banner'] .hero-amount {
  * анимации на элемент: такое браузер ведёт целиком в потоке отрисовки, без нашего кода. Слой лёгкий и очень прозрачный: буквы
  * под ним читаются как обычно.
  */
-.season-heat {
+.season-heat,
+.season-mist,
+.season-blow {
   position: fixed;
   inset: 0;
   z-index: 0;
@@ -949,6 +951,76 @@ html[data-hero='banner'] .hero-amount {
 }
 .season-heat-wave:nth-child(4) {
   animation-delay: -7.5s;
+}
+
+/*
+ * Дождь: пелена. Цвет берётся у текста страницы (--text): на светлой теме это лёгкая серо-синяя хмарь, на тёмной — лёгкая светлая
+ * дымка. Одна полупрозрачная заливка, чуть «дышит» (прозрачность). Капли и брызги рисует engine.ts.
+ */
+@keyframes mist-breathe {
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.season-mist {
+  background: linear-gradient(to bottom, rgb(var(--text) / 0.06), rgb(var(--text) / 0.015) 50%, rgb(var(--text) / 0.045));
+  animation: mist-breathe 6s ease-in-out infinite alternate;
+  will-change: opacity;
+}
+/* Брызги: колечко у верхнего края блока расходится и тает (масштаб и прозрачность — анимация в engine.ts). */
+.season-splash {
+  position: absolute;
+  width: 14px;
+  height: 5px;
+  margin: -3px 0 0 -7px;
+  border: 1px solid rgb(var(--text) / 0.5);
+  border-radius: 50%;
+  will-change: transform, opacity;
+}
+
+/*
+ * Метель: порывы. Три мягких пятна, пролетающие по экрану слева направо вместе с ветром (снег косой в ту же сторону; края у
+ * пятен размыты, прямоугольников не видно). Цвет — как у пелены дождя. Прозрачность и сдвиг одной анимацией на полосу.
+ */
+@keyframes gust {
+  0% {
+    opacity: 0;
+    transform: translateX(-70vw);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(40vw);
+  }
+}
+.season-gust {
+  position: absolute;
+  top: 10vh;
+  left: 0;
+  width: 130vw;
+  height: 24vh;
+  background: radial-gradient(ellipse at 55% 50%, rgb(var(--text) / 0.15) 0%, rgb(var(--text) / 0.07) 40%, rgb(var(--text) / 0) 72%);
+  opacity: 0;
+  animation: gust 3.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.season-gust:nth-child(2) {
+  top: 40vh;
+  height: 30vh;
+  animation-delay: -1.1s;
+}
+.season-gust:nth-child(3) {
+  top: 68vh;
+  height: 22vh;
+  animation-delay: -2.2s;
 }
 
 /* Сетка (киберпанк): неоновая сетка уходит к горизонту и бежит на зрителя. */

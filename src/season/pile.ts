@@ -131,3 +131,16 @@ export function particleCount(base: number, w: number, h: number): number {
   const wanted = Math.round((base * (w * h)) / (390 * 844));
   return Math.max(8, Math.min(70, base + 34, wanted));
 }
+
+/**
+ * Частица движется вместе со скроллом: страницу прокрутили вниз на `dy` px — частица поднимается на `dy × k` px (k < 1: дальние,
+ * мелкие частицы отстают от страницы, получается глубина). Путь частицы — время, а она падает со скоростью `vy` px/с, поэтому сдвиг
+ * по экрану равен сдвигу по времени назад на `dy × k / vy` с. `cur` — сколько мс частица летит от верха пути, `duration` — длина
+ * пути, мс. Путь повторяется по кругу, поэтому время остаётся в пределах [0, duration): частица, которую подняло выше начала пути,
+ * появляется у его конца (внизу экрана), и густота частиц не редеет.
+ */
+export function shiftClock(cur: number, duration: number, dy: number, k: number, vy: number): number {
+  if (!(vy > 0) || !(duration > 0) || !Number.isFinite(dy)) return cur;
+  const next = cur - ((dy * k) / vy) * 1000;
+  return ((next % duration) + duration) % duration;
+}

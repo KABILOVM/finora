@@ -74,6 +74,29 @@ function crystal(ctx: Ctx, r: number, color: string): void {
   }
 }
 
+/** Капля дождя в полёте: тонкая линия, у хвоста прозрачная, у головы плотная. Голова — справа (по ней частицу поворачивают по ходу полёта). */
+function streak(ctx: Ctx, r: number, color: string): void {
+  const g = ctx.createLinearGradient(-r, 0, r, 0);
+  g.addColorStop(0, rgb(color, 0));
+  g.addColorStop(0.6, rgb(color, 0.55));
+  g.addColorStop(1, rgb(color, 1));
+  ctx.strokeStyle = g;
+  ctx.lineWidth = r * 0.23;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r, 0);
+  ctx.lineTo(r, 0);
+  ctx.stroke();
+}
+
+/** Снег в метели: мягкая точка, растянутая вдоль ветра (след от быстрого движения). Длинная ось — по +x, частицу поворачивают по полёту. */
+function windDot(ctx: Ctx, r: number, core: string, rim: string, rimAlpha: number): void {
+  ctx.save();
+  ctx.scale(3.4, 1);
+  softDot(ctx, r, core, rim, rimAlpha);
+  ctx.restore();
+}
+
 /** Лепесток с выемкой на конце (как у цветка абрикоса или сакуры): тёмное основание, светлый край. */
 function petal(ctx: Ctx, r: number, base: string, tip: string): void {
   const g = ctx.createLinearGradient(0, r, 0, -r);
@@ -155,14 +178,25 @@ function leaf(ctx: Ctx, r: number, color: string, shade: string): void {
 /** Картинки падающих частиц сезона. `dark` — тёмная тема; `dpr` — плотность точек экрана. */
 export function particleSprites(season: SeasonKind, dark: boolean, dpr: number): Sprite[] {
   const list: (Sprite | null)[] = [];
-  if (season === 'winter') {
+  if (season === 'winter' || season === 'blizzard') {
     // на светлой теме белая снежинка на белой карточке не видна: она вся голубая, без белой середины (иначе выходит «колечко»)
     const core = dark ? '255 255 255' : '158 190 238';
     const rim = dark ? '214 230 255' : '158 190 238';
     const line = dark ? '236 244 255' : '120 160 220';
-    list.push(sprite(7, 4, dpr, 6, 1, false, (c) => softDot(c, 4, core, rim, dark ? 0.75 : 0.55)));
-    list.push(sprite(6, 4, dpr, 3, 0.75, false, (c) => softDot(c, 3.6, dark ? core : '140 176 232', rim, dark ? 1 : 0.6)));
-    list.push(sprite(9, 8, dpr, 2, 2.1, true, (c) => crystal(c, 8, line)));
+    if (season === 'blizzard') {
+      // метель: быстрые вытянутые по ветру штрихи и крупные снежинки среди них
+      list.push(sprite(14, 4, dpr, 6, 1, false, (c) => windDot(c, 2.6, core, rim, dark ? 0.75 : 0.6)));
+      list.push(sprite(14, 4, dpr, 3, 0.8, false, (c) => windDot(c, 2.6, dark ? core : '140 176 232', rim, dark ? 1 : 0.65)));
+      list.push(sprite(9, 8, dpr, 1, 2.2, true, (c) => crystal(c, 8, line)));
+    } else {
+      list.push(sprite(7, 4, dpr, 6, 1, false, (c) => softDot(c, 4, core, rim, dark ? 0.75 : 0.55)));
+      list.push(sprite(6, 4, dpr, 3, 0.75, false, (c) => softDot(c, 3.6, dark ? core : '140 176 232', rim, dark ? 1 : 0.6)));
+      list.push(sprite(9, 8, dpr, 2, 2.1, true, (c) => crystal(c, 8, line)));
+    }
+  } else if (season === 'rain' || season === 'downpour') {
+    // светлая тема: капля тёмно-голубая; тёмная: светло-голубая
+    const color = dark ? '178 206 246' : '62 100 170';
+    list.push(sprite(12, 10, dpr, 1, 1, false, (c) => streak(c, 10, color)));
   } else if (season === 'spring') {
     const tones: readonly (readonly [string, string])[] = dark
       ? [['246 138 176', '255 206 222'], ['255 176 200', '255 232 240'], ['236 118 164', '255 190 212']]

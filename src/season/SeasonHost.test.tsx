@@ -4,8 +4,13 @@ import { SceneHost } from '@/scene/SceneHost';
 import { readSeasonPref, saveFxPref, saveSeasonPref, saveSkinPref } from '@/theme';
 import { SeasonHost } from './SeasonHost';
 
+// погода берётся из хранилища города; здесь её подставляет тест
+const weather = vi.hoisted(() => ({ code: null as number | null | undefined }));
+vi.mock('./useWeatherCode', () => ({ useWeatherCode: () => weather.code }));
+
 const html = document.documentElement;
 const reset = () => {
+  weather.code = null;
   vi.unstubAllGlobals();
   vi.useRealTimers();
   localStorage.clear();
@@ -123,6 +128,45 @@ describe('слой сезонных эффектов', () => {
     expect(document.querySelector('.season-heat')).toBeNull();
     act(() => saveSeasonPref('summer'));
     expect(document.querySelector('.season-heat')).not.toBeNull();
+  });
+
+  it('«Авто»: дождливая погода — дождь с пеленой, метель — метель с порывами; ясно — снова сезон по дате', async () => {
+    act(() => saveSkinPref('classic'));
+    weather.code = 63; // дождь
+    const view = render(<SeasonHost />);
+    expect(layer()?.getAttribute('data-season-layer')).toBe('rain');
+    await waitFor(() => expect(document.querySelector('.season-mist')).not.toBeNull());
+    expect(document.querySelector('.season-heat')).toBeNull();
+    view.unmount();
+
+    weather.code = 75; // сильный снег
+    const second = render(<SeasonHost />);
+    expect(layer()?.getAttribute('data-season-layer')).toBe('blizzard');
+    await waitFor(() => expect(document.querySelectorAll('.season-gust').length).toBeGreaterThanOrEqual(2));
+    second.unmount();
+
+    weather.code = 0; // ясно
+    render(<SeasonHost />);
+    expect(layer()?.getAttribute('data-season-layer')).toBe('autumn');
+  });
+
+  it('«Авто»: пока погода читается, ничего не мигает; выбранный вручную сезон ждать не нужно', () => {
+    act(() => saveSkinPref('classic'));
+    weather.code = undefined; // ещё читается
+    const view = render(<SeasonHost />);
+    expect(layer()).toBeNull();
+    view.unmount();
+    act(() => saveSeasonPref('winter'));
+    render(<SeasonHost />);
+    expect(layer()?.getAttribute('data-season-layer')).toBe('winter');
+  });
+
+  it('сезон, выбранный вручную, погодой не перебивается', () => {
+    act(() => saveSkinPref('classic'));
+    act(() => saveSeasonPref('summer'));
+    weather.code = 65;
+    render(<SeasonHost />);
+    expect(layer()?.getAttribute('data-season-layer')).toBe('summer');
   });
 
   it('фон образа, нарисованный в CSS (сетка, огни), остаётся вместе с сезоном', () => {

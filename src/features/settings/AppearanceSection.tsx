@@ -9,7 +9,8 @@ import { paletteFromHex } from '@/lib/palette';
 import { CUSTOM_SKIN, isBaseSkin } from '@/skinCore';
 import { skinById } from '@/skins';
 import { ChipPicker } from '@/components/ChipPicker';
-import { isSeasonPref, seasonOf, type SeasonPref } from '@/season/season';
+import { isSeasonPref, seasonOf, weatherEffect, type SeasonKind, type SeasonPref } from '@/season/season';
+import { useWeatherCode } from '@/season/useWeatherCode';
 import { readCustomPalette, saveCustomAccent, useAccentPref, useCustomAccent, useFxPref, useSeasonPref, useSkinPref, useThemePref, type ThemePref } from '@/theme';
 import { AccentPicker } from './AccentPicker';
 import { SettingsSection } from './SettingsSection';
@@ -29,8 +30,16 @@ const SEASON_OPTIONS = [
   { value: 'off', label: 'Выкл' },
 ] as const satisfies readonly { value: SeasonPref; label: string; icon?: string }[];
 
-/** Что летает в каждом сезоне — для подписи под выбором. */
-const SEASON_TEXT = { winter: 'идёт снег', spring: 'летят лепестки', summer: 'жара и немного пуха', autumn: 'падают листья' } as const;
+/** Что сейчас происходит на экране — для подписи под выбором («Авто» зависит от даты и погоды). */
+const SEASON_TEXT: Readonly<Record<SeasonKind, string>> = {
+  winter: 'идёт снег',
+  spring: 'летят лепестки',
+  summer: 'жара и немного пуха',
+  autumn: 'падают листья',
+  rain: 'идёт дождь',
+  downpour: 'льёт ливень',
+  blizzard: 'метель',
+};
 
 /**
  * Оформление: тема, образ (строка ведёт на витрину образов), цвет акцента (готовые цвета и «Свой цвет»), живой фон, сезонные
@@ -43,6 +52,7 @@ export function AppearanceSection() {
   const [skin] = useSkinPref();
   const [fx, setFx] = useFxPref();
   const [season, setSeason] = useSeasonPref();
+  const weather = weatherEffect(useWeatherCode() ?? null);
   const customHex = useCustomAccent();
   // Палитру «своего цвета» строит генератор (он грузится только здесь) и сохраняет вместе с цветом: основному файлу он при запуске не нужен
   const setCustomHex = useCallback((hex: string): boolean => {
@@ -99,8 +109,9 @@ export function AppearanceSection() {
           <div>
             <p className="font-medium">Сезонные эффекты</p>
             <p className="text-sm text-muted">
-              Зимой идёт снег, весной летят лепестки, летом жара и немного пуха, осенью — листья. Снег, лепестки и листья ложатся на блоки; нажмите на блок, чтобы стряхнуть.
-              {season === 'auto' && ` «Авто» выбирает по дате: сейчас ${SEASON_TEXT[seasonOf(new Date())]}.`}
+              Зимой идёт снег, весной летят лепестки, летом жара и немного пуха, осенью — листья. Снег, лепестки и листья ложатся на блоки;
+              нажмите на блок, чтобы стряхнуть.
+              {season === 'auto' && ` «Авто» выбирает по дате и по погоде (если в «Погоде» выбран город): дождь — дождь, снегопад — метель. Сейчас ${SEASON_TEXT[weather ?? seasonOf(new Date())]}.`}
             </p>
           </div>
           <ChipPicker ariaLabel="Сезонные эффекты" options={SEASON_OPTIONS} value={season} onChange={(v) => isSeasonPref(v) && setSeason(v)} />
