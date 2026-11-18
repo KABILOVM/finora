@@ -818,6 +818,62 @@ html[data-hero='banner'] .hero-amount {
   height: 100%;
 }
 
+/* ───────────────────────── Сезонные эффекты (src/season) ───────────────────────── */
+
+/*
+ * Слой сезона: ПОВЕРХ содержимого страницы (снег идёт перед блоками и ложится на них), но под шапкой, нижним меню и окнами.
+ * Касаний не принимает. Внутри два слоя: неподвижный во весь экран, где летят частицы (каждую двигает браузер по заранее заданному
+ * пути), и слой в координатах страницы, где лежат сугробы и украшения блоков, — он прокручивается вместе со страницей сам.
+ */
+.season {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+.season-sky {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  contain: strict;
+}
+.season-flake {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+.season-ground {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+}
+.season-ground > canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.season-pile {
+  z-index: 2;
+}
+.season-accent {
+  z-index: 1;
+}
+/* Солнечный блик медленно «дышит». */
+@keyframes season-glare {
+  50% {
+    opacity: 0.55;
+  }
+}
+.season-glare {
+  animation: season-glare 6s ease-in-out infinite;
+}
+
 /* Сетка (киберпанк): неоновая сетка уходит к горизонту и бежит на зрителя. */
 @keyframes scene-grid {
   to {

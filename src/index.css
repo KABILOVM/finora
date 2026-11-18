@@ -4906,12 +4906,19 @@ html[data-skin] .skin-hero {
     opacity: 0;
   }
 }
+/*
+ * Пульс маркера на конце графика: светлое кольцо расходится от точки и гаснет. Это масштаб и прозрачность отдельного слоя — их
+ * браузер ведёт в потоке отрисовки. Раньше здесь анимировалась тень (box-shadow), а её браузер перерисовывает в основном потоке:
+ * страница пересчитывалась 60 раз в секунду всё время, пока открыта «Главная».
+ */
 @keyframes spark-ping {
   0% {
-    box-shadow: 0 0 0 0 rgb(255 255 255 / 0.55);
+    transform: scale(1);
+    opacity: 0.55;
   }
   100% {
-    box-shadow: 0 0 0 14px rgb(255 255 255 / 0);
+    transform: scale(3.8);
+    opacity: 0;
   }
 }
 @keyframes bar-grow {
@@ -4929,9 +4936,16 @@ html[data-skin] .skin-hero {
   animation: spark-fade 1.2s ease 0.5s both;
 }
 .spark-dot {
-  animation:
-    spark-fade 0.4s ease 1.3s both,
-    spark-ping 2.4s ease-out 1.7s infinite;
+  animation: spark-fade 0.4s ease 1.3s both;
+}
+.spark-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(255 255 255);
+  opacity: 0;
+  animation: spark-ping 2.4s ease-out 1.7s infinite;
 }
 .bar-grow {
   transform-origin: left;

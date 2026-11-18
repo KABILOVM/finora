@@ -33,6 +33,11 @@ describe('checkData: дубли', () => {
     expect(DUPLICATE_DAYS).toBe(180);
     expect(c.dupes.map((d) => d.txIds)).toEqual([['a', 'b']]); // январские — старше 180 дней
   });
+  it('одинаковые траты, внесённые в разное время, — не дубль', () => {
+    const a = tx({ occurredOn: '2026-10-10', amountMinor: 1_000, note: 'такси', createdAt: '2026-10-10T04:10:00.000Z' });
+    const b = tx({ occurredOn: '2026-10-10', amountMinor: 1_000, note: 'такси', createdAt: '2026-10-10T13:40:00.000Z' });
+    expect(check([a, b]).dupes).toEqual([]);
+  });
   it('удалённые не считаются', () => {
     const a = tx({ occurredOn: '2026-10-10', amountMinor: 1_500, note: 'кофе' });
     const b = tx({ occurredOn: '2026-10-10', amountMinor: 1_500, note: 'кофе', deletedAt: '2026-10-11T00:00:00.000Z' });

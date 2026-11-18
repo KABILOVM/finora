@@ -104,7 +104,7 @@ export function AnomaliesCard({ anomalies, categories, base, month, today }: Ano
           Возможный дубль: <span className="font-bold">{d.note !== '' ? d.note : (cat?.name ?? 'Без категории')}</span> — <MoneyText minor={d.amountMinor} currency={base} tone="expense" /> × {count}
         </>
       ),
-      text: `${formatDayLabel(d.occurredOn, today)} · ${count} ${pluralRu(count, 'одинаковая трата', 'одинаковые траты', 'одинаковых трат')} за день. Если это не повтор, скройте.`,
+      text: `${formatDayLabel(d.occurredOn, today)} · ${count} ${pluralRu(count, 'одинаковая трата', 'одинаковые траты', 'одинаковых трат')} внесены подряд. Если это не повтор, скройте.`,
       target: { kind: 'edit', id: d.txIds[0] ?? '' },
       label: 'Открыть трату',
     });

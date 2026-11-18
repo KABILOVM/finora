@@ -155,7 +155,7 @@ export default function DataCheckPage() {
           </Card>
 
           {dupes.length > 0 && (
-            <Block id="check-dupes" title="Возможные дубли" hint="Одинаковые траты (кошелёк, категория, сумма, заметка) в один день за последние полгода.">
+            <Block id="check-dupes" title="Возможные дубли" hint="Одинаковые траты (кошелёк, категория, сумма, заметка) в один день, внесённые подряд, за последние полгода. Внесённые в разное время дублем не считаются.">
               {dupes.map((d) => {
                 const name = d.note !== '' ? d.note : catName(d.categoryId);
                 const count = d.txIds.length;
@@ -170,7 +170,7 @@ export default function DataCheckPage() {
                         {name} — <MoneyText minor={d.amountMinor} currency={base} tone="expense" /> × {count}
                       </>
                     }
-                    text={`${formatDayLabel(d.occurredOn, today)} · ${count} ${pluralRu(count, 'одинаковая трата', 'одинаковые траты', 'одинаковых трат')} за день`}
+                    text={`${formatDayLabel(d.occurredOn, today)} · ${count} ${pluralRu(count, 'одинаковая трата', 'одинаковые траты', 'одинаковых трат')} внесены подряд`}
                     actions={
                       <>
                         {openLink(d.txIds[0]!)}

@@ -1,0 +1,125 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render } from '@/components/testUtils';
+import { SceneHost } from '@/scene/SceneHost';
+import { readSeasonPref, saveFxPref, saveSeasonPref, saveSkinPref } from '@/theme';
+import { SeasonHost } from './SeasonHost';
+
+const html = document.documentElement;
+const reset = () => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+  localStorage.clear();
+  for (const a of ['data-skin', 'data-look', 'data-fx', 'data-scene', 'data-shape', 'data-material', 'data-nav', 'data-hero', 'data-motion', 'style']) html.removeAttribute(a);
+  document.head.innerHTML = '';
+};
+/** «Сегодня» — 18 ноября 2026: осень. */
+beforeEach(() => {
+  reset();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-18T12:00:00'));
+});
+afterEach(reset);
+
+const layer = () => document.querySelector('[data-season-layer]');
+const sceneLayer = () => document.querySelector('[data-scene-layer]');
+
+describe('выбор сезонных эффектов хранится на устройстве', () => {
+  it('по умолчанию «Авто»; выбор запоминается; испорченное значение — снова «Авто»', () => {
+    expect(readSeasonPref()).toBe('auto');
+    act(() => saveSeasonPref('winter'));
+    expect(readSeasonPref()).toBe('winter');
+    expect(localStorage.getItem('finora-season')).toBe('winter');
+    act(() => saveSeasonPref('off'));
+    expect(readSeasonPref()).toBe('off');
+    act(() => saveSeasonPref('auto'));
+    expect(localStorage.getItem('finora-season')).toBeNull();
+    localStorage.setItem('finora-season', 'метель');
+    expect(readSeasonPref()).toBe('auto');
+  });
+});
+
+describe('слой сезонных эффектов', () => {
+  it('у «Классики» слой есть, сезон — по дате; он украшение (aria-hidden)', () => {
+    act(() => saveSkinPref('classic'));
+    render(<SeasonHost />);
+    expect(layer()?.getAttribute('data-season-layer')).toBe('autumn');
+    expect(layer()?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('человек выбрал сезон — слой меняется сразу; «Выкл» — слоя нет', () => {
+    act(() => saveSkinPref('classic'));
+    render(<SeasonHost />);
+    act(() => saveSeasonPref('winter'));
+    expect(layer()?.getAttribute('data-season-layer')).toBe('winter');
+    act(() => saveSeasonPref('off'));
+    expect(layer()).toBeNull();
+    act(() => saveSeasonPref('auto'));
+    expect(layer()?.getAttribute('data-season-layer')).toBe('autumn');
+  });
+
+  it('эффекты выключены или у устройства «уменьшить движение» — слоя нет', () => {
+    act(() => saveSkinPref('classic'));
+    const view = render(<SeasonHost />);
+    act(() => saveFxPref(false));
+    expect(layer()).toBeNull();
+    act(() => saveFxPref(true));
+    expect(layer()).not.toBeNull();
+    view.unmount();
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('prefers-reduced-motion'), media: query, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    render(<SeasonHost />);
+    expect(layer()).toBeNull();
+  });
+
+  it('образ со своими частицами другого рода: при «Авто» сезонного слоя нет, частицы образа остаются', () => {
+    act(() => saveSkinPref('christmas')); // у «Нового года» свой снег, а на дворе осень
+    render(
+      <>
+        <SceneHost />
+        <SeasonHost />
+      </>,
+    );
+    expect(layer()).toBeNull();
+    expect(sceneLayer()?.getAttribute('data-scene-layer')).toBe('snow');
+  });
+
+  it('сезон заменяет частицы образа: летает что-то одно', () => {
+    act(() => saveSkinPref('christmas'));
+    render(
+      <>
+        <SceneHost />
+        <SeasonHost />
+      </>,
+    );
+    act(() => saveSeasonPref('winter'));
+    expect(layer()?.getAttribute('data-season-layer')).toBe('winter');
+    expect(sceneLayer()).toBeNull();
+    act(() => saveSeasonPref('auto'));
+    expect(layer()).toBeNull();
+    expect(sceneLayer()).not.toBeNull();
+  });
+
+  it('зимой «Авто» сам заменяет снег образа сезонным: он ложится на блоки', () => {
+    vi.setSystemTime(new Date('2027-01-10T12:00:00'));
+    act(() => saveSkinPref('christmas'));
+    render(
+      <>
+        <SceneHost />
+        <SeasonHost />
+      </>,
+    );
+    expect(layer()?.getAttribute('data-season-layer')).toBe('winter');
+    expect(sceneLayer()).toBeNull();
+  });
+
+  it('фон образа, нарисованный в CSS (сетка, огни), остаётся вместе с сезоном', () => {
+    act(() => saveSkinPref('cyber'));
+    render(
+      <>
+        <SceneHost />
+        <SeasonHost />
+      </>,
+    );
+    expect(sceneLayer()?.getAttribute('data-scene-layer')).toBe('grid');
+    expect(layer()?.getAttribute('data-season-layer')).toBe('autumn');
+  });
+});

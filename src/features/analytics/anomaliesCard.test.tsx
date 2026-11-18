@@ -79,7 +79,7 @@ describe('«Что бросается в глаза»', () => {
     const dup = text(tid('anomaly-dup'));
     expect(dup).toContain('Возможный дубль: кофе');
     expect(dup).toContain(`${fmt(1_500)} × 2`);
-    expect(dup).toContain('2 одинаковые траты за день');
+    expect(dup).toContain('2 одинаковые траты внесены подряд');
   });
 
   it('«Скрыть» убирает находку и помнит об этом после перезагрузки экрана; остальные остаются', async () => {

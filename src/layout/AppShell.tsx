@@ -7,6 +7,7 @@ import { useOnline } from '@/components/OnlineBadge';
 import { cn } from '@/lib/cn';
 import { HideAmountsProvider } from '@/components/hideAmounts';
 import { SceneHost } from '@/scene/SceneHost';
+import { SeasonHost } from '@/season/SeasonHost';
 import { BottomNav } from './BottomNav';
 import { SectionBoundary } from './SectionBoundary';
 import { SideNav } from './SideNav';
@@ -37,6 +38,7 @@ export function AppShell({ status }: AppShellProps) {
     <HideAmountsProvider>
     <div className="min-h-dvh">
       <SceneHost />
+      <SeasonHost />
       <SideNav status={status} />
       <div className="md:pl-64">
         {/* HashRouter: обычная ссылка #main заменила бы адрес страницы, поэтому фокус переводим сами */}

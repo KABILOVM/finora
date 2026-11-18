@@ -67,4 +67,29 @@ describe('«Оформление»: образ и цвет акцента', () =
     expect(document.documentElement.hasAttribute('data-fx')).toBe(false);
     expect(localStorage.getItem('finora-fx')).toBeNull();
   });
+
+  it('«Сезонные эффекты»: по умолчанию «Авто»; выбранный сезон или «Выкл» запоминается на устройстве', async () => {
+    open();
+    const group = screen.getByRole('group', { name: 'Сезонные эффекты' });
+    const chips = Array.from(group.querySelectorAll('button'));
+    const chip = (name: RegExp) => chips.find((b) => name.test(b.textContent ?? ''))!;
+    expect(chips).toHaveLength(6);
+    expect(chip(/Авто/).getAttribute('aria-pressed')).toBe('true');
+    await user.click(chip(/Зима/));
+    expect(chip(/Зима/).getAttribute('aria-pressed')).toBe('true');
+    expect(chip(/Авто/).getAttribute('aria-pressed')).toBe('false');
+    expect(localStorage.getItem('finora-season')).toBe('winter');
+    await user.click(chip(/Выкл/));
+    expect(localStorage.getItem('finora-season')).toBe('off');
+    await user.click(chip(/Авто/));
+    expect(localStorage.getItem('finora-season')).toBeNull();
+  });
+
+  it('эффекты выключены — выбора сезона нет: без эффектов сезон не показывается', async () => {
+    open();
+    await user.click(screen.getByRole('switch', { name: 'Живой фон и эффекты' }));
+    expect(screen.queryByRole('group', { name: 'Сезонные эффекты' })).toBeNull();
+    await user.click(screen.getByRole('switch', { name: 'Живой фон и эффекты' }));
+    expect(screen.getByRole('group', { name: 'Сезонные эффекты' })).toBeInTheDocument();
+  });
 });
