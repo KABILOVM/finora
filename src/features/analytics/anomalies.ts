@@ -1,7 +1,7 @@
 import { isAdjustment } from '@/domain/adjustment';
 import { addMinor } from '@/domain/money';
 import { normNote } from '@/domain/subscriptions';
-import type { CurrencyCode, IsoDate, Minor, Transaction, UUID } from '@/domain/types';
+import type { CurrencyCode, IsoDate, IsoDateTime, Minor, Transaction, UUID } from '@/domain/types';
 import { shiftMonth } from '@/features/transactions/txFilters';
 
 /**
@@ -10,7 +10,8 @@ import { shiftMonth } from '@/features/transactions/txFilters';
  * по расписанию в расходы-«события» не входят (аренда по расписанию не может быть «необычной тратой»).
  *  - крупная трата: больше любой из прошлых трат этой категории и заметно больше обычной (медианы);
  *  - новая статья: заметная доля расходов месяца в категории, где в последние три месяца трат не было;
- *  - возможный дубль: две и больше одинаковых трат (кошелёк, категория, сумма, заметка) в один день.
+ *  - возможный дубль: две и больше одинаковых трат (кошелёк, категория, сумма, заметка) в один день, внесённых подряд
+ *    (не дальше минуты друг от друга): такси утром и такси вечером по одной цене — две поездки, а не повтор.
  * «Необычно много за месяц по категории» уже показывает «Темп трат» (domain/pace.ts), здесь его нет.
  * Бросают RangeError, если суммы не помещаются в безопасное целое.
  */
@@ -18,7 +19,11 @@ import { shiftMonth } from '@/features/transactions/txFilters';
 export type AnomalyTx = Pick<
   Transaction,
   'id' | 'kind' | 'walletId' | 'categoryId' | 'amountMinor' | 'baseAmountMinor' | 'baseCurrency' | 'occurredOn' | 'note' | 'debtId' | 'recurringRuleId' | 'deletedAt'
-> & { fxSource?: string | null | undefined };
+> & {
+  fxSource?: string | null | undefined;
+  /** Когда операцию внесли (у операции есть только день, времени суток нет). Нужно дублям; нет поля — время внесения неизвестно. */
+  createdAt?: IsoDateTime | undefined;
+};
 
 /** Сколько прошлых трат категории нужно, чтобы говорить, что у неё есть «обычная». */
 export const MIN_HISTORY = 5;
@@ -36,6 +41,8 @@ export const NEW_CATEGORY_MONTHS = 3;
 export const MIN_ACTIVE_MONTHS = 2;
 /** Сколько находок каждого вида показываем. */
 export const MAX_PER_KIND = 3;
+/** Одинаковые траты дня — возможный дубль, только если внесены не дальше стольких миллисекунд друг от друга (минута). */
+export const DUPLICATE_ENTRY_GAP_MS = 60_000;
 
 export interface BigPurchase {
   key: string;
@@ -158,9 +165,38 @@ export function newCategories(txs: readonly AnomalyTx[], month: string, today: I
   return out.sort((a, b) => b.spentMinor - a.spentMinor || (a.categoryId < b.categoryId ? -1 : 1)).slice(0, MAX_PER_KIND);
 }
 
+/** Момент внесения в миллисекундах; null — неизвестен (поля нет или в нём не дата). */
+function enteredAt(t: AnomalyTx): number | null {
+  const ms = t.createdAt === undefined ? Number.NaN : Date.parse(t.createdAt);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 /**
- * Одинаковые траты в один день: тот же кошелёк, категория, сумма и заметка (без регистра и лишних пробелов). Две порции кофе по одной
- * цене бывают, поэтому экран спрашивает «не дубль ли?», а не утверждает. Самые свежие дни первыми. `from`/`to` — границы (включительно).
+ * Делит одинаковые траты дня на пачки внесённых подряд: новая пачка начинается, когда между соседними внесениями прошло больше
+ * DUPLICATE_ENTRY_GAP_MS. Неизвестное время разрыва не даёт: без него нельзя сказать, что траты внесены в разное время.
+ */
+function entryBursts(list: readonly AnomalyTx[]): AnomalyTx[][] {
+  const sorted = list
+    .map((t) => ({ t, at: enteredAt(t) }))
+    .sort((a, b) => (a.at === b.at ? (a.t.id < b.t.id ? -1 : 1) : a.at === null ? -1 : b.at === null ? 1 : a.at - b.at));
+  const bursts: AnomalyTx[][] = [];
+  let prev: number | null = null;
+  for (const { t, at } of sorted) {
+    const current = bursts[bursts.length - 1];
+    if (current && (prev === null || at === null || at - prev <= DUPLICATE_ENTRY_GAP_MS)) current.push(t);
+    else bursts.push([t]);
+    prev = at;
+  }
+  return bursts;
+}
+
+/**
+ * Одинаковые траты в один день: тот же кошелёк, категория, сумма и заметка (без регистра и лишних пробелов), внесённые подряд — не
+ * дальше минуты друг от друга (entryBursts). Внесённые в разное время дублем не считаются: человек дважды ездил на такси, а не
+ * дважды нажал «Сохранить». Две порции кофе по одной цене бывают, поэтому экран спрашивает «не дубль ли?», а не утверждает.
+ * Самые свежие дни первыми. `from`/`to` — границы (включительно).
+ * Ключ первой находки дня — прежний (`dup:` + приметы траты и день): скрытое раньше остаётся скрытым; у следующих находок с теми же
+ * приметами в тот же день к ключу добавлен id первой траты.
  */
 export function duplicateGroups(txs: readonly AnomalyTx[], from: IsoDate, to: IsoDate, base: CurrencyCode): DuplicateGroup[] {
   const groups = new Map<string, AnomalyTx[]>();
@@ -174,9 +210,14 @@ export function duplicateGroups(txs: readonly AnomalyTx[], from: IsoDate, to: Is
   const out: DuplicateGroup[] = [];
   for (const [key, list] of groups) {
     if (list.length < 2) continue;
-    const ids = list.map((t) => t.id).sort();
-    const first = list[0]!;
-    out.push({ key: `dup:${key}`, txIds: ids, walletId: first.walletId, categoryId: first.categoryId, amountMinor: first.baseAmountMinor, occurredOn: first.occurredOn, note: first.note.trim() });
+    let found = 0;
+    for (const burst of entryBursts(list)) {
+      if (burst.length < 2) continue;
+      const ids = burst.map((t) => t.id).sort();
+      const first = burst[0]!;
+      out.push({ key: found === 0 ? `dup:${key}` : `dup:${key}|${ids[0]!}`, txIds: ids, walletId: first.walletId, categoryId: first.categoryId, amountMinor: first.baseAmountMinor, occurredOn: first.occurredOn, note: first.note.trim() });
+      found++;
+    }
   }
   return out.sort((a, b) => (a.occurredOn < b.occurredOn ? 1 : a.occurredOn > b.occurredOn ? -1 : a.key < b.key ? -1 : 1));
 }

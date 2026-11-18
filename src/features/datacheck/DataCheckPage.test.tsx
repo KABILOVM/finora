@@ -64,6 +64,7 @@ describe('«Проверка данных»', () => {
 
     expect(text('check-dupes')).toContain('кофе');
     expect(text('check-dupes')).toContain('× 2');
+    expect(text('check-dupes')).toContain('2 одинаковые траты внесены подряд');
     expect(text('check-uncategorized')).toContain('Без категории · 1');
     expect(text('check-uncategorized')).toContain('киоск');
     expect(text('check-future')).toContain('опечатка в годе');

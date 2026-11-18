@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bigPurchases,
+  DUPLICATE_ENTRY_GAP_MS,
   duplicateGroups,
   findAnomalies,
   hasAnomalies,
@@ -157,6 +158,47 @@ describe('duplicateGroups: возможный дубль', () => {
     const rows = [day({ id: 'a' }), day({ id: 'b' }), day({ id: 'c' }), day({ id: 'x', occurredOn: '2026-10-14' }), day({ id: 'y', occurredOn: '2026-10-14' }), day({ id: 'o1', occurredOn: '2026-09-30' }), day({ id: 'o2', occurredOn: '2026-09-30' })];
     const out = duplicateGroups(rows, '2026-10-01', '2026-10-31', BASE);
     expect(out.map((g) => g.txIds)).toEqual([['x', 'y'], ['a', 'b', 'c']]);
+  });
+
+  describe('время внесения', () => {
+    const at = (id: string, time: string, over: Partial<AnomalyTx> = {}) => day({ id, createdAt: `2026-10-12T${time}Z`, ...over });
+    const groups = (rows: AnomalyTx[]) => duplicateGroups(rows, '2026-10-01', '2026-10-31', BASE);
+
+    it('одинаковые траты, внесённые в разное время, — не дубль (такси утром и вечером)', () => {
+      expect(groups([at('a', '04:10:00.000'), at('b', '13:40:00.000')])).toEqual([]);
+    });
+
+    it('внесены подряд — дубль', () => {
+      expect(groups([at('a', '04:10:00.000'), at('b', '04:10:20.000')]).map((g) => g.txIds)).toEqual([['a', 'b']]);
+    });
+
+    it('граница: ровно минута между внесениями — ещё дубль, на миллисекунду больше — уже нет', () => {
+      expect(DUPLICATE_ENTRY_GAP_MS).toBe(60_000);
+      expect(groups([at('a', '04:10:00.000'), at('b', '04:11:00.000')])).toHaveLength(1);
+      expect(groups([at('a', '04:10:00.000'), at('b', '04:11:00.001')])).toEqual([]);
+    });
+
+    it('из трёх одинаковых в группу попадают только внесённые подряд', () => {
+      const out = groups([at('c', '13:40:00.000'), at('a', '04:10:00.000'), at('b', '04:10:30.000')]);
+      expect(out.map((g) => g.txIds)).toEqual([['a', 'b']]);
+    });
+
+    it('цепочка: каждая следующая внесена не позже чем через минуту после предыдущей — одна группа', () => {
+      const out = groups([at('a', '04:10:00.000'), at('b', '04:10:50.000'), at('c', '04:11:40.000')]);
+      expect(out.map((g) => g.txIds)).toEqual([['a', 'b', 'c']]);
+    });
+
+    it('две пары за день — две находки с разными ключами; у первой ключ прежний (скрытая раньше остаётся скрытой)', () => {
+      const out = groups([at('a', '04:10:00.000'), at('b', '04:10:05.000'), at('c', '13:40:00.000'), at('d', '13:40:05.000')]);
+      expect(out.map((g) => g.txIds)).toEqual([['a', 'b'], ['c', 'd']]);
+      expect(out[0]!.key).toBe('dup:w1|food|1500|кофе|2026-10-12');
+      expect(out[1]!.key).toBe('dup:w1|food|1500|кофе|2026-10-12|c');
+    });
+
+    it('время внесения неизвестно — как раньше: одинаковые траты одного дня считаются возможным дублем', () => {
+      expect(groups([day({ id: 'a' }), at('b', '13:40:00.000')]).map((g) => g.txIds)).toEqual([['a', 'b']]);
+      expect(groups([day({ id: 'a', createdAt: 'не дата' }), at('b', '13:40:00.000')]).map((g) => g.txIds)).toEqual([['a', 'b']]);
+    });
   });
 });
 
